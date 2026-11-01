@@ -36,16 +36,16 @@
 ---
 
 ## 9.14-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate customer party or user table** — Tickets link directly to `core.Party`, `accounts.User`, and `ecommerce.CustomerAccountProfile`.
-- [ ] **NO real-time WebSockets / external chat server daemon** — Chat channels, session metadata, and bot handoffs are stored and managed via standard HTTP/HTMX views; WebSocket push runs in later platform phases.
-- [ ] **NO external carrier EDI claims integration** — Carrier tracking numbers and dispute reference IDs are modeled natively in Django; live EDI/carrier carrier claims APIs run later.
-- [ ] **NO duplicate financial transaction ledgers** — Refund authorizations on claims specify resolution amounts and hand off to `accounting` (Module 2).
+- [x] **NO duplicate customer party or user table** — Tickets link directly to `core.Party`, `accounts.User`, and `ecommerce.CustomerAccountProfile`.
+- [x] **NO real-time WebSockets / external chat server daemon** — Chat channels, session metadata, and bot handoffs are stored and managed via standard HTTP/HTMX views; WebSocket push runs in later platform phases.
+- [x] **NO external carrier EDI claims integration** — Carrier tracking numbers and dispute reference IDs are modeled natively in Django; live EDI/carrier carrier claims APIs run later.
+- [x] **NO duplicate financial transaction ledgers** — Refund authorizations on claims specify resolution amounts and hand off to `accounting` (Module 2).
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/CustomerSupport/`)
 
-- [ ] **`CustomerSupportTicket`** [Prefix: `ESTK-`] (`apps/ecommerce/models/CustomerSupport/CustomerSupportTickets.py`)
+- [x] **`CustomerSupportTicket`** [Prefix: `ESTK-`] (`apps/ecommerce/models/CustomerSupport/CustomerSupportTickets.py`)
   - **Purpose**: Omnichannel helpdesk ticket and conversational support case. Captures customer inquiries across channels (email, chat, web form, portal, marketplace, phone), order linkage for WISMO resolution, priority & SLA target countdowns, lifecycle status workflow, internal agent notes, and chatbot handoff tracking.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -82,7 +82,7 @@
     - `Index(fields=["tenant", "order"], name="idx_estk_ten_order")`
   - **Form Exclusions**: `tenant`, `number`, `is_sla_breached`, `first_responded_at`, `resolved_at`, `created_at`, `updated_at`.
 
-- [ ] **`KnowledgeBaseArticle`** [Prefix: `EKBA-`] (`apps/ecommerce/models/CustomerSupport/KnowledgeBaseArticles.py`)
+- [x] **`KnowledgeBaseArticle`** [Prefix: `EKBA-`] (`apps/ecommerce/models/CustomerSupport/KnowledgeBaseArticles.py`)
   - **Purpose**: Self-service knowledge base, customer FAQ, return policy guide, and troubleshooting documentation repository. Supports category taxonomies, audience scoping (public, registered, wholesale), keyword search tagging, view counters, and customer helpfulness voting for deflection efficiency analysis.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -110,7 +110,7 @@
     - `Index(fields=["tenant", "is_featured"], name="idx_ekba_ten_feat")`
   - **Form Exclusions**: `tenant`, `number`, `view_count`, `helpful_votes`, `unhelpful_votes`, `created_at`, `updated_at`.
 
-- [ ] **`OrderIssueClaim`** [Prefix: `ECLM-`] (`apps/ecommerce/models/CustomerSupport/OrderIssueClaims.py`)
+- [x] **`OrderIssueClaim`** [Prefix: `ECLM-`] (`apps/ecommerce/models/CustomerSupport/OrderIssueClaims.py`)
   - **Purpose**: Order issue intake, damaged goods dispute adjudication, missing component investigations, and policy-governed refund/replacement authorization. Captures carrier tracking, photo evidence links, claimed vs. approved amounts, supervisor approvals, and resolution actions.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -138,7 +138,7 @@
     - `Index(fields=["tenant", "claim_type"], name="idx_eclm_ten_type")`
   - **Form Exclusions**: `tenant`, `number`, `resolved_at`, `created_at`, `updated_at`.
 
-- [ ] **`CustomerSatisfactionSurvey`** [Prefix: `ECSF-`] (`apps/ecommerce/models/CustomerSupport/CustomerSatisfactionSurveys.py`)
+- [x] **`CustomerSatisfactionSurvey`** [Prefix: `ECSF-`] (`apps/ecommerce/models/CustomerSupport/CustomerSatisfactionSurveys.py`)
   - **Purpose**: Customer feedback collection, post-ticket CSAT (1–5 stars), delivery satisfaction scoring, and store-wide Net Promoter Score (0–10 NPS). Features automated sentiment classification (promoter, passive, detractor) and closed-loop escalation tracking for negative feedback remediation.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -168,66 +168,66 @@
 
 ## Backend Packages (apps/ecommerce/{models,forms,views,urls}/CustomerSupport/)
 
-- [ ] **Models**:
+- [x] **Models**:
   - `apps/ecommerce/models/CustomerSupport/__init__.py`
   - `apps/ecommerce/models/CustomerSupport/CustomerSupportTickets.py`
   - `apps/ecommerce/models/CustomerSupport/KnowledgeBaseArticles.py`
   - `apps/ecommerce/models/CustomerSupport/OrderIssueClaims.py`
   - `apps/ecommerce/models/CustomerSupport/CustomerSatisfactionSurveys.py`
   - `apps/ecommerce/models/__init__.py` re-export block
-- [ ] **Forms**:
+- [x] **Forms**:
   - `apps/ecommerce/forms/CustomerSupport/__init__.py`
   - `apps/ecommerce/forms/CustomerSupport/CustomerSupportTickets.py` (`CustomerSupportTicketForm`, `CustomerSupportTicketStatusForm`)
   - `apps/ecommerce/forms/CustomerSupport/KnowledgeBaseArticles.py` (`KnowledgeBaseArticleForm`)
   - `apps/ecommerce/forms/CustomerSupport/OrderIssueClaims.py` (`OrderIssueClaimForm`, `OrderIssueClaimDecisionForm`)
   - `apps/ecommerce/forms/CustomerSupport/CustomerSatisfactionSurveys.py` (`CustomerSatisfactionSurveyForm`, `CustomerSatisfactionSurveyFollowUpForm`)
   - `apps/ecommerce/forms/__init__.py` re-export block
-- [ ] **Views**:
+- [x] **Views**:
   - `apps/ecommerce/views/CustomerSupport/__init__.py`
   - `apps/ecommerce/views/CustomerSupport/CustomerSupportTickets.py` (CRUD + quick status transition action)
   - `apps/ecommerce/views/CustomerSupport/KnowledgeBaseArticles.py` (CRUD + helpful/unhelpful vote action)
   - `apps/ecommerce/views/CustomerSupport/OrderIssueClaims.py` (CRUD + claim adjudication decision action)
   - `apps/ecommerce/views/CustomerSupport/CustomerSatisfactionSurveys.py` (CRUD + supervisor follow-up action)
   - `apps/ecommerce/views/__init__.py` re-export block
-- [ ] **URLs**:
+- [x] **URLs**:
   - `apps/ecommerce/urls/CustomerSupport/__init__.py`
   - `apps/ecommerce/urls/CustomerSupport/CustomerSupportTickets.py`
   - `apps/ecommerce/urls/CustomerSupport/KnowledgeBaseArticles.py`
   - `apps/ecommerce/urls/CustomerSupport/OrderIssueClaims.py`
   - `apps/ecommerce/urls/CustomerSupport/CustomerSatisfactionSurveys.py`
   - `apps/ecommerce/urls/__init__.py` concatenation block
-- [ ] **Admin Registration**:
+- [x] **Admin Registration**:
   - `apps/ecommerce/admin.py` register `CustomerSupportTicket`, `KnowledgeBaseArticle`, `OrderIssueClaim`, `CustomerSatisfactionSurvey`
-- [ ] **Navigation & Sidebar Wiring**:
+- [x] **Navigation & Sidebar Wiring**:
   - `apps/core/navigation.py` add `LIVE_LINKS["9.14"]`:
     - `"Help Desk & Ticket Management": "ecommerce:customersupportticket_list"`
     - `"Live Chat & Chatbot": "ecommerce:customersupportticket_list?channel=chat"`
     - `"Self-Service Knowledge Base": "ecommerce:knowledgebasearticle_list"`
     - `"Order Inquiry & Issue Resolution": "ecommerce:orderissueclaim_list"`
     - `"Customer Feedback & NPS": "ecommerce:customersatisfactionsurvey_list"`
-- [ ] **Database Migration**:
+- [x] **Database Migration**:
   - `makemigrations ecommerce` -> `0019_...`
   - `migrate`
-- [ ] **Seeder Extension**:
+- [x] **Seeder Extension**:
   - `apps/ecommerce/management/commands/seed_ecommerce.py` extend with realistic demo support tickets, knowledge articles, claims with photos, and CSAT/NPS survey rows.
 
 ---
 
 ## Templates (templates/ecommerce/customer_support/)
 
-- [ ] **CustomerSupportTicket** (`templates/ecommerce/customer_support/ticket/`):
+- [x] **CustomerSupportTicket** (`templates/ecommerce/customer_support/ticket/`):
   - `list.html`: Search, status filter, priority filter, channel filter, SLA status badges, assigned agent, actions.
   - `detail.html`: Full inquiry message, order linkage sidebar, carrier tracking status, SLA countdown, internal notes, resolution box, audit log.
   - `form.html`: Ticket creation/edit form with order and customer selection.
-- [ ] **KnowledgeBaseArticle** (`templates/ecommerce/customer_support/article/`):
+- [x] **KnowledgeBaseArticle** (`templates/ecommerce/customer_support/article/`):
   - `list.html`: Category filter, status filter, audience filter, view count, helpfulness score, featured badges.
   - `detail.html`: Full markdown content preview, category metadata, helpfulness feedback buttons, author info.
   - `form.html`: Article authoring form with markdown content and keyword tagging.
-- [ ] **OrderIssueClaim** (`templates/ecommerce/customer_support/claim/`):
+- [x] **OrderIssueClaim** (`templates/ecommerce/customer_support/claim/`):
   - `list.html`: Order filter, claim type filter, adjudication status filter, claimed amount, actions.
   - `detail.html`: Order summary, photo evidence lightbox/link, claimed vs approved amounts, resolution action, supervisor decision notes.
   - `form.html`: Claim submission and review form.
-- [ ] **CustomerSatisfactionSurvey** (`templates/ecommerce/customer_support/survey/`):
+- [x] **CustomerSatisfactionSurvey** (`templates/ecommerce/customer_support/survey/`):
   - `list.html`: Survey type filter, sentiment filter, rating score badges (stars / NPS), follow-up status badges.
   - `detail.html`: Full customer comment, rated ticket & order context, sentiment breakdown, supervisor follow-up action log.
   - `form.html`: Survey recording and follow-up management form.
@@ -235,21 +235,21 @@
 ---
 
 ## Verification & Quality Gates
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check`
-- [ ] `temp/smoke_customer_support.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce`
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [x] `venv\Scripts\python.exe manage.py check`
+- [x] `temp/smoke_customer_support.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, and IDOR isolation.
 
 ---
 
 ## Review & Tests & Close-Out (Phases 4–7)
-- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.14.md`
-- [ ] Phase 5: `code-fixer` agent burns down findings
-- [ ] Phase 6: Tests in serial order (`test_customersupport_models.py`, `test_customersupport_forms.py`, `test_customersupport_views.py`, `test_customersupport_security.py`)
-- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
-- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.14.md`
+- [x] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.14.md`
+- [x] Phase 5: `code-fixer` agent burns down findings
+- [x] Phase 6: Tests in serial order (`test_customersupport_models.py`, `test_customersupport_forms.py`, `test_customersupport_views.py`, `test_customersupport_security.py`)
+- [x] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [x] Register gaps in `.agents/tasks/gaps-ecommerce-9.14.md`
 
 ---
 
