@@ -73,7 +73,7 @@
   - `apps/ecommerce/views/ContentManagement/BlogArticles.py`
 - **Problem**: Full editorial text (potentially 50KB–200KB+) is retrieved for all 20 rows in list queries but not displayed in tables.
 - **Fix**: Add `.defer("raw_html_body", "content_json")` to `CmsPage` list queryset and `.defer("body_markdown")` to `BlogArticle` list queryset.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [I6] Reverse Tabnabbing risk on external `target="_blank"` anchors
 - **Files**:
