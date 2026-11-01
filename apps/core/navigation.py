@@ -2807,6 +2807,19 @@ LIVE_LINKS = {
         "Issue Claims": "ecommerce:orderissueclaim_list",
         "Customer Feedback": "ecommerce:customersatisfactionsurvey_list",
     },
+    "9.15": {
+        "Sales Performance Dashboards": "ecommerce:dailysalessnapshot_list",
+        "Customer Analytics": "ecommerce:customercohortmetric_list",
+        "Product & Merchandising Analytics": "ecommerce:productmerchandisingmetric_list",
+        "Marketing Attribution": "ecommerce:attributiontouchpoint_list",
+        "Real-Time Operational Monitoring": "ecommerce:analytics_cockpit",
+        # Extra live leaves
+        "Sales Snapshots": "ecommerce:dailysalessnapshot_list",
+        "Customer Cohorts": "ecommerce:customercohortmetric_list",
+        "Merchandising Analytics": "ecommerce:productmerchandisingmetric_list",
+        "Attribution Touchpoints": "ecommerce:attributiontouchpoint_list",
+        "Analytics Cockpit": "ecommerce:analytics_cockpit",
+    },
 
 
 
