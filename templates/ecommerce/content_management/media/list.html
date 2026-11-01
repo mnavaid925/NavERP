@@ -85,7 +85,7 @@
                         </td>
                         <td>
                             {% if asset_item.media_type == 'image' or asset_item.media_type == 'banner' or asset_item.media_type == 'icon' %}
-                            <a href="{{ asset_item.file_url }}" target="_blank" class="block w-12 h-12 rounded bg-slate-100 overflow-hidden border border-slate-200">
+                            <a href="{{ asset_item.file_url }}" target="_blank" rel="noopener noreferrer" class="block w-12 h-12 rounded bg-slate-100 overflow-hidden border border-slate-200">
                                 <img src="{{ asset_item.file_url }}" alt="{{ asset_item.alt_text|default:asset_item.title }}" class="w-full h-full object-cover">
                             </a>
                             {% else %}
@@ -121,7 +121,7 @@
                             {{ asset_item.created_at|date:"M d, Y" }}
                         </td>
                         <td class="table-actions text-right">
-                            <a href="{{ asset_item.file_url }}" target="_blank" class="btn btn-icon" title="Open Asset Link">
+                            <a href="{{ asset_item.file_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-icon" title="Open Asset Link">
                                 <i data-lucide="external-link"></i>
                             </a>
                             <a href="{% url 'ecommerce:mediaasset_detail' asset_item.pk %}" class="btn btn-icon" title="View Detail">
