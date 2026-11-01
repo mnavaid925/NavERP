@@ -135,7 +135,7 @@
                     <a href="{% url 'ecommerce:ecommerceorder_detail' claim.order.pk %}" class="text-primary hover:underline font-mono font-bold">
                         {{ claim.order.number }}
                     </a>
-                    <span class="text-xs text-slate-500 block">Total: ${{ claim.order.grand_total }} &bull; {{ claim.order.get_status_display }}</span>
+                    <span class="text-xs text-slate-500 block">Total: ${{ claim.order.total_amount }} &bull; {{ claim.order.get_status_display }}</span>
                 </div>
                 {% if claim.carrier_tracking_number %}
                 <div>
