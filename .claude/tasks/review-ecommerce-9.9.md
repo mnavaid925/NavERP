@@ -125,7 +125,7 @@
   - `templates/ecommerce/content_management/blog/detail.html`
 - **Problem**: Multiple tags like `"news, updates"` appear in one badge.
 - **Fix**: Add `tag_list` helper property on `BlogArticle` model and loop over chips in template.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [M5] Seeder cross-tenant user fallback in `seed_ecommerce.py`
 - **File**: `apps/ecommerce/management/commands/seed_ecommerce.py`
