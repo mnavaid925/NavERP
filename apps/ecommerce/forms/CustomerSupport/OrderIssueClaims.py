@@ -69,7 +69,5 @@ class OrderIssueClaimForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, "order", self.tenant)
-        reject_foreign(self, "customer", self.tenant)
-        reject_foreign(self, "ticket", self.tenant)
+        reject_foreign(self, cleaned, ["order", "customer", "ticket"])
         return cleaned
