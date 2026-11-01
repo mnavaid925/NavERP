@@ -49,12 +49,16 @@ class AttributionTouchpointForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
-            self.fields["order"].queryset = EcommerceOrder.objects.filter(
-                tenant=self.tenant
-            ).order_by("-created_at")
-            self.fields["cart"].queryset = Cart.objects.filter(
-                tenant=self.tenant
-            ).order_by("-created_at")
+            self.fields["order"].queryset = (
+                EcommerceOrder.objects.filter(tenant=self.tenant)
+                .select_related("customer")
+                .order_by("-created_at")
+            )
+            self.fields["cart"].queryset = (
+                Cart.objects.filter(tenant=self.tenant)
+                .select_related("customer")
+                .order_by("-created_at")
+            )
             self.fields["campaign"].queryset = MarketingCampaign.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
