@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Product & Merchandising Analytics | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="package" class="w-7 h-7 text-brand"></i>
+        Product & Merchandising Analytics
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Catalog sales velocity tiers, best sellers, slow movers, inventory turnover, and gross margin health
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <form method="post" action="{% url 'ecommerce:productmerchandisingmetric_reclassify' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline flex items-center gap-2">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Reclassify Tiers</span>
+        </button>
+      </form>
+      <a href="{% url 'ecommerce:productmerchandisingmetric_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Metric</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label for="filter-q" class="form-label text-xs uppercase text-slate-500">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ query }}"
+            placeholder="Metric #, product name, SKU..."
+            class="form-input pl-9 w-full"
+          >
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div>
+        <label for="filter-tier" class="form-label text-xs uppercase text-slate-500">Velocity Tier</label>
+        <select id="filter-tier" name="velocity_tier" class="form-select w-full">
+          <option value="">All Tiers</option>
+          {% for val, label in velocity_tier_choices %}
+          <option value="{{ val }}" {% if selected_velocity_tier == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Filter</span>
+        </button>
+        <a href="{% url 'ecommerce:productmerchandisingmetric_list' %}" class="btn btn-outline" title="Reset Filters">
+          <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+        </a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Table Card -->
+  <div class="card overflow-hidden">
+    {% if metrics %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Entry</th>
+            <th>Product / SKU</th>
+            <th>Velocity Tier</th>
+            <th>Units Sold</th>
+            <th>Gross Revenue</th>
+            <th>Margin %</th>
+            <th>Return Rate %</th>
+            <th>Conversion %</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in metrics %}
+          <tr>
+            <td class="font-medium text-slate-900 dark:text-white">
+              <a href="{% url 'ecommerce:productmerchandisingmetric_detail' m.pk %}" class="hover:text-brand font-semibold">
+                {{ m.number }}
+              </a>
+            </td>
+            <td>
+              <div class="flex flex-col">
+                <span class="font-semibold text-slate-900 dark:text-white">{{ m.product.name }}</span>
+                {% if m.variant %}
+                <span class="text-xs text-slate-400 font-mono">SKU: {{ m.variant.sku }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td>
+              {% if m.velocity_tier == "best_seller" %}
+              <span class="badge badge-green">Best Seller</span>
+              {% elif m.velocity_tier == "core_performer" %}
+              <span class="badge badge-info">Core Performer</span>
+              {% elif m.velocity_tier == "slow_mover" %}
+              <span class="badge badge-amber">Slow Mover</span>
+              {% else %}
+              <span class="badge badge-red">Dead Stock</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="font-semibold text-slate-800 dark:text-slate-200">{{ m.units_sold }}</span>
+            </td>
+            <td>
+              <span class="font-mono text-sm font-semibold">${{ m.gross_revenue }}</span>
+            </td>
+            <td>
+              <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ m.gross_margin_pct }}%</span>
+            </td>
+            <td>
+              {% if m.return_rate_pct > 15 %}
+              <span class="font-semibold text-rose-600 dark:text-rose-400">{{ m.return_rate_pct }}%</span>
+              {% else %}
+              <span class="text-slate-600 dark:text-slate-300">{{ m.return_rate_pct }}%</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ m.conversion_rate_pct }}%</span>
+            </td>
+            <td class="text-right">
+              <div class="table-actions justify-end">
+                <a href="{% url 'ecommerce:productmerchandisingmetric_detail' m.pk %}" class="btn btn-icon" title="View Detail">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+                <a href="{% url 'ecommerce:productmerchandisingmetric_edit' m.pk %}" class="btn btn-icon" title="Edit Metric">
+                  <i data-lucide="pencil" class="w-4 h-4"></i>
+                </a>
+                <form method="post" action="{% url 'ecommerce:productmerchandisingmetric_delete' m.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete merchandising metric {{ m.number }}?');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-icon text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30" title="Delete Metric">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
+      <span class="text-slate-500">
+        Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} products
+      </span>
+      <div class="pagination flex items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_velocity_tier %}&velocity_tier={{ selected_velocity_tier }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Previous
+        </a>
+        {% endif %}
+
+        <span class="px-3 py-1 font-semibold text-slate-700 dark:text-slate-300 text-xs">
+          Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </span>
+
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_velocity_tier %}&velocity_tier={{ selected_velocity_tier }}{% endif %}" class="btn btn-outline py-1 px-3 text-xs">
+          Next
+        </a>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state p-12 text-center">
+      <div class="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400 mb-3">
+        <i data-lucide="package-search" class="w-6 h-6"></i>
+      </div>
+      <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200">No Merchandising Metrics Found</h3>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1">
+        Analyze product sales velocity, gross margins, and inventory turn tiers.
+      </p>
+      <div class="mt-4">
+        <a href="{% url 'ecommerce:productmerchandisingmetric_create' %}" class="btn btn-primary">
+          <i data-lucide="plus" class="w-4 h-4 mr-2"></i>
+          Record Merchandising Metric
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
