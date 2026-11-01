@@ -150,7 +150,7 @@
                     <a href="{% url 'ecommerce:ecommerceorder_detail' ticket.order.pk %}" class="text-primary hover:underline font-mono font-medium">
                         {{ ticket.order.number }}
                     </a>
-                    <span class="text-xs text-slate-500 block">Total: ${{ ticket.order.grand_total }} &bull; Status: {{ ticket.order.get_status_display }}</span>
+                    <span class="text-xs text-slate-500 block">Total: ${{ ticket.order.total_amount }} &bull; Status: {{ ticket.order.get_status_display }}</span>
                 </div>
                 {% endif %}
             </div>
