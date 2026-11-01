@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.ecommerce.models._base import TenantNumbered
@@ -95,4 +96,6 @@ class BlogArticle(TenantNumbered):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.title)[:250]
+        if self.status == "published" and self.published_at is None:
+            self.published_at = timezone.now()
         super().save(*args, **kwargs)
