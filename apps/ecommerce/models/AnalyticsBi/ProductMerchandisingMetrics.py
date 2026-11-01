@@ -66,7 +66,7 @@ class ProductMerchandisingMetric(TenantNumbered):
             margin = (
                 ((self.gross_revenue - self.cost_of_goods) / self.gross_revenue) * Decimal("100.00")
             )
-            self.gross_margin_pct = max(Decimal("0.00"), margin.quantize(Decimal("0.01")))
+            self.gross_margin_pct = min(Decimal("100.00"), max(Decimal("0.00"), margin)).quantize(Decimal("0.01"))
         else:
             self.gross_margin_pct = Decimal("0.00")
 
@@ -74,7 +74,7 @@ class ProductMerchandisingMetric(TenantNumbered):
             ret_rate = (
                 (Decimal(str(self.refunds_count)) / Decimal(str(self.units_sold))) * Decimal("100.00")
             )
-            self.return_rate_pct = ret_rate.quantize(Decimal("0.01"))
+            self.return_rate_pct = min(Decimal("100.00"), max(Decimal("0.00"), ret_rate)).quantize(Decimal("0.01"))
         else:
             self.return_rate_pct = Decimal("0.00")
 
@@ -82,7 +82,7 @@ class ProductMerchandisingMetric(TenantNumbered):
             conv_rate = (
                 (Decimal(str(self.units_sold)) / Decimal(str(self.page_views_count))) * Decimal("100.00")
             )
-            self.conversion_rate_pct = conv_rate.quantize(Decimal("0.01"))
+            self.conversion_rate_pct = min(Decimal("100.00"), max(Decimal("0.00"), conv_rate)).quantize(Decimal("0.01"))
         else:
             self.conversion_rate_pct = Decimal("0.00")
 
