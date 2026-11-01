@@ -93,7 +93,7 @@
                             </a>
                         </td>
                         <td>
-                            <div class="font-semibold text-slate-900">{{ survey.get_survey_type_display }}</div>
+                            <div class="font-semibold text-slate-900 dark:text-slate-100">{{ survey.get_survey_type_display }}</div>
                             <div class="text-xs text-slate-500 font-mono">
                                 {% if survey.ticket %}
                                 Ticket: {{ survey.ticket.number }}
@@ -129,7 +129,7 @@
                             <span class="badge badge-red">Negative / Detractor</span>
                             {% endif %}
                         </td>
-                        <td class="text-sm text-slate-700 max-w-xs truncate">
+                        <td class="text-sm text-slate-700 dark:text-slate-200 max-w-xs truncate">
                             {{ survey.feedback_comment|default:"—" }}
                         </td>
                         <td>
@@ -173,7 +173,7 @@
                         <td colspan="9" class="text-center py-8">
                             <div class="empty-state">
                                 <i data-lucide="smile" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
-                                <h3 class="text-base font-semibold text-slate-700">No feedback surveys found</h3>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No feedback surveys found</h3>
                                 <p class="text-sm text-slate-500 mb-4">No satisfaction surveys match the current filters.</p>
                                 <a href="{% url 'ecommerce:customersatisfactionsurvey_create' %}" class="btn btn-primary btn-sm">Record First Survey</a>
                             </div>
