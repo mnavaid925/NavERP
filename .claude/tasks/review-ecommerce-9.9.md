@@ -111,7 +111,7 @@
   - `templates/ecommerce/content_management/block/list.html`
 - **Problem**: Icon-only action links/buttons have `title` but lack `aria-label`.
 - **Fix**: Add matching `aria-label` to each action button.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [M3] `BlogArticleForm` does not lowercase or strip slug
 - **File**: `apps/ecommerce/forms/ContentManagement/BlogArticles.py`
