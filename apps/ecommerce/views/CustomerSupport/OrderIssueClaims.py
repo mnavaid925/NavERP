@@ -15,7 +15,7 @@ from apps.ecommerce.views._common import ecommerce_object
 @login_required
 def orderissueclaim_list(request):
     qs = OrderIssueClaim.objects.filter(tenant=request.tenant).select_related(
-        "order", "customer", "ticket", "reviewed_by"
+        "order", "customer__customer", "ticket", "reviewed_by"
     )
 
     query = request.GET.get("q", "").strip()
@@ -64,7 +64,7 @@ def orderissueclaim_detail(request, pk):
         request,
         OrderIssueClaim,
         pk,
-        select_related=("order", "customer", "ticket", "reviewed_by"),
+        select_related=("order", "customer__customer", "ticket", "reviewed_by"),
     )
     return render(request, "ecommerce/customer_support/claim/detail.html", {"claim": claim})
 
