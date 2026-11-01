@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ block.name }} | Content Block | NavERP{% endblock %}
+{% block title %}{{ content_block.name }} | Content Block | NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -14,24 +14,24 @@
             <span>/</span>
             <a href="{% url 'ecommerce:contentblock_list' %}">Blocks</a>
             <span>/</span>
-            <span>{{ block.number }}</span>
+            <span>{{ content_block.number }}</span>
         </div>
         <div class="flex items-center gap-3">
-            <h1 class="page-title">{{ block.name }}</h1>
-            <span class="badge badge-blue">{{ block.get_block_type_display }}</span>
-            {% if block.is_active %}
+            <h1 class="page-title">{{ content_block.name }}</h1>
+            <span class="badge badge-blue">{{ content_block.get_block_type_display }}</span>
+            {% if content_block.is_active %}
             <span class="badge badge-green">Active</span>
             {% else %}
             <span class="badge badge-gray">Inactive</span>
             {% endif %}
         </div>
-        <p class="text-sm text-slate-500 font-mono mt-1">{{ block.number }} · Sort Order: {{ block.sort_order }}</p>
+        <p class="text-sm text-slate-500 font-mono mt-1">{{ content_block.number }} · Sort Order: {{ content_block.sort_order }}</p>
     </div>
     <div class="page-actions flex items-center gap-2">
-        <a href="{% url 'ecommerce:contentblock_edit' block.pk %}" class="btn btn-primary">
+        <a href="{% url 'ecommerce:contentblock_edit' content_block.pk %}" class="btn btn-primary">
             <i data-lucide="pencil"></i> Edit Block
         </a>
-        <form action="{% url 'ecommerce:contentblock_delete' block.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete content block {{ block.name }}?');">
+        <form action="{% url 'ecommerce:contentblock_delete' content_block.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete content block {{ content_block.name }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2"></i> Delete
@@ -50,28 +50,28 @@
         <div class="card overflow-hidden">
             <div class="card-header flex items-center justify-between">
                 <h2 class="card-title text-sm uppercase tracking-wider text-slate-500">Live Component Preview</h2>
-                <span class="text-xs font-mono text-slate-400">{{ block.bg_color_class }} {{ block.text_color_class }}</span>
+                <span class="text-xs font-mono text-slate-400">{{ content_block.bg_color_class }} {{ content_block.text_color_class }}</span>
             </div>
-            <div class="p-8 {{ block.bg_color_class }} {{ block.text_color_class }} rounded-b border-t border-slate-200">
+            <div class="p-8 {{ content_block.bg_color_class }} {{ content_block.text_color_class }} rounded-b border-t border-slate-200">
                 <div class="max-w-2xl mx-auto text-center space-y-4">
-                    {% if block.media_asset %}
+                    {% if content_block.media_asset %}
                     <div class="mb-4">
-                        <img src="{{ block.media_asset.file_url }}" alt="{{ block.media_asset.alt_text|default:block.name }}" class="max-h-56 mx-auto rounded-lg shadow-sm object-cover">
+                        <img src="{{ content_block.media_asset.file_url }}" alt="{{ content_block.media_asset.alt_text|default:content_block.name }}" class="max-h-56 mx-auto rounded-lg shadow-sm object-cover">
                     </div>
                     {% endif %}
-                    {% if block.headline %}
-                    <h2 class="text-2xl md:text-3xl font-extrabold">{{ block.headline }}</h2>
+                    {% if content_block.headline %}
+                    <h2 class="text-2xl md:text-3xl font-extrabold">{{ content_block.headline }}</h2>
                     {% endif %}
-                    {% if block.subheadline %}
-                    <p class="text-base font-medium opacity-80">{{ block.subheadline }}</p>
+                    {% if content_block.subheadline %}
+                    <p class="text-base font-medium opacity-80">{{ content_block.subheadline }}</p>
                     {% endif %}
-                    {% if block.body_text %}
-                    <p class="text-sm opacity-90 leading-relaxed">{{ block.body_text }}</p>
+                    {% if content_block.body_text %}
+                    <p class="text-sm opacity-90 leading-relaxed">{{ content_block.body_text }}</p>
                     {% endif %}
-                    {% if block.cta_label %}
+                    {% if content_block.cta_label %}
                     <div class="pt-2">
-                        <a href="{{ block.cta_url|default:'#' }}" class="btn btn-primary inline-flex items-center gap-1">
-                            {{ block.cta_label }} <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        <a href="{{ content_block.cta_url|default:'#' }}" class="btn btn-primary inline-flex items-center gap-1">
+                            {{ content_block.cta_label }} <i data-lucide="arrow-right" class="w-4 h-4"></i>
                         </a>
                     </div>
                     {% endif %}
@@ -87,24 +87,24 @@
             <div class="card-body space-y-4">
                 <div>
                     <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Promotional Headline</label>
-                    <p class="text-base font-semibold text-slate-800 mt-1">{{ block.headline|default:"—" }}</p>
+                    <p class="text-base font-semibold text-slate-800 mt-1">{{ content_block.headline|default:"—" }}</p>
                 </div>
                 <div>
                     <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Sub-headline</label>
-                    <p class="text-sm text-slate-700 mt-1">{{ block.subheadline|default:"—" }}</p>
+                    <p class="text-sm text-slate-700 mt-1">{{ content_block.subheadline|default:"—" }}</p>
                 </div>
                 <div>
                     <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Body Copy</label>
-                    <p class="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{{ block.body_text|default:"—" }}</p>
+                    <p class="text-sm text-slate-700 mt-1 whitespace-pre-wrap">{{ content_block.body_text|default:"—" }}</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
                     <div>
                         <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">CTA Button Label</label>
-                        <p class="text-sm font-medium text-slate-800 mt-1">{{ block.cta_label|default:"—" }}</p>
+                        <p class="text-sm font-medium text-slate-800 mt-1">{{ content_block.cta_label|default:"—" }}</p>
                     </div>
                     <div>
                         <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Target CTA URL</label>
-                        <p class="text-sm font-mono text-slate-600 mt-1">{{ block.cta_url|default:"—" }}</p>
+                        <p class="text-sm font-mono text-slate-600 mt-1">{{ content_block.cta_url|default:"—" }}</p>
                     </div>
                 </div>
             </div>
@@ -121,9 +121,9 @@
             <div class="card-body divide-y divide-slate-100">
                 <div class="py-2">
                     <span class="text-xs text-slate-500 block">Media Graphic</span>
-                    {% if block.media_asset %}
-                    <a href="{% url 'ecommerce:mediaasset_detail' block.media_asset.pk %}" class="text-sm font-semibold text-primary hover:underline flex items-center gap-1 mt-1">
-                        <i data-lucide="image" class="w-4 h-4"></i> {{ block.media_asset.title }}
+                    {% if content_block.media_asset %}
+                    <a href="{% url 'ecommerce:mediaasset_detail' content_block.media_asset.pk %}" class="text-sm font-semibold text-primary hover:underline flex items-center gap-1 mt-1">
+                        <i data-lucide="image" class="w-4 h-4"></i> {{ content_block.media_asset.title }}
                     </a>
                     {% else %}
                     <span class="text-sm text-slate-400 italic">No media assigned</span>
@@ -131,9 +131,9 @@
                 </div>
                 <div class="py-2">
                     <span class="text-xs text-slate-500 block">Catalog Product</span>
-                    {% if block.target_product %}
+                    {% if content_block.target_product %}
                     <span class="text-sm font-semibold text-slate-800 flex items-center gap-1 mt-1">
-                        <i data-lucide="package" class="w-4 h-4 text-slate-500"></i> {{ block.target_product.title }}
+                        <i data-lucide="package" class="w-4 h-4 text-slate-500"></i> {{ content_block.target_product.title }}
                     </span>
                     {% else %}
                     <span class="text-sm text-slate-400 italic">No product targeted</span>
@@ -141,9 +141,9 @@
                 </div>
                 <div class="py-2">
                     <span class="text-xs text-slate-500 block">Store Category</span>
-                    {% if block.target_category %}
+                    {% if content_block.target_category %}
                     <span class="text-sm font-semibold text-slate-800 flex items-center gap-1 mt-1">
-                        <i data-lucide="folder" class="w-4 h-4 text-slate-500"></i> {{ block.target_category.name }}
+                        <i data-lucide="folder" class="w-4 h-4 text-slate-500"></i> {{ content_block.target_category.name }}
                     </span>
                     {% else %}
                     <span class="text-sm text-slate-400 italic">No category targeted</span>
@@ -160,15 +160,15 @@
             <div class="card-body divide-y divide-slate-100">
                 <div class="py-2 flex justify-between items-center text-sm">
                     <span class="text-slate-500">Display Priority</span>
-                    <span class="font-mono font-bold text-slate-800">{{ block.sort_order }}</span>
+                    <span class="font-mono font-bold text-slate-800">{{ content_block.sort_order }}</span>
                 </div>
                 <div class="py-2 flex justify-between items-center text-sm">
                     <span class="text-slate-500">Background Class</span>
-                    <span class="font-mono text-xs text-slate-800">{{ block.bg_color_class }}</span>
+                    <span class="font-mono text-xs text-slate-800">{{ content_block.bg_color_class }}</span>
                 </div>
                 <div class="py-2 flex justify-between items-center text-sm">
                     <span class="text-slate-500">Text Class</span>
-                    <span class="font-mono text-xs text-slate-800">{{ block.text_color_class }}</span>
+                    <span class="font-mono text-xs text-slate-800">{{ content_block.text_color_class }}</span>
                 </div>
             </div>
         </div>
@@ -181,15 +181,15 @@
             <div class="card-body space-y-2 text-xs text-slate-500">
                 <div class="flex justify-between">
                     <span>Record ID:</span>
-                    <span class="font-mono">{{ block.number }}</span>
+                    <span class="font-mono">{{ content_block.number }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span>Created:</span>
-                    <span>{{ block.created_at|date:"M d, Y H:i" }}</span>
+                    <span>{{ content_block.created_at|date:"M d, Y H:i" }}</span>
                 </div>
                 <div class="flex justify-between">
                     <span>Last Updated:</span>
-                    <span>{{ block.updated_at|date:"M d, Y H:i" }}</span>
+                    <span>{{ content_block.updated_at|date:"M d, Y H:i" }}</span>
                 </div>
             </div>
         </div>
