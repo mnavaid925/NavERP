@@ -93,7 +93,7 @@
                         </td>
                         <td>
                             <div class="flex items-center gap-2">
-                                <span class="font-semibold text-slate-900">{{ article.title }}</span>
+                                <span class="font-semibold text-slate-900 dark:text-slate-100">{{ article.title }}</span>
                                 {% if article.is_featured %}
                                 <span class="badge badge-amber text-xs">Featured</span>
                                 {% endif %}
@@ -120,7 +120,7 @@
                         <td class="text-sm">
                             <div class="flex items-center gap-1">
                                 <i data-lucide="thumbs-up" class="w-3.5 h-3.5 text-green-600"></i>
-                                <span class="font-medium text-slate-700">{{ article.helpful_votes }}</span>
+                                <span class="font-medium text-slate-700 dark:text-slate-200">{{ article.helpful_votes }}</span>
                                 <span class="text-slate-400">/</span>
                                 <i data-lucide="thumbs-down" class="w-3.5 h-3.5 text-slate-400"></i>
                                 <span class="text-slate-500">{{ article.unhelpful_votes }}</span>
@@ -153,7 +153,7 @@
                         <td colspan="8" class="text-center py-8">
                             <div class="empty-state">
                                 <i data-lucide="book-open" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
-                                <h3 class="text-base font-semibold text-slate-700">No knowledge base articles found</h3>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No knowledge base articles found</h3>
                                 <p class="text-sm text-slate-500 mb-4">No articles match your query.</p>
                                 <a href="{% url 'ecommerce:knowledgebasearticle_create' %}" class="btn btn-primary btn-sm">Create First Article</a>
                             </div>
