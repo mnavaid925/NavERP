@@ -131,7 +131,7 @@
 - **File**: `apps/ecommerce/management/commands/seed_ecommerce.py`
 - **Problem**: Seeder uses `User.objects.filter(is_active=True).first()` without tenant filter.
 - **Fix**: Scope by `User.objects.filter(tenant=tenant, is_active=True).first() or User.objects.filter(is_active=True).first()`.
-- **Status**: [ ] open
+- **Status**: [x] fixed
 
 ### [M6] Table Name Defaulting on `CmsPage` (`ecommerce_cmspage` vs `ecommerce_cms_page`)
 - **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
