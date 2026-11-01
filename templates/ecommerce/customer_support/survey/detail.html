@@ -60,7 +60,7 @@
             </div>
             <div class="card-body">
                 {% if survey.feedback_comment %}
-                <p class="whitespace-pre-line text-slate-800 leading-relaxed text-base italic border-l-4 border-primary pl-4 py-1">
+                <p class="whitespace-pre-line text-slate-800 leading-relaxed text-base italic border-l-4 border-brand-500 pl-4 py-1">
                     "{{ survey.feedback_comment }}"
                 </p>
                 {% else %}
@@ -122,7 +122,7 @@
                 {% if survey.ticket %}
                 <div>
                     <span class="text-slate-500 block text-xs">Evaluated Ticket</span>
-                    <a href="{% url 'ecommerce:customersupportticket_detail' survey.ticket.pk %}" class="text-primary hover:underline font-mono font-medium">
+                    <a href="{% url 'ecommerce:customersupportticket_detail' survey.ticket.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ survey.ticket.number }}
                     </a>
                     <span class="text-xs text-slate-500 block">{{ survey.ticket.subject }}</span>
@@ -131,7 +131,7 @@
                 {% if survey.order %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Evaluated Order</span>
-                    <a href="{% url 'ecommerce:ecommerceorder_detail' survey.order.pk %}" class="text-primary hover:underline font-mono font-medium">
+                    <a href="{% url 'ecommerce:ecommerceorder_detail' survey.order.pk %}" class="text-brand hover:underline font-mono font-medium">
                         {{ survey.order.number }}
                     </a>
                 </div>
@@ -139,7 +139,7 @@
                 {% if survey.customer %}
                 <div class="pt-2 border-t border-slate-100">
                     <span class="text-slate-500 block text-xs">Shopper Account</span>
-                    <a href="{% url 'ecommerce:customeraccountprofile_detail' survey.customer.pk %}" class="text-primary hover:underline font-medium">
+                    <a href="{% url 'ecommerce:customeraccountprofile_detail' survey.customer.pk %}" class="text-brand hover:underline font-medium">
                         {{ survey.customer.number }} - {{ survey.customer }}
                     </a>
                 </div>
