@@ -1,6 +1,6 @@
 from django import forms
 
-from apps.ecommerce.forms._common import TenantModelForm, reject_foreign
+from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
 from apps.ecommerce.models.CartCheckout.Carts import Cart
 from apps.ecommerce.models.MarketingCampaign.AffiliatePartners import AffiliatePartner
@@ -8,7 +8,7 @@ from apps.ecommerce.models.MarketingCampaign.MarketingCampaigns import Marketing
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
 
-class AttributionTouchpointForm(TenantModelForm):
+class AttributionTouchpointForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = AttributionTouchpoint
         fields = [
