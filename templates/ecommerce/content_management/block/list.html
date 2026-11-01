@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Content Blocks | NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'dashboard:home' %}">Home</a>
+            <span>/</span>
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Content Management</span>
+            <span>/</span>
+            <span>Content Blocks</span>
+        </div>
+        <h1 class="page-title">Reusable Content Blocks & Widgets</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:contentblock_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i> New Block
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0">
+                <label for="q" class="form-label">Search</label>
+                <input type="text" id="q" name="q" value="{{ search_query }}" placeholder="Name, headline, block #..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <label for="block_type" class="form-label">Block Type</label>
+                <select id="block_type" name="block_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in block_type_choices %}
+                    <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label for="is_active" class="form-label">Active State</label>
+                <select id="is_active" name="is_active" class="form-select">
+                    <option value="">All States</option>
+                    <option value="1" {% if selected_active == '1' %}selected{% endif %}>Active Only</option>
+                    <option value="0" {% if selected_active == '0' %}selected{% endif %}>Inactive Only</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter"></i> Filter</button>
+                <a href="{% url 'ecommerce:contentblock_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Blocks Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Block #</th>
+                        <th>Name & Headline</th>
+                        <th>Block Type</th>
+                        <th>Associated Media / Target</th>
+                        <th>Order</th>
+                        <th>Status</th>
+                        <th>Updated</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for block_item in blocks %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:contentblock_detail' block_item.pk %}" class="font-medium text-primary">
+                                {{ block_item.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800 dark:text-slate-100">{{ block_item.name }}</div>
+                            <div class="text-xs text-slate-400 truncate max-w-xs">{{ block_item.headline|default:"No headline" }}</div>
+                        </td>
+                        <td>
+                            <span class="badge badge-blue">{{ block_item.get_block_type_display }}</span>
+                        </td>
+                        <td class="text-sm text-slate-600">
+                            {% if block_item.media_asset %}
+                            <div class="flex items-center gap-1 text-xs">
+                                <i data-lucide="image" class="w-3.5 h-3.5 text-slate-400"></i>
+                                <span>{{ block_item.media_asset.title }}</span>
+                            </div>
+                            {% endif %}
+                            {% if block_item.target_product %}
+                            <div class="flex items-center gap-1 text-xs text-primary">
+                                <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                                <span>{{ block_item.target_product.title }}</span>
+                            </div>
+                            {% elif block_item.target_category %}
+                            <div class="flex items-center gap-1 text-xs text-slate-500">
+                                <i data-lucide="folder" class="w-3.5 h-3.5"></i>
+                                <span>{{ block_item.target_category.name }}</span>
+                            </div>
+                            {% endif %}
+                            {% if not block_item.media_asset and not block_item.target_product and not block_item.target_category %}
+                            <span class="text-slate-400 italic text-xs">None</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm font-mono text-slate-600">
+                            {{ block_item.sort_order }}
+                        </td>
+                        <td>
+                            {% if block_item.is_active %}
+                            <span class="badge badge-green">Active</span>
+                            {% else %}
+                            <span class="badge badge-gray">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ block_item.updated_at|date:"M d, Y" }}
+                        </td>
+                        <td class="table-actions text-right">
+                            <a href="{% url 'ecommerce:contentblock_detail' block_item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:contentblock_edit' block_item.pk %}" class="btn btn-icon" title="Edit Block">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form action="{% url 'ecommerce:contentblock_delete' block_item.pk %}" method="post" class="inline" onsubmit="return confirm('Are you sure you want to delete content block {{ block_item.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-danger" title="Delete Block">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-8">
+                            <div class="empty-state">
+                                <i data-lucide="layers" class="w-12 h-12 mx-auto text-slate-400 mb-2"></i>
+                                <h3 class="text-base font-semibold text-slate-700 dark:text-slate-200">No content blocks found</h3>
+                                <p class="text-sm text-slate-500 mb-4">No hero banners, carousels, or widgets match your search.</p>
+                                <a href="{% url 'ecommerce:contentblock_create' %}" class="btn btn-primary btn-sm">Create First Block</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if blocks.has_other_pages %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing {{ blocks.start_index }} to {{ blocks.end_index }} of {{ blocks.paginator.count }} blocks
+            </div>
+            <div class="flex gap-1">
+                <a href="?page={% if blocks.has_previous %}{{ blocks.previous_page_number }}{% else %}1{% endif %}&q={{ search_query }}&block_type={{ selected_type }}&is_active={{ selected_active }}"
+                   class="btn btn-outline btn-sm {% if not blocks.has_previous %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Previous
+                </a>
+                <span class="btn btn-sm btn-outline active">{{ blocks.number }} / {{ blocks.paginator.num_pages }}</span>
+                <a href="?page={% if blocks.has_next %}{{ blocks.next_page_number }}{% else %}{{ blocks.paginator.num_pages }}{% endif %}&q={{ search_query }}&block_type={{ selected_type }}&is_active={{ selected_active }}"
+                   class="btn btn-outline btn-sm {% if not blocks.has_next %}disabled opacity-50 pointer-events-none{% endif %}">
+                    Next
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
