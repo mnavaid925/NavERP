@@ -1,6 +1,7 @@
 from django import forms
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 from apps.ecommerce.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
@@ -72,6 +73,17 @@ class BlogArticleForm(TenantUniqueMixin, TenantModelForm):
                     self.fields["featured_media"].queryset = MediaAsset.objects.filter(tenant=self.tenant)
             except (LookupError, AttributeError):
                 pass
+
+    def clean_slug(self):
+        slug = self.cleaned_data.get("slug", "").strip().lower()
+        if not slug:
+            return slug
+        qs = BlogArticle.objects.filter(tenant=self.tenant, slug=slug)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError(f"A blog article with slug '{slug}' already exists for this tenant.")
+        return slug
 
     def clean(self):
         cleaned = super().clean()
