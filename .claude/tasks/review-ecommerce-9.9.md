@@ -137,7 +137,7 @@
 - **File**: `apps/ecommerce/models/ContentManagement/CmsPages.py`
 - **Problem**: Contract specified `Table: ecommerce_cms_page`, but model defaulted to `ecommerce_cmspage`.
 - **Fix**: Record in `.agents/tasks/gaps-ecommerce-9.9.md` to avoid disruption of migration 0026.
-- **Status**: [ ] open
+- **Status**: [~] skipped - recorded in gap register
 
 ### [M7] Composite `(tenant, -created_at)` indexes omitted from CMS models
 - **Files**:
@@ -147,4 +147,4 @@
   - `apps/ecommerce/models/ContentManagement/ContentBlocks.py`
 - **Problem**: Default list pagination orders by `-created_at` without a composite index on `(tenant, -created_at)`.
 - **Fix**: Record in `.agents/tasks/gaps-ecommerce-9.9.md`.
-- **Status**: [ ] open
+- **Status**: [~] skipped - recorded in gap register
