@@ -52,6 +52,10 @@ from apps.ecommerce.models.SubscriptionCommerce.CustomerSubscriptions import Cus
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionBoxCurations import SubscriptionBoxCuration
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionPlans import SubscriptionPlan
 from apps.ecommerce.models.SubscriptionCommerce.SubscriptionRetentionActions import SubscriptionRetentionAction
+from apps.ecommerce.models.ContentManagement.BlogArticles import BlogArticle
+from apps.ecommerce.models.ContentManagement.CmsPages import CmsPage
+from apps.ecommerce.models.ContentManagement.ContentBlocks import ContentBlock
+from apps.ecommerce.models.ContentManagement.MediaAssets import MediaAsset
 
 
 @admin.register(StoreCategory)
@@ -665,6 +669,86 @@ class CustomerSatisfactionSurveyAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["ticket", "order", "customer", "agent_rated", "reviewed_by"]
     ordering = ["-created_at"]
+
+
+# 9.9 Content Management System (CMS)
+@admin.register(CmsPage)
+class CmsPageAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "title",
+        "slug",
+        "page_type",
+        "status",
+        "template_layout",
+        "view_count",
+        "is_ab_test_active",
+        "updated_at",
+    ]
+    list_filter = ["page_type", "status", "template_layout", "is_ab_test_active", "is_indexable", "tenant"]
+    search_fields = ["title", "slug", "number", "meta_title"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    ordering = ["-created_at"]
+
+
+@admin.register(BlogArticle)
+class BlogArticleAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "title",
+        "slug",
+        "author",
+        "category",
+        "status",
+        "reading_time_minutes",
+        "is_featured",
+        "view_count",
+        "published_at",
+    ]
+    list_filter = ["category", "status", "is_featured", "allow_comments", "tenant"]
+    search_fields = ["title", "slug", "number", "tags", "excerpt"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["author", "featured_media"]
+    ordering = ["-created_at"]
+
+
+@admin.register(MediaAsset)
+class MediaAssetAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "title",
+        "media_type",
+        "folder_category",
+        "mime_type",
+        "width_px",
+        "height_px",
+        "uploaded_by",
+        "created_at",
+    ]
+    list_filter = ["media_type", "folder_category", "tenant"]
+    search_fields = ["title", "alt_text", "caption", "number"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["uploaded_by"]
+    ordering = ["-created_at"]
+
+
+@admin.register(ContentBlock)
+class ContentBlockAdmin(admin.ModelAdmin):
+    list_display = [
+        "number",
+        "name",
+        "block_type",
+        "sort_order",
+        "is_active",
+        "bg_color_class",
+        "created_at",
+    ]
+    list_filter = ["block_type", "is_active", "tenant"]
+    search_fields = ["name", "headline", "subheadline", "number"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["media_asset", "target_category", "target_product"]
+    ordering = ["sort_order", "-created_at"]
+
 
 
 
