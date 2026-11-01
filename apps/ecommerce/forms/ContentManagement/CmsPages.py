@@ -49,3 +49,21 @@ class CmsPageForm(TenantUniqueMixin, TenantModelForm):
         if qs.exists():
             raise ValidationError(f"A page with slug '{slug}' already exists for this tenant.")
         return slug
+
+    def clean_raw_html_body(self):
+        import re
+        raw_html = self.cleaned_data.get("raw_html_body", "")
+        if not raw_html:
+            return raw_html
+        dangerous_patterns = [
+            (r"<\s*script\b", "Script tags (<script>) are not permitted in CMS page body."),
+            (r"<\s*iframe\b", "Iframe elements (<iframe>) are not permitted in CMS page body."),
+            (r"<\s*object\b", "Object elements (<object>) are not permitted in CMS page body."),
+            (r"<\s*embed\b", "Embed elements (<embed>) are not permitted in CMS page body."),
+            (r"javascript\s*:", "Inline JavaScript URIs (javascript:) are not permitted."),
+            (r"\bon\w+\s*=", "Inline event handlers (e.g. onload, onerror, onclick) are not permitted."),
+        ]
+        for pattern, msg in dangerous_patterns:
+            if re.search(pattern, raw_html, re.IGNORECASE):
+                raise ValidationError(msg)
+        return raw_html
