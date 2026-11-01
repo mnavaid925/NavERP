@@ -128,7 +128,6 @@ def orderissueclaim_edit(request, pk):
 def orderissueclaim_delete(request, pk):
     claim = ecommerce_object(request, OrderIssueClaim, pk)
     number = claim.number
-    claim.delete()
     write_audit_log(
         request.user,
         claim,
@@ -136,5 +135,6 @@ def orderissueclaim_delete(request, pk):
         {"number": number},
         tenant=request.tenant,
     )
+    claim.delete()
     messages.success(request, f"Claim {number} deleted.")
     return redirect("ecommerce:orderissueclaim_list")
