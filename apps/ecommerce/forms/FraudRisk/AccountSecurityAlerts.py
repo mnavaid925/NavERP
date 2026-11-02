@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from apps.core.forms import TenantModelForm
 from apps.core.models.Party import Party
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
 
 
@@ -37,3 +37,8 @@ class AccountSecurityAlertForm(TenantUniqueMixin, TenantModelForm):
             self.fields["assigned_investigator"].queryset = self.fields["assigned_investigator"].queryset.filter(is_active=True)
         if "resolved_by" in self.fields:
             self.fields["resolved_by"].queryset = self.fields["resolved_by"].queryset.filter(is_active=True)
+
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["party"])
+        return cleaned
