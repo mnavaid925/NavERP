@@ -86,6 +86,8 @@ class B2bQuickOrderTemplate(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_ebqt_ten_created"),
+            models.Index(fields=["tenant", "company", "is_active"], name="idx_ebqt_ten_co_act"),
             models.Index(fields=["tenant", "company"], name="idx_ebqt_ten_co"),
             models.Index(fields=["tenant", "scope"], name="idx_ebqt_ten_scope"),
             models.Index(fields=["tenant", "is_active"], name="idx_ebqt_ten_act"),
