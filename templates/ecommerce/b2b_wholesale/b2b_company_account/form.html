@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bcompanyaccount_list' %}" class="hover:text-brand">Company Accounts</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{% if company_account %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="building-2" class="w-7 h-7 text-brand"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <a href="{% if company_account %}{% url 'ecommerce:b2bcompanyaccount_detail' company_account.pk %}{% else %}{% url 'ecommerce:b2bcompanyaccount_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+        <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300">
+          <div class="font-bold flex items-center gap-2 mb-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i>
+            Please correct the errors below:
+          </div>
+          <ul class="list-disc list-inside space-y-1">
+            {% for field, errors in form.errors.items %}
+              {% for err in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ err }}</li>
+              {% endfor %}
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Corporate Identity -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="building" class="w-4 h-4 text-brand"></i>
+          Corporate Identity & Core Spine
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.company_name.id_for_label }}" class="form-label">
+              Company Trading Name <span class="text-rose-500">*</span>
+            </label>
+            {{ form.company_name }}
+            {% if form.company_name.help_text %}
+              <div class="text-xs text-slate-500 mt-1">{{ form.company_name.help_text }}</div>
+            {% endif %}
+          </div>
+
+          <div>
+            <label for="{{ form.company_party.id_for_label }}" class="form-label">
+              Core Spine Party <span class="text-rose-500">*</span>
+            </label>
+            {{ form.company_party }}
+            <div class="text-xs text-slate-500 mt-1">Unified corporate identity record in core spine</div>
+          </div>
+
+          <div>
+            <label for="{{ form.primary_contact.id_for_label }}" class="form-label">Primary Account Executive / Contact</label>
+            {{ form.primary_contact }}
+          </div>
+
+          <div>
+            <label for="{{ form.preferred_currency.id_for_label }}" class="form-label">
+              Billing Currency <span class="text-rose-500">*</span>
+            </label>
+            {{ form.preferred_currency }}
+          </div>
+
+          <div>
+            <label for="{{ form.company_tax_id.id_for_label }}" class="form-label">Tax ID / VAT Number</label>
+            {{ form.company_tax_id }}
+          </div>
+
+          <div>
+            <label for="{{ form.business_registration_number.id_for_label }}" class="form-label">Business Registration Number</label>
+            {{ form.business_registration_number }}
+          </div>
+
+          <div>
+            <label for="{{ form.industry.id_for_label }}" class="form-label">Industry Classification</label>
+            {{ form.industry }}
+          </div>
+
+          <div>
+            <label for="{{ form.website.id_for_label }}" class="form-label">Corporate Website URL</label>
+            {{ form.website }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Trade Credit & Wholesale Terms -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="credit-card" class="w-4 h-4 text-brand"></i>
+          Trade Credit Lines & Commercial Terms
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label for="{{ form.credit_limit.id_for_label }}" class="form-label">Approved Credit Limit ($)</label>
+            {{ form.credit_limit }}
+          </div>
+
+          <div>
+            <label for="{{ form.payment_terms.id_for_label }}" class="form-label">Contractual Payment Terms</label>
+            {{ form.payment_terms }}
+          </div>
+
+          <div>
+            <label for="{{ form.credit_status.id_for_label }}" class="form-label">Credit Status</label>
+            {{ form.credit_status }}
+          </div>
+
+          <div>
+            <label for="{{ form.wholesale_discount_percent.id_for_label }}" class="form-label">Wholesale Discount (%)</label>
+            {{ form.wholesale_discount_percent }}
+          </div>
+
+          <div>
+            <label for="{{ form.status.id_for_label }}" class="form-label">Account Lifecycle Status</label>
+            {{ form.status }}
+          </div>
+
+          <div class="flex items-center pt-6">
+            <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+              {{ form.requires_po_number }}
+              <span>Require Customer PO Number</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Governance & PunchOut Settings -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="shield" class="w-4 h-4 text-brand"></i>
+          Purchasing Approvals & PunchOut Gateway
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div class="flex items-center pt-2">
+            <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+              {{ form.requires_order_approval }}
+              <span>Enable Corporate Order Approvals</span>
+            </label>
+          </div>
+
+          <div>
+            <label for="{{ form.approval_threshold_amount.id_for_label }}" class="form-label">Approval Threshold Amount ($)</label>
+            {{ form.approval_threshold_amount }}
+            <div class="text-xs text-slate-500 mt-1">Orders exceeding this amount require supervisor review</div>
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="{{ form.default_approver.id_for_label }}" class="form-label">Default Supervisor Approver</label>
+            {{ form.default_approver }}
+          </div>
+
+          <div class="flex items-center pt-2">
+            <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+              {{ form.punchout_enabled }}
+              <span>Enable e-Procurement PunchOut Catalog</span>
+            </label>
+          </div>
+
+          <div>
+            <label for="{{ form.punchout_protocol.id_for_label }}" class="form-label">PunchOut Protocol</label>
+            {{ form.punchout_protocol }}
+          </div>
+
+          <div>
+            <label for="{{ form.punchout_identity.id_for_label }}" class="form-label">Buyer PunchOut Identity</label>
+            {{ form.punchout_identity }}
+          </div>
+
+          <div>
+            <label for="{{ form.punchout_shared_secret.id_for_label }}" class="form-label">Shared Secret Credential</label>
+            {{ form.punchout_shared_secret }}
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="{{ form.punchout_return_url.id_for_label }}" class="form-label">Procurement Callback URL</label>
+            {{ form.punchout_return_url }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <label for="{{ form.notes.id_for_label }}" class="form-label">Account Notes & Underwriting Remarks</label>
+        {{ form.notes }}
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if company_account %}{% url 'ecommerce:b2bcompanyaccount_detail' company_account.pk %}{% else %}{% url 'ecommerce:b2bcompanyaccount_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Save Company Account</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
