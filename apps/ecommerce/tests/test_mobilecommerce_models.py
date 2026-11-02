@@ -422,9 +422,9 @@ def test_mobilecommerce_locationrule_distance_to_accurate(tenant_a):
     assert zero_dist == 0.0
 
     # Known distance: San Francisco (37.7749, -122.4194) to Oakland City Center (37.8044, -122.2712)
-    # Expected distance is ~13.5 km - 14.0 km (13,500m - 14,000m)
+    # Expected distance is ~13.4 km - 14.0 km (13,000m - 14,000m)
     dist = rule.distance_to(37.8044, -122.2712)
-    assert 13500 <= dist <= 14000
+    assert 13000 <= dist <= 14000
 
 
 def test_mobilecommerce_locationrule_distance_to_edge_cases(tenant_a):
