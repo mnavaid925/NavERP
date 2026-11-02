@@ -22,10 +22,10 @@ def mobilelocationrule_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(name__icontains(q))
-            | Q(store_name__icontains(q))
-            | Q(number__icontains(q))
-            | Q(fulfillment_center__name__icontains(q))
+            Q(name__icontains=q)
+            | Q(store_name__icontains=q)
+            | Q(number__icontains=q)
+            | Q(fulfillment_center__name__icontains=q)
         )
 
     selected_type = request.GET.get("rule_type", "").strip()
