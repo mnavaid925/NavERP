@@ -15,7 +15,22 @@ from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAcco
 from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
+from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
+
+
+def _prepare_product_choices(request, limit=30):
+    products = list(
+        ecommerce_scope(
+            CatalogProduct.objects.filter(status="active").prefetch_related("variants").order_by("name"),
+            request,
+        )[:limit]
+    )
+    for p in products:
+        var = p.variants.first()
+        p.display_sku = var.sku if var else p.number
+        p.display_price = var.price if (var and var.price) else Decimal("0.00")
+    return products
 
 
 @login_required
@@ -98,7 +113,7 @@ def b2bquoterequest_create(request):
         initial["company"] = company_id
     initial["requested_by"] = request.user.pk
 
-    products = ecommerce_scope(CatalogProduct.objects.filter(is_active=True).order_by("name"), request)[:30]
+    products = _prepare_product_choices(request, 30)
 
     if request.method == "POST":
         form = B2bQuoteRequestForm(request.POST, tenant=request.tenant)
@@ -118,23 +133,26 @@ def b2bquoterequest_create(request):
             subtotal = Decimal("0.00")
             for idx, pid in enumerate(product_ids):
                 if pid:
-                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first()
+                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
                     if prod:
+                        var = prod.variants.first()
+                        prod_sku = var.sku if var else prod.number
+                        default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
                             q_val = int(qtys[idx]) if idx < len(qtys) else 1
                         except (ValueError, IndexError):
                             q_val = 1
                         try:
-                            p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else prod.retail_price
+                            p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else default_price
                         except (ValueError, IndexError):
-                            p_val = prod.retail_price
+                            p_val = default_price
 
                         n_val = notes[idx] if idx < len(notes) else ""
                         line_tot = (Decimal(str(q_val)) * p_val).quantize(Decimal("0.01"))
                         subtotal += line_tot
                         line_items.append({
                             "product_id": prod.pk,
-                            "sku": prod.sku,
+                            "sku": prod_sku,
                             "name": prod.name,
                             "requested_qty": q_val,
                             "requested_unit_price": float(p_val),
@@ -170,7 +188,7 @@ def b2bquoterequest_create(request):
 @login_required
 def b2bquoterequest_edit(request, pk):
     quote = ecommerce_object(request, B2bQuoteRequest, pk)
-    products = ecommerce_scope(CatalogProduct.objects.filter(is_active=True).order_by("name"), request)[:30]
+    products = _prepare_product_choices(request, 30)
 
     if request.method == "POST":
         form = B2bQuoteRequestForm(request.POST, instance=quote, tenant=request.tenant)
@@ -188,23 +206,26 @@ def b2bquoterequest_edit(request, pk):
                 subtotal = Decimal("0.00")
                 for idx, pid in enumerate(product_ids):
                     if pid:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first()
+                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
                         if prod:
+                            var = prod.variants.first()
+                            prod_sku = var.sku if var else prod.number
+                            default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
                                 q_val = int(qtys[idx]) if idx < len(qtys) else 1
                             except (ValueError, IndexError):
                                 q_val = 1
                             try:
-                                p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else prod.retail_price
+                                p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else default_price
                             except (ValueError, IndexError):
-                                p_val = prod.retail_price
+                                p_val = default_price
 
                             n_val = notes[idx] if idx < len(notes) else ""
                             line_tot = (Decimal(str(q_val)) * p_val).quantize(Decimal("0.01"))
                             subtotal += line_tot
                             line_items.append({
                                 "product_id": prod.pk,
-                                "sku": prod.sku,
+                                "sku": prod_sku,
                                 "name": prod.name,
                                 "requested_qty": q_val,
                                 "requested_unit_price": float(p_val),
@@ -332,7 +353,7 @@ def b2bquoterequest_convert_order(request, pk):
 
     if quote.converted_order:
         messages.info(request, f"This quote was already converted to Order {quote.converted_order.number}.")
-        return redirect("ecommerce:order_detail", pk=quote.converted_order.pk)
+        return redirect("ecommerce:ecommerceorder_detail", pk=quote.converted_order.pk)
 
     with transaction.atomic():
         # Create authoritative EcommerceOrder
@@ -353,15 +374,17 @@ def b2bquoterequest_convert_order(request, pk):
         # Create order items
         for item in quote.line_items_data:
             pid = item.get("product_id")
-            prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first() if pid else None
+            prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first() if pid else None
             if not prod:
-                prod = CatalogProduct.objects.filter(tenant=request.tenant).first()
+                prod = CatalogProduct.objects.filter(tenant=request.tenant).prefetch_related("variants").first()
             if prod:
+                var = prod.variants.first()
+                item_sku = item.get("sku") or (var.sku if var else prod.number)
                 EcommerceOrderLine.objects.create(
                     tenant=request.tenant,
                     order=order,
                     product=prod,
-                    sku=item.get("sku") or prod.sku,
+                    sku=item_sku,
                     product_name=item.get("name") or prod.name,
                     quantity=item.get("requested_qty", 1),
                     unit_price=Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0)),
@@ -384,4 +407,4 @@ def b2bquoterequest_convert_order(request, pk):
         object_id=quote.pk,
     )
     messages.success(request, f"Quote {quote.number} converted into Order {order.number} successfully!")
-    return redirect("ecommerce:order_detail", pk=order.pk)
+    return redirect("ecommerce:ecommerceorder_detail", pk=order.pk)
