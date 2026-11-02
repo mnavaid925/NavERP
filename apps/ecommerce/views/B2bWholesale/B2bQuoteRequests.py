@@ -358,6 +358,17 @@ def b2bquoterequest_convert_order(request, pk):
         messages.info(request, f"This quote was already converted to Order {quote.converted_order.number}.")
         return redirect("ecommerce:ecommerceorder_detail", pk=quote.converted_order.pk)
 
+    party = quote.company.company_party
+    party_addr = party.addresses.filter(kind="shipping").first() or party.addresses.first() if party else None
+    shipping_name = (
+        (quote.requested_by.get_full_name() if quote.requested_by else "")
+        or quote.company.company_name
+    )[:150]
+    shipping_line1 = (party_addr.line1 if party_addr and party_addr.line1 else "100 Commercial Way")[:255]
+    shipping_city = (party_addr.city if party_addr and party_addr.city else "Enterprise City")[:100]
+    shipping_postal_code = "10001"
+    shipping_country = (party_addr.country if party_addr and party_addr.country else "USA")[:100]
+
     with transaction.atomic():
         # Create authoritative EcommerceOrder
         order = EcommerceOrder.objects.create(
@@ -366,12 +377,18 @@ def b2bquoterequest_convert_order(request, pk):
             currency=quote.currency,
             status="processing",
             payment_status="authorized" if quote.company.has_available_credit(quote.quoted_total) else "pending",
-            subtotal=quote.original_subtotal,
+            subtotal_amount=quote.original_subtotal,
             discount_amount=(quote.original_subtotal - (quote.quoted_total - quote.tax_amount - quote.shipping_estimate)),
             tax_amount=quote.tax_amount,
             shipping_amount=quote.shipping_estimate,
             total_amount=quote.quoted_total,
             guest_email=quote.requested_by.email if quote.requested_by else "",
+            shipping_name=shipping_name,
+            shipping_address_line1=shipping_line1,
+            shipping_city=shipping_city,
+            shipping_postal_code=shipping_postal_code,
+            shipping_country=shipping_country,
+            shipping_address=party_addr,
         )
 
         # Create order items
