@@ -8,6 +8,211 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.18: Fraud & Risk Management (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.18.md` (2026-11-02)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.17.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0034_b2bcompanyaccount_idx_ebca_ten_created_and_more.py`, so **9.18 claims `0035`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.18.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/FraudRisk/`
+> Template folder name: `templates/ecommerce/fraud_risk/{fraud_rule,transaction_risk_assessment,chargeback_dispute,account_security_alert}/` + `fraud_risk_hub.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Fraud & Risk Spine Integration (L28/L29)**:
+  - Account takeover and security alerts link to `settings.AUTH_USER_MODEL` and unified business identity `core.Party` (Module 0).
+  - Risk assessments link to canonical orders `ecommerce.EcommerceOrder` (`EORD-`, 9.5) and customer `core.Party` (Module 0).
+  - Chargeback disputes link to `ecommerce.EcommerceOrder` (`EORD-`, 9.5), customer `core.Party`, and preferred currency `accounting.Currency` (Module 2).
+  - Authoritative accounting ledger entries (dispute settlements, merchant loss write-offs, payment reversals) remain anchored in Module 2 `accounting` (`Invoice`, `Payment`, `JournalEntry`) (L29).
+  - All administrative reviews and status overrides write to `core.AuditLog` via `apps.core.utils.log_action`.
+- **Clear Sibling Boundaries (9.4 vs. 9.5 vs. 9.6 vs. 9.17 vs. 9.18)**:
+  - 9.4 (`CartCheckout`): Owns shopping carts and standard checkout forms. 9.18 evaluates risk velocity and challenge rules during cart checkout.
+  - 9.5 (`OrderManagement`): Owns core orders and fulfillment statuses. 9.18 attaches risk scores, manual analyst review hold statuses, and dispute representment cases without duplicating order headers or items.
+  - 9.6 (`CustomerProfile`): Owns B2C customer profiles. 9.18 monitors account security anomalies, credential stuffing, and ATO alerts.
+  - 9.17 (`B2bWholesale`): Owns corporate accounts, credit terms, and buyer permissions. 9.18 evaluates risk on wholesale checkout orders and enforces fraud policy.
+- **Multi-Tenancy & Data Isolation**: All 4 Fraud & Risk models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`) with strict `tenant` (`core.Tenant`) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered`, implementing thread-safe auto-number generation, audit timestamps, and strictly unique prefixes.
+- **Prefix Collision Sweep**: `EFRR`, `ETRA`, `ECBD`, `EASA` verified 100% collision-free across the entire repository.
+
+---
+
+## 9.18-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate financial general ledger tables** — Chargeback case files track dispute amounts, merchant fees, and representment evidence; authoritative payment settlements and reversal journals live in `accounting` (L29).
+- [ ] **NO duplicate customer identity tables** — Monitored users and compromised accounts are `accounts.User` linked to `core.Party`.
+- [ ] **NO external bank/card network HTTP daemon or live 3DS redirect dependency in test suite** — AVS, CVV, and 3DS challenge flows operate locally and deterministically within tenant configuration.
+- [ ] **NO external third-party sanctions API subscription fee dependency** — Sanctions and PEP watchlist screenings evaluate locally via structured watchlist criteria.
+- [ ] **NO duplicate order or fulfillment tables** — Risk assessments and disputes point to verified `ecommerce.EcommerceOrder`.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/FraudRisk/`)
+
+- [ ] **`FraudRule`** [Prefix: `EFRR-`] (`apps/ecommerce/models/FraudRisk/FraudRules.py`)
+  - **Purpose**: Configurable fraud rule engine defining velocity checks, threshold limits, geochecks, proxy detection, and automated decisions.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `name`: CharField(max_length=255)
+    - `rule_code`: CharField(max_length=50, blank=True)
+    - `rule_scope`: CharField(max_length=30, choices=[("checkout", "Checkout / Payment"), ("account_login", "Account Login"), ("registration", "Account Registration"), ("promotion", "Coupon / Promotion Redemption")], default="checkout")
+    - `rule_type`: CharField(max_length=40, choices=[("velocity_orders", "Order Velocity (Orders / Hour)"), ("velocity_cards", "Card Attempt Velocity"), ("amount_threshold", "High Order Amount Threshold"), ("avs_cvv_mismatch", "AVS / CVV Failure"), ("ip_proxy_vpn", "Proxy / VPN / TOR Detection"), ("country_mismatch", "Billing / IP Country Mismatch"), ("email_domain_risk", "High-Risk Disposable Email Domain"), ("blacklist_match", "Blacklist Entity Match"), ("whitelist_match", "Whitelist Entity Match")], default="velocity_orders")
+    - `condition_operator`: CharField(max_length=20, choices=[("gt", "Greater Than (>)"), ("gte", "Greater Than or Equal (>=)"), ("lt", "Less Than (<)"), ("lte", "Less Than or Equal (<=)"), ("equals", "Equals (==)"), ("contains", "Contains"), ("in_list", "In Blacklist / Whitelist")], default="gt")
+    - `threshold_value`: CharField(max_length=255, help_text="Numeric limit, threshold count, or comma-separated match values")
+    - `risk_score_impact`: IntegerField(default=20, help_text="Risk points added (or subtracted if whitelist) when triggered")
+    - `action_to_take`: CharField(max_length=25, choices=[("allow", "Allow / Trust"), ("flag_review", "Flag for Manual Review"), ("challenge_3ds", "Challenge (3D Secure / MFA)"), ("block", "Block / Reject")], default="flag_review")
+    - `priority`: IntegerField(default=10, help_text="Execution order (lower runs first)")
+    - `is_active`: BooleanField(default=True)
+    - `description`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`TransactionRiskAssessment`** [Prefix: `ETRA-`] (`apps/ecommerce/models/FraudRisk/TransactionRiskAssessments.py`)
+  - **Purpose**: Real-time multi-signal risk evaluation record scoring transactions 0–100 with AVS/CVV signals, device fingerprints, and automated/manual verdicts.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `order`: ForeignKey(`ecommerce.EcommerceOrder`, SET_NULL, null=True, blank=True, related_name="risk_assessments")
+    - `customer_party`: ForeignKey(`core.Party`, SET_NULL, null=True, blank=True, related_name="fraud_assessments")
+    - `user`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="ecommerce_risk_assessments")
+    - `transaction_amount`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `currency`: ForeignKey(`accounting.Currency`, PROTECT, related_name="fraud_assessments")
+    - `risk_score`: IntegerField(default=0, help_text="Composite risk score from 0 (very low risk) to 100 (critical fraud risk)")
+    - `risk_tier`: CharField(max_length=20, choices=[("low", "Low Risk (0-25)"), ("medium", "Medium Risk (26-60)"), ("high", "High Risk (61-85)"), ("critical", "Critical Risk (86-100)")], default="low")
+    - `recommended_action`: CharField(max_length=25, choices=[("approve", "Approve"), ("review", "Manual Review"), ("challenge", "Challenge (3DS)"), ("reject", "Reject / Decline")], default="approve")
+    - `actual_decision`: CharField(max_length=25, choices=[("pending", "Pending Assessment"), ("approved_auto", "Auto-Approved"), ("approved_manual", "Approved by Analyst"), ("declined_auto", "Auto-Declined"), ("declined_manual", "Declined by Analyst"), ("challenged", "Challenged / 3DS Required")], default="pending")
+    - `avs_result_code`: CharField(max_length=20, choices=[("match", "Full Address & Zip Match"), ("partial", "Partial Match (Zip or Street only)"), ("no_match", "No Match"), ("not_checked", "Not Checked / Unsupported")], default="not_checked")
+    - `cvv_result_code`: CharField(max_length=20, choices=[("match", "CVV Match"), ("no_match", "CVV No Match"), ("not_provided", "Not Provided"), ("not_checked", "Not Checked")], default="not_checked")
+    - `ip_address`: GenericIPAddressField(null=True, blank=True)
+    - `billing_country`: CharField(max_length=2, blank=True)
+    - `ip_country`: CharField(max_length=2, blank=True)
+    - `is_geo_mismatch`: BooleanField(default=False)
+    - `is_proxy_or_vpn`: BooleanField(default=False)
+    - `device_fingerprint`: CharField(max_length=128, blank=True)
+    - `velocity_count_24h`: IntegerField(default=1)
+    - `risk_factors_summary`: TextField(blank=True, help_text="Summary of triggered rules and signals")
+    - `analyst_user`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="reviewed_risk_assessments")
+    - `analyst_notes`: TextField(blank=True)
+    - `reviewed_at`: DateTimeField(null=True, blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `reviewed_at`
+
+- [ ] **`ChargebackDispute`** [Prefix: `ECBD-`] (`apps/ecommerce/models/FraudRisk/ChargebackDisputes.py`)
+  - **Purpose**: Formal card network chargeback and dispute management record tracking reason codes, evidence submission, representment deadlines, and win/loss resolution.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `order`: ForeignKey(`ecommerce.EcommerceOrder`, PROTECT, related_name="chargeback_disputes")
+    - `customer_party`: ForeignKey(`core.Party`, SET_NULL, null=True, blank=True, related_name="customer_disputes")
+    - `currency`: ForeignKey(`accounting.Currency`, PROTECT, related_name="disputes")
+    - `dispute_amount`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `dispute_fee`: DecimalField(max_digits=10, decimal_places=2, default=15.00, help_text="Payment scheme non-refundable dispute fee")
+    - `gateway_dispute_id`: CharField(max_length=100, blank=True)
+    - `payment_method_type`: CharField(max_length=30, choices=[("credit_card", "Credit Card"), ("debit_card", "Debit Card"), ("paypal", "PayPal"), ("bank_transfer", "Direct Debit / ACH"), ("other", "Other")], default="credit_card")
+    - `card_brand`: CharField(max_length=30, blank=True)
+    - `reason_category`: CharField(max_length=35, choices=[("fraudulent", "Fraudulent / Unauthorized Transaction"), ("unrecognized", "Unrecognized Card Charge"), ("product_not_received", "Merchandise / Service Not Received"), ("not_as_described", "Significantly Not as Described / Defective"), ("credit_not_processed", "Credit / Refund Not Processed"), ("duplicate_charge", "Duplicate Processing"), ("subscription_canceled", "Subscription Canceled Prior to Charge"), ("other", "Other General Dispute")], default="fraudulent")
+    - `reason_code`: CharField(max_length=30, blank=True, help_text="Card network reason code e.g. 10.4, 4837")
+    - `stage`: CharField(max_length=30, choices=[("inquiry", "Pre-Dispute Inquiry / Retrieval Request"), ("needs_response", "Dispute Received - Action Required"), ("under_review", "Evidence Collation Under Review"), ("representment_submitted", "Representment Evidence Submitted"), ("won", "Resolved: Dispute Won"), ("lost", "Resolved: Dispute Lost"), ("accepted", "Dispute Accepted (Conceded)")], default="needs_response")
+    - `evidence_due_date`: DateField(null=True, blank=True)
+    - `evidence_summary`: TextField(blank=True, help_text="Summary of collated evidence (tracking, delivery signature, communications)")
+    - `representment_notes`: TextField(blank=True, help_text="Formal rebuttal statement submitted to processor")
+    - `representment_submitted_at`: DateTimeField(null=True, blank=True)
+    - `resolved_at`: DateTimeField(null=True, blank=True)
+    - `outcome_notes`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `representment_submitted_at`, `resolved_at`
+
+- [ ] **`AccountSecurityAlert`** [Prefix: `EASA-`] (`apps/ecommerce/models/FraudRisk/AccountSecurityAlerts.py`)
+  - **Purpose**: Real-time account security alert record for Account Takeover (ATO), credential stuffing, impossible travel, and sanctions/PEP compliance matches.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `user`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="account_security_alerts")
+    - `party`: ForeignKey(`core.Party`, SET_NULL, null=True, blank=True, related_name="security_alerts")
+    - `alert_type`: CharField(max_length=35, choices=[("credential_stuffing", "Credential Stuffing Attack Spike"), ("brute_force", "Brute-Force Password Attempts"), ("suspicious_login", "Suspicious / New Device Login"), ("impossible_travel", "Impossible Travel (Geo Velocity)"), ("session_hijack", "Session / User-Agent Anomaly"), ("sanctions_screening_hit", "Sanctions List Potential Match"), ("pep_screening_hit", "Politically Exposed Person (PEP) Match"), ("aml_velocity_alert", "Anti-Money Laundering (AML) Velocity Spike"), ("excessive_refunds", "Refund / Voucher Abuse Pattern")], default="suspicious_login")
+    - `severity`: CharField(max_length=20, choices=[("low", "Low"), ("medium", "Medium"), ("high", "High"), ("critical", "Critical")], default="medium")
+    - `status`: CharField(max_length=25, choices=[("new", "New / Unassigned"), ("investigating", "Under Investigation"), ("resolved_legitimate", "Resolved: Legitimate Activity"), ("confirmed_threat", "Confirmed Security Threat"), ("dismissed", "False Positive / Dismissed")], default="new")
+    - `automated_action_taken`: CharField(max_length=35, choices=[("none", "None / Log Only"), ("force_password_reset", "Forced Password Reset"), ("lock_account", "Account Locked"), ("terminate_sessions", "Active Sessions Terminated"), ("challenge_mfa", "Step-Up MFA Challenge Triggered"), ("notify_user", "Security Email Alert Sent")], default="none")
+    - `ip_address`: GenericIPAddressField(null=True, blank=True)
+    - `location_info`: CharField(max_length=150, blank=True)
+    - `user_agent`: CharField(max_length=255, blank=True)
+    - `incident_details`: TextField(blank=True)
+    - `assigned_investigator`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="assigned_security_alerts")
+    - `investigation_notes`: TextField(blank=True)
+    - `resolved_by`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="resolved_security_alerts")
+    - `resolved_at`: DateTimeField(null=True, blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `resolved_at`
+
+---
+
+## Backend Packages (`apps/ecommerce/`)
+
+### Models (`apps/ecommerce/models/FraudRisk/`)
+- [ ] `apps/ecommerce/models/FraudRisk/__init__.py`
+- [ ] `apps/ecommerce/models/FraudRisk/FraudRules.py`
+- [ ] `apps/ecommerce/models/FraudRisk/TransactionRiskAssessments.py`
+- [ ] `apps/ecommerce/models/FraudRisk/ChargebackDisputes.py`
+- [ ] `apps/ecommerce/models/FraudRisk/AccountSecurityAlerts.py`
+
+### Forms (`apps/ecommerce/forms/FraudRisk/`)
+- [ ] `apps/ecommerce/forms/FraudRisk/__init__.py`
+- [ ] `apps/ecommerce/forms/FraudRisk/FraudRules.py`
+- [ ] `apps/ecommerce/forms/FraudRisk/TransactionRiskAssessments.py`
+- [ ] `apps/ecommerce/forms/FraudRisk/ChargebackDisputes.py`
+- [ ] `apps/ecommerce/forms/FraudRisk/AccountSecurityAlerts.py`
+
+### Views (`apps/ecommerce/views/FraudRisk/`)
+- [ ] `apps/ecommerce/views/FraudRisk/__init__.py`
+- [ ] `apps/ecommerce/views/FraudRisk/FraudRules.py`
+- [ ] `apps/ecommerce/views/FraudRisk/TransactionRiskAssessments.py`
+- [ ] `apps/ecommerce/views/FraudRisk/ChargebackDisputes.py`
+- [ ] `apps/ecommerce/views/FraudRisk/AccountSecurityAlerts.py`
+
+### URLs (`apps/ecommerce/urls/FraudRisk/`)
+- [ ] `apps/ecommerce/urls/FraudRisk/__init__.py`
+- [ ] `apps/ecommerce/urls/FraudRisk/FraudRules.py`
+- [ ] `apps/ecommerce/urls/FraudRisk/TransactionRiskAssessments.py`
+- [ ] `apps/ecommerce/urls/FraudRisk/ChargebackDisputes.py`
+- [ ] `apps/ecommerce/urls/FraudRisk/AccountSecurityAlerts.py`
+
+---
+
+## Package Re-Exports & Wiring
+- [ ] Re-export all 4 models in `apps/ecommerce/models/__init__.py`
+- [ ] Re-export all 4 forms in `apps/ecommerce/forms/__init__.py`
+- [ ] Re-export all views in `apps/ecommerce/views/__init__.py`
+- [ ] Wire url patterns into `apps/ecommerce/urls/__init__.py`
+- [ ] Register all 4 models in `apps/ecommerce/admin.py`
+- [ ] Add `LIVE_LINKS["9.18"]` in `apps/core/navigation.py`
+- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent 9.18 seed data
+
+---
+
+## Frontend Templates (`templates/ecommerce/fraud_risk/`)
+- [ ] `templates/ecommerce/fraud_risk/fraud_risk_hub.html` (Overview dashboard with risk KPIs & alert summaries)
+- [ ] `templates/ecommerce/fraud_risk/fraud_rule/list.html`
+- [ ] `templates/ecommerce/fraud_risk/fraud_rule/detail.html`
+- [ ] `templates/ecommerce/fraud_risk/fraud_rule/form.html`
+- [ ] `templates/ecommerce/fraud_risk/transaction_risk_assessment/list.html`
+- [ ] `templates/ecommerce/fraud_risk/transaction_risk_assessment/detail.html`
+- [ ] `templates/ecommerce/fraud_risk/transaction_risk_assessment/form.html`
+- [ ] `templates/ecommerce/fraud_risk/chargeback_dispute/list.html`
+- [ ] `templates/ecommerce/fraud_risk/chargeback_dispute/detail.html`
+- [ ] `templates/ecommerce/fraud_risk/chargeback_dispute/form.html`
+- [ ] `templates/ecommerce/fraud_risk/account_security_alert/list.html`
+- [ ] `templates/ecommerce/fraud_risk/account_security_alert/detail.html`
+- [ ] `templates/ecommerce/fraud_risk/account_security_alert/form.html`
+
+---
+
+## Verification & Smoke
+- [ ] `makemigrations ecommerce` (claim `0035`)
+- [ ] `migrate`
+- [ ] `seed_ecommerce` (run twice to verify idempotence)
+- [ ] `manage.py check` clean
+- [ ] Smoke test script in `temp/` verifying HTTP 200/302, zero leak markers, and cross-tenant IDOR 404
+
+---
+
+## Review & Tests
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+- [ ] Phase 5 Fixer: `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.18.md`
+- [ ] Phase 6 Tests: Contract, conftest, and test suite green
+- [ ] Phase 7 Skill & README update
+
+---
+
 # Sub-module 9.17: B2B & Wholesale Commerce (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.17.md` (2026-11-02)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.16.
