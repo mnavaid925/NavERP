@@ -160,6 +160,10 @@ class MobileAppConfig(TenantNumbered):
                 fields=["tenant", "number"],
                 name="ecommerce_emac_tenant_num_uniq",
             ),
+            models.UniqueConstraint(
+                fields=["tenant", "short_name"],
+                name="ecommerce_emac_tenant_sname_uniq",
+            ),
         ]
         indexes = [
             models.Index(fields=["tenant", "is_active"], name="idx_emac_ten_act"),
