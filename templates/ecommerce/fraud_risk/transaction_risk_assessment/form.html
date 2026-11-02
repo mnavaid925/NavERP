@@ -174,11 +174,18 @@
             <h2 class="card-title font-semibold">Fraud Analyst Review</h2>
         </div>
         <div class="card-body space-y-4">
+            {% if form.analyst_user %}
             <div class="form-group">
                 <label class="form-label font-medium" for="{{ form.analyst_user.id_for_label }}">Assigned Analyst</label>
                 {{ form.analyst_user }}
                 {% if form.analyst_user.errors %}<div class="form-error">{{ form.analyst_user.errors.0 }}</div>{% endif %}
             </div>
+            {% elif is_edit and assessment.analyst_user %}
+            <div class="form-group">
+                <label class="form-label font-medium">Assigned Analyst</label>
+                <div class="form-input bg-slate-50 cursor-not-allowed text-muted">{{ assessment.analyst_user.username }}</div>
+            </div>
+            {% endif %}
             <div class="form-group">
                 <label class="form-label font-medium" for="{{ form.analyst_notes.id_for_label }}">Analyst Commentary &amp; Decision Justification</label>
                 {{ form.analyst_notes }}
