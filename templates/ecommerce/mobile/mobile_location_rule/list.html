@@ -149,8 +149,10 @@
                   <span class="badge badge-slate">Geofence Exit</span>
                   {% elif rule.rule_type == 'geofence_dwell' %}
                   <span class="badge badge-amber">Geofence Dwell</span>
-                  {% else %}
+                  {% elif rule.rule_type == 'curbside_pickup' %}
                   <span class="badge badge-info">Curbside Pickup</span>
+                  {% else %}
+                  <span class="badge badge-slate">{{ rule.get_rule_type_display }}</span>
                   {% endif %}
                 </div>
                 <div class="text-xs text-slate-500">{{ rule.get_trigger_action_display }}</div>
@@ -174,15 +176,15 @@
             </td>
             <td class="text-right">
               <div class="flex items-center justify-end gap-1">
-                <a href="{% url 'ecommerce:mobilelocationrule_detail' rule.pk %}" class="btn-icon" title="View details & test">
+                <a href="{% url 'ecommerce:mobilelocationrule_detail' rule.pk %}" class="btn-icon" title="View details & test" aria-label="View details & test">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:mobilelocationrule_edit' rule.pk %}" class="btn-icon" title="Edit rule">
+                <a href="{% url 'ecommerce:mobilelocationrule_edit' rule.pk %}" class="btn-icon" title="Edit rule" aria-label="Edit rule">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
                 <form method="post" action="{% url 'ecommerce:mobilelocationrule_delete' rule.pk %}" onsubmit="return confirm('Delete location rule {{ rule.name }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete" aria-label="Delete">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
@@ -198,7 +200,7 @@
                 <p class="text-sm text-slate-500 mt-1">Configure retail store locator pins, entry welcome geofences, and curbside arrival triggers.</p>
                 <div class="mt-4">
                   <a href="{% url 'ecommerce:mobilelocationrule_create' %}" class="btn btn-primary">
-                    Create Location Rule
+                    <i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i>Create Location Rule
                   </a>
                 </div>
               </div>
