@@ -121,7 +121,7 @@
                             <div class="text-xs text-muted">{{ item.order.number|default:"No Order" }}</div>
                         </td>
                         <td>
-                            <span class="font-bold {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warn{% else %}text-green{% endif %}">
+                            <span class="font-bold {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warn{% else %}text-ok{% endif %}">
                                 {{ item.risk_score }}/100
                             </span>
                             <span class="block text-xs text-muted">{{ item.get_risk_tier_display }}</span>
