@@ -143,9 +143,9 @@
                         <div class="mt-1">
                             <span class="font-mono">Billing: {{ assessment.billing_country|default:"-" }} / IP: {{ assessment.ip_country|default:"-" }}</span>
                             {% if assessment.is_geo_mismatch %}
-                            <span class="badge badge-amber ml-2">Country Mismatch</span>
+                            <span class="badge badge-amber ms-2">Country Mismatch</span>
                             {% else %}
-                            <span class="badge badge-green ml-2">Matched</span>
+                            <span class="badge badge-green ms-2">Matched</span>
                             {% endif %}
                         </div>
                     </div>
