@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ template_obj.name }} - Reorder Template | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="hover:text-brand">Reorder Templates</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200 font-mono">{{ template_obj.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="bookmark" class="w-7 h-7 text-brand"></i>
+          {{ template_obj.name }}
+        </h1>
+        {% if template_obj.is_active %}
+          <span class="badge badge-green">Active</span>
+        {% else %}
+          <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2b_quick_order_matrix' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+        <span>Quick Order Grid</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bquickordertemplate_edit' template_obj.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Template</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="btn btn-outline">
+        Back to List
+      </a>
+    </div>
+  </div>
+
+  {% if show_delete_confirm %}
+    <div class="card p-6 border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
+      <div class="flex items-start gap-4">
+        <div class="stat-icon red">
+          <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-rose-900 dark:text-rose-200">Confirm Template Deletion</h3>
+          <p class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+            Are you sure you want to delete template <strong>{{ template_obj.name }}</strong> ({{ template_obj.number }})?
+          </p>
+          <div class="flex items-center gap-3 mt-4">
+            <form method="post" action="{% url 'ecommerce:b2bquickordertemplate_delete' template_obj.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                <span>Confirm Permanent Delete</span>
+              </button>
+            </form>
+            <a href="{% url 'ecommerce:b2bquickordertemplate_detail' template_obj.pk %}" class="btn btn-outline">
+              Cancel
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Overview Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="card p-5 space-y-2">
+      <div class="text-xs text-slate-400">Owning Wholesale Company</div>
+      <a href="{% url 'ecommerce:b2bcompanyaccount_detail' template_obj.company.pk %}" class="text-base font-bold text-brand hover:underline block">
+        {{ template_obj.company.company_name }}
+      </a>
+      <div class="text-xs text-slate-500 font-mono">{{ template_obj.company.number }}</div>
+    </div>
+
+    <div class="card p-5 space-y-2">
+      <div class="text-xs text-slate-400">Visibility & Cadence</div>
+      <div class="flex items-center gap-2">
+        <span class="badge badge-info">{{ template_obj.get_scope_display }}</span>
+        <span class="badge badge-slate">{{ template_obj.get_cadence_display }}</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-1">Authored by: {{ template_obj.created_by.get_full_name|default:template_obj.created_by.username|default:"System" }}</div>
+    </div>
+
+    <div class="card p-5 space-y-2">
+      <div class="text-xs text-slate-400">Reorder Statistics</div>
+      <div class="text-lg font-bold font-mono text-slate-900 dark:text-white">
+        {{ template_obj.times_ordered }} Orders Placed
+      </div>
+      <div class="text-xs text-slate-500">
+        Last ordered: {{ template_obj.last_ordered_at|date:"M d, Y"|default:"Never" }}
+      </div>
+    </div>
+  </div>
+
+  {% if template_obj.description %}
+    <div class="card p-4">
+      <div class="text-xs text-slate-400 uppercase font-bold mb-1">Description & Guidelines</div>
+      <p class="text-sm text-slate-700 dark:text-slate-300">{{ template_obj.description }}</p>
+    </div>
+  {% endif %}
+
+  <!-- Included Products List -->
+  <div class="card overflow-hidden">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-white flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="layers" class="w-5 h-5 text-brand"></i>
+        <span>Included Replenishment SKUs ({{ items_data|length }})</span>
+      </div>
+      <a href="{% url 'ecommerce:b2bquickordertemplate_edit' template_obj.pk %}" class="text-xs text-brand hover:underline font-normal">
+        Modify SKUs
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Product Name</th>
+            <th>SKU</th>
+            <th class="text-right">Default Reorder Qty</th>
+            <th class="text-right">Unit Price</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for itm in items_data %}
+            <tr>
+              <td class="font-medium text-slate-800 dark:text-slate-200">{{ itm.name }}</td>
+              <td class="font-mono text-xs text-slate-500">{{ itm.sku }}</td>
+              <td class="text-right font-mono font-bold">{{ itm.default_quantity }} {{ itm.uom|default:"EA" }}</td>
+              <td class="text-right font-mono text-slate-600 dark:text-slate-400">
+                {% if itm.unit_price %}${{ itm.unit_price|floatformat:2 }}{% else %}—{% endif %}
+              </td>
+              <td class="text-xs text-slate-500">{{ itm.notes|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-center p-6 text-slate-400 text-sm">
+                No items added to this template yet. Click "Edit Template" to add catalog products.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
