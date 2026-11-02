@@ -26,7 +26,7 @@ def chargeback_dispute_list(request):
             | Q(gateway_dispute_id__icontains=search_query)
             | Q(order__number__icontains=search_query)
             | Q(reason_code__icontains=search_query)
-            | Q(customer_party__legal_name__icontains=search_query)
+            | Q(customer_party__name__icontains=search_query)
             | Q(evidence_summary__icontains=search_query)
         )
 
