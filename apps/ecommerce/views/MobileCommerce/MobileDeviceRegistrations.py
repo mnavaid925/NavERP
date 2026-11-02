@@ -1,3 +1,6 @@
+import math
+from decimal import Decimal, InvalidOperation
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -177,12 +180,26 @@ def mobiledeviceregistration_ping(request, pk):
     device = ecommerce_object(request, MobileDeviceRegistration, pk)
     lat = request.POST.get("lat")
     lng = request.POST.get("lng")
-    try:
-        lat_dec = float(lat) if lat else None
-        lng_dec = float(lng) if lng else None
-    except ValueError:
-        lat_dec = None
-        lng_dec = None
+    lat_dec = None
+    lng_dec = None
+    if lat and lng:
+        try:
+            val_lat = float(lat)
+            val_lng = float(lng)
+            if (
+                math.isfinite(val_lat)
+                and math.isfinite(val_lng)
+                and -90.0 <= val_lat <= 90.0
+                and -180.0 <= val_lng <= 180.0
+            ):
+                lat_dec = round(Decimal(str(val_lat)), 6)
+                lng_dec = round(Decimal(str(val_lng)), 6)
+            else:
+                messages.warning(request, "Coordinates must be within -90..90 lat and -180..180 lng.")
+        except (ValueError, TypeError, InvalidOperation):
+            lat_dec = None
+            lng_dec = None
+            messages.warning(request, "Invalid numeric coordinates provided.")
 
     device.record_activity(lat=lat_dec, lng=lng_dec)
     messages.success(request, f"Simulated telemetry ping recorded for device {device.number}.")
