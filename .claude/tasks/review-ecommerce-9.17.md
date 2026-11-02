@@ -108,22 +108,22 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Negative or zero quantities can produce negative subtotals.
   - *Fix*: Enforce `1 <= qty <= 100000`.
 
-- [ ] **I11** — Non-existent product attributes in quote edit template
+- [x] **I11** — Non-existent product attributes in quote edit template — aaab05a3
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_quote_request/form.html:123-124`
   - *Problem*: Uses `prod.retail_price` and `prod.sku` in edit loop, rendering blank.
   - *Fix*: Use `prod.display_price` and `prod.display_sku`.
 
-- [ ] **I12** — Unrendered context variable `quick_order_templates` in Company Account detail
+- [x] **I12** — Unrendered context variable `quick_order_templates` in Company Account detail — 5ffc548d
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_company_account/detail.html`
   - *Problem*: Context variable passed by view is omitted from detail template.
   - *Fix*: Render saved templates section in company detail page.
 
-- [ ] **I13** — Unlabeled file and text inputs in Quick Order Matrix and interactive forms (WCAG A11y)
+- [x] **I13** — Unlabeled file and text inputs in Quick Order Matrix and interactive forms (WCAG A11y) — d665a438, 4f748f13
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_quick_order_template/quick_order_matrix.html`, `b2b_quote_request/detail.html`
   - *Problem*: Inputs lack `<label>` or `aria-label`.
   - *Fix*: Add appropriate `aria-label` and `label for` attributes.
 
-- [ ] **I14** — Navigation target collisions in `LIVE_LINKS["9.17"]`
+- [x] **I14** — Navigation target collisions in `LIVE_LINKS["9.17"]` — 6d640e8a
   - *Location*: `apps/core/navigation.py:2836-2848`
   - *Problem*: Duplicate destinations for sidebar items; Bulk Ordering links to templates instead of matrix.
   - *Fix*: Point "Bulk Ordering & Quick Order" to `ecommerce:b2b_quick_order_matrix` and differentiate query params.
@@ -142,27 +142,27 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: If product not found, falls back to first arbitrary product in tenant catalog.
   - *Fix*: Skip item with a warning message instead of assigning a random product.
 
-- [ ] **M2** — Non-standard badge CSS classes across templates
+- [x] **M2** — Non-standard badge CSS classes across templates — 8058c2bd, a0686cbf, 0ad66eb7, b67f4c5f, 7195c68d, bd6e3b59, 574d093e, f500a70a, 836a1193
   - *Location*: Various templates in `templates/ecommerce/b2b_wholesale/`
   - *Problem*: `badge-info` and `badge-muted` used instead of standard color-named classes.
   - *Fix*: Standardize to `badge-blue` and `badge-slate`.
 
-- [ ] **M3** — Seeder volume drift from Contract Section 5
+- [x] **M3** — Seeder volume drift from Contract Section 5 — 0b55021b
   - *Location*: `apps/ecommerce/management/commands/seed_ecommerce.py:3659-3753`
   - *Problem*: Contract specifies 3 users, 2 quote requests, 2 templates; currently seeds 1 of each.
   - *Fix*: Expand seeder to match all contract rows.
 
-- [ ] **M4** — Subtotal overwriting when line items data is empty in `recalculate_totals()`
+- [x] **M4** — Subtotal overwriting when line items data is empty in `recalculate_totals()` — 6cb91312
   - *Location*: `apps/ecommerce/models/B2bWholesale/B2bQuoteRequests.py:167-174`
   - *Problem*: Ad-hoc budget quotes without structured items have their subtotal zeroed.
   - *Fix*: Only recalculate subtotal if `self.line_items_data` is non-empty.
 
-- [ ] **M5** — Quick Order Matrix lacks CTA button to transfer parsed items to cart/order
+- [x] **M5** — Quick Order Matrix lacks CTA button to transfer parsed items to cart/order — d665a438
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_quick_order_template/quick_order_matrix.html:128-132`
   - *Problem*: Parsed matrix items have no CTA to proceed to cart.
   - *Fix*: Add "Proceed to Cart" action button.
 
-- [ ] **M6** — Unescaped single quotes in JavaScript delete confirmation prompts
+- [x] **M6** — Unescaped single quotes in JavaScript delete confirmation prompts — 88ebc46d, 85035b03, daac7b43, 8d2f0cb5
   - *Location*: `templates/ecommerce/b2b_company_account/list.html:218`, `b2b_company_user/list.html:192`
   - *Problem*: Direct interpolation of company/user names breaks JS syntax if apostrophe is present.
   - *Fix*: Filter through `|escapejs`.
@@ -172,7 +172,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Unrecognized manual SKUs only appear in error messages, not in preview table with `found=False`.
   - *Fix*: Add to `parsed_items` with `found=False`.
 
-- [ ] **M8** — Redundant SQL `COUNT(*)` in Company Account Detail template
+- [x] **M8** — Redundant SQL `COUNT(*)` in Company Account Detail template — 5ffc548d
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_company_account/detail.html:241`
   - *Problem*: Evaluates `company_users.count` immediately before loop.
   - *Fix*: Use `company_users|length`.
@@ -182,7 +182,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Loads all columns when template only needs `id` and `company_name`.
   - *Fix*: Add `.only("id", "company_name")`.
 
-- [ ] **M10** — Rejection reason length unconstrained
+- [x] **M10** — Rejection reason length unconstrained — 5d1b3d7a
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:338`
   - *Problem*: `rejection_reason` from POST is unconstrained.
   - *Fix*: Truncate to 1000 characters.
