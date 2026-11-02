@@ -84,10 +84,11 @@ def mobileappconfig_create(request):
             config.tenant = request.tenant
             config.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=config,
                 action="CREATE",
-                instance=config,
-                message=f"Created MobileAppConfig {config.number} ({config.short_name})",
+                changes={"name": config.short_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Mobile App Config '{config.short_name}' created successfully.")
             return redirect("ecommerce:mobileappconfig_detail", pk=config.pk)
@@ -110,10 +111,11 @@ def mobileappconfig_edit(request, pk):
         if form.is_valid():
             config = form.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=config,
                 action="UPDATE",
-                instance=config,
-                message=f"Updated MobileAppConfig {config.number}",
+                changes={"name": config.short_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Mobile App Config '{config.short_name}' updated successfully.")
             return redirect("ecommerce:mobileappconfig_detail", pk=config.pk)
@@ -137,10 +139,11 @@ def mobileappconfig_delete(request, pk):
     number = config.number
     name = config.short_name
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=config,
         action="DELETE",
-        instance=config,
-        message=f"Deleted MobileAppConfig {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     config.delete()
     messages.success(request, f"Mobile App Config '{name}' ({number}) deleted.")
