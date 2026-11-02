@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Fraud &amp; Risk Management Hub — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <span>eCommerce</span>
+            <span>/</span>
+            <span>Fraud &amp; Risk</span>
+        </div>
+        <h1 class="page-title">Fraud &amp; Risk Management Hub</h1>
+        <p class="text-secondary text-sm">Enterprise trust, transaction risk evaluation, chargeback defense, and account takeover prevention</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:fraud_rule_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>New Rule</span>
+        </a>
+        <a href="{% url 'ecommerce:transaction_risk_assessment_create' %}" class="btn btn-primary">
+            <i data-lucide="shield-check"></i>
+            <span>Assess Transaction</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card blue">
+        <div class="stat-icon blue"><i data-lucide="shield"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Active Rules</div>
+            <div class="stat-value">{{ active_rules }} <span class="text-xs text-muted font-normal">/ {{ total_rules }}</span></div>
+        </div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Pending Reviews</div>
+            <div class="stat-value">{{ pending_reviews }}</div>
+        </div>
+    </div>
+    <div class="stat-card purple">
+        <div class="stat-icon purple"><i data-lucide="credit-card"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Open Disputes</div>
+            <div class="stat-value">{{ open_disputes }} <span class="text-xs text-muted font-normal">(${{ dispute_amount_total|floatformat:2 }})</span></div>
+        </div>
+    </div>
+    <div class="stat-card red">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Critical Security Alerts</div>
+            <div class="stat-value">{{ critical_alerts }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <a href="{% url 'ecommerce:fraud_rule_list' %}" class="card hover:border-primary transition-colors p-4 block">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-blue-50 text-blue-600 rounded-lg"><i data-lucide="sliders"></i></div>
+            <div>
+                <div class="font-semibold text-primary">Rules Engine</div>
+                <div class="text-xs text-muted">Velocity, AVS/CVV, proxy rules</div>
+            </div>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}" class="card hover:border-primary transition-colors p-4 block">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-purple-50 text-purple-600 rounded-lg"><i data-lucide="shield-alert"></i></div>
+            <div>
+                <div class="font-semibold text-primary">Risk Assessments</div>
+                <div class="text-xs text-muted">0–100 scoring &amp; analyst review</div>
+            </div>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:chargeback_dispute_list' %}" class="card hover:border-primary transition-colors p-4 block">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-amber-50 text-amber-600 rounded-lg"><i data-lucide="scale"></i></div>
+            <div>
+                <div class="font-semibold text-primary">Chargeback Disputes</div>
+                <div class="text-xs text-muted">Evidence &amp; representment tracking</div>
+            </div>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:account_security_alert_list' %}" class="card hover:border-primary transition-colors p-4 block">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-red-50 text-red-600 rounded-lg"><i data-lucide="user-x"></i></div>
+            <div>
+                <div class="font-semibold text-primary">Security &amp; ATO Alerts</div>
+                <div class="text-xs text-muted">Credential stuffing &amp; AML flags</div>
+            </div>
+        </div>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title font-semibold">Recent Risk Assessments</h2>
+            <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}" class="text-xs text-primary font-medium hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Assessment</th>
+                        <th>Risk Score</th>
+                        <th>Recommendation</th>
+                        <th>Decision</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_assessments %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:transaction_risk_assessment_detail' item.pk %}" class="font-mono text-xs font-semibold text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                            <div class="text-xs text-muted">{{ item.order.number|default:"No Order" }}</div>
+                        </td>
+                        <td>
+                            <span class="font-bold {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warning{% else %}text-green{% endif %}">
+                                {{ item.risk_score }}/100
+                            </span>
+                            <span class="block text-xs text-muted">{{ item.get_risk_tier_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {% if item.recommended_action == 'reject' %}badge-red{% elif item.recommended_action == 'challenge' %}badge-amber{% elif item.recommended_action == 'review' %}badge-info{% else %}badge-green{% endif %}">
+                                {{ item.get_recommended_action_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-xs font-mono">{{ item.get_actual_decision_display }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted text-sm">No recent transaction assessments</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title font-semibold">Active Chargeback Cases</h2>
+            <a href="{% url 'ecommerce:chargeback_dispute_list' %}" class="text-xs text-primary font-medium hover:underline">View All</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Case #</th>
+                        <th>Amount</th>
+                        <th>Reason</th>
+                        <th>Stage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_disputes %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:chargeback_dispute_detail' item.pk %}" class="font-mono text-xs font-semibold text-primary hover:underline">
+                                {{ item.number }}
+                            </a>
+                            <div class="text-xs text-muted font-mono">{{ item.gateway_dispute_id|default:"-" }}</div>
+                        </td>
+                        <td>
+                            <span class="font-bold text-danger">{{ item.currency.symbol|default:"$" }}{{ item.dispute_amount }}</span>
+                        </td>
+                        <td class="text-xs">
+                            <span class="font-medium">{{ item.get_reason_category_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {% if item.stage == 'needs_response' %}badge-red{% elif item.stage == 'under_review' or item.stage == 'representment_submitted' %}badge-info{% elif item.stage == 'won' %}badge-green{% else %}badge-slate{% endif %}">
+                                {{ item.get_stage_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted text-sm">No active chargeback disputes</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title font-semibold">Account Takeover &amp; Compliance Alerts</h2>
+        <a href="{% url 'ecommerce:account_security_alert_list' %}" class="text-xs text-primary font-medium hover:underline">View All</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Alert #</th>
+                    <th>Threat Type</th>
+                    <th>Severity</th>
+                    <th>Account / Target</th>
+                    <th>Automated Action</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in recent_alerts %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:account_security_alert_detail' item.pk %}" class="font-mono text-xs font-semibold text-primary hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="font-medium text-sm">{{ item.get_alert_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.severity == 'critical' %}badge-red{% elif item.severity == 'high' %}badge-red{% elif item.severity == 'medium' %}badge-amber{% else %}badge-info{% endif %}">
+                            {{ item.get_severity_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="text-sm font-medium">{{ item.user.username|default:item.party.legal_name|default:"Unregistered Guest" }}</span>
+                        {% if item.ip_address %}
+                        <span class="block text-xs font-mono text-muted">{{ item.ip_address }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono">{{ item.get_automated_action_taken_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'new' %}badge-red{% elif item.status == 'investigating' %}badge-amber{% elif item.status == 'confirmed_threat' %}badge-red{% else %}badge-green{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted text-sm">No recent account security alerts</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
