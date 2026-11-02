@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit Device {{ device.number }}{% else %}Register New Mobile Device{% endif %} - Mobile Commerce | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:mobile_hub' %}" class="hover:text-brand">Mobile Commerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:mobiledeviceregistration_list' %}" class="hover:text-brand">Registered Devices</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{% if is_edit %}Edit {{ device.number }}{% else %}New Registration{% endif %}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="tablet-smartphone" class="w-7 h-7 text-brand"></i>
+        {% if is_edit %}Edit Mobile Device Registration{% else %}Register Mobile Device{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Manage mobile client tokens, biometric capabilities, and location permissions
+      </p>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+      {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Section 1: Hardware & Platform Identity -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="cpu" class="w-5 h-5 text-brand"></i>
+        Hardware & Platform Identifiers
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.device_uuid.id_for_label }}" class="form-label">Installation UUID *</label>
+          {{ form.device_uuid }}
+          {% if form.device_uuid.errors %}<div class="form-error">{{ form.device_uuid.errors }}</div>{% endif %}
+          <div class="text-xs text-slate-500 mt-1">Unique client UUID generated on app installation</div>
+        </div>
+
+        <div>
+          <label for="{{ form.device_platform.id_for_label }}" class="form-label">Operating Platform *</label>
+          {{ form.device_platform }}
+          {% if form.device_platform.errors %}<div class="form-error">{{ form.device_platform.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label for="{{ form.device_model.id_for_label }}" class="form-label">Hardware Model</label>
+          {{ form.device_model }}
+          {% if form.device_model.errors %}<div class="form-error">{{ form.device_model.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.os_version.id_for_label }}" class="form-label">OS Version</label>
+          {{ form.os_version }}
+          {% if form.os_version.errors %}<div class="form-error">{{ form.os_version.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.app_version.id_for_label }}" class="form-label">Installed App Version</label>
+          {{ form.app_version }}
+          {% if form.app_version.errors %}<div class="form-error">{{ form.app_version.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Account & Identity Linkage -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="user-check" class="w-5 h-5 text-green-500"></i>
+        Identity & Customer Association
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.customer_profile.id_for_label }}" class="form-label">Customer Account Profile</label>
+          {{ form.customer_profile }}
+          {% if form.customer_profile.errors %}<div class="form-error">{{ form.customer_profile.errors }}</div>{% endif %}
+          <div class="text-xs text-slate-500 mt-1">Optional customer account binding</div>
+        </div>
+
+        <div>
+          <label for="{{ form.party.id_for_label }}" class="form-label">Unified Party</label>
+          {{ form.party }}
+          {% if form.party.errors %}<div class="form-error">{{ form.party.errors }}</div>{% endif %}
+          <div class="text-xs text-slate-500 mt-1">Unified core identity record</div>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <label class="flex items-center gap-2 cursor-pointer">
+          {{ form.is_active }}
+          <span class="text-sm font-medium text-slate-900 dark:text-white">Active Device Registration</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Section 3: Push Notification Settings -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="bell" class="w-5 h-5 text-amber-500"></i>
+        Push Notification Credentials
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.push_provider.id_for_label }}" class="form-label">Push Dispatch Provider</label>
+          {{ form.push_provider }}
+          {% if form.push_provider.errors %}<div class="form-error">{{ form.push_provider.errors }}</div>{% endif %}
+        </div>
+
+        <div class="space-y-2 pt-6">
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.push_enabled }}
+            <span class="text-sm font-medium text-slate-900 dark:text-white">Customer Notification Opt-in Enabled</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            {{ form.biometric_enrolled }}
+            <span class="text-sm font-medium text-slate-900 dark:text-white">Biometric Login Enrolled (FaceID / TouchID)</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label for="{{ form.push_token.id_for_label }}" class="form-label">Push Notification Registration Token</label>
+        {{ form.push_token }}
+        {% if form.push_token.errors %}<div class="form-error">{{ form.push_token.errors }}</div>{% endif %}
+      </div>
+    </div>
+
+    <!-- Section 4: Location Permissions & Coordinates -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="map-pin" class="w-5 h-5 text-purple-500"></i>
+        Location Permission & Last Reported GPS
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label for="{{ form.location_permission.id_for_label }}" class="form-label">Location Permission Status</label>
+          {{ form.location_permission }}
+          {% if form.location_permission.errors %}<div class="form-error">{{ form.location_permission.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.last_latitude.id_for_label }}" class="form-label">Latitude</label>
+          {{ form.last_latitude }}
+          {% if form.last_latitude.errors %}<div class="form-error">{{ form.last_latitude.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.last_longitude.id_for_label }}" class="form-label">Longitude</label>
+          {{ form.last_longitude }}
+          {% if form.last_longitude.errors %}<div class="form-error">{{ form.last_longitude.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center justify-end gap-3 pt-2">
+      <a href="{% if is_edit %}{% url 'ecommerce:mobiledeviceregistration_detail' device.pk %}{% else %}{% url 'ecommerce:mobiledeviceregistration_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+      <button type="submit" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>{% if is_edit %}Save Changes{% else %}Register Device{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
