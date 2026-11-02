@@ -21,9 +21,9 @@ def mobileappconfig_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(app_name__icontains(q))
-            | Q(short_name__icontains(q))
-            | Q(number__icontains(q))
+            Q(app_name__icontains=q)
+            | Q(short_name__icontains=q)
+            | Q(number__icontains=q)
         )
 
     is_active_filter = request.GET.get("is_active", "").strip()
