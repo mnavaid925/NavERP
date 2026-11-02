@@ -31,7 +31,7 @@ class B2bCompanyAccountForm(TenantUniqueMixin, TenantModelForm):
             "punchout_enabled": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "punchout_protocol": forms.Select(attrs={"class": "form-select"}),
             "punchout_identity": forms.TextInput(attrs={"class": "form-input font-mono", "placeholder": "e.g. DUNS-019283746"}),
-            "punchout_shared_secret": forms.TextInput(attrs={"class": "form-input font-mono", "placeholder": "Secret token / password"}),
+            "punchout_shared_secret": forms.PasswordInput(render_value=False, attrs={"class": "form-input font-mono", "placeholder": "Secret token / password"}),
             "punchout_return_url": forms.URLInput(attrs={"class": "form-input", "placeholder": "https://procurement.buyer.com/punchout/callback"}),
             "wholesale_discount_percent": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "placeholder": "15.00"}),
             "status": forms.Select(attrs={"class": "form-select"}),
@@ -64,6 +64,12 @@ class B2bCompanyAccountForm(TenantUniqueMixin, TenantModelForm):
         if val is not None and val < Decimal("0.00"):
             raise forms.ValidationError("Approval threshold amount cannot be negative.")
         return val
+
+    def clean_punchout_shared_secret(self):
+        val = self.cleaned_data.get("punchout_shared_secret")
+        if not val and self.instance and self.instance.pk:
+            return self.instance.punchout_shared_secret
+        return val or ""
 
     def clean(self):
         cleaned = super().clean()
