@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence: sales performance dashboards, revenue AOV and cart abandonment trends, customer cohort retention & LTV curves, product merchandising turnover & margin velocity tiers, multi-touch marketing attribution models, real-time operational monitoring & executive analytics cockpit, CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, 9.14, or 9.15), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce: Progressive Web App PWA manifest and offline caching, native device telemetry and APNs/FCM push registrations, push notification campaigns and dispatch simulation, store locator circular geofence rules, curbside pickup radar, mobile express wallets Apple Pay and Google Pay, mobile command hub console, sales performance dashboards, revenue AOV and cart abandonment trends, customer cohort retention & LTV curves, product merchandising turnover & margin velocity tiers, multi-touch marketing attribution models, real-time operational monitoring & executive analytics cockpit, CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, 9.14, 9.15, or 9.16), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, and an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, and real-time executive operational cockpits. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, and a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns with dispatch simulation and conversion attribution, circular store locator geofences with curbside pickup arrival radar, express mobile wallet checkout (Apple Pay & Google Pay), and a centralized Mobile Commerce Command Hub. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -84,6 +84,11 @@ apps/ecommerce/
 │   │   ├── CustomerCohortMetrics.py # CustomerCohortMetric model (ECCM-)
 │   │   ├── ProductMerchandisingMetrics.py # ProductMerchandisingMetric model (EPMM-)
 │   │   └── AttributionTouchpoints.py # AttributionTouchpoint model (EATT-)
+│   ├── MobileCommerce/
+│   │   ├── MobileAppConfigs.py      # MobileAppConfig model (EMAC-)
+│   │   ├── MobileDeviceRegistrations.py # MobileDeviceRegistration model (EMDR-)
+│   │   ├── MobilePushCampaigns.py   # MobilePushCampaign model (EMPC-)
+│   │   └── MobileLocationRules.py   # MobileLocationRule model (EMLR-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -143,6 +148,11 @@ apps/ecommerce/
 │   │   ├── CustomerCohortMetrics.py # CustomerCohortMetricForm
 │   │   ├── ProductMerchandisingMetrics.py # ProductMerchandisingMetricForm
 │   │   └── AttributionTouchpoints.py # AttributionTouchpointForm
+│   ├── MobileCommerce/
+│   │   ├── MobileAppConfigs.py      # MobileAppConfigForm
+│   │   ├── MobileDeviceRegistrations.py # MobileDeviceRegistrationForm
+│   │   ├── MobilePushCampaigns.py   # MobilePushCampaignForm
+│   │   └── MobileLocationRules.py   # MobileLocationRuleForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -208,6 +218,12 @@ apps/ecommerce/
 │   │   ├── ProductMerchandisingMetrics.py # productmerchandisingmetric CRUD + recalculate action
 │   │   ├── AttributionTouchpoints.py # attributiontouchpoint CRUD
 │   │   └── AnalyticsCockpit.py      # analytics_cockpit executive monitoring dashboard
+│   ├── MobileCommerce/
+│   │   ├── MobileHub.py             # mobile_hub command center console
+│   │   ├── MobileAppConfigs.py      # mobileappconfig CRUD + pwa_manifest_json endpoint
+│   │   ├── MobileDeviceRegistrations.py # mobiledeviceregistration CRUD + telemetry ping
+│   │   ├── MobilePushCampaigns.py   # mobilepushcampaign CRUD + test_send dispatch simulation
+│   │   └── MobileLocationRules.py   # mobilelocationrule CRUD + geofence simulation
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -278,6 +294,12 @@ apps/ecommerce/
 │   │   ├── ProductMerchandisingMetrics.py # analytics/merchandising/ paths
 │   │   ├── AttributionTouchpoints.py # analytics/attribution/ paths
 │   │   └── AnalyticsCockpit.py      # analytics/cockpit/ path
+│   ├── MobileCommerce/
+│   │   ├── MobileHub.py             # mobile/hub/ path
+│   │   ├── MobileAppConfigs.py      # mobile/configs/ paths & mobile/manifest.json
+│   │   ├── MobileDeviceRegistrations.py # mobile/devices/ paths & ping action
+│   │   ├── MobilePushCampaigns.py   # mobile/push-campaigns/ paths & test-send
+│   │   └── MobileLocationRules.py   # mobile/location-rules/ paths & simulate
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -410,6 +432,16 @@ apps/ecommerce/
 | `CustomerCohortMetric` | `ECCM-` | `cohort_month`, `period_offset_months`, `acquisition_channel_tag`, `initial_cohort_size`, `retained_customers_count`, `retention_rate`, `churn_rate`, `period_gross_revenue`, `cumulative_gross_revenue`, `cumulative_ltv`, `repeat_order_count`, `is_finalized` | None | `calculate_metrics()`, non-negative metrics, unique constraint per tenant+cohort_month+offset+channel |
 | `ProductMerchandisingMetric` | `EPMM-` | `product`, `variant`, `metric_date`, `views_count`, `add_to_cart_count`, `cart_to_detail_rate`, `units_sold`, `gross_revenue`, `cost_of_goods`, `gross_margin_amount`, `gross_margin_rate`, `refunds_count`, `return_rate`, `ending_inventory_units`, `inventory_turnover_ratio`, `velocity_tier`, `notes` | `CatalogProduct`, `ProductVariant` | `calculate_merchandising_kpis()`, velocity tier classification (A/B/C/D), unique per tenant+product+variant+date |
 | `AttributionTouchpoint` | `EATT-` | `order`, `customer`, `touchpoint_timestamp`, `touchpoint_position`, `channel`, `campaign_name`, `source`, `medium`, `content`, `landing_page`, `referral_url`, `device_category`, `first_touch_weight`, `last_touch_weight`, `linear_weight`, `time_decay_weight`, `position_based_weight`, `attributed_revenue_linear`, `conversion_value` | `EcommerceOrder`, `CustomerAccountProfile` | `normalize_weights()`, non-negative weights and attribution values, sargable timestamp ordering |
+
+---
+
+### Sub-module 9.16: Mobile Commerce
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `MobileAppConfig` | `EMAC-` | `app_name`, `short_name`, `theme_color`, `background_color`, `start_url`, `display_mode`, `orientation`, `enable_pwa`, `enable_apple_pay`, `apple_merchant_id`, `enable_google_pay`, `google_merchant_id`, `firebase_sender_id`, `is_active` | None | `generate_manifest_dict()`, `generate_manifest_json()`, hex color validation, unique per tenant+short_name and tenant+number |
+| `MobileDeviceRegistration` | `EMDR-` | `customer_profile`, `party`, `device_uuid`, `device_platform`, `device_model`, `os_version`, `app_version`, `push_token`, `push_provider`, `push_enabled`, `last_latitude`, `last_longitude`, `last_active_at`, `is_active` | `CustomerAccountProfile`, `core.Party` | `record_activity(lat, lng)`, `reset_badge_count()`, compound indexes `(tenant, -last_active_at)` and `(tenant, is_active, push_enabled)`, unique per tenant+device_uuid |
+| `MobilePushCampaign` | `EMPC-` | `campaign_name`, `title`, `body_text`, `notification_image_url`, `deep_link_url`, `campaign_type`, `target_platform`, `target_product`, `target_category`, `target_coupon`, `scheduled_at`, `sent_at`, `status`, `target_audience_count`, `sent_count`, `delivered_count`, `opened_count`, `converted_revenue`, `created_by` | `CatalogProduct`, `StoreCategory`, `CouponPromotion`, `auth.User` (`created_by`) | `dispatch_simulation(device_count)`, `open_rate_pct`, `click_through_rate_pct`, status lifecycle guards (cannot re-dispatch cancelled) |
+| `MobileLocationRule` | `EMLR-` | `name`, `store_name`, `rule_type`, `latitude`, `longitude`, `radius_meters`, `trigger_action`, `notification_title`, `notification_message`, `fulfillment_center`, `linked_promotion`, `is_active` | `FulfillmentCenter`, `CouponPromotion` | `distance_to(lat, lng)` (clamped Haversine formula), `is_device_inside(lat, lng)`, boundary and coordinate range validation |
 
 ---
 
@@ -791,6 +823,37 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.16 Mobile Commerce Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `mobile/hub/` | `mobile_hub` | `mobile_hub` | Mobile Commerce Command Hub console dashboard |
+| `mobile/manifest.json` | `pwa_manifest_json` | `pwa_manifest_json` | Public W3C Progressive Web App manifest endpoint |
+| `mobile/configs/` | `mobileappconfig_list` | `mobileappconfig_list` | Mobile app configurations table with PWA and wallet filters |
+| `mobile/configs/new/` | `mobileappconfig_create` | `mobileappconfig_create` | Create mobile app configuration record |
+| `mobile/configs/<int:pk>/` | `mobileappconfig_detail` | `mobileappconfig_detail` | Mobile app config detail with live W3C manifest preview |
+| `mobile/configs/<int:pk>/edit/` | `mobileappconfig_edit` | `mobileappconfig_edit` | Edit mobile app configuration and theme colors |
+| `mobile/configs/<int:pk>/delete/` | `mobileappconfig_delete` | `mobileappconfig_delete` | Delete app config (POST only, tenant admin required) |
+| `mobile/devices/` | `mobiledeviceregistration_list` | `mobiledeviceregistration_list` | Registered mobile devices table with platform and status filters |
+| `mobile/devices/new/` | `mobiledeviceregistration_create` | `mobiledeviceregistration_create` | Register new mobile device record |
+| `mobile/devices/<int:pk>/` | `mobiledeviceregistration_detail` | `mobiledeviceregistration_detail` | Device detail with telemetry history and push token |
+| `mobile/devices/<int:pk>/edit/` | `mobiledeviceregistration_edit` | `mobiledeviceregistration_edit` | Edit device attributes and status |
+| `mobile/devices/<int:pk>/delete/` | `mobiledeviceregistration_delete` | `mobiledeviceregistration_delete` | Delete device record (POST only, tenant admin required) |
+| `mobile/devices/<int:pk>/ping/` | `mobiledeviceregistration_ping` | `mobiledeviceregistration_ping` | Simulate device telemetry heartbeat ping (POST only, tenant admin) |
+| `mobile/push-campaigns/` | `mobilepushcampaign_list` | `mobilepushcampaign_list` | Push campaigns table with platform and status filters |
+| `mobile/push-campaigns/new/` | `mobilepushcampaign_create` | `mobilepushcampaign_create` | Create mobile push notification campaign |
+| `mobile/push-campaigns/<int:pk>/` | `mobilepushcampaign_detail` | `mobilepushcampaign_detail` | Campaign detail with phone preview and conversion scorecard |
+| `mobile/push-campaigns/<int:pk>/edit/` | `mobilepushcampaign_edit` | `mobilepushcampaign_edit` | Edit push notification campaign |
+| `mobile/push-campaigns/<int:pk>/delete/` | `mobilepushcampaign_delete` | `mobilepushcampaign_delete` | Delete push campaign (POST only, tenant admin required) |
+| `mobile/push-campaigns/<int:pk>/test-send/` | `mobilepushcampaign_test_send` | `mobilepushcampaign_test_send` | Simulate push notification dispatch (POST only, tenant admin) |
+| `mobile/location-rules/` | `mobilelocationrule_list` | `mobilelocationrule_list` | Store locator and geofence rules table with trigger action filters |
+| `mobile/location-rules/new/` | `mobilelocationrule_create` | `mobilelocationrule_create` | Create store locator and geofence rule |
+| `mobile/location-rules//<int:pk>/` | `mobilelocationrule_detail` | `mobilelocationrule_detail` | Location rule detail with circular geofence radar simulator |
+| `mobile/location-rules/<int:pk>/edit/` | `mobilelocationrule_edit` | `mobilelocationrule_edit` | Edit location rule and trigger parameters |
+| `mobile/location-rules/<int:pk>/delete/` | `mobilelocationrule_delete` | `mobilelocationrule_delete` | Delete location rule (POST only, tenant admin required) |
+| `mobile/location-rules/<int:pk>/simulate/` | `mobilelocationrule_simulate` | `mobilelocationrule_simulate` | Test GPS boundary simulation inside/outside geofence (POST only) |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -874,6 +937,12 @@ Templates are stored under `templates/ecommerce/`:
   - `customer_cohort_metric/` — `list.html` (with cohort month, period offset, acquisition channel filters, retention percentage badges), `detail.html` (with cohort retention curve scorecard, cumulative LTV breakdown, recalculate action), `form.html`.
   - `product_merchandising_metric/` — `list.html` (with velocity tier color badges [A/B/C/D], turnover ratio, gross margin rate), `detail.html` (with merchandising economics, views to cart conversion, return rates, recalculate action), `form.html`.
   - `attribution_touchpoint/` — `list.html` (with channel badges, device icons, attributed revenue, campaign filter), `detail.html` (with multi-touch attribution model weight scorecard, touchpoint positioning timeline), `form.html`.
+- `mobile/`
+  - `mobile_hub.html` — Mobile Commerce Command Hub: total registered devices, platform distribution (iOS/Android/PWA), active push campaigns, push revenue attribution, circular geofence status, PWA and wallet toggles.
+  - `mobile_app_config/` — `list.html` (with status, PWA, and wallet badges), `detail.html` (with theme color swatch, Apple/Google Pay status, live W3C `manifest.json` code block, Back button), `form.html`.
+  - `mobile_device_registration/` — `list.html` (with platform badges, push provider pills, active status, customer links), `detail.html` (with device hardware specs, telemetry coordinates, read-only push token, simulated ping trigger), `form.html`.
+  - `mobile_push_campaign/` — `list.html` (with campaign status badges, platform targeting pills, delivery and revenue counters), `detail.html` (with phone lockscreen notification preview card, conversion scorecard, test send dispatch action), `form.html`.
+  - `mobile_location_rule/` — `list.html` (with rule type and trigger action badges, radius meters), `detail.html` (with circular geofence radar simulator, inside/outside trigger feedback, coordinates validation), `form.html`.
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
@@ -949,7 +1018,11 @@ The command provisions:
 - 4 Customer Cohort Metrics (`ECCM-`): Monthly acquisition retention offsets (months 0-3), churn rates, and cumulative LTV progression.
 - 5 Product Merchandising Metrics (`EPMM-`): Merchandising economics, inventory turnover ratios, gross margins, view-to-cart conversions, and velocity tiers (A/B/C/D).
 - 4 Attribution Touchpoints (`EATT-`): First-touch, last-touch, linear, time-decay, and position-based multi-touch marketing attribution touchpoints.
-- All demo data is scoped to tenant `acme`.
+- 1 Mobile App Configuration (`EMAC-`): Acme Mobile Store PWA & Native configuration with standalone display, Apple Pay merchant token, Google Pay express checkout, and branded `#2563EB` status bar.
+- 4 Registered Mobile Devices (`EMDR-`): iPhone 16 Pro (iOS 18.2 / APNs), Samsung Galaxy S24 Ultra (Android 15 / FCM), Google Pixel 9 Pro (Android 15 / FCM), and Desktop Chrome PWA with live telemetry coordinates and active heartbeats.
+- 3 Mobile Push Campaigns (`EMPC-`): Weekend Flash Sale 20% off alert, Abandoned Cart express checkout reminder, and In-Store VIP Welcome push notification with deep-links and conversion tracking.
+- 3 Store Locator & Geofence Rules (`EMLR-`): Downtown Flagship Store 150m entry geofence (push discount), West Coast Distribution Center curbside pickup radar (arrival alert), and Metropolitan Store locator guide.
+- All demo data is scoped to tenant `acme` and `globex`.
 
 ---
 
@@ -999,6 +1072,12 @@ The command provisions:
     - Computed metrics (`conversion_rate`, `cart_abandonment_rate`, `retention_rate`, `gross_margin_rate`) must clamp values within database precision limits (e.g. 0.00% to 100.00% or max 999.99%) to prevent DecimalField runtime overflows.
 18. **TenantUniqueMixin Constraint Integrity**:
     - Because Django `ModelForm` default validation does not check `models.UniqueConstraint` expressions on the instance before DB save, `TenantUniqueMixin` invokes `self.instance.validate_constraints(exclude=exclude)` during form validation to catch duplicate composite unique keys (such as `tenant + snapshot_date + currency`) gracefully with form field errors rather than unhandled 500 `IntegrityError` exceptions.
+19. **Mobile Telemetry Coordinate Clamping & Validation (Lesson L35)**:
+    - Telemetry coordinates from device heartbeats or geofence simulators must be validated with `math.isfinite()` and bounded within latitude `[-90.0, 90.0]` and longitude `[-180.0, 180.0]`. Hand-parsed numeric POST input must reject NaN, Infinity, and out-of-range floats before persisting to database DecimalFields or passing into calculations.
+20. **Haversine Formula Domain Clamping**:
+    - In `MobileLocationRule.distance_to()`, calculating `c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))` must clamp `a = min(1.0, max(0.0, a))` to prevent floating-point rounding errors on identical or antipodal coordinates from raising `ValueError: math domain error`.
+21. **Mobile Push Lifecycle & Status Guards**:
+    - Cancelled push campaigns (`status='cancelled'`) are immutable and blocked from re-dispatch in `mobilepushcampaign_test_send`. Dispatch simulations advance status to `'sent'`, record delivery and open rates, and write an audit log row with verb `'SEND'`.
 
 ---
 
@@ -1114,6 +1193,18 @@ LIVE_LINKS["9.15"] = {
     "Merchandising Analytics": "ecommerce:productmerchandisingmetric_list",
     "Attribution Touchpoints": "ecommerce:attributiontouchpoint_list",
     "Analytics Executive Cockpit": "ecommerce:analytics_cockpit",
+}
+LIVE_LINKS["9.16"] = {
+    "Progressive Web App (PWA)": "ecommerce:mobileappconfig_list",
+    "Native Mobile Apps (iOS/Android)": "ecommerce:mobiledeviceregistration_list",
+    "Mobile Payment Integration": "ecommerce:mobileappconfig_list",
+    "Location-Based Services": "ecommerce:mobilelocationrule_list",
+    "Social & Messaging Commerce": "ecommerce:mobilepushcampaign_list",
+    "Mobile Hub": "ecommerce:mobile_hub",
+    "App Configurations": "ecommerce:mobileappconfig_list",
+    "Registered Devices": "ecommerce:mobiledeviceregistration_list",
+    "Push Campaigns": "ecommerce:mobilepushcampaign_list",
+    "Location Rules": "ecommerce:mobilelocationrule_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
