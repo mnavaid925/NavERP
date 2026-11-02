@@ -67,7 +67,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div class="p-4 bg-slate-50 border border-border rounded-lg">
                         <span class="text-xs text-muted uppercase font-medium block">Target Account</span>
-                        <div class="text-lg font-bold mt-1">{{ alert.user.username|default:"Unregistered Guest" }}</div>
+                        <div class="text-lg font-bold mt-1">{% if alert.user %}{{ alert.user.username }}{% else %}Unregistered Guest{% endif %}</div>
                         {% if alert.party %}
                         <div class="text-xs text-secondary mt-1">{{ alert.party.name }}</div>
                         {% endif %}
@@ -129,7 +129,7 @@
             <div class="card-body text-sm space-y-3">
                 <div class="flex justify-between py-1 border-b border-border">
                     <span class="text-muted">Investigator:</span>
-                    <span class="font-medium">{{ alert.assigned_investigator.username|default:"Unassigned" }}</span>
+                    <span class="font-medium">{% if alert.assigned_investigator %}{{ alert.assigned_investigator.username }}{% else %}Unassigned{% endif %}</span>
                 </div>
                 <div class="flex justify-between py-1 border-b border-border">
                     <span class="text-muted">Status:</span>
@@ -137,7 +137,7 @@
                 </div>
                 <div class="flex justify-between py-1 border-b border-border">
                     <span class="text-muted">Resolved By:</span>
-                    <span>{{ alert.resolved_by.username|default:"Pending" }}</span>
+                    <span>{% if alert.resolved_by %}{{ alert.resolved_by.username }}{% else %}Pending{% endif %}</span>
                 </div>
                 <div class="flex justify-between py-1">
                     <span class="text-muted">Resolved At:</span>
