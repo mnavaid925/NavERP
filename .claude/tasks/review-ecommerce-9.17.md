@@ -58,7 +58,7 @@ The deduplicated and prioritized findings below are structured for resolution by
 
 ## Important Findings
 
-- [ ] **I1** — Unhandled `ValueError` 500 crash on non-numeric `?company=` query parameter
+- [x] **I1** — Unhandled `ValueError` 500 crash on non-numeric `?company=` query parameter — 5fedd467, 837de32d, 5dc16b65
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bCompanyUsers.py:46`, `B2bQuoteRequests.py:58`, `B2bQuickOrderTemplates.py:62`
   - *Problem*: Passing non-numeric `?company=xyz` causes unhandled `ValueError` when Django coerces FK id.
   - *Fix*: Guard with `selected_company.isdigit()`.
