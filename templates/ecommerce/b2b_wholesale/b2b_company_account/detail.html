@@ -351,7 +351,13 @@
                   {{ qr.number }}
                 </a>
               </td>
-              <td>{{ qr.requested_by.get_full_name|default:qr.requested_by.username }}</td>
+              <td>
+                {% if qr.requested_by %}
+                  {{ qr.requested_by.get_full_name|default:qr.requested_by.username }}
+                {% else %}
+                  <span class="text-slate-400">—</span>
+                {% endif %}
+              </td>
               <td class="font-mono">${{ qr.original_subtotal|floatformat:2 }}</td>
               <td class="font-mono font-bold text-slate-900 dark:text-white">${{ qr.quoted_total|floatformat:2 }}</td>
               <td>{{ qr.valid_until|date:"M d, Y"|default:"Open" }}</td>
