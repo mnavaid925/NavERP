@@ -16,7 +16,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def b2bcompanyuser_list(request):
     qs = ecommerce_scope(
-        B2bCompanyUser.objects.select_related("company", "user", "party", "reports_to_approver"),
+        B2bCompanyUser.objects.select_related("company", "user", "party", "reports_to_approver__user"),
         request,
     )
 
@@ -56,7 +56,7 @@ def b2bcompanyuser_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    companies = ecommerce_scope(B2bCompanyAccount.objects.order_by("company_name"), request)
+    companies = ecommerce_scope(B2bCompanyAccount.objects.only("id", "company_name").order_by("company_name"), request)
 
     context = {
         "company_users": page_obj.object_list,
@@ -82,7 +82,7 @@ def b2bcompanyuser_detail(request, pk):
         request,
         B2bCompanyUser,
         pk,
-        select_related=("company", "user", "party", "reports_to_approver"),
+        select_related=("company", "user", "party", "reports_to_approver__user"),
     )
 
     subordinate_buyers = company_user.subordinate_buyers.select_related("user").order_by("user__username")
@@ -157,25 +157,19 @@ def b2bcompanyuser_edit(request, pk):
 
 @login_required
 @tenant_admin_required
+@require_POST
 def b2bcompanyuser_delete(request, pk):
     cu = ecommerce_object(request, B2bCompanyUser, pk)
-    if request.method == "POST":
-        username = cu.user.username
-        co_name = cu.company.company_name
-        num = cu.number
-        cu.delete()
-        write_audit_log(
-            request.user,
-            cu,
-            "delete",
-            {"number": num, "username": username, "company": co_name},
-            tenant=request.tenant,
-        )
-        messages.success(request, f"Company buyer {username} has been removed.")
-        return redirect("ecommerce:b2bcompanyuser_list")
-
-    return render(
-        request,
-        "ecommerce/b2b_wholesale/b2b_company_user/detail.html",
-        {"company_user": cu, "show_delete_confirm": True},
+    username = cu.user.username
+    co_name = cu.company.company_name
+    num = cu.number
+    cu.delete()
+    write_audit_log(
+        request.user,
+        cu,
+        "delete",
+        {"number": num, "username": username, "company": co_name},
+        tenant=request.tenant,
     )
+    messages.success(request, f"Company buyer {username} has been removed.")
+    return redirect("ecommerce:b2bcompanyuser_list")
