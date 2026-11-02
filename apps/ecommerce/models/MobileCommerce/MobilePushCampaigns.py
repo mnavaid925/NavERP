@@ -179,10 +179,22 @@ class MobilePushCampaign(TenantNumbered):
             return round((self.opened_count / self.delivered_count) * 100, 2)
         return 0.0
 
+    @property
+    def open_rate_pct(self):
+        return self.calculate_open_rate_pct()
+
     def calculate_ctr_pct(self):
         if self.opened_count and self.opened_count > 0:
             return round((self.converted_count / self.opened_count) * 100, 2)
         return 0.0
+
+    @property
+    def click_through_rate_pct(self):
+        return self.calculate_ctr_pct()
+
+    @property
+    def ctr_pct(self):
+        return self.calculate_ctr_pct()
 
     def dispatch_simulation(self, device_count=10):
         self.status = "sent"
