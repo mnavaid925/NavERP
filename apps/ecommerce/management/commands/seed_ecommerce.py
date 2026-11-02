@@ -3678,16 +3678,22 @@ class Command(BaseCommand):
         )
 
         # 3. B2bQuoteRequest
-        sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+        sample_var = ProductVariant.objects.filter(tenant=tenant).first()
+        prod_pk = sample_var.product_id if sample_var else None
+        sku_val = sample_var.sku if sample_var else "SKU-B2B-100"
+        name_val = sample_var.name if (sample_var and sample_var.name) else ("Industrial Workstation Kit" if not sample_var or not sample_var.product else sample_var.product.name)
+        base_price = sample_var.price if (sample_var and sample_var.price) else Decimal("250.00")
+        discounted_price = (base_price * Decimal("0.85")).quantize(Decimal("0.01"))
+        qty = 50
         sample_items = [
             {
-                "product_id": sample_prod.pk if sample_prod else None,
-                "sku": sample_prod.sku if sample_prod else "SKU-B2B-100",
-                "name": sample_prod.name if sample_prod else "Industrial Workstation Kit",
-                "requested_qty": 50,
-                "requested_unit_price": float(sample_prod.retail_price) if sample_prod else 250.00,
-                "quoted_unit_price": float(sample_prod.retail_price * Decimal("0.85")) if sample_prod else 212.50,
-                "line_total": float(50 * (sample_prod.retail_price * Decimal("0.85") if sample_prod else Decimal("212.50"))),
+                "product_id": prod_pk,
+                "sku": sku_val,
+                "name": name_val,
+                "requested_qty": qty,
+                "requested_unit_price": float(base_price),
+                "quoted_unit_price": float(discounted_price),
+                "line_total": float(qty * discounted_price),
                 "notes": "Palletized freight delivery to warehouse dock #4",
             }
         ]
@@ -3720,11 +3726,11 @@ class Command(BaseCommand):
         # 4. B2bQuickOrderTemplate
         template_items = [
             {
-                "product_id": sample_prod.pk if sample_prod else None,
-                "sku": sample_prod.sku if sample_prod else "SKU-B2B-100",
-                "name": sample_prod.name if sample_prod else "Industrial Workstation Kit",
+                "product_id": prod_pk,
+                "sku": sku_val,
+                "name": name_val,
                 "default_quantity": 25,
-                "unit_price": float(sample_prod.retail_price) if sample_prod else 250.00,
+                "unit_price": float(base_price),
                 "uom": "EA",
                 "notes": "Standard monthly replenishment stock",
             }
