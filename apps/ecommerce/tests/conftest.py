@@ -64,6 +64,10 @@ from apps.ecommerce.models import (
     BlogArticle,
     MediaAsset,
     ContentBlock,
+    DailySalesSnapshot,
+    CustomerCohortMetric,
+    ProductMerchandisingMetric,
+    AttributionTouchpoint,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -3551,6 +3555,171 @@ def ecom_contentblock_b(tenant_b, ecom_mediaasset_b, ecom_category_b, ecom_produ
         target_category=ecom_category_b,
         target_product=ecom_product_b,
     )
+
+
+# ---------------------------------------------------------------------------
+# 9.15 Analytics & Business Intelligence
+# ---------------------------------------------------------------------------
+
+ANALYTICSBI_PAGE_SIZE = 15
+
+ANALYTICSBI_MODEL_FIELDS = {
+    "DailySalesSnapshot": (
+        "id", "tenant", "number", "snapshot_date", "currency", "gross_sales",
+        "discounts_total", "net_sales", "shipping_collected", "taxes_collected",
+        "cost_of_goods_sold", "gross_profit", "orders_count", "units_sold",
+        "average_order_value", "carts_created", "carts_abandoned",
+        "conversion_rate_pct", "is_finalized", "notes", "created_at", "updated_at",
+    ),
+    "CustomerCohortMetric": (
+        "id", "tenant", "number", "cohort_month", "period_offset_months",
+        "initial_cohort_size", "active_customers", "cumulative_net_revenue",
+        "cumulative_ltv_per_customer", "retention_rate_pct", "churn_rate_pct",
+        "acquisition_channel_tag", "created_at", "updated_at",
+    ),
+    "ProductMerchandisingMetric": (
+        "id", "tenant", "number", "product", "variant", "period_start",
+        "period_end", "velocity_tier", "units_sold", "gross_revenue",
+        "cost_of_goods_sold", "gross_margin_pct", "return_units_count",
+        "return_rate_pct", "page_views_count", "conversion_rate_pct",
+        "inventory_turnover_ratio", "created_at", "updated_at",
+    ),
+    "AttributionTouchpoint": (
+        "id", "tenant", "number", "order", "cart", "channel_type",
+        "attribution_model", "campaign", "affiliate", "utm_source",
+        "utm_medium", "utm_campaign", "touchpoint_timestamp",
+        "attribution_weight", "attributed_revenue", "estimated_cac",
+        "landing_page_url", "referrer_url", "created_at", "updated_at",
+    ),
+}
+
+
+def _analyticsbi_sales_snapshot(tenant, snapshot_date=None, currency="USD", **overrides):
+    if snapshot_date is None:
+        snapshot_date = timezone.now().date()
+    defaults = {
+        "tenant": tenant,
+        "snapshot_date": snapshot_date,
+        "currency": currency,
+        "gross_sales": Decimal("1000.00"),
+        "discounts_total": Decimal("50.00"),
+        "net_sales": Decimal("950.00"),
+        "shipping_collected": Decimal("40.00"),
+        "taxes_collected": Decimal("60.00"),
+        "cost_of_goods_sold": Decimal("400.00"),
+        "gross_profit": Decimal("550.00"),
+        "orders_count": 10,
+        "units_sold": 20,
+        "average_order_value": Decimal("95.00"),
+        "carts_created": 50,
+        "carts_abandoned": 40,
+        "conversion_rate_pct": Decimal("20.00"),
+        "is_finalized": False,
+        "notes": "Test Daily Snapshot",
+    }
+    defaults.update(overrides)
+    return DailySalesSnapshot.objects.create(**defaults)
+
+
+def _analyticsbi_cohort_metric(tenant, cohort_month=None, period_offset_months=0, **overrides):
+    if cohort_month is None:
+        cohort_month = timezone.now().date().replace(day=1)
+    defaults = {
+        "tenant": tenant,
+        "cohort_month": cohort_month,
+        "period_offset_months": period_offset_months,
+        "initial_cohort_size": 100,
+        "active_customers": 80,
+        "cumulative_net_revenue": Decimal("8000.00"),
+        "cumulative_ltv_per_customer": Decimal("80.00"),
+        "retention_rate_pct": Decimal("80.00"),
+        "churn_rate_pct": Decimal("20.00"),
+        "acquisition_channel_tag": "organic",
+    }
+    defaults.update(overrides)
+    return CustomerCohortMetric.objects.create(**defaults)
+
+
+def _analyticsbi_merchandising_metric(tenant, product, **overrides):
+    today = timezone.now().date()
+    defaults = {
+        "tenant": tenant,
+        "product": product,
+        "period_start": today - timezone.timedelta(days=30),
+        "period_end": today,
+        "velocity_tier": "best_seller",
+        "units_sold": 50,
+        "gross_revenue": Decimal("5000.00"),
+        "cost_of_goods_sold": Decimal("2000.00"),
+        "gross_margin_pct": Decimal("60.00"),
+        "return_units_count": 2,
+        "return_rate_pct": Decimal("4.00"),
+        "page_views_count": 500,
+        "conversion_rate_pct": Decimal("10.00"),
+        "inventory_turnover_ratio": Decimal("4.50"),
+    }
+    defaults.update(overrides)
+    return ProductMerchandisingMetric.objects.create(**defaults)
+
+
+def _analyticsbi_attribution_touchpoint(tenant, channel_type="direct", **overrides):
+    defaults = {
+        "tenant": tenant,
+        "channel_type": channel_type,
+        "attribution_model": "last_touch",
+        "utm_source": "google",
+        "utm_medium": "organic",
+        "utm_campaign": "brand_search",
+        "touchpoint_timestamp": timezone.now(),
+        "attribution_weight": Decimal("1.0000"),
+        "attributed_revenue": Decimal("150.00"),
+        "estimated_cac": Decimal("15.00"),
+        "landing_page_url": "https://store.example.com/products/test",
+        "referrer_url": "https://google.com",
+    }
+    defaults.update(overrides)
+    return AttributionTouchpoint.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_sales_snapshot_a(tenant_a):
+    return _analyticsbi_sales_snapshot(tenant_a, snapshot_date=timezone.now().date() - timezone.timedelta(days=1))
+
+
+@pytest.fixture
+def ecom_sales_snapshot_b(tenant_b):
+    return _analyticsbi_sales_snapshot(tenant_b, snapshot_date=timezone.now().date() - timezone.timedelta(days=1))
+
+
+@pytest.fixture
+def ecom_cohort_metric_a(tenant_a):
+    return _analyticsbi_cohort_metric(tenant_a)
+
+
+@pytest.fixture
+def ecom_cohort_metric_b(tenant_b):
+    return _analyticsbi_cohort_metric(tenant_b)
+
+
+@pytest.fixture
+def ecom_merchandising_metric_a(tenant_a, ecom_product_a):
+    return _analyticsbi_merchandising_metric(tenant_a, ecom_product_a)
+
+
+@pytest.fixture
+def ecom_merchandising_metric_b(tenant_b, ecom_product_b):
+    return _analyticsbi_merchandising_metric(tenant_b, ecom_product_b)
+
+
+@pytest.fixture
+def ecom_attribution_touchpoint_a(tenant_a):
+    return _analyticsbi_attribution_touchpoint(tenant_a)
+
+
+@pytest.fixture
+def ecom_attribution_touchpoint_b(tenant_b):
+    return _analyticsbi_attribution_touchpoint(tenant_b)
+
 
 
 
