@@ -58,7 +58,7 @@ def b2bquickordertemplate_list(request):
         qs = qs.filter(cadence=selected_cadence)
 
     selected_company = request.GET.get("company", "").strip()
-    if selected_company:
+    if selected_company and selected_company.isdigit():
         qs = qs.filter(company_id=selected_company)
 
     stats = ecommerce_scope(B2bQuickOrderTemplate.objects.all(), request).aggregate(
