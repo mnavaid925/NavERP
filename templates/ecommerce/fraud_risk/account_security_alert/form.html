@@ -123,11 +123,18 @@
                     {{ form.assigned_investigator }}
                     {% if form.assigned_investigator.errors %}<div class="form-error">{{ form.assigned_investigator.errors.0 }}</div>{% endif %}
                 </div>
+                {% if form.resolved_by %}
                 <div class="form-group">
                     <label class="form-label font-medium" for="{{ form.resolved_by.id_for_label }}">Resolved By</label>
                     {{ form.resolved_by }}
                     {% if form.resolved_by.errors %}<div class="form-error">{{ form.resolved_by.errors.0 }}</div>{% endif %}
                 </div>
+                {% elif is_edit and alert.resolved_by %}
+                <div class="form-group">
+                    <label class="form-label font-medium">Resolved By</label>
+                    <div class="form-input bg-slate-50 cursor-not-allowed text-muted">{{ alert.resolved_by.username }}</div>
+                </div>
+                {% endif %}
             </div>
 
             <div class="form-group">
