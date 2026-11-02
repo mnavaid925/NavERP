@@ -77,12 +77,11 @@ def transaction_risk_assessment_create(request):
                 assessment.reviewed_at = timezone.now()
             assessment.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="TransactionRiskAssessment",
-                object_id=assessment.pk,
+                request.user,
+                assessment,
+                "create",
                 changes={"risk_score": assessment.risk_score, "actual_decision": assessment.actual_decision},
+                tenant=request.tenant,
             )
             messages.success(request, f"Transaction risk assessment {assessment.number} recorded.")
             return redirect("ecommerce:transaction_risk_assessment_detail", pk=assessment.pk)
@@ -122,12 +121,11 @@ def transaction_risk_assessment_edit(request, pk):
                 assessment.reviewed_at = timezone.now()
             assessment.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="TransactionRiskAssessment",
-                object_id=assessment.pk,
+                request.user,
+                assessment,
+                "update",
                 changes={"actual_decision": assessment.actual_decision, "risk_score": assessment.risk_score},
+                tenant=request.tenant,
             )
             messages.success(request, f"Transaction risk assessment {assessment.number} updated.")
             return redirect("ecommerce:transaction_risk_assessment_detail", pk=assessment.pk)
@@ -147,14 +145,13 @@ def transaction_risk_assessment_edit(request, pk):
 def transaction_risk_assessment_delete(request, pk):
     assessment = ecommerce_object(request, TransactionRiskAssessment, pk)
     number = assessment.number
-    assessment.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="TransactionRiskAssessment",
-        object_id=pk,
+        request.user,
+        assessment,
+        "delete",
         changes={"number": number},
+        tenant=request.tenant,
     )
+    assessment.delete()
     messages.success(request, f"Transaction risk assessment {number} deleted.")
     return redirect("ecommerce:transaction_risk_assessment_list")
