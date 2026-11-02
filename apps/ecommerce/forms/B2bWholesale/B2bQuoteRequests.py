@@ -21,6 +21,10 @@ class B2bQuoteRequestForm(TenantUniqueMixin, TenantModelForm):
             "accepted_at",
             "converted_order",
             "line_items_data",
+            "status",
+            "original_subtotal",
+            "quoted_discount_percent",
+            "quoted_total",
         ]
         widgets = {
             "company": forms.Select(attrs={"class": "form-select"}),
