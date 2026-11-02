@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company_account.company_name }} - B2B Company Account | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bcompanyaccount_list' %}" class="hover:text-brand">Company Accounts</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200 font-mono">{{ company_account.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="building-2" class="w-7 h-7 text-brand"></i>
+          {{ company_account.company_name }}
+        </h1>
+        {% if company_account.status == "active" %}
+          <span class="badge badge-green">Active</span>
+        {% elif company_account.status == "pending_review" %}
+          <span class="badge badge-amber">Pending Review</span>
+        {% elif company_account.status == "on_hold" %}
+          <span class="badge badge-amber">On Hold</span>
+        {% elif company_account.status == "suspended" %}
+          <span class="badge badge-red">Suspended</span>
+        {% else %}
+          <span class="badge badge-slate">{{ company_account.get_status_display }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      {% if company_account.punchout_enabled %}
+        <a href="{% url 'ecommerce:b2bcompanyaccount_punchout_test' company_account.pk %}" class="btn btn-outline flex items-center gap-2">
+          <i data-lucide="external-link" class="w-4 h-4"></i>
+          <span>PunchOut Simulator</span>
+        </a>
+      {% endif %}
+      <a href="{% url 'ecommerce:b2bcompanyaccount_edit' company_account.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Account</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bcompanyaccount_list' %}" class="btn btn-outline">
+        Back to List
+      </a>
+    </div>
+  </div>
+
+  {% if show_delete_confirm %}
+    <div class="card p-6 border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
+      <div class="flex items-start gap-4">
+        <div class="stat-icon red">
+          <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-rose-900 dark:text-rose-200">Confirm Account Deletion</h3>
+          <p class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+            Are you sure you want to delete corporate account <strong>{{ company_account.company_name }}</strong> ({{ company_account.number }})?
+            This will permanently remove company settings and associations.
+          </p>
+          <div class="flex items-center gap-3 mt-4">
+            <form method="post" action="{% url 'ecommerce:b2bcompanyaccount_delete' company_account.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                <span>Confirm Permanent Delete</span>
+              </button>
+            </form>
+            <a href="{% url 'ecommerce:b2bcompanyaccount_detail' company_account.pk %}" class="btn btn-outline">
+              Cancel
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Core Overview Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Corporate Details -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+        <i data-lucide="info" class="w-4 h-4 text-brand"></i>
+        Corporate Identity
+      </div>
+      <div class="space-y-3 text-sm">
+        <div>
+          <div class="text-xs text-slate-400">Account Number</div>
+          <div class="font-mono font-medium text-slate-800 dark:text-slate-200">{{ company_account.number }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Core Party Record</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_account.company_party.name }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Tax ID / VAT Number</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_account.company_tax_id|default:"None specified" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Business Registration</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_account.business_registration_number|default:"None specified" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Industry / Sector</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_account.industry|default:"Unclassified" }}</div>
+        </div>
+        {% if company_account.website %}
+          <div>
+            <div class="text-xs text-slate-400">Corporate Website</div>
+            <a href="{{ company_account.website }}" target="_blank" rel="noopener" class="text-brand hover:underline flex items-center gap-1">
+              {{ company_account.website }}
+              <i data-lucide="external-link" class="w-3 h-3"></i>
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Trade Credit & Payment Terms -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+        <i data-lucide="credit-card" class="w-4 h-4 text-brand"></i>
+        Trade Credit & Terms
+      </div>
+      <div class="space-y-3 text-sm">
+        <div>
+          <div class="text-xs text-slate-400">Approved Credit Line</div>
+          <div class="text-lg font-bold font-mono text-slate-900 dark:text-white">
+            ${{ company_account.credit_limit|floatformat:2 }}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Available Credit Balance</div>
+          <div class="text-lg font-bold font-mono {% if company_account.available_credit <= 0 %}text-rose-600{% else %}text-emerald-600{% endif %}">
+            ${{ company_account.available_credit|floatformat:2 }}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Payment Terms</div>
+          <div class="mt-1">
+            <span class="badge badge-info">{{ company_account.get_payment_terms_display }}</span>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Credit Standing</div>
+          <div class="mt-1">
+            {% if company_account.credit_status == "good_standing" %}
+              <span class="badge badge-green">Good Standing</span>
+            {% elif company_account.credit_status == "warning" %}
+              <span class="badge badge-amber">Warning</span>
+            {% elif company_account.credit_status == "exceeded_limit" %}
+              <span class="badge badge-red">Exceeded Limit</span>
+            {% elif company_account.credit_status == "suspended" %}
+              <span class="badge badge-red">Suspended</span>
+            {% else %}
+              <span class="badge badge-muted">{{ company_account.get_credit_status_display }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Wholesale Discount</div>
+          <div class="font-bold text-slate-800 dark:text-slate-200">{{ company_account.wholesale_discount_percent|floatformat:2 }}% Off Catalog</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">PO Number Policy</div>
+          <div class="text-sm text-slate-700 dark:text-slate-300">
+            {% if company_account.requires_po_number %}
+              <span class="text-emerald-600 font-medium flex items-center gap-1">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Mandatory PO on Checkout
+              </span>
+            {% else %}
+              <span class="text-slate-400">Optional PO Number</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Governance & PunchOut Settings -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+        <i data-lucide="shield-check" class="w-4 h-4 text-brand"></i>
+        Governance & PunchOut
+      </div>
+      <div class="space-y-3 text-sm">
+        <div>
+          <div class="text-xs text-slate-400">Order Approval Policy</div>
+          <div class="text-sm font-medium text-slate-800 dark:text-slate-200">
+            {% if company_account.requires_order_approval %}
+              <span class="badge badge-amber">Approval Required Over ${{ company_account.approval_threshold_amount|floatformat:2 }}</span>
+            {% else %}
+              <span class="badge badge-slate">No Threshold Approval Required</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if company_account.default_approver %}
+          <div>
+            <div class="text-xs text-slate-400">Default Supervisor Approver</div>
+            <div class="font-medium text-slate-800 dark:text-slate-200">
+              {{ company_account.default_approver.get_full_name|default:company_account.default_approver.username }}
+            </div>
+          </div>
+        {% endif %}
+        <div>
+          <div class="text-xs text-slate-400">PunchOut Integration</div>
+          <div class="mt-1">
+            {% if company_account.punchout_enabled %}
+              <span class="badge badge-green flex items-center gap-1 w-fit">
+                <i data-lucide="check" class="w-3 h-3"></i> Enabled ({{ company_account.get_punchout_protocol_display }})
+              </span>
+            {% else %}
+              <span class="badge badge-slate">Disabled</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if company_account.punchout_identity %}
+          <div>
+            <div class="text-xs text-slate-400">Buyer Network Identity</div>
+            <div class="font-mono text-xs bg-slate-100 dark:bg-slate-800 p-1.5 rounded">{{ company_account.punchout_identity }}</div>
+          </div>
+        {% endif %}
+        {% if company_account.punchout_return_url %}
+          <div>
+            <div class="text-xs text-slate-400">Callback Return URL</div>
+            <div class="text-xs text-slate-500 break-all">{{ company_account.punchout_return_url }}</div>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Associated Company Buyers Table -->
+  <div class="card overflow-hidden">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="users" class="w-5 h-5 text-brand"></i>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Authorized Company Buyers</h2>
+        <span class="badge badge-slate text-xs">{{ company_users.count }} Users</span>
+      </div>
+      <a href="{% url 'ecommerce:b2bcompanyuser_create' %}?company={{ company_account.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
+        <i data-lucide="user-plus" class="w-4 h-4"></i>
+        <span>Add Buyer</span>
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Role</th>
+            <th>Department</th>
+            <th class="text-right">Order Spend Limit</th>
+            <th class="text-right">Monthly Budget</th>
+            <th>Permissions</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cu in company_users %}
+            <tr>
+              <td>
+                <div class="font-medium text-slate-800 dark:text-slate-200">{{ cu.user.get_full_name|default:cu.user.username }}</div>
+                <div class="text-xs text-slate-400 font-mono">{{ cu.user.email }}</div>
+              </td>
+              <td>
+                <span class="badge badge-info">{{ cu.get_role_display }}</span>
+              </td>
+              <td>{{ cu.department|default:"—" }}</td>
+              <td class="text-right font-mono">
+                {% if cu.order_spend_limit > 0 %}
+                  ${{ cu.order_spend_limit|floatformat:2 }}
+                {% else %}
+                  <span class="text-slate-400 text-xs italic">Unlimited</span>
+                {% endif %}
+              </td>
+              <td class="text-right font-mono">
+                {% if cu.monthly_spend_limit > 0 %}
+                  ${{ cu.monthly_spend_limit|floatformat:2 }}
+                {% else %}
+                  <span class="text-slate-400 text-xs italic">Unlimited</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="flex items-center gap-1 text-xs text-slate-500">
+                  {% if cu.can_place_orders %}<span class="badge badge-slate">Order</span>{% endif %}
+                  {% if cu.can_request_quotes %}<span class="badge badge-slate">Quote</span>{% endif %}
+                  {% if cu.can_approve_orders %}<span class="badge badge-amber">Approve</span>{% endif %}
+                </div>
+              </td>
+              <td>
+                {% if cu.status == "active" %}
+                  <span class="badge badge-green">Active</span>
+                {% elif cu.status == "invited" %}
+                  <span class="badge badge-amber">Invited</span>
+                {% else %}
+                  <span class="badge badge-muted">{{ cu.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <a href="{% url 'ecommerce:b2bcompanyuser_detail' cu.pk %}" class="btn btn-icon" title="View Buyer">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8" class="text-center p-6 text-slate-400 text-sm">
+                No company users registered yet. Click "Add Buyer" to grant purchasing access.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Quote Requests (RFQs) Table -->
+  <div class="card overflow-hidden">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="file-text" class="w-5 h-5 text-brand"></i>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Recent RFQs & Quotes</h2>
+      </div>
+      <a href="{% url 'ecommerce:b2bquoterequest_create' %}?company={{ company_account.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Request Quote</span>
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Quote #</th>
+            <th>Requested By</th>
+            <th>Subtotal</th>
+            <th>Quoted Total</th>
+            <th>Valid Until</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for qr in quote_requests %}
+            <tr>
+              <td class="font-mono font-medium text-brand">
+                <a href="{% url 'ecommerce:b2bquoterequest_detail' qr.pk %}" class="hover:underline">
+                  {{ qr.number }}
+                </a>
+              </td>
+              <td>{{ qr.requested_by.get_full_name|default:qr.requested_by.username }}</td>
+              <td class="font-mono">${{ qr.original_subtotal|floatformat:2 }}</td>
+              <td class="font-mono font-bold text-slate-900 dark:text-white">${{ qr.quoted_total|floatformat:2 }}</td>
+              <td>{{ qr.valid_until|date:"M d, Y"|default:"Open" }}</td>
+              <td>
+                {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
+                  <span class="badge badge-green">{{ qr.get_status_display }}</span>
+                {% elif qr.status == "quoted" %}
+                  <span class="badge badge-info">Quoted / Offer Sent</span>
+                {% elif qr.status == "under_review" or qr.status == "submitted" %}
+                  <span class="badge badge-amber">{{ qr.get_status_display }}</span>
+                {% elif qr.status == "rejected" %}
+                  <span class="badge badge-red">Rejected</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ qr.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <a href="{% url 'ecommerce:b2bquoterequest_detail' qr.pk %}" class="btn btn-icon" title="View Quote">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" class="text-center p-6 text-slate-400 text-sm">
+                No quote requests submitted for this company yet.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
