@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ location_rule.name }} - Location Rule | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:mobile_hub' %}" class="hover:text-brand">Mobile Commerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:mobilelocationrule_list' %}" class="hover:text-brand">Location Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{{ location_rule.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-7 h-7 text-brand"></i>
+          {{ location_rule.name }}
+        </h1>
+        {% if location_rule.is_active %}
+        <span class="badge badge-green">Active Radar</span>
+        {% else %}
+        <span class="badge badge-muted">Inactive</span>
+        {% endif %}
+      </div>
+      <p class="text-sm text-slate-500 mt-1">
+        Rule #{{ location_rule.number }} · {{ location_rule.store_name }} · Radius: {{ location_rule.radius_meters }}m
+      </p>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:mobilelocationrule_edit' location_rule.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Rule</span>
+      </a>
+      <form method="post" action="{% url 'ecommerce:mobilelocationrule_delete' location_rule.pk %}" onsubmit="return confirm('Delete location rule {{ location_rule.name }}?');" class="inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 flex items-center gap-2">
+          <i data-lucide="trash-2" class="w-4 h-4"></i>
+          <span>Delete</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Geofence Specs & Simulator -->
+    <div class="lg:col-span-2 space-y-6">
+      <!-- Location & Geofence Coordinates -->
+      <div class="card p-5">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+          <i data-lucide="compass" class="w-5 h-5 text-brand"></i>
+          Geofence Center & Spatial Boundary
+        </h3>
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Store / Venue Name</dt>
+            <dd class="mt-1 font-medium text-slate-800 dark:text-slate-200">{{ location_rule.store_name }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Rule Type</dt>
+            <dd class="mt-1 font-medium text-slate-800 dark:text-slate-200">{{ location_rule.get_rule_type_display }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Latitude</dt>
+            <dd class="mt-1 font-mono text-slate-800 dark:text-slate-200">{{ location_rule.latitude }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Longitude</dt>
+            <dd class="mt-1 font-mono text-slate-800 dark:text-slate-200">{{ location_rule.longitude }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Geofence Radius</dt>
+            <dd class="mt-1 font-bold text-slate-900 dark:text-white">{{ location_rule.radius_meters }} meters</dd>
+          </div>
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Minimum Dwell Time</dt>
+            <dd class="mt-1 font-medium text-slate-800 dark:text-slate-200">{{ location_rule.dwell_time_seconds }} seconds</dd>
+          </div>
+          <div class="sm:col-span-2">
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Linked Physical Fulfillment Center</dt>
+            <dd class="mt-1">
+              {% if location_rule.fulfillment_center %}
+              <span class="font-medium text-brand">{{ location_rule.fulfillment_center.name }} ({{ location_rule.fulfillment_center.code }})</span>
+              <span class="text-xs text-slate-500">· Type: {{ location_rule.fulfillment_center.get_center_type_display }}</span>
+              {% else %}
+              <span class="text-slate-400">Independent store locator pin (no warehouse linked)</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Trigger Action & Coupon Payload -->
+      <div class="card p-5">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+          <i data-lucide="zap" class="w-5 h-5 text-amber-500"></i>
+          Trigger Action & Proximity Privileges
+        </h3>
+        <dl class="space-y-4 text-sm">
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Configured Action</dt>
+            <dd class="mt-1 font-medium text-slate-800 dark:text-slate-200">
+              {{ location_rule.get_trigger_action_display }}
+            </dd>
+          </div>
+
+          {% if location_rule.push_message %}
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Proximity Push Message Alert</dt>
+            <dd class="mt-1 p-3 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 text-xs">
+              "{{ location_rule.push_message }}"
+            </dd>
+          </div>
+          {% endif %}
+
+          {% if location_rule.linked_promotion %}
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Unlocked Proximity Coupon</dt>
+            <dd class="mt-1">
+              <a href="{% url 'ecommerce:couponpromotion_detail' location_rule.linked_promotion.pk %}" class="text-brand font-medium hover:underline">
+                {{ location_rule.linked_promotion.name }} (Code: {{ location_rule.linked_promotion.code }})
+              </a>
+            </dd>
+          </div>
+          {% endif %}
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div>
+              <dt class="text-xs font-semibold text-slate-500 uppercase">In-Store Shopping Mode</dt>
+              <dd class="mt-1">
+                {% if location_rule.enable_instore_mode %}
+                <span class="badge badge-green">Enabled (Aisle Nav & Scanner)</span>
+                {% else %}
+                <span class="badge badge-muted">Standard App View</span>
+                {% endif %}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-semibold text-slate-500 uppercase">BOPIS / Curbside Check-in</dt>
+              <dd class="mt-1">
+                {% if location_rule.enable_bopis_checkin %}
+                <span class="badge badge-info">1-Tap Arrival Check-in Active</span>
+                {% else %}
+                <span class="badge badge-muted">Disabled</span>
+                {% endif %}
+              </dd>
+            </div>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Geofence Proximity Simulator -->
+      <div class="card p-5">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-3">
+          <i data-lucide="radar" class="w-5 h-5 text-indigo-500"></i>
+          Test Geofence Proximity Radar
+        </h3>
+        <p class="text-xs text-slate-500 mb-4">
+          Test whether a client reporting arbitrary GPS coordinates will trigger this rule's {{ location_rule.radius_meters }}m radius.
+        </p>
+
+        <form method="post" action="{% url 'ecommerce:mobilelocationrule_simulate' location_rule.pk %}" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {% csrf_token %}
+          <div>
+            <label class="form-label text-xs">Test Latitude</label>
+            <input type="text" name="test_lat" value="{{ location_rule.latitude }}" class="form-input text-xs font-mono w-full">
+          </div>
+          <div>
+            <label class="form-label text-xs">Test Longitude</label>
+            <input type="text" name="test_lng" value="{{ location_rule.longitude }}" class="form-input text-xs font-mono w-full">
+          </div>
+          <div class="flex items-end">
+            <button type="submit" class="btn btn-outline text-xs w-full flex items-center justify-center gap-2">
+              <i data-lucide="play" class="w-3.5 h-3.5"></i>
+              <span>Evaluate Geofence</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right Col: Metadata & Info -->
+    <div class="space-y-6">
+      <div class="card p-5">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+          <i data-lucide="info" class="w-5 h-5 text-blue-500"></i>
+          Rule Status
+        </h3>
+        <dl class="space-y-3 text-sm">
+          <div>
+            <dt class="text-xs font-semibold text-slate-500 uppercase">Operational Status</dt>
+            <dd class="mt-1">
+              {% if location_rule.is_active %}
+              <span class="badge badge-green">Active In Mobile Telemetry</span>
+              {% else %}
+              <span class="badge badge-muted">Inactive / Suspended</span>
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="card p-5 text-xs text-slate-500 space-y-2">
+        <div class="flex justify-between">
+          <span>Created:</span>
+          <span class="text-slate-700 dark:text-slate-300">{{ location_rule.created_at|date:"Y-m-d H:i" }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span>Last Updated:</span>
+          <span class="text-slate-700 dark:text-slate-300">{{ location_rule.updated_at|date:"Y-m-d H:i" }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
