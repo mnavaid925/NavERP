@@ -445,28 +445,26 @@ def b2bquoterequest_convert_order(request, pk):
             pid = item.get("product_id")
             prod = products_map.get(int(pid)) if pid and str(pid).isdigit() else None
             if not prod:
-                if fallback_prod is None:
-                    fallback_prod = CatalogProduct.objects.filter(tenant=request.tenant).prefetch_related("variants").first()
-                prod = fallback_prod
-            if prod:
-                variants_list = prod.variants.all()
-                var = variants_list[0] if variants_list else None
-                item_sku = item.get("sku") or (var.sku if var else prod.number)
-                EcommerceOrderLine.objects.create(
-                    tenant=request.tenant,
-                    order=order,
-                    product=prod,
-                    sku=item_sku,
-                    product_name=item.get("name") or prod.name,
-                    quantity=item.get("requested_qty", 1),
-                    unit_price=Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0)),
-                    line_total=Decimal(str(item.get("line_total", 0))),
-                )
+                continue
+            variants_list = list(prod.variants.all())
+            var = variants_list[0] if variants_list else None
+            item_sku = item.get("sku") or (var.sku if var else prod.number)
+            EcommerceOrderLine.objects.create(
+                tenant=request.tenant,
+                order=order,
+                product=prod,
+                sku=item_sku,
+                product_name=item.get("name") or prod.name,
+                quantity=item.get("requested_qty", 1),
+                unit_price=Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0)),
+                line_total=Decimal(str(item.get("line_total", 0))),
+            )
 
-        # Deduct credit if applicable
-        if quote.company.available_credit >= quote.quoted_total:
-            quote.company.available_credit -= quote.quoted_total
-            quote.company.save(update_fields=["available_credit", "updated_at"])
+        # Deduct credit if applicable with row-level lock
+        company = B2bCompanyAccount.objects.select_for_update().get(pk=quote.company_id)
+        if company.available_credit >= quote.quoted_total:
+            company.available_credit -= quote.quoted_total
+            company.save(update_fields=["available_credit", "updated_at"])
 
         quote.converted_order = order
         quote.status = "converted_to_order"
