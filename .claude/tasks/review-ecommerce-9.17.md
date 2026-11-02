@@ -88,17 +88,17 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Template accesses `cu.reports_to_approver.user`, triggering N queries to `auth_user`.
   - *Fix*: Add `select_related("reports_to_approver__user")`.
 
-- [ ] **I7** — Chained N+1 via `B2bCompanyUser.__str__` in form approver dropdown
+- [x] **I7** — Chained N+1 via `B2bCompanyUser.__str__` in form approver dropdown — 5c9e1cdd
   - *Location*: `apps/ecommerce/forms/B2bWholesale/B2bCompanyUsers.py:39-42`
   - *Problem*: Form dropdown queryset lacks `select_related("user", "company")`.
   - *Fix*: Add `.select_related("user", "company")`.
 
-- [ ] **I8** — Prefetched cache bypassed via `.first()` in `_prepare_product_choices`
+- [x] **I8** — Prefetched cache bypassed via `.first()` in `_prepare_product_choices` — a4f15661, f200a7de
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:30`, `B2bQuickOrderTemplates.py:30`
   - *Problem*: `.variants.first()` executes a new SQL query per product instead of reading prefetch cache.
   - *Fix*: Read from `p.variants.all()` list.
 
-- [ ] **I9** — Missing composite indexes on `(tenant, -created_at)` and `(tenant, company, status)`
+- [x] **I9** — Missing composite indexes on `(tenant, -created_at)` and `(tenant, company, status)` — 71ec696c, 6858ea32, 6cb91312, d86db2ba, 687323b8
   - *Location*: `apps/ecommerce/models/B2bWholesale/` across all 4 models
   - *Problem*: Hot list queries and cockpits lack composite indexes on tenant ordering and status filtering.
   - *Fix*: Add composite indexes with migration.
@@ -128,7 +128,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Duplicate destinations for sidebar items; Bulk Ordering links to templates instead of matrix.
   - *Fix*: Point "Bulk Ordering & Quick Order" to `ecommerce:b2b_quick_order_matrix` and differentiate query params.
 
-- [ ] **I15** — Available credit frozen at 0 if credit limit was originally 0
+- [x] **I15** — Available credit frozen at 0 if credit limit was originally 0 — 71ec696c
   - *Location*: `apps/ecommerce/models/B2bWholesale/B2bCompanyAccounts.py:197-201`
   - *Problem*: When account is registered with limit 0, later edit does not initialize available credit.
   - *Fix*: Initialize available credit if previously 0 and limit increased.
