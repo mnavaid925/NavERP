@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -16,10 +16,7 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
 @login_required
 def mobilepushcampaign_list(request):
-    qs = ecommerce_scope(
-        MobilePushCampaign.objects.all().select_related("target_product", "target_category", "target_coupon"),
-        request,
-    )
+    qs = ecommerce_scope(MobilePushCampaign.objects.all(), request)
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -41,10 +38,14 @@ def mobilepushcampaign_list(request):
     if selected_platform:
         qs = qs.filter(target_platform=selected_platform)
 
-    base_all = ecommerce_scope(MobilePushCampaign.objects.all(), request)
-    total_count = base_all.count()
-    sent_count = base_all.filter(status="sent").count()
-    draft_count = base_all.filter(status="draft").count()
+    base_stats = ecommerce_scope(MobilePushCampaign.objects.all(), request).aggregate(
+        total=Count("id"),
+        sent=Count("id", filter=Q(status="sent")),
+        draft=Count("id", filter=Q(status="draft")),
+    )
+    total_count = base_stats["total"] or 0
+    sent_count = base_stats["sent"] or 0
+    draft_count = base_stats["draft"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
