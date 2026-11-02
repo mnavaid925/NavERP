@@ -358,6 +358,9 @@ def b2bquoterequest_quote(request, pk):
 @require_POST
 def b2bquoterequest_accept(request, pk):
     quote = ecommerce_object(request, B2bQuoteRequest, pk)
+    if quote.status not in ["quoted", "buyer_review"]:
+        messages.error(request, f"Quote {quote.number} cannot be accepted from its current status '{quote.get_status_display()}'.")
+        return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
     quote.status = "accepted"
     quote.accepted_at = timezone.now()
     quote.save(update_fields=["status", "accepted_at", "updated_at"])
@@ -370,7 +373,10 @@ def b2bquoterequest_accept(request, pk):
 @require_POST
 def b2bquoterequest_reject(request, pk):
     quote = ecommerce_object(request, B2bQuoteRequest, pk)
-    reason = request.POST.get("rejection_reason", "").strip()
+    if quote.status not in ["quoted", "buyer_review"]:
+        messages.error(request, f"Quote {quote.number} cannot be rejected from its current status '{quote.get_status_display()}'.")
+        return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
+    reason = request.POST.get("rejection_reason", "").strip()[:1000]
     quote.status = "rejected"
     if reason:
         quote.rejection_reason = reason
@@ -389,6 +395,10 @@ def b2bquoterequest_convert_order(request, pk):
     if quote.converted_order:
         messages.info(request, f"This quote was already converted to Order {quote.converted_order.number}.")
         return redirect("ecommerce:ecommerceorder_detail", pk=quote.converted_order.pk)
+
+    if quote.status != "accepted":
+        messages.error(request, f"Quote {quote.number} must be accepted before converting to an order.")
+        return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
 
     party = quote.company.company_party
     party_addr = party.addresses.filter(kind="shipping").first() or party.addresses.first() if party else None
