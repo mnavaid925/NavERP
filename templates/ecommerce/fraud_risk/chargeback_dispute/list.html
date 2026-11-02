@@ -29,10 +29,10 @@
     <div class="card-body">
         <form method="get" action="{% url 'ecommerce:chargeback_dispute_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div class="form-group mb-0 md:col-span-2">
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Search case #, gateway dispute ID, order, code..." class="form-input">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search case #, gateway dispute ID, order, code..." class="form-input" aria-label="Search chargeback disputes">
             </div>
             <div class="form-group mb-0">
-                <select name="stage" class="form-select">
+                <select name="stage" class="form-select" aria-label="Filter by dispute stage">
                     <option value="">All Stages</option>
                     {% for val, label in stage_choices %}
                     <option value="{{ val }}" {% if stage_filter == val %}selected{% endif %}>{{ label }}</option>
@@ -40,7 +40,7 @@
                 </select>
             </div>
             <div class="form-group mb-0">
-                <select name="reason" class="form-select">
+                <select name="reason" class="form-select" aria-label="Filter by reason category">
                     <option value="">All Reason Categories</option>
                     {% for val, label in reason_choices %}
                     <option value="{{ val }}" {% if reason_filter == val %}selected{% endif %}>{{ label }}</option>
