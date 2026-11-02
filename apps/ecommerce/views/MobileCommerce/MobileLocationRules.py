@@ -92,10 +92,11 @@ def mobilelocationrule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=rule,
                 action="CREATE",
-                instance=rule,
-                message=f"Created MobileLocationRule {rule.number} ({rule.name})",
+                changes={"name": rule.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Location Rule '{rule.name}' created successfully.")
             return redirect("ecommerce:mobilelocationrule_detail", pk=rule.pk)
@@ -118,10 +119,11 @@ def mobilelocationrule_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=rule,
                 action="UPDATE",
-                instance=rule,
-                message=f"Updated MobileLocationRule {rule.number}",
+                changes={"name": rule.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Location Rule '{rule.name}' updated successfully.")
             return redirect("ecommerce:mobilelocationrule_detail", pk=rule.pk)
@@ -145,10 +147,11 @@ def mobilelocationrule_delete(request, pk):
     number = rule.number
     name = rule.name
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=rule,
         action="DELETE",
-        instance=rule,
-        message=f"Deleted MobileLocationRule {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     rule.delete()
     messages.success(request, f"Location Rule '{name}' ({number}) deleted.")
