@@ -149,7 +149,7 @@
             <dd class="mt-1">
               {% if device.customer_profile %}
               <a href="{% url 'ecommerce:customeraccountprofile_detail' device.customer_profile.pk %}" class="text-brand hover:underline font-medium">
-                {{ device.customer_profile.customer_number }}
+                {{ device.customer_profile.number }}
               </a>
               {% else %}
               <span class="text-slate-400">—</span>
