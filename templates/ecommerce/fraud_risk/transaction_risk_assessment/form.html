@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Assessment: {{ assessment.number }}{% else %}New Transaction Risk Assessment{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}">Assessments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Assessment{% else %}New Assessment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Assessment {{ assessment.number }}{% else %}Record Transaction Risk Assessment{% endif %}</h1>
+        <p class="text-secondary text-sm">Enter transaction evaluation telemetry, risk score, and analyst review determination</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:transaction_risk_assessment_detail' assessment.pk %}{% else %}{% url 'ecommerce:transaction_risk_assessment_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-danger text-sm">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Transaction &amp; Entity Links</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.order.id_for_label }}">Order</label>
+                    {{ form.order }}
+                    {% if form.order.errors %}<div class="form-error">{{ form.order.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.customer_party.id_for_label }}">Customer Party</label>
+                    {{ form.customer_party }}
+                    {% if form.customer_party.errors %}<div class="form-error">{{ form.customer_party.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.user.id_for_label }}">User Account</label>
+                    {{ form.user }}
+                    {% if form.user.errors %}<div class="form-error">{{ form.user.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.transaction_amount.id_for_label }}">Transaction Amount <span class="text-danger">*</span></label>
+                    {{ form.transaction_amount }}
+                    {% if form.transaction_amount.errors %}<div class="form-error">{{ form.transaction_amount.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.currency.id_for_label }}">Currency <span class="text-danger">*</span></label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Risk Scoring &amp; Decisioning</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.risk_score.id_for_label }}">Risk Score (0–100)</label>
+                    {{ form.risk_score }}
+                    {% if form.risk_score.errors %}<div class="form-error">{{ form.risk_score.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.risk_tier.id_for_label }}">Risk Tier</label>
+                    {{ form.risk_tier }}
+                    {% if form.risk_tier.errors %}<div class="form-error">{{ form.risk_tier.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.recommended_action.id_for_label }}">Recommended Action</label>
+                    {{ form.recommended_action }}
+                    {% if form.recommended_action.errors %}<div class="form-error">{{ form.recommended_action.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.actual_decision.id_for_label }}">Actual Decision</label>
+                    {{ form.actual_decision }}
+                    {% if form.actual_decision.errors %}<div class="form-error">{{ form.actual_decision.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.risk_factors_summary.id_for_label }}">Risk Factors Summary</label>
+                {{ form.risk_factors_summary }}
+                {% if form.risk_factors_summary.errors %}<div class="form-error">{{ form.risk_factors_summary.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Payment Verification &amp; Network Signals</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.avs_result_code.id_for_label }}">AVS Verification</label>
+                    {{ form.avs_result_code }}
+                    {% if form.avs_result_code.errors %}<div class="form-error">{{ form.avs_result_code.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.cvv_result_code.id_for_label }}">CVV Check</label>
+                    {{ form.cvv_result_code }}
+                    {% if form.cvv_result_code.errors %}<div class="form-error">{{ form.cvv_result_code.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.ip_address.id_for_label }}">Client IP</label>
+                    {{ form.ip_address }}
+                    {% if form.ip_address.errors %}<div class="form-error">{{ form.ip_address.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.velocity_count_24h.id_for_label }}">24h Velocity Count</label>
+                    {{ form.velocity_count_24h }}
+                    {% if form.velocity_count_24h.errors %}<div class="form-error">{{ form.velocity_count_24h.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.billing_country.id_for_label }}">Billing Country (ISO-2)</label>
+                    {{ form.billing_country }}
+                    {% if form.billing_country.errors %}<div class="form-error">{{ form.billing_country.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.ip_country.id_for_label }}">IP Geolocation Country (ISO-2)</label>
+                    {{ form.ip_country }}
+                    {% if form.ip_country.errors %}<div class="form-error">{{ form.ip_country.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.device_fingerprint.id_for_label }}">Device Fingerprint Hash</label>
+                    {{ form.device_fingerprint }}
+                    {% if form.device_fingerprint.errors %}<div class="form-error">{{ form.device_fingerprint.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-6 mt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_geo_mismatch }}
+                    <span class="form-label mb-0 font-medium">Billing / IP Country Mismatch</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_proxy_or_vpn }}
+                    <span class="form-label mb-0 font-medium">Proxy / VPN / TOR Node Detected</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Fraud Analyst Review</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.analyst_user.id_for_label }}">Assigned Analyst</label>
+                {{ form.analyst_user }}
+                {% if form.analyst_user.errors %}<div class="form-error">{{ form.analyst_user.errors.0 }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.analyst_notes.id_for_label }}">Analyst Commentary &amp; Decision Justification</label>
+                {{ form.analyst_notes }}
+                {% if form.analyst_notes.errors %}<div class="form-error">{{ form.analyst_notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'ecommerce:transaction_risk_assessment_detail' assessment.pk %}{% else %}{% url 'ecommerce:transaction_risk_assessment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Record Assessment{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
