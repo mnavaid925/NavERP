@@ -19,7 +19,7 @@
           <i data-lucide="user" class="w-7 h-7 text-brand"></i>
           {{ company_user.user.get_full_name|default:company_user.user.username }}
         </h1>
-        <span class="badge badge-info">{{ company_user.get_role_display }}</span>
+        <span class="badge badge-blue">{{ company_user.get_role_display }}</span>
         {% if company_user.status == "active" %}
           <span class="badge badge-green">Active</span>
         {% elif company_user.status == "invited" %}
@@ -234,7 +234,7 @@
             {% for sub in subordinate_buyers %}
               <tr>
                 <td>{{ sub.user.get_full_name|default:sub.user.username }}</td>
-                <td><span class="badge badge-info">{{ sub.get_role_display }}</span></td>
+                <td><span class="badge badge-blue">{{ sub.get_role_display }}</span></td>
                 <td class="font-mono">${{ sub.order_spend_limit|floatformat:2 }}</td>
                 <td class="text-right">
                   <a href="{% url 'ecommerce:b2bcompanyuser_detail' sub.pk %}" class="btn btn-icon">
