@@ -189,7 +189,7 @@
                   <a href="{% url 'ecommerce:b2bcompanyuser_edit' cu.pk %}" class="btn btn-icon" title="Edit Buyer">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
-                  <form method="post" action="{% url 'ecommerce:b2bcompanyuser_delete' cu.pk %}" class="inline" onsubmit="return confirm('Remove user {{ cu.user.username }} from company {{ cu.company.company_name }}?');">
+                  <form method="post" action="{% url 'ecommerce:b2bcompanyuser_delete' cu.pk %}" class="inline" onsubmit="return confirm('Remove user {{ cu.user.username|escapejs }} from company {{ cu.company.company_name|escapejs }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-icon text-rose-500 hover:text-rose-700" title="Delete">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
