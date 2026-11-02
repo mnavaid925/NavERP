@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Rule: {{ rule.name }}{% else %}New Fraud Detection Rule{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:fraud_rule_list' %}">Rules Engine</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Rule{% else %}New Rule{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Fraud Detection Rule{% else %}New Fraud Detection Rule{% endif %}</h1>
+        <p class="text-secondary text-sm">Configure threshold conditions, risk score contribution, and automated policy actions</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:fraud_rule_detail' rule.pk %}{% else %}{% url 'ecommerce:fraud_rule_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-danger text-sm">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Rule Identification &amp; Scope</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.name.id_for_label }}">Rule Name <span class="text-danger">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.rule_code.id_for_label }}">Rule Code</label>
+                    {{ form.rule_code }}
+                    {% if form.rule_code.errors %}<div class="form-error">{{ form.rule_code.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-muted">Optional unique code like R-VEL-01 or R-GEO-02</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.rule_scope.id_for_label }}">Lifecycle Scope</label>
+                    {{ form.rule_scope }}
+                    {% if form.rule_scope.errors %}<div class="form-error">{{ form.rule_scope.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.rule_type.id_for_label }}">Rule Type / Vector</label>
+                    {{ form.rule_type }}
+                    {% if form.rule_type.errors %}<div class="form-error">{{ form.rule_type.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Condition Logic &amp; Policy Response</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.condition_operator.id_for_label }}">Condition Operator</label>
+                    {{ form.condition_operator }}
+                    {% if form.condition_operator.errors %}<div class="form-error">{{ form.condition_operator.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.threshold_value.id_for_label }}">Threshold Value <span class="text-danger">*</span></label>
+                    {{ form.threshold_value }}
+                    {% if form.threshold_value.errors %}<div class="form-error">{{ form.threshold_value.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-muted">Numeric limit, dollar sum, or comma-separated lists</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.risk_score_impact.id_for_label }}">Risk Points Impact</label>
+                    {{ form.risk_score_impact }}
+                    {% if form.risk_score_impact.errors %}<div class="form-error">{{ form.risk_score_impact.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-muted">Points added to transaction risk score (0-100)</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.action_to_take.id_for_label }}">Policy Action Upon Match</label>
+                    {{ form.action_to_take }}
+                    {% if form.action_to_take.errors %}<div class="form-error">{{ form.action_to_take.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.priority.id_for_label }}">Execution Priority</label>
+                    {{ form.priority }}
+                    {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors.0 }}</div>{% endif %}
+                    <span class="text-xs text-muted">Lower integer evaluates first (e.g. 10)</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="flex items-center gap-2 cursor-pointer mt-2">
+                    {{ form.is_active }}
+                    <span class="form-label mb-0 font-medium">Rule Active &amp; Evaluating</span>
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.description.id_for_label }}">Description &amp; Analyst Guidance</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'ecommerce:fraud_rule_detail' rule.pk %}{% else %}{% url 'ecommerce:fraud_rule_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Rule{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
