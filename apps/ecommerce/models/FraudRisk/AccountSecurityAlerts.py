@@ -144,6 +144,7 @@ class AccountSecurityAlert(TenantNumbered):
             models.Index(fields=["tenant", "alert_type"], name="idx_easa_ten_type"),
             models.Index(fields=["tenant", "severity"], name="idx_easa_ten_sev"),
             models.Index(fields=["tenant", "status"], name="idx_easa_ten_stat"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_easa_ten_created"),
         ]
 
     def __str__(self):
