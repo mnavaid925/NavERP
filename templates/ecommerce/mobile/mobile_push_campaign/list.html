@@ -168,8 +168,10 @@
               <span class="badge badge-info">Sending</span>
               {% elif camp.status == 'cancelled' %}
               <span class="badge badge-red">Cancelled</span>
-              {% else %}
+              {% elif camp.status == 'draft' %}
               <span class="badge badge-muted">Draft</span>
+              {% else %}
+              <span class="badge badge-slate">{{ camp.get_status_display }}</span>
               {% endif %}
             </td>
             <td>
@@ -196,15 +198,15 @@
                     <i data-lucide="send" class="w-4 h-4"></i>
                   </button>
                 </form>
-                <a href="{% url 'ecommerce:mobilepushcampaign_detail' camp.pk %}" class="btn-icon" title="View details">
+                <a href="{% url 'ecommerce:mobilepushcampaign_detail' camp.pk %}" class="btn-icon" title="View details" aria-label="View details">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:mobilepushcampaign_edit' camp.pk %}" class="btn-icon" title="Edit campaign">
+                <a href="{% url 'ecommerce:mobilepushcampaign_edit' camp.pk %}" class="btn-icon" title="Edit campaign" aria-label="Edit campaign">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
                 <form method="post" action="{% url 'ecommerce:mobilepushcampaign_delete' camp.pk %}" onsubmit="return confirm('Delete campaign {{ camp.campaign_name }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete" aria-label="Delete">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
@@ -220,7 +222,7 @@
                 <p class="text-sm text-slate-500 mt-1">Create promotional flash sales, order updates, or automated recovery triggers.</p>
                 <div class="mt-4">
                   <a href="{% url 'ecommerce:mobilepushcampaign_create' %}" class="btn btn-primary">
-                    Create Push Campaign
+                    <i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i>Create Push Campaign
                   </a>
                 </div>
               </div>
