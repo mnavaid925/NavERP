@@ -54,7 +54,7 @@ def b2bquoterequest_list(request):
         qs = qs.filter(status=selected_status)
 
     selected_company = request.GET.get("company", "").strip()
-    if selected_company:
+    if selected_company and selected_company.isdigit():
         qs = qs.filter(company_id=selected_company)
 
     stats = ecommerce_scope(B2bQuoteRequest.objects.all(), request).aggregate(
