@@ -3703,7 +3703,7 @@ class Command(BaseCommand):
             user=manager_user,
             defaults={
                 "party": company_party,
-                "role": "purchasing_manager",
+                "role": "procurement_manager",
                 "job_title": "Procurement Operations Manager",
                 "department": "Corporate Purchasing",
                 "reports_to_approver": admin_cu,
@@ -3724,7 +3724,7 @@ class Command(BaseCommand):
             user=buyer_user,
             defaults={
                 "party": company_party,
-                "role": "staff_buyer",
+                "role": "buyer",
                 "job_title": "Senior Purchasing Agent",
                 "department": "Facility Operations",
                 "reports_to_approver": mgr_cu,
