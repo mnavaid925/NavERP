@@ -170,6 +170,10 @@ def mobilepushcampaign_delete(request, pk):
 def mobilepushcampaign_test_send(request, pk):
     """Simulate push notification dispatch to all eligible registered devices."""
     campaign = ecommerce_object(request, MobilePushCampaign, pk)
+    if campaign.status == "cancelled":
+        messages.error(request, f"Cannot dispatch cancelled campaign '{campaign.campaign_name}'.")
+        return redirect("ecommerce:mobilepushcampaign_detail", pk=campaign.pk)
+
     device_qs = ecommerce_scope(MobileDeviceRegistration.objects.filter(is_active=True, push_enabled=True), request)
     if campaign.target_platform == "ios_only":
         device_qs = device_qs.filter(device_platform="ios")
