@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Dispute: {{ dispute.number }}{% else %}Register Chargeback Dispute{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:chargeback_dispute_list' %}">Disputes</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Case{% else %}Register Dispute{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Case {{ dispute.number }}{% else %}Register Chargeback Dispute{% endif %}</h1>
+        <p class="text-secondary text-sm">Record incoming card-scheme dispute claim, evidence collation, and representment defense</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:chargeback_dispute_detail' dispute.pk %}{% else %}{% url 'ecommerce:chargeback_dispute_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-danger text-sm">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Order &amp; Dispute Identification</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.order.id_for_label }}">Disputed Order <span class="text-danger">*</span></label>
+                    {{ form.order }}
+                    {% if form.order.errors %}<div class="form-error">{{ form.order.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.customer_party.id_for_label }}">Customer Party</label>
+                    {{ form.customer_party }}
+                    {% if form.customer_party.errors %}<div class="form-error">{{ form.customer_party.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.gateway_dispute_id.id_for_label }}">Gateway Dispute ID</label>
+                    {{ form.gateway_dispute_id }}
+                    {% if form.gateway_dispute_id.errors %}<div class="form-error">{{ form.gateway_dispute_id.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.dispute_amount.id_for_label }}">Disputed Amount <span class="text-danger">*</span></label>
+                    {{ form.dispute_amount }}
+                    {% if form.dispute_amount.errors %}<div class="form-error">{{ form.dispute_amount.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.dispute_fee.id_for_label }}">Dispute Fee <span class="text-danger">*</span></label>
+                    {{ form.dispute_fee }}
+                    {% if form.dispute_fee.errors %}<div class="form-error">{{ form.dispute_fee.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.currency.id_for_label }}">Currency <span class="text-danger">*</span></label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.payment_method_type.id_for_label }}">Payment Instrument</label>
+                    {{ form.payment_method_type }}
+                    {% if form.payment_method_type.errors %}<div class="form-error">{{ form.payment_method_type.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.card_brand.id_for_label }}">Card Brand</label>
+                    {{ form.card_brand }}
+                    {% if form.card_brand.errors %}<div class="form-error">{{ form.card_brand.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Reason &amp; Representment Lifecycle</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.reason_category.id_for_label }}">Reason Category</label>
+                    {{ form.reason_category }}
+                    {% if form.reason_category.errors %}<div class="form-error">{{ form.reason_category.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.reason_code.id_for_label }}">Scheme Reason Code</label>
+                    {{ form.reason_code }}
+                    {% if form.reason_code.errors %}<div class="form-error">{{ form.reason_code.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.stage.id_for_label }}">Case Stage</label>
+                    {{ form.stage }}
+                    {% if form.stage.errors %}<div class="form-error">{{ form.stage.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.evidence_due_date.id_for_label }}">Evidence Due Date</label>
+                {{ form.evidence_due_date }}
+                {% if form.evidence_due_date.errors %}<div class="form-error">{{ form.evidence_due_date.errors.0 }}</div>{% endif %}
+                <span class="text-xs text-muted">Deadline enforced by card scheme after which representment rights are forfeit</span>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.evidence_summary.id_for_label }}">Collated Evidence Package</label>
+                {{ form.evidence_summary }}
+                {% if form.evidence_summary.errors %}<div class="form-error">{{ form.evidence_summary.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.representment_notes.id_for_label }}">Representment Rebuttal Statement</label>
+                {{ form.representment_notes }}
+                {% if form.representment_notes.errors %}<div class="form-error">{{ form.representment_notes.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.outcome_notes.id_for_label }}">Outcome &amp; Settlement Notes</label>
+                {{ form.outcome_notes }}
+                {% if form.outcome_notes.errors %}<div class="form-error">{{ form.outcome_notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'ecommerce:chargeback_dispute_detail' dispute.pk %}{% else %}{% url 'ecommerce:chargeback_dispute_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Register Dispute{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
