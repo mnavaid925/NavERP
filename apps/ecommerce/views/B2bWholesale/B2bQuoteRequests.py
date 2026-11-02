@@ -167,10 +167,11 @@ def b2bquoterequest_create(request):
             quote.save()
 
             write_audit_log(
-                request,
+                request.user,
+                quote,
                 "create",
-                f"Created B2B Quote Request {quote.number} for {quote.company.company_name}",
-                object_id=quote.pk,
+                {"number": quote.number, "company": quote.company.company_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"B2B Quote Request {quote.number} created successfully.")
             return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
@@ -239,10 +240,11 @@ def b2bquoterequest_edit(request, pk):
             quote.save()
 
             write_audit_log(
-                request,
+                request.user,
+                quote,
                 "update",
-                f"Updated B2B Quote Request {quote.number}",
-                object_id=quote.pk,
+                {"number": quote.number, "company": quote.company.company_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Quote Request {quote.number} updated successfully.")
             return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
@@ -267,10 +269,11 @@ def b2bquoterequest_delete(request, pk):
         co_name = quote.company.company_name
         quote.delete()
         write_audit_log(
-            request,
+            request.user,
+            quote,
             "delete",
-            f"Deleted Quote Request {num} for {co_name}",
-            object_id=pk,
+            {"number": num, "company": co_name},
+            tenant=request.tenant,
         )
         messages.success(request, f"Quote Request {num} has been deleted.")
         return redirect("ecommerce:b2bquoterequest_list")
@@ -290,7 +293,7 @@ def b2bquoterequest_submit(request, pk):
         quote.status = "submitted"
         quote.submitted_at = timezone.now()
         quote.save(update_fields=["status", "submitted_at", "updated_at"])
-        write_audit_log(request, "update", f"Submitted RFQ {quote.number}", object_id=quote.pk)
+        write_audit_log(request.user, quote, "submit", {"number": quote.number, "status": quote.status}, tenant=request.tenant)
         messages.success(request, f"Quote Request {quote.number} has been submitted for review.")
     return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
 
@@ -314,7 +317,7 @@ def b2bquoterequest_quote(request, pk):
         quote.assigned_sales_rep = request.user
 
     quote.save(update_fields=["status", "quoted_at", "quoted_discount_percent", "original_subtotal", "quoted_total", "assigned_sales_rep", "updated_at"])
-    write_audit_log(request, "update", f"Quoted offer dispatched for {quote.number} (${quote.quoted_total})", object_id=quote.pk)
+    write_audit_log(request.user, quote, "quote", {"number": quote.number, "quoted_total": str(quote.quoted_total)}, tenant=request.tenant)
     messages.success(request, f"Quote offer dispatched for {quote.number} at ${quote.quoted_total:.2f}.")
     return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
 
@@ -326,7 +329,7 @@ def b2bquoterequest_accept(request, pk):
     quote.status = "accepted"
     quote.accepted_at = timezone.now()
     quote.save(update_fields=["status", "accepted_at", "updated_at"])
-    write_audit_log(request, "update", f"Accepted Quote {quote.number}", object_id=quote.pk)
+    write_audit_log(request.user, quote, "accept", {"number": quote.number, "status": quote.status}, tenant=request.tenant)
     messages.success(request, f"Quote {quote.number} accepted by buyer. Ready for order conversion.")
     return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
 
@@ -340,7 +343,7 @@ def b2bquoterequest_reject(request, pk):
     if reason:
         quote.rejection_reason = reason
     quote.save(update_fields=["status", "rejection_reason", "updated_at"])
-    write_audit_log(request, "update", f"Declined Quote {quote.number}: {reason}", object_id=quote.pk)
+    write_audit_log(request.user, quote, "reject", {"number": quote.number, "reason": reason}, tenant=request.tenant)
     messages.warning(request, f"Quote {quote.number} marked as rejected.")
     return redirect("ecommerce:b2bquoterequest_detail", pk=quote.pk)
 
@@ -401,10 +404,11 @@ def b2bquoterequest_convert_order(request, pk):
         quote.save(update_fields=["converted_order", "status", "updated_at"])
 
     write_audit_log(
-        request,
+        request.user,
+        quote,
         "convert",
-        f"Converted Quote {quote.number} into EcommerceOrder {order.number}",
-        object_id=quote.pk,
+        {"number": quote.number, "order_number": order.number},
+        tenant=request.tenant,
     )
     messages.success(request, f"Quote {quote.number} converted into Order {order.number} successfully!")
     return redirect("ecommerce:ecommerceorder_detail", pk=order.pk)
