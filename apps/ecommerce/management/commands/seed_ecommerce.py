@@ -78,6 +78,10 @@ from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAcco
 from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
 from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
 from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
+from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
+from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
+from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
+from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -3851,6 +3855,265 @@ class Command(BaseCommand):
                 "times_ordered": 2,
                 "last_ordered_at": timezone.now() - timedelta(days=5),
                 "is_active": True,
+            },
+        )
+
+        # -----------------------------------------------------------------
+        # 9.18 Fraud & Risk Management Demo Data
+        # -----------------------------------------------------------------
+        # 1. FraudRules
+        FraudRule.objects.get_or_create(
+            tenant=tenant,
+            name="Card Velocity Exceeded (>5 attempts/hr)",
+            defaults={
+                "rule_code": "R-VEL-01",
+                "rule_scope": "checkout",
+                "rule_type": "velocity_cards",
+                "condition_operator": "gt",
+                "threshold_value": "5",
+                "risk_score_impact": 25,
+                "action_to_take": "flag_review",
+                "priority": 10,
+                "is_active": True,
+                "description": "Flags checkout sessions with more than 5 rapid card payment authorization attempts within one hour.",
+            },
+        )
+        FraudRule.objects.get_or_create(
+            tenant=tenant,
+            name="High Order Value Threshold ($2,500+)",
+            defaults={
+                "rule_code": "R-AMT-02",
+                "rule_scope": "checkout",
+                "rule_type": "amount_threshold",
+                "condition_operator": "gte",
+                "threshold_value": "2500.00",
+                "risk_score_impact": 30,
+                "action_to_take": "flag_review",
+                "priority": 20,
+                "is_active": True,
+                "description": "Requires manual fraud analyst review on single cart checkouts exceeding $2,500.",
+            },
+        )
+        FraudRule.objects.get_or_create(
+            tenant=tenant,
+            name="Known Proxy / TOR / VPN IP Connection",
+            defaults={
+                "rule_code": "R-NET-03",
+                "rule_scope": "checkout",
+                "rule_type": "ip_proxy_vpn",
+                "condition_operator": "equals",
+                "threshold_value": "1",
+                "risk_score_impact": 40,
+                "action_to_take": "challenge_3ds",
+                "priority": 30,
+                "is_active": True,
+                "description": "Demands step-up 3D Secure / biometric authentication when user connection originates from commercial anonymizer proxy.",
+            },
+        )
+        FraudRule.objects.get_or_create(
+            tenant=tenant,
+            name="Trusted Corporate Whitelist Domain",
+            defaults={
+                "rule_code": "R-WHT-04",
+                "rule_scope": "checkout",
+                "rule_type": "whitelist_match",
+                "condition_operator": "in_list",
+                "threshold_value": "trusted-corp.com,acme.org",
+                "risk_score_impact": -20,
+                "action_to_take": "allow",
+                "priority": 5,
+                "is_active": True,
+                "description": "Pre-approved corporate email domain whitelist allowing rapid expedited order processing.",
+            },
+        )
+
+        # 2. TransactionRiskAssessments
+        usd_cur = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+        demo_order = EcommerceOrder.objects.filter(tenant=tenant).first()
+        demo_party = Party.objects.filter(tenant=tenant).first()
+        analyst_user = admin_user
+
+        TransactionRiskAssessment.objects.get_or_create(
+            tenant=tenant,
+            order=demo_order,
+            risk_score=12,
+            defaults={
+                "customer_party": demo_party,
+                "user": admin_user,
+                "transaction_amount": Decimal("145.00"),
+                "currency": usd_cur,
+                "risk_tier": "low",
+                "recommended_action": "approve",
+                "actual_decision": "approved_auto",
+                "avs_result_code": "match",
+                "cvv_result_code": "match",
+                "ip_address": "198.51.100.12",
+                "billing_country": "US",
+                "ip_country": "US",
+                "is_geo_mismatch": False,
+                "is_proxy_or_vpn": False,
+                "device_fingerprint": "fp_98293810293a8b",
+                "velocity_count_24h": 1,
+                "risk_factors_summary": "Full AVS & CVV match; direct residential IP connection; low velocity.",
+                "analyst_user": None,
+                "analyst_notes": "",
+            },
+        )
+
+        TransactionRiskAssessment.objects.get_or_create(
+            tenant=tenant,
+            order=None,
+            risk_score=48,
+            defaults={
+                "customer_party": demo_party,
+                "user": admin_user,
+                "transaction_amount": Decimal("890.00"),
+                "currency": usd_cur,
+                "risk_tier": "medium",
+                "recommended_action": "review",
+                "actual_decision": "approved_manual",
+                "avs_result_code": "partial",
+                "cvv_result_code": "match",
+                "ip_address": "203.0.113.88",
+                "billing_country": "US",
+                "ip_country": "CA",
+                "is_geo_mismatch": True,
+                "is_proxy_or_vpn": False,
+                "device_fingerprint": "fp_cc77221199a0b1",
+                "velocity_count_24h": 2,
+                "risk_factors_summary": "Billing vs IP country mismatch (US/CA); postal code partial AVS match.",
+                "analyst_user": analyst_user,
+                "analyst_notes": "Contacted client via registered phone; verified legitimate cross-border business travel.",
+                "reviewed_at": timezone.now() - timedelta(hours=4),
+            },
+        )
+
+        TransactionRiskAssessment.objects.get_or_create(
+            tenant=tenant,
+            order=None,
+            risk_score=94,
+            defaults={
+                "customer_party": None,
+                "user": None,
+                "transaction_amount": Decimal("3200.00"),
+                "currency": usd_cur,
+                "risk_tier": "critical",
+                "recommended_action": "reject",
+                "actual_decision": "declined_auto",
+                "avs_result_code": "no_match",
+                "cvv_result_code": "no_match",
+                "ip_address": "198.18.0.55",
+                "billing_country": "US",
+                "ip_country": "NL",
+                "is_geo_mismatch": True,
+                "is_proxy_or_vpn": True,
+                "device_fingerprint": "fp_tor_exit_node_8877",
+                "velocity_count_24h": 8,
+                "risk_factors_summary": "TOR exit node IP detected; velocity 8 attempts/24h; CVV and AVS full mismatch.",
+                "analyst_user": None,
+                "analyst_notes": "Automated hard decline enforced by high-risk proxy & velocity rules.",
+            },
+        )
+
+        # 3. ChargebackDisputes
+        if demo_order:
+            ChargebackDispute.objects.get_or_create(
+                tenant=tenant,
+                order=demo_order,
+                gateway_dispute_id="dp_1N9Abc2eZvKYlo2C",
+                defaults={
+                    "customer_party": demo_party,
+                    "currency": usd_cur,
+                    "dispute_amount": Decimal("249.50"),
+                    "dispute_fee": Decimal("15.00"),
+                    "payment_method_type": "credit_card",
+                    "card_brand": "Visa",
+                    "reason_category": "fraudulent",
+                    "reason_code": "10.4",
+                    "stage": "needs_response",
+                    "evidence_due_date": (timezone.now() + timedelta(days=12)).date(),
+                    "evidence_summary": "Signed carrier delivery proof from FedEx with signature confirmation.",
+                    "representment_notes": "Order delivered to cardholder billing address with matching AVS.",
+                },
+            )
+
+            ChargebackDispute.objects.get_or_create(
+                tenant=tenant,
+                order=demo_order,
+                gateway_dispute_id="dp_1N8Xyz772211aa",
+                defaults={
+                    "customer_party": demo_party,
+                    "currency": usd_cur,
+                    "dispute_amount": Decimal("120.00"),
+                    "dispute_fee": Decimal("15.00"),
+                    "payment_method_type": "credit_card",
+                    "card_brand": "Mastercard",
+                    "reason_category": "product_not_received",
+                    "reason_code": "4853",
+                    "stage": "won",
+                    "evidence_due_date": (timezone.now() - timedelta(days=10)).date(),
+                    "evidence_summary": "Proof of delivery GPS coordinates and signed customer receipt.",
+                    "representment_notes": "Carrier delivered to verified front porch with timestamped photo.",
+                    "representment_submitted_at": timezone.now() - timedelta(days=14),
+                    "resolved_at": timezone.now() - timedelta(days=5),
+                    "outcome_notes": "Card issuer reviewed delivery photograph and ruled in merchant favor. Full funds returned.",
+                },
+            )
+
+        # 4. AccountSecurityAlerts
+        AccountSecurityAlert.objects.get_or_create(
+            tenant=tenant,
+            alert_type="credential_stuffing",
+            ip_address="198.51.100.99",
+            defaults={
+                "user": admin_user,
+                "party": demo_party,
+                "severity": "critical",
+                "status": "confirmed_threat",
+                "automated_action_taken": "force_password_reset",
+                "location_info": "Unknown Host, Hosting Provider Subnet",
+                "user_agent": "Python-requests/2.31.0",
+                "incident_details": "42 rapid failed authentication requests using credential stuffing dictionary.",
+                "assigned_investigator": analyst_user,
+                "investigation_notes": "Account password reset forced automatically. Active bearer sessions terminated.",
+                "resolved_by": analyst_user,
+                "resolved_at": timezone.now() - timedelta(days=1),
+            },
+        )
+
+        AccountSecurityAlert.objects.get_or_create(
+            tenant=tenant,
+            alert_type="suspicious_login",
+            ip_address="203.0.113.14",
+            defaults={
+                "user": admin_user,
+                "party": demo_party,
+                "severity": "medium",
+                "status": "investigating",
+                "automated_action_taken": "challenge_mfa",
+                "location_info": "London, United Kingdom",
+                "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "incident_details": "New device fingerprint login detected from anomalous IP address.",
+                "assigned_investigator": analyst_user,
+                "investigation_notes": "MFA step-up prompt successfully answered by client. Verifying location traveling.",
+            },
+        )
+
+        AccountSecurityAlert.objects.get_or_create(
+            tenant=tenant,
+            alert_type="aml_velocity_alert",
+            ip_address="198.51.100.22",
+            defaults={
+                "user": None,
+                "party": demo_party,
+                "severity": "high",
+                "status": "new",
+                "automated_action_taken": "notify_user",
+                "location_info": "Frankfurt, Germany",
+                "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "incident_details": "Rapid order structuring pattern detected: 4 orders of $9,900 placed within 3 hours.",
+                "assigned_investigator": None,
+                "investigation_notes": "",
             },
         )
 
