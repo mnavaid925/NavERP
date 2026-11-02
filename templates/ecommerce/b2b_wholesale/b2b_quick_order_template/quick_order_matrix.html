@@ -67,9 +67,10 @@
 
       <form method="post" enctype="multipart/form-data" class="space-y-4">
         {% csrf_token %}
+        <label for="csv_file" class="sr-only">Upload CSV file</label>
         <div class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center hover:border-brand transition-colors">
           <i data-lucide="file-up" class="w-8 h-8 text-slate-400 mx-auto mb-2"></i>
-          <input type="file" name="csv_file" accept=".csv" required class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand/10 file:text-brand hover:file:bg-brand/20 cursor-pointer" />
+          <input type="file" id="csv_file" name="csv_file" aria-label="Order CSV spreadsheet file" accept=".csv" required class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand/10 file:text-brand hover:file:bg-brand/20 cursor-pointer" />
         </div>
         <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
           <i data-lucide="upload" class="w-4 h-4"></i>
@@ -93,16 +94,16 @@
         <input type="hidden" name="manual_submit" value="1" />
         <div class="space-y-2" id="matrix-container">
           <div class="flex items-center gap-2">
-            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
-            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+            <input type="text" name="matrix_sku[]" aria-label="Product SKU" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" aria-label="Quantity" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
           </div>
           <div class="flex items-center gap-2">
-            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
-            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+            <input type="text" name="matrix_sku[]" aria-label="Product SKU" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" aria-label="Quantity" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
           </div>
           <div class="flex items-center gap-2">
-            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
-            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+            <input type="text" name="matrix_sku[]" aria-label="Product SKU" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" aria-label="Quantity" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
           </div>
         </div>
         <div class="flex items-center gap-2 pt-2">
@@ -125,8 +126,14 @@
           <i data-lucide="shopping-cart" class="w-5 h-5 text-brand"></i>
           Validated Quick Order Items ({{ parsed_items|length }})
         </div>
-        <div class="text-sm font-mono font-bold text-slate-900 dark:text-white">
-          Ready for Cart Checkout
+        <div class="flex items-center gap-3">
+          <div class="text-sm font-mono font-bold text-slate-900 dark:text-white">
+            Ready for Cart Checkout
+          </div>
+          <a href="{% url 'ecommerce:cart_detail' %}" class="btn btn-primary btn-sm flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+            <span>Proceed to Cart</span>
+          </a>
         </div>
       </div>
       <div class="table-wrap">
@@ -183,8 +190,8 @@
         const row = document.createElement('div');
         row.className = 'flex items-center gap-2';
         row.innerHTML = `
-          <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
-          <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+          <input type="text" name="matrix_sku[]" aria-label="Product SKU" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+          <input type="number" name="matrix_qty[]" aria-label="Quantity" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
         `;
         container.appendChild(row);
       });
