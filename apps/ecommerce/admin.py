@@ -845,7 +845,7 @@ class MobileAppConfigAdmin(admin.ModelAdmin):
 class MobileDeviceRegistrationAdmin(admin.ModelAdmin):
     list_display = ["number", "device_platform", "device_model", "customer_profile", "push_enabled", "biometric_enrolled", "is_active", "last_active_at"]
     list_filter = ["device_platform", "push_provider", "push_enabled", "biometric_enrolled", "is_active", "tenant"]
-    search_fields = ["number", "device_uuid", "device_model", "customer_profile__customer_number"]
+    search_fields = ["number", "device_uuid", "device_model", "customer_profile__number"]
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["customer_profile", "party"]
     ordering = ["-last_active_at", "-created_at"]
