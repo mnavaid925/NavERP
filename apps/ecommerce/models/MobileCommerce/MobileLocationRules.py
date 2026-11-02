@@ -115,17 +115,24 @@ class MobileLocationRule(TenantNumbered):
         if target_lat is None or target_lng is None:
             return float("inf")
         try:
-            lat1 = math.radians(float(self.latitude))
-            lon1 = math.radians(float(self.longitude))
-            lat2 = math.radians(float(target_lat))
-            lon2 = math.radians(float(target_lng))
+            f_lat1 = float(self.latitude)
+            f_lon1 = float(self.longitude)
+            f_lat2 = float(target_lat)
+            f_lon2 = float(target_lng)
+            if not (math.isfinite(f_lat1) and math.isfinite(f_lon1) and math.isfinite(f_lat2) and math.isfinite(f_lon2)):
+                return float("inf")
+            lat1 = math.radians(f_lat1)
+            lon1 = math.radians(f_lon1)
+            lat2 = math.radians(f_lat2)
+            lon2 = math.radians(f_lon2)
         except (ValueError, TypeError):
             return float("inf")
 
         dlat = lat2 - lat1
         dlon = lon2 - lon1
         a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        a = max(0.0, min(1.0, a))
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
         earth_radius_m = 6371000
         return round(earth_radius_m * c, 1)
 
