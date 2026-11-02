@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Alert: {{ alert.number }}{% else %}Log Security Alert{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:account_security_alert_list' %}">Security Alerts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit Alert{% else %}Log Alert{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Alert {{ alert.number }}{% else %}Log Security &amp; Compliance Alert{% endif %}</h1>
+        <p class="text-secondary text-sm">Record account takeover events, brute force attempts, and sanctions screening hits</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:account_security_alert_detail' alert.pk %}{% else %}{% url 'ecommerce:account_security_alert_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body text-danger text-sm">
+            {% for error in form.non_field_errors %}
+            <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Incident Classification &amp; Target</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.user.id_for_label }}">Target User Account</label>
+                    {{ form.user }}
+                    {% if form.user.errors %}<div class="form-error">{{ form.user.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.party.id_for_label }}">Customer / Entity Party</label>
+                    {{ form.party }}
+                    {% if form.party.errors %}<div class="form-error">{{ form.party.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.alert_type.id_for_label }}">Threat Classification</label>
+                    {{ form.alert_type }}
+                    {% if form.alert_type.errors %}<div class="form-error">{{ form.alert_type.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.severity.id_for_label }}">Severity</label>
+                    {{ form.severity }}
+                    {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.status.id_for_label }}">Status</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.automated_action_taken.id_for_label }}">Automated Intervention Executed</label>
+                {{ form.automated_action_taken }}
+                {% if form.automated_action_taken.errors %}<div class="form-error">{{ form.automated_action_taken.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Origin Telemetry &amp; Technical Details</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.ip_address.id_for_label }}">Origin IP Address</label>
+                    {{ form.ip_address }}
+                    {% if form.ip_address.errors %}<div class="form-error">{{ form.ip_address.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.location_info.id_for_label }}">Resolved Location</label>
+                    {{ form.location_info }}
+                    {% if form.location_info.errors %}<div class="form-error">{{ form.location_info.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.user_agent.id_for_label }}">Client User-Agent</label>
+                {{ form.user_agent }}
+                {% if form.user_agent.errors %}<div class="form-error">{{ form.user_agent.errors.0 }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.incident_details.id_for_label }}">Technical Diagnostic Telemetry</label>
+                {{ form.incident_details }}
+                {% if form.incident_details.errors %}<div class="form-error">{{ form.incident_details.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title font-semibold">Investigation &amp; Resolution</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.assigned_investigator.id_for_label }}">Assigned Investigator</label>
+                    {{ form.assigned_investigator }}
+                    {% if form.assigned_investigator.errors %}<div class="form-error">{{ form.assigned_investigator.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.resolved_by.id_for_label }}">Resolved By</label>
+                    {{ form.resolved_by }}
+                    {% if form.resolved_by.errors %}<div class="form-error">{{ form.resolved_by.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.investigation_notes.id_for_label }}">Investigation Case Notes</label>
+                {{ form.investigation_notes }}
+                {% if form.investigation_notes.errors %}<div class="form-error">{{ form.investigation_notes.errors.0 }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'ecommerce:account_security_alert_detail' alert.pk %}{% else %}{% url 'ecommerce:account_security_alert_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Log Alert{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
