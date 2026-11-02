@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 
 from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfig
@@ -17,28 +17,35 @@ def mobile_hub(request):
     ).first()
 
     devices_qs = ecommerce_scope(MobileDeviceRegistration.objects.all(), request)
-    total_devices = devices_qs.count()
-    ios_devices = devices_qs.filter(device_platform="ios").count()
-    android_devices = devices_qs.filter(device_platform="android").count()
-    pwa_devices = devices_qs.filter(device_platform="pwa_web").count()
+    devices_agg = devices_qs.aggregate(
+        total=Count("id"),
+        ios=Count("id", filter=Q(device_platform="ios")),
+        android=Count("id", filter=Q(device_platform="android")),
+        pwa=Count("id", filter=Q(device_platform="pwa_web")),
+    )
+    total_devices = devices_agg["total"] or 0
+    ios_devices = devices_agg["ios"] or 0
+    android_devices = devices_agg["android"] or 0
+    pwa_devices = devices_agg["pwa"] or 0
 
     campaigns_qs = ecommerce_scope(MobilePushCampaign.objects.all(), request)
-    active_campaigns = campaigns_qs.filter(status__in=["scheduled", "sending", "sent"]).count()
-    push_aggregates = campaigns_qs.aggregate(
+    campaigns_agg = campaigns_qs.aggregate(
+        active=Count("id", filter=Q(status__in=["scheduled", "sending", "sent"])),
         total_sent=Sum("sent_count"),
         total_opened=Sum("opened_count"),
         total_rev=Sum("converted_revenue"),
     )
-    total_push_sent = push_aggregates["total_sent"] or 0
-    total_push_opened = push_aggregates["total_opened"] or 0
-    total_push_revenue = push_aggregates["total_rev"] or 0
+    active_campaigns = campaigns_agg["active"] or 0
+    total_push_sent = campaigns_agg["total_sent"] or 0
+    total_push_opened = campaigns_agg["total_opened"] or 0
+    total_push_revenue = campaigns_agg["total_rev"] or 0
 
     locations_qs = ecommerce_scope(MobileLocationRule.objects.all(), request)
     active_geofences = locations_qs.filter(is_active=True).count()
 
     recent_devices = devices_qs.select_related("customer_profile", "party")[:5]
     recent_campaigns = campaigns_qs[:5]
-    recent_locations = locations_qs.select_related("fulfillment_center", "linked_promotion")[:5]
+    recent_locations = locations_qs[:5]
 
     context = {
         "app_config": app_config,
