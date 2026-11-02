@@ -74,6 +74,10 @@ from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfi
 from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
 from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
 from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
+from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccount
+from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
+from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
+from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -3586,6 +3590,162 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
+
+        # ------------------------------------------------------------------
+        # 9.17 B2B & Wholesale Commerce Seeding
+        # ------------------------------------------------------------------
+        company_party = Party.objects.filter(tenant=tenant).first()
+        currency_obj = Currency.objects.filter(tenant=tenant).first()
+        admin_user = get_user_model().objects.filter(is_superuser=True).first() or get_user_model().objects.first()
+
+        # 1. B2bCompanyAccount
+        co_acme, _ = B2bCompanyAccount.objects.get_or_create(
+            tenant=tenant,
+            company_name="Acme Industrial Supplies Ltd",
+            defaults={
+                "company_party": company_party,
+                "primary_contact": admin_user,
+                "preferred_currency": currency_obj,
+                "company_tax_id": "US-987654321",
+                "business_registration_number": "REG-ACME-8821",
+                "website": "https://www.acme-industrial.com",
+                "industry": "Industrial Equipment & MRO",
+                "credit_limit": Decimal("100000.00"),
+                "available_credit": Decimal("85000.00"),
+                "payment_terms": "net_30",
+                "credit_status": "good_standing",
+                "requires_po_number": True,
+                "requires_order_approval": True,
+                "approval_threshold_amount": Decimal("5000.00"),
+                "default_approver": admin_user,
+                "punchout_enabled": True,
+                "punchout_protocol": "cxml",
+                "punchout_identity": "DUNS-019283746",
+                "punchout_shared_secret": "AcmeSecret2026!",
+                "punchout_return_url": "https://procurement.acme.com/cxml/return",
+                "wholesale_discount_percent": Decimal("15.00"),
+                "status": "active",
+                "notes": "Tier-1 enterprise wholesale client with cXML PunchOut gateway and Net 30 trade terms.",
+            },
+        )
+
+        co_global, _ = B2bCompanyAccount.objects.get_or_create(
+            tenant=tenant,
+            company_name="Global Logistics Wholesale Corp",
+            defaults={
+                "company_party": company_party,
+                "primary_contact": admin_user,
+                "preferred_currency": currency_obj,
+                "company_tax_id": "GB-123456789",
+                "business_registration_number": "REG-GLB-4410",
+                "website": "https://www.global-logistics-wholesale.com",
+                "industry": "Freight & Warehousing",
+                "credit_limit": Decimal("250000.00"),
+                "available_credit": Decimal("250000.00"),
+                "payment_terms": "net_60",
+                "credit_status": "good_standing",
+                "requires_po_number": True,
+                "requires_order_approval": False,
+                "approval_threshold_amount": Decimal("0.00"),
+                "default_approver": None,
+                "punchout_enabled": False,
+                "punchout_protocol": "none",
+                "wholesale_discount_percent": Decimal("20.00"),
+                "status": "pending_review",
+                "notes": "Underwriting review in progress for extended $250k Net 60 trade facility.",
+            },
+        )
+
+        # 2. B2bCompanyUser
+        B2bCompanyUser.objects.get_or_create(
+            tenant=tenant,
+            company=co_acme,
+            user=admin_user,
+            defaults={
+                "party": company_party,
+                "role": "company_admin",
+                "job_title": "Director of Global Procurement",
+                "department": "Corporate Purchasing",
+                "order_spend_limit": Decimal("50000.00"),
+                "monthly_spend_limit": Decimal("200000.00"),
+                "can_place_orders": True,
+                "can_request_quotes": True,
+                "can_view_invoices": True,
+                "can_manage_users": True,
+                "can_approve_orders": True,
+                "status": "active",
+            },
+        )
+
+        # 3. B2bQuoteRequest
+        sample_prod = CatalogProduct.objects.filter(tenant=tenant).first()
+        sample_items = [
+            {
+                "product_id": sample_prod.pk if sample_prod else None,
+                "sku": sample_prod.sku if sample_prod else "SKU-B2B-100",
+                "name": sample_prod.name if sample_prod else "Industrial Workstation Kit",
+                "requested_qty": 50,
+                "requested_unit_price": float(sample_prod.retail_price) if sample_prod else 250.00,
+                "quoted_unit_price": float(sample_prod.retail_price * Decimal("0.85")) if sample_prod else 212.50,
+                "line_total": float(50 * (sample_prod.retail_price * Decimal("0.85") if sample_prod else Decimal("212.50"))),
+                "notes": "Palletized freight delivery to warehouse dock #4",
+            }
+        ]
+
+        qr_subtotal = Decimal(str(sample_items[0]["line_total"]))
+        B2bQuoteRequest.objects.get_or_create(
+            tenant=tenant,
+            company=co_acme,
+            buyer_notes="Bulk quarterly procurement for regional distribution centers.",
+            defaults={
+                "requested_by": admin_user,
+                "assigned_sales_rep": admin_user,
+                "currency": currency_obj,
+                "status": "quoted",
+                "target_budget": Decimal("15000.00"),
+                "original_subtotal": qr_subtotal,
+                "quoted_discount_percent": Decimal("15.00"),
+                "quoted_total": (qr_subtotal * Decimal("0.85") + Decimal("450.00")).quantize(Decimal("0.01")),
+                "tax_amount": Decimal("0.00"),
+                "shipping_estimate": Decimal("450.00"),
+                "target_delivery_date": timezone.now().date() + timedelta(days=21),
+                "valid_until": timezone.now() + timedelta(days=30),
+                "submitted_at": timezone.now() - timedelta(days=2),
+                "quoted_at": timezone.now() - timedelta(days=1),
+                "line_items_data": sample_items,
+                "merchant_notes": "Tier-1 volume tier applied with dedicated flatbed freight shipping.",
+            },
+        )
+
+        # 4. B2bQuickOrderTemplate
+        template_items = [
+            {
+                "product_id": sample_prod.pk if sample_prod else None,
+                "sku": sample_prod.sku if sample_prod else "SKU-B2B-100",
+                "name": sample_prod.name if sample_prod else "Industrial Workstation Kit",
+                "default_quantity": 25,
+                "unit_price": float(sample_prod.retail_price) if sample_prod else 250.00,
+                "uom": "EA",
+                "notes": "Standard monthly replenishment stock",
+            }
+        ]
+        B2bQuickOrderTemplate.objects.get_or_create(
+            tenant=tenant,
+            name="Monthly Regional Hub Supplies",
+            defaults={
+                "company": co_acme,
+                "created_by": admin_user,
+                "description": "Standard recurring replenishment template for east coast distribution hub.",
+                "scope": "company_shared",
+                "cadence": "monthly",
+                "items_data": template_items,
+                "total_items_count": len(template_items),
+                "times_ordered": 6,
+                "last_ordered_at": timezone.now() - timedelta(days=15),
+                "is_active": True,
+            },
+        )
+
 
 
 
