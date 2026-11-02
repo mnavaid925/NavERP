@@ -60,6 +60,10 @@ from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnap
 from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
 from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
 from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
+from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfig
+from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
+from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
+from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
 
 
 @admin.register(StoreCategory)
@@ -826,6 +830,45 @@ class AttributionTouchpointAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["order", "cart", "campaign", "affiliate"]
     ordering = ["-touchpoint_timestamp"]
+
+
+@admin.register(MobileAppConfig)
+class MobileAppConfigAdmin(admin.ModelAdmin):
+    list_display = ["number", "app_name", "short_name", "display_mode", "enable_pwa", "enable_apple_pay", "enable_google_pay", "is_active"]
+    list_filter = ["is_active", "enable_pwa", "enable_apple_pay", "enable_google_pay", "display_mode", "tenant"]
+    search_fields = ["number", "app_name", "short_name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    ordering = ["-is_active", "-created_at"]
+
+
+@admin.register(MobileDeviceRegistration)
+class MobileDeviceRegistrationAdmin(admin.ModelAdmin):
+    list_display = ["number", "device_platform", "device_model", "customer_profile", "push_enabled", "biometric_enrolled", "is_active", "last_active_at"]
+    list_filter = ["device_platform", "push_provider", "push_enabled", "biometric_enrolled", "is_active", "tenant"]
+    search_fields = ["number", "device_uuid", "device_model", "customer_profile__customer_number"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["customer_profile", "party"]
+    ordering = ["-last_active_at", "-created_at"]
+
+
+@admin.register(MobilePushCampaign)
+class MobilePushCampaignAdmin(admin.ModelAdmin):
+    list_display = ["number", "campaign_name", "campaign_type", "target_platform", "status", "sent_count", "opened_count", "converted_revenue", "scheduled_for"]
+    list_filter = ["status", "campaign_type", "target_platform", "tenant"]
+    search_fields = ["number", "campaign_name", "notification_title"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["target_product", "target_category", "target_coupon", "created_by"]
+    ordering = ["-scheduled_for", "-created_at"]
+
+
+@admin.register(MobileLocationRule)
+class MobileLocationRuleAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "store_name", "rule_type", "radius_meters", "trigger_action", "enable_instore_mode", "is_active"]
+    list_filter = ["rule_type", "trigger_action", "is_active", "enable_instore_mode", "tenant"]
+    search_fields = ["number", "name", "store_name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["fulfillment_center", "linked_promotion"]
+    ordering = ["store_name", "-created_at"]
 
 
 
