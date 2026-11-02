@@ -22,7 +22,7 @@
         {% if quote_request.status == "accepted" or quote_request.status == "converted_to_order" %}
           <span class="badge badge-green">{{ quote_request.get_status_display }}</span>
         {% elif quote_request.status == "quoted" %}
-          <span class="badge badge-info">Quoted / Offer Sent</span>
+          <span class="badge badge-blue">Quoted / Offer Sent</span>
         {% elif quote_request.status == "under_review" or quote_request.status == "submitted" or quote_request.status == "buyer_review" %}
           <span class="badge badge-amber">{{ quote_request.get_status_display }}</span>
         {% elif quote_request.status == "rejected" %}
