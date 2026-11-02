@@ -2833,6 +2833,19 @@ LIVE_LINKS = {
         "Push Campaigns": "ecommerce:mobilepushcampaign_list",
         "Location Rules": "ecommerce:mobilelocationrule_list",
     },
+    "9.17": {
+        "Company Account Management": "ecommerce:b2bcompanyaccount_list",
+        "Quote Request & Negotiation": "ecommerce:b2bquoterequest_list",
+        "Punch-Out Catalog Integration": "ecommerce:b2bcompanyaccount_list",
+        "Credit Terms & Net Payment": "ecommerce:b2bcompanyaccount_list",
+        "Bulk Ordering & Quick Order": "ecommerce:b2bquickordertemplate_list",
+        # Extra live leaves
+        "B2B Wholesale Hub": "ecommerce:b2b_wholesale_hub",
+        "Company Accounts": "ecommerce:b2bcompanyaccount_list",
+        "Company Buyers": "ecommerce:b2bcompanyuser_list",
+        "Quote Requests (RFQ)": "ecommerce:b2bquoterequest_list",
+        "Quick Order & Templates": "ecommerce:b2bquickordertemplate_list",
+    },
 
 
 
