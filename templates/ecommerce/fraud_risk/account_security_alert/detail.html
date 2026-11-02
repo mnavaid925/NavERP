@@ -33,7 +33,7 @@
             {% elif alert.status == "resolved_legitimate" %}
             <span class="badge badge-green">Legitimate</span>
             {% else %}
-            <span class="badge badge-muted">Dismissed</span>
+            <span class="badge badge-muted">{{ alert.get_status_display }}</span>
             {% endif %}
         </div>
         <p class="text-secondary text-sm">Security Incident <span class="font-mono font-semibold">{{ alert.number }}</span> · Logged on {{ alert.created_at|date:"M d, Y H:i" }}</p>
