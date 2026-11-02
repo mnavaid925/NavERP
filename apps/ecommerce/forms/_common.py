@@ -18,6 +18,11 @@ class TenantUniqueMixin:
             self.instance.validate_unique(exclude=exclude)
         except ValidationError as exc:
             self._update_errors(exc)
+        if hasattr(self.instance, "validate_constraints"):
+            try:
+                self.instance.validate_constraints(exclude=exclude)
+            except ValidationError as exc:
+                self._update_errors(exc)
 
 
 def reject_foreign(form, cleaned, names):
