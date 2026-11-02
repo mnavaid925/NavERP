@@ -26,7 +26,7 @@ def transaction_risk_assessment_list(request):
             | Q(order__number__icontains=search_query)
             | Q(ip_address__icontains=search_query)
             | Q(device_fingerprint__icontains=search_query)
-            | Q(customer_party__legal_name__icontains=search_query)
+            | Q(customer_party__name__icontains=search_query)
             | Q(risk_factors_summary__icontains=search_query)
         )
 
