@@ -136,7 +136,7 @@
                         {% if rule.risk_score_impact > 0 %}
                         <span class="font-semibold text-danger">+{{ rule.risk_score_impact }}</span>
                         {% else %}
-                        <span class="font-semibold text-green">{{ rule.risk_score_impact }}</span>
+                        <span class="font-semibold text-ok">{{ rule.risk_score_impact }}</span>
                         {% endif %}
                     </td>
                     <td>
