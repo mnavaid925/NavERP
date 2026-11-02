@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Assessment {{ assessment.number }} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}">Assessments</a>
+            <span>/</span>
+            <span class="font-mono">{{ assessment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Assessment {{ assessment.number }}</h1>
+            <span class="badge {% if assessment.risk_tier == 'critical' or assessment.risk_tier == 'high' %}badge-red{% elif assessment.risk_tier == 'medium' %}badge-amber{% else %}badge-green{% endif %}">
+                {{ assessment.get_risk_tier_display }}
+            </span>
+            {% if assessment.actual_decision == "approved_auto" or assessment.actual_decision == "approved_manual" %}
+            <span class="badge badge-green">{{ assessment.get_actual_decision_display }}</span>
+            {% elif assessment.actual_decision == "declined_auto" or assessment.actual_decision == "declined_manual" %}
+            <span class="badge badge-red">{{ assessment.get_actual_decision_display }}</span>
+            {% elif assessment.actual_decision == "challenged" %}
+            <span class="badge badge-amber">{{ assessment.get_actual_decision_display }}</span>
+            {% else %}
+            <span class="badge badge-info">{{ assessment.get_actual_decision_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm">Evaluated on {{ assessment.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Assessments</span>
+        </a>
+        <a href="{% url 'ecommerce:transaction_risk_assessment_edit' assessment.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Assessment</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:transaction_risk_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Delete assessment {{ assessment.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Risk Score &amp; Decision Summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Risk Score</div>
+                        <div class="text-3xl font-extrabold mt-1 {% if assessment.risk_score > 60 %}text-danger{% elif assessment.risk_score > 25 %}text-warning{% else %}text-green{% endif %}">
+                            {{ assessment.risk_score }} <span class="text-xs text-muted font-normal">/ 100</span>
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Algorithmic Recommendation</div>
+                        <div class="text-lg font-bold mt-2">
+                            {% if assessment.recommended_action == "reject" %}
+                            <span class="text-danger">Decline / Block</span>
+                            {% elif assessment.recommended_action == "challenge" %}
+                            <span class="text-warning">Step-Up Challenge</span>
+                            {% elif assessment.recommended_action == "review" %}
+                            <span class="text-primary">Manual Analyst Review</span>
+                            {% else %}
+                            <span class="text-green">Immediate Approval</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Evaluated Amount</div>
+                        <div class="text-2xl font-bold mt-1">
+                            {{ assessment.currency.symbol|default:"$" }}{{ assessment.transaction_amount }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Related Order</span>
+                        {% if assessment.order %}
+                        <span class="font-mono font-semibold">{{ assessment.order.number }}</span>
+                        {% else %}
+                        <span class="text-muted">None (Pre-order verification)</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Customer Party</span>
+                        <span>{{ assessment.customer_party.legal_name|default:"Unregistered Guest" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">User Account</span>
+                        <span>{{ assessment.user.username|default:"Guest Shopper" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Currency</span>
+                        <span class="font-mono">{{ assessment.currency.code }}</span>
+                    </div>
+                </div>
+
+                {% if assessment.risk_factors_summary %}
+                <div class="mt-6 pt-4 border-t border-border">
+                    <span class="text-xs text-muted uppercase font-medium block mb-2">Triggered Risk Factors &amp; Signals</span>
+                    <pre class="bg-slate-50 border border-border p-3 rounded font-mono text-xs whitespace-pre-wrap">{{ assessment.risk_factors_summary }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Payment &amp; Device Telemetry Signals</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">AVS Result Code</span>
+                        <span class="font-bold text-base mt-1 block {% if assessment.avs_result_code == 'match' %}text-green{% elif assessment.avs_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
+                            {{ assessment.get_avs_result_code_display }}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">CVV Verification</span>
+                        <span class="font-bold text-base mt-1 block {% if assessment.cvv_result_code == 'match' %}text-green{% elif assessment.cvv_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
+                            {{ assessment.get_cvv_result_code_display }}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">Client IP Address</span>
+                        <span class="font-mono font-semibold mt-1 block">{{ assessment.ip_address|default:"Not recorded" }}</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">Geolocation Match</span>
+                        <div class="mt-1">
+                            <span class="font-mono">Billing: {{ assessment.billing_country|default:"-" }} / IP: {{ assessment.ip_country|default:"-" }}</span>
+                            {% if assessment.is_geo_mismatch %}
+                            <span class="badge badge-amber ml-2">Country Mismatch</span>
+                            {% else %}
+                            <span class="badge badge-green ml-2">Matched</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">Proxy / VPN / TOR Status</span>
+                        <span class="mt-1 block">
+                            {% if assessment.is_proxy_or_vpn %}
+                            <span class="badge badge-red font-bold">High Risk Proxy Detected</span>
+                            {% else %}
+                            <span class="badge badge-green">Residential / Direct IP</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-border">
+                        <span class="text-xs text-muted uppercase font-medium block">24-Hour Velocity</span>
+                        <span class="font-bold font-mono mt-1 block">{{ assessment.velocity_count_24h }} Orders Attempted</span>
+                    </div>
+                </div>
+
+                {% if assessment.device_fingerprint %}
+                <div class="mt-4 pt-3 border-t border-border">
+                    <span class="text-xs text-muted uppercase font-medium block">Hardware / Browser Device Fingerprint</span>
+                    <span class="font-mono text-xs text-secondary mt-1 block">{{ assessment.device_fingerprint }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Fraud Analyst Review</h2>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Analyst:</span>
+                    <span class="font-medium">{{ assessment.analyst_user.username|default:"Unassigned" }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Decision:</span>
+                    <span class="font-mono font-semibold">{{ assessment.get_actual_decision_display }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Reviewed At:</span>
+                    <span>{{ assessment.reviewed_at|date:"M d, Y H:i"|default:"Pending" }}</span>
+                </div>
+
+                {% if assessment.analyst_notes %}
+                <div class="pt-2">
+                    <span class="text-muted text-xs uppercase font-medium block mb-1">Analyst Notes:</span>
+                    <p class="text-secondary text-xs italic whitespace-pre-line">{{ assessment.analyst_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
