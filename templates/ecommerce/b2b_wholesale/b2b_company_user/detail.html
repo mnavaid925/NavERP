@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company_user.user.username }} - Company Buyer | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bcompanyuser_list' %}" class="hover:text-brand">Company Buyers</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200 font-mono">{{ company_user.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="user" class="w-7 h-7 text-brand"></i>
+          {{ company_user.user.get_full_name|default:company_user.user.username }}
+        </h1>
+        <span class="badge badge-info">{{ company_user.get_role_display }}</span>
+        {% if company_user.status == "active" %}
+          <span class="badge badge-green">Active</span>
+        {% elif company_user.status == "invited" %}
+          <span class="badge badge-amber">Invited</span>
+        {% else %}
+          <span class="badge badge-slate">{{ company_user.get_status_display }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2bcompanyuser_edit' company_user.pk %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit Buyer</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bcompanyaccount_detail' company_user.company.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="building-2" class="w-4 h-4"></i>
+        <span>View Company</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bcompanyuser_list' %}" class="btn btn-outline">
+        Back to List
+      </a>
+    </div>
+  </div>
+
+  {% if show_delete_confirm %}
+    <div class="card p-6 border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
+      <div class="flex items-start gap-4">
+        <div class="stat-icon red">
+          <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-rose-900 dark:text-rose-200">Confirm Buyer Removal</h3>
+          <p class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+            Remove <strong>{{ company_user.user.username }}</strong> from <strong>{{ company_user.company.company_name }}</strong>?
+            This will revoke their corporate ordering and quote permissions.
+          </p>
+          <div class="flex items-center gap-3 mt-4">
+            <form method="post" action="{% url 'ecommerce:b2bcompanyuser_delete' company_user.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                <span>Confirm Removal</span>
+              </button>
+            </form>
+            <a href="{% url 'ecommerce:b2bcompanyuser_detail' company_user.pk %}" class="btn btn-outline">
+              Cancel
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Details Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- User & Role Profile -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+        <i data-lucide="id-card" class="w-4 h-4 text-brand"></i>
+        Buyer Profile
+      </div>
+      <div class="space-y-3 text-sm">
+        <div>
+          <div class="text-xs text-slate-400">Membership Number</div>
+          <div class="font-mono font-medium text-slate-800 dark:text-slate-200">{{ company_user.number }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Company Account</div>
+          <a href="{% url 'ecommerce:b2bcompanyaccount_detail' company_user.company.pk %}" class="font-medium text-brand hover:underline">
+            {{ company_user.company.company_name }}
+          </a>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Login Username / Email</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_user.user.username }} ({{ company_user.user.email }})</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Corporate Job Title</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_user.job_title|default:"Not specified" }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Department / Cost Center</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">{{ company_user.department|default:"Not specified" }}</div>
+        </div>
+        {% if company_user.reports_to_approver %}
+          <div>
+            <div class="text-xs text-slate-400">Direct Supervisor Approver</div>
+            <a href="{% url 'ecommerce:b2bcompanyuser_detail' company_user.reports_to_approver.pk %}" class="text-brand hover:underline">
+              {{ company_user.reports_to_approver.user.get_full_name|default:company_user.reports_to_approver.user.username }}
+            </a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Spending Limits & Governance -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+        <i data-lucide="coins" class="w-4 h-4 text-brand"></i>
+        Spending Limits & Budget
+      </div>
+      <div class="space-y-4 text-sm">
+        <div>
+          <div class="text-xs text-slate-400">Maximum Per-Order Spend Limit</div>
+          <div class="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+            {% if company_user.order_spend_limit > 0 %}
+              ${{ company_user.order_spend_limit|floatformat:2 }}
+            {% else %}
+              <span class="text-emerald-600 font-semibold">Unlimited Approval</span>
+            {% endif %}
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">Orders exceeding this limit trigger supervisor sign-off</div>
+        </div>
+
+        <div>
+          <div class="text-xs text-slate-400">Monthly Budget Limit</div>
+          <div class="text-xl font-bold font-mono text-slate-900 dark:text-white mt-1">
+            {% if company_user.monthly_spend_limit > 0 %}
+              ${{ company_user.monthly_spend_limit|floatformat:2 }}
+            {% else %}
+              <span class="text-emerald-600 font-semibold">Unlimited Monthly Budget</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div>
+          <div class="text-xs text-slate-400">Current Month Spend Accumulated</div>
+          <div class="text-lg font-bold font-mono text-slate-800 dark:text-slate-200 mt-1">
+            ${{ company_user.monthly_spend_current|floatformat:2 }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Role Permissions Grid -->
+  <div class="card p-5 space-y-4">
+    <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200">
+      <i data-lucide="lock" class="w-4 h-4 text-brand"></i>
+      Granted Permissions & Access Controls
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+      <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        {% if company_user.can_place_orders %}
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+          <span class="font-medium text-slate-800 dark:text-slate-200">Execute Orders</span>
+        {% else %}
+          <i data-lucide="x-circle" class="w-5 h-5 text-slate-400"></i>
+          <span class="text-slate-400 line-through">Execute Orders</span>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        {% if company_user.can_request_quotes %}
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+          <span class="font-medium text-slate-800 dark:text-slate-200">Submit RFQs & Quotes</span>
+        {% else %}
+          <i data-lucide="x-circle" class="w-5 h-5 text-slate-400"></i>
+          <span class="text-slate-400 line-through">Submit RFQs</span>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        {% if company_user.can_approve_orders %}
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+          <span class="font-medium text-slate-800 dark:text-slate-200">Approve Orders</span>
+        {% else %}
+          <i data-lucide="x-circle" class="w-5 h-5 text-slate-400"></i>
+          <span class="text-slate-400 line-through">Approve Orders</span>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        {% if company_user.can_view_invoices %}
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+          <span class="font-medium text-slate-800 dark:text-slate-200">View Invoices & Billing</span>
+        {% else %}
+          <i data-lucide="x-circle" class="w-5 h-5 text-slate-400"></i>
+          <span class="text-slate-400 line-through">View Invoices</span>
+        {% endif %}
+      </div>
+
+      <div class="flex items-center gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+        {% if company_user.can_manage_users %}
+          <i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>
+          <span class="font-medium text-slate-800 dark:text-slate-200">Manage Company Users</span>
+        {% else %}
+          <i data-lucide="x-circle" class="w-5 h-5 text-slate-400"></i>
+          <span class="text-slate-400 line-through">Manage Users</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if subordinate_buyers %}
+    <div class="card overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="users" class="w-5 h-5 text-brand"></i>
+        Subordinate Buyers Reporting to This Approver
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Buyer</th>
+              <th>Role</th>
+              <th>Order Limit</th>
+              <th class="text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for sub in subordinate_buyers %}
+              <tr>
+                <td>{{ sub.user.get_full_name|default:sub.user.username }}</td>
+                <td><span class="badge badge-info">{{ sub.get_role_display }}</span></td>
+                <td class="font-mono">${{ sub.order_spend_limit|floatformat:2 }}</td>
+                <td class="text-right">
+                  <a href="{% url 'ecommerce:b2bcompanyuser_detail' sub.pk %}" class="btn btn-icon">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
