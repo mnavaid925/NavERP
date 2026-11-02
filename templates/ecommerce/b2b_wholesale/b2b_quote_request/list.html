@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Quote Requests & RFQs - B2B Wholesale | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">Quote Requests</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="file-text" class="w-7 h-7 text-brand"></i>
+        Quote Requests & RFQ Negotiations
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Customer request-for-quotes, volume discount negotiation, custom terms, and order conversion pipeline
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Wholesale Hub</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bquoterequest_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Create Quote (RFQ)</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i data-lucide="file-text" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ total_count }}</div>
+        <div class="text-xs text-slate-500">Total RFQs Received</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon orange">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ pending_count }}</div>
+        <div class="text-xs text-slate-500">Pending Review / Quoting</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <i data-lucide="badge-dollar-sign" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">${{ total_quoted_pipeline|floatformat:2 }}</div>
+        <div class="text-xs text-slate-500">Active Quoted Pipeline</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div>
+        <label for="filter-q" class="form-label text-xs uppercase text-slate-500">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Search quote #, company, notes..."
+            class="form-input pl-9 w-full"
+          />
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div>
+        <label for="filter-company" class="form-label text-xs uppercase text-slate-500">Company</label>
+        <select id="filter-company" name="company" class="form-select w-full">
+          <option value="">All Companies</option>
+          {% for co in companies %}
+            <option value="{{ co.pk }}" {% if selected_company == co.pk|stringformat:"d" %}selected{% endif %}>
+              {{ co.company_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="filter-status" class="form-label text-xs uppercase text-slate-500">Lifecycle Status</label>
+        <select id="filter-status" name="status" class="form-select w-full">
+          <option value="">All Statuses</option>
+          {% for val, label in status_choices %}
+            <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Apply</span>
+        </button>
+        {% if search_query or selected_company or selected_status %}
+          <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="btn btn-outline" title="Reset Filters">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table View -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Quote #</th>
+            <th>Company</th>
+            <th>Requested By</th>
+            <th class="text-right">Catalog Subtotal</th>
+            <th class="text-right">Discount</th>
+            <th class="text-right">Quoted Total</th>
+            <th>Valid Until</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for qr in quote_requests %}
+            <tr>
+              <td>
+                <a href="{% url 'ecommerce:b2bquoterequest_detail' qr.pk %}" class="font-mono font-bold text-brand hover:underline">
+                  {{ qr.number }}
+                </a>
+                <div class="text-xs text-slate-400">{{ qr.created_at|date:"M d, Y" }}</div>
+              </td>
+              <td>
+                <a href="{% url 'ecommerce:b2bcompanyaccount_detail' qr.company.pk %}" class="font-medium text-slate-800 dark:text-slate-200 hover:text-brand">
+                  {{ qr.company.company_name }}
+                </a>
+              </td>
+              <td>
+                <div class="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {{ qr.requested_by.get_full_name|default:qr.requested_by.username }}
+                </div>
+              </td>
+              <td class="text-right font-mono text-slate-600 dark:text-slate-400">
+                ${{ qr.original_subtotal|floatformat:2 }}
+              </td>
+              <td class="text-right font-mono text-amber-600 font-semibold">
+                {% if qr.quoted_discount_percent > 0 %}
+                  -{{ qr.quoted_discount_percent|floatformat:1 }}%
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+              <td class="text-right font-mono font-bold text-slate-900 dark:text-white">
+                ${{ qr.quoted_total|floatformat:2 }}
+              </td>
+              <td>
+                {% if qr.valid_until %}
+                  <div class="text-xs font-medium text-slate-700 dark:text-slate-300">{{ qr.valid_until|date:"M d, Y" }}</div>
+                {% else %}
+                  <span class="text-slate-400 text-xs italic">Open</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
+                  <span class="badge badge-green">{{ qr.get_status_display }}</span>
+                {% elif qr.status == "quoted" %}
+                  <span class="badge badge-info">Quoted / Offer Sent</span>
+                {% elif qr.status == "under_review" or qr.status == "submitted" or qr.status == "buyer_review" %}
+                  <span class="badge badge-amber">{{ qr.get_status_display }}</span>
+                {% elif qr.status == "rejected" %}
+                  <span class="badge badge-red">Rejected</span>
+                {% else %}
+                  <span class="badge badge-slate">{{ qr.get_status_display }}</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="table-actions justify-end">
+                  <a href="{% url 'ecommerce:b2bquoterequest_detail' qr.pk %}" class="btn btn-icon" title="View Quote">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:b2bquoterequest_edit' qr.pk %}" class="btn btn-icon" title="Edit Quote">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:b2bquoterequest_delete' qr.pk %}" class="inline" onsubmit="return confirm('Delete quote {{ qr.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-rose-500 hover:text-rose-700" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="9">
+                <div class="empty-state p-8 text-center">
+                  <div class="stat-icon blue mx-auto mb-3">
+                    <i data-lucide="file-text" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200">No Quote Requests Found</h3>
+                  <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                    Create quotes and negotiate volume discounts with wholesale buyers.
+                  </p>
+                  <a href="{% url 'ecommerce:b2bquoterequest_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create First Quote</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-sm">
+        <div class="text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} quotes
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_company %}&company={{ selected_company }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+              Previous
+            </a>
+          {% endif %}
+          <span class="px-3 py-1 text-slate-600 dark:text-slate-400 font-medium">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+          </span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_company %}&company={{ selected_company }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
