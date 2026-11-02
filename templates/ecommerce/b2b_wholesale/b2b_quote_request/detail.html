@@ -118,14 +118,24 @@
         <div>
           <div class="text-xs text-slate-400">Submitted By</div>
           <div class="font-medium text-slate-800 dark:text-slate-200">
-            {{ quote_request.requested_by.get_full_name|default:quote_request.requested_by.username }}
+            {% if quote_request.requested_by %}
+              {{ quote_request.requested_by.get_full_name|default:quote_request.requested_by.username }}
+            {% else %}
+              <span class="text-slate-400">Not specified</span>
+            {% endif %}
           </div>
-          <div class="text-xs text-slate-400">{{ quote_request.requested_by.email }}</div>
+          {% if quote_request.requested_by and quote_request.requested_by.email %}
+            <div class="text-xs text-slate-400">{{ quote_request.requested_by.email }}</div>
+          {% endif %}
         </div>
         <div>
           <div class="text-xs text-slate-400">Assigned Sales Executive</div>
           <div class="font-medium text-slate-800 dark:text-slate-200">
-            {{ quote_request.assigned_sales_rep.get_full_name|default:quote_request.assigned_sales_rep.username|default:"Unassigned" }}
+            {% if quote_request.assigned_sales_rep %}
+              {{ quote_request.assigned_sales_rep.get_full_name|default:quote_request.assigned_sales_rep.username }}
+            {% else %}
+              <span class="text-slate-400">Unassigned</span>
+            {% endif %}
           </div>
         </div>
       </div>
