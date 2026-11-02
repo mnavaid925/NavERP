@@ -2,7 +2,7 @@ import datetime
 from decimal import Decimal
 
 from django.db import models
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
 from apps.ecommerce.models._base import TenantNumbered
