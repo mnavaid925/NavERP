@@ -90,7 +90,7 @@
                     </td>
                     <td>
                         <span class="font-mono text-xs font-semibold">{{ dispute.order.number }}</span>
-                        <div class="text-xs text-muted">{{ dispute.customer_party.legal_name|default:"Direct Consumer" }}</div>
+                        <div class="text-xs text-muted">{{ dispute.customer_party.name|default:"Direct Consumer" }}</div>
                     </td>
                     <td class="font-mono text-xs text-muted">
                         {{ dispute.gateway_dispute_id|default:"-" }}
