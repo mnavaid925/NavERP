@@ -58,7 +58,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
                         <div class="text-xs text-muted uppercase font-medium">Risk Score</div>
-                        <div class="text-3xl font-extrabold mt-1 {% if assessment.risk_score > 60 %}text-danger{% elif assessment.risk_score > 25 %}text-warning{% else %}text-green{% endif %}">
+                        <div class="text-3xl font-extrabold mt-1 {% if assessment.risk_score > 60 %}text-danger{% elif assessment.risk_score > 25 %}text-warn{% else %}text-green{% endif %}">
                             {{ assessment.risk_score }} <span class="text-xs text-muted font-normal">/ 100</span>
                         </div>
                     </div>
@@ -68,7 +68,7 @@
                             {% if assessment.recommended_action == "reject" %}
                             <span class="text-danger">Decline / Block</span>
                             {% elif assessment.recommended_action == "challenge" %}
-                            <span class="text-warning">Step-Up Challenge</span>
+                            <span class="text-warn">Step-Up Challenge</span>
                             {% elif assessment.recommended_action == "review" %}
                             <span class="text-primary">Manual Analyst Review</span>
                             {% else %}
