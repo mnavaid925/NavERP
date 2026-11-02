@@ -78,12 +78,12 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: `available_credit` is read and updated without row-level locking.
   - *Fix*: Use `select_for_update()` inside `transaction.atomic()`.
 
-- [ ] **I5** — Missing `@require_POST` decorator on delete views
+- [x] **I5** — Missing `@require_POST` decorator on delete views — fe13f42c, 3ad3d24f, 5d1b3d7a, 8db0421b
   - *Location*: All 4 delete views in `B2bCompanyAccounts.py`, `B2bCompanyUsers.py`, `B2bQuoteRequests.py`, `B2bQuickOrderTemplates.py`
   - *Problem*: Delete endpoints accept GET requests instead of strictly requiring POST.
   - *Fix*: Decorate with `@require_POST`.
 
-- [ ] **I6** — Missing chained relation `reports_to_approver__user` in `B2bCompanyUser` views
+- [x] **I6** — Missing chained relation `reports_to_approver__user` in `B2bCompanyUser` views — 3ad3d24f
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bCompanyUsers.py:19, 85`
   - *Problem*: Template accesses `cu.reports_to_approver.user`, triggering N queries to `auth_user`.
   - *Fix*: Add `select_related("reports_to_approver__user")`.
@@ -103,7 +103,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Hot list queries and cockpits lack composite indexes on tenant ordering and status filtering.
   - *Fix*: Add composite indexes with migration.
 
-- [ ] **I10** — Non-positive and unbounded quantities accepted in Quick Order Matrix and CSV upload (L35)
+- [x] **I10** — Non-positive and unbounded quantities accepted in Quick Order Matrix and CSV upload (L35) — 8db0421b
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuickOrderTemplates.py:143, 204, 288, 344`
   - *Problem*: Negative or zero quantities can produce negative subtotals.
   - *Fix*: Enforce `1 <= qty <= 100000`.
@@ -167,7 +167,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Direct interpolation of company/user names breaks JS syntax if apostrophe is present.
   - *Fix*: Filter through `|escapejs`.
 
-- [ ] **M7** — Quick Order manual entry missing failed SKU visual row in preview table
+- [x] **M7** — Quick Order manual entry missing failed SKU visual row in preview table — 8db0421b
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuickOrderTemplates.py:375`
   - *Problem*: Unrecognized manual SKUs only appear in error messages, not in preview table with `found=False`.
   - *Fix*: Add to `parsed_items` with `found=False`.
@@ -177,7 +177,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Evaluates `company_users.count` immediately before loop.
   - *Fix*: Use `company_users|length`.
 
-- [ ] **M9** — Whole-model column loading in company filter dropdowns
+- [x] **M9** — Whole-model column loading in company filter dropdowns — 3ad3d24f, 5d1b3d7a, 8db0421b
   - *Location*: `apps/ecommerce/views/B2bWholesale/` list views
   - *Problem*: Loads all columns when template only needs `id` and `company_name`.
   - *Fix*: Add `.only("id", "company_name")`.
