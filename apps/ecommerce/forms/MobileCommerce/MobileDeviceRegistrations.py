@@ -28,7 +28,7 @@ class MobileDeviceRegistrationForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["customer_profile"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant)
+            self.fields["customer_profile"].queryset = CustomerAccountProfile.objects.filter(tenant=self.tenant).select_related("customer")
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant)
 
     def clean(self):
