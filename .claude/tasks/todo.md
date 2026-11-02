@@ -8,6 +8,245 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.17: B2B & Wholesale Commerce (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.17.md` (2026-11-02)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.16.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0031_alter_mobileappconfig_background_color_and_more.py`, so **9.17 claims `0032`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.17.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/B2bWholesale/`
+> Template folder name: `templates/ecommerce/b2b_wholesale/{b2b_company_account,b2b_company_user,b2b_quote_request,b2b_quick_order_template}/` + `b2b_wholesale_hub.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Wholesale Spine Integration (L28/L29)**:
+  - Corporate wholesale accounts link to unified business identity `core.Party` (Module 0) with company registration, VAT/Tax identification, and currency preferences in `accounting.Currency`.
+  - Individual company members link to `settings.AUTH_USER_MODEL` and `core.Party`.
+  - Credit terms and trade financing configure credit limits, Net terms (Net 15/30/45/60/90), and payment rules without duplicating double-entry bookkeeping tables in `ecommerce`. Authoritative invoices and settlements remain anchored in Module 2 `accounting` (`Invoice`, `Payment`, `JournalEntry`) (L29).
+  - Quote requests link to canonical catalog products `ecommerce.CatalogProduct` (`EPRD-`, 9.1) and `ecommerce.ProductVariant` (`PVR-`, 9.1). Converted quotes link directly to `ecommerce.EcommerceOrder` (`EORD-`, 9.5).
+  - Quick order templates store SKU items lists and quantities, allowing rapid reordering and CSV spreadsheet cart population without duplicating cart tables (reuses `ecommerce.Cart`, 9.4).
+- **Clear Sibling Boundaries (9.1 vs. 9.4 vs. 9.5 vs. 9.6 vs. 9.17 vs. SCM 4.1)**:
+  - 9.1 (`ProductCatalog`): Owns the base product catalog and standard customer pricing. 9.17 applies wholesale pricing tiers, negotiated quotes, and custom company discounts.
+  - 9.4 (`CartCheckout`): Owns standard consumer cart and checkout workflows. 9.17 provides quick order SKU grids, CSV upload cart loading, and PO number checkout enforcement.
+  - 9.5 (`OrderManagement`): Owns core orders and fulfillment pipelines. 9.17 converts negotiated quotes into `EcommerceOrder` records with corporate buyer references.
+  - 9.6 (`CustomerProfile`): Owns individual B2C consumer profiles. 9.17 owns corporate B2B multi-user organization accounts and approval hierarchies.
+  - SCM 4.1 (`Procurement`): Owns supplier procurement RFQs and purchase requisitions where NavERP is the buyer purchasing from external vendors. 9.17 owns customer-facing B2B wholesale where NavERP is the seller quoting to client companies.
+- **Multi-Tenancy & Data Isolation**: All 4 B2B wholesale models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`) with strict `tenant` (`core.Tenant`) isolation. All queries, views, and actions filter strictly on `tenant=request.tenant`.
+- **Base Class & Prefix Discipline**: All 4 models inherit from `TenantNumbered`, implementing thread-safe auto-number generation, audit timestamps, and strictly unique prefixes.
+- **Prefix Collision Sweep**: `EBCA`, `EBCU`, `EBQR`, `EBQT` verified 100% collision-free across the entire repository.
+
+---
+
+## 9.17-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate financial general ledger tables** — Credit limits, trade terms, and available credit are managed in `ecommerce.B2bCompanyAccount`; authoritative accounts receivable invoices and payment ledgers live in `accounting`.
+- [ ] **NO duplicate customer/user identity tables** — B2B users are `accounts.User` linked to `core.Party` via `B2bCompanyUser`.
+- [ ] **NO direct external ERP cXML HTTPS daemon listener** — PunchOut setup and punchback cart flows are modeled, validated, and tested via clean HTTP views and structured XML/JSON simulation endpoints.
+- [ ] **NO duplicate cart or catalog tables** — RFQs and quick order templates point to verified `ecommerce.CatalogProduct` and populate canonical `ecommerce.Cart`.
+- [ ] **NO external third-party credit bureau API dependency in unit/smoke tests** — Trade credit limits and status transitions operate locally within tenant configuration.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/B2bWholesale/`)
+
+- [ ] **`B2bCompanyAccount`** [Prefix: `EBCA-`] (`apps/ecommerce/models/B2bWholesale/B2bCompanyAccounts.py`)
+  - **Purpose**: Central B2B corporate customer account, trade credit line, approval policy, and punchout integration configuration.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `company_party` (`core.Party`, PROTECT, related_name="b2b_company_accounts")
+    - `primary_contact` (`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="managed_b2b_companies")
+    - `preferred_currency` (`accounting.Currency`, PROTECT, related_name="b2b_companies")
+    - `company_name`: CharField(max_length=255)
+    - `company_tax_id`: CharField(max_length=64, blank=True)
+    - `business_registration_number`: CharField(max_length=64, blank=True)
+    - `website`: URLField(blank=True)
+    - `industry`: CharField(max_length=100, blank=True)
+    - `credit_limit`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `available_credit`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `payment_terms`: CharField(max_length=25, choices=[("prepaid", "Prepaid"), ("due_on_receipt", "Due on Receipt"), ("net_15", "Net 15 Days"), ("net_30", "Net 30 Days"), ("net_45", "Net 45 Days"), ("net_60", "Net 60 Days"), ("net_90", "Net 90 Days")], default="due_on_receipt")
+    - `credit_status`: CharField(max_length=25, choices=[("good_standing", "Good Standing"), ("warning", "Credit Warning"), ("exceeded_limit", "Exceeded Limit"), ("suspended", "Suspended"), ("revoked", "Revoked")], default="good_standing")
+    - `requires_po_number`: BooleanField(default=True)
+    - `requires_order_approval`: BooleanField(default=False)
+    - `approval_threshold_amount`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `default_approver`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approver_b2b_companies")
+    - `punchout_enabled`: BooleanField(default=False)
+    - `punchout_protocol`: CharField(max_length=20, choices=[("none", "None"), ("cxml", "cXML (Ariba / Coupa)"), ("oci", "OCI (SAP)")], default="none")
+    - `punchout_identity`: CharField(max_length=128, blank=True)
+    - `punchout_shared_secret`: CharField(max_length=128, blank=True)
+    - `punchout_return_url`: URLField(blank=True)
+    - `wholesale_discount_percent`: DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    - `status`: CharField(max_length=25, choices=[("pending_review", "Pending Review"), ("active", "Active"), ("on_hold", "On Hold"), ("suspended", "Suspended"), ("closed", "Closed")], default="pending_review")
+    - `notes`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `available_credit` (computed / credit-managed)
+
+- [ ] **`B2bCompanyUser`** [Prefix: `EBCU-`] (`apps/ecommerce/models/B2bWholesale/B2bCompanyUsers.py`)
+  - **Purpose**: Corporate buyer membership, user hierarchies, spend limits, and approver assignment.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `company` (`B2bCompanyAccount`, CASCADE, related_name="company_users")
+    - `user` (`settings.AUTH_USER_MODEL`, CASCADE, related_name="b2b_user_memberships")
+    - `party` (`core.Party`, SET_NULL, null=True, blank=True, related_name="b2b_company_roles")
+    - `role`: CharField(max_length=30, choices=[("company_admin", "Company Administrator"), ("procurement_manager", "Procurement Manager"), ("buyer", "Authorized Buyer"), ("approver", "Order Approver"), ("finance_auditor", "Finance / Auditor")], default="buyer")
+    - `job_title`: CharField(max_length=100, blank=True)
+    - `department`: CharField(max_length=100, blank=True)
+    - `order_spend_limit`: DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Maximum per-order spend allowed without approval (0 for unlimited)")
+    - `monthly_spend_limit`: DecimalField(max_digits=12, decimal_places=2, default=0.00, help_text="Maximum monthly budget (0 for unlimited)")
+    - `monthly_spend_current`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `can_place_orders`: BooleanField(default=True)
+    - `can_request_quotes`: BooleanField(default=True)
+    - `can_view_invoices`: BooleanField(default=False)
+    - `can_manage_users`: BooleanField(default=False)
+    - `can_approve_orders`: BooleanField(default=False)
+    - `reports_to_approver`: ForeignKey("self", SET_NULL, null=True, blank=True, related_name="subordinate_buyers")
+    - `status`: CharField(max_length=20, choices=[("active", "Active"), ("invited", "Invitation Pending"), ("suspended", "Suspended"), ("inactive", "Inactive")], default="active")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `monthly_spend_current`
+
+- [ ] **`B2bQuoteRequest`** [Prefix: `EBQR-`] (`apps/ecommerce/models/B2bWholesale/B2bQuoteRequests.py`)
+  - **Purpose**: RFQ negotiation lifecycle, custom discount quotation, and one-click order conversion.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `company` (`B2bCompanyAccount`, CASCADE, related_name="quote_requests")
+    - `requested_by` (`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="requested_quotes")
+    - `assigned_sales_rep` (`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="assigned_quotes")
+    - `currency` (`accounting.Currency`, PROTECT, related_name="b2b_quotes")
+    - `converted_order` (`ecommerce.EcommerceOrder`, SET_NULL, null=True, blank=True, related_name="source_b2b_quotes")
+    - `status`: CharField(max_length=25, choices=[("draft", "Draft"), ("submitted", "Submitted / Pending Review"), ("under_review", "Under Review"), ("quoted", "Quoted / Offer Sent"), ("buyer_review", "Buyer Review"), ("accepted", "Accepted"), ("rejected", "Rejected"), ("expired", "Expired"), ("converted_to_order", "Converted to Order")], default="draft")
+    - `target_budget`: DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    - `original_subtotal`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `quoted_discount_percent`: DecimalField(max_digits=5, decimal_places=2, default=0.00)
+    - `quoted_total`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `tax_amount`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `shipping_estimate`: DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    - `target_delivery_date`: DateField(null=True, blank=True)
+    - `valid_until`: DateTimeField(null=True, blank=True)
+    - `submitted_at`: DateTimeField(null=True, blank=True)
+    - `quoted_at`: DateTimeField(null=True, blank=True)
+    - `accepted_at`: DateTimeField(null=True, blank=True)
+    - `line_items_data`: JSONField(default=list, blank=True)
+    - `buyer_notes`: TextField(blank=True)
+    - `merchant_notes`: TextField(blank=True)
+    - `rejection_reason`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `submitted_at`, `quoted_at`, `accepted_at`, `converted_order`
+
+- [ ] **`B2bQuickOrderTemplate`** [Prefix: `EBQT-`] (`apps/ecommerce/models/B2bWholesale/B2bQuickOrderTemplates.py`)
+  - **Purpose**: Saved requisition lists, bulk SKU ordering templates, and recurring order kits.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `company` (`B2bCompanyAccount`, CASCADE, related_name="quick_order_templates")
+    - `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="created_quick_order_templates")
+    - `name`: CharField(max_length=200)
+    - `description`: TextField(blank=True)
+    - `scope`: CharField(max_length=20, choices=[("private", "Private (My Eyes Only)"), ("company_shared", "Company-Wide Shared")], default="company_shared")
+    - `cadence`: CharField(max_length=20, choices=[("ad_hoc", "Ad-Hoc / As Needed"), ("weekly", "Weekly Replenishment"), ("bi_weekly", "Bi-Weekly"), ("monthly", "Monthly Replenishment"), ("quarterly", "Quarterly")], default="ad_hoc")
+    - `items_data`: JSONField(default=list, blank=True)
+    - `total_items_count`: PositiveIntegerField(default=0)
+    - `times_ordered`: PositiveIntegerField(default=0)
+    - `last_ordered_at`: DateTimeField(null=True, blank=True)
+    - `is_active`: BooleanField(default=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `total_items_count`, `times_ordered`, `last_ordered_at`
+
+---
+
+## Backend Packages (`apps/ecommerce/{models,forms,views,urls}/B2bWholesale/`)
+
+- [ ] Models:
+  - `apps/ecommerce/models/B2bWholesale/__init__.py`
+  - `apps/ecommerce/models/B2bWholesale/B2bCompanyAccounts.py`
+  - `apps/ecommerce/models/B2bWholesale/B2bCompanyUsers.py`
+  - `apps/ecommerce/models/B2bWholesale/B2bQuoteRequests.py`
+  - `apps/ecommerce/models/B2bWholesale/B2bQuickOrderTemplates.py`
+  - Re-export block in `apps/ecommerce/models/__init__.py`
+- [ ] Forms:
+  - `apps/ecommerce/forms/B2bWholesale/__init__.py`
+  - `apps/ecommerce/forms/B2bWholesale/B2bCompanyAccounts.py`
+  - `apps/ecommerce/forms/B2bWholesale/B2bCompanyUsers.py`
+  - `apps/ecommerce/forms/B2bWholesale/B2bQuoteRequests.py`
+  - `apps/ecommerce/forms/B2bWholesale/B2bQuickOrderTemplates.py`
+  - Re-export block in `apps/ecommerce/forms/__init__.py`
+- [ ] Views:
+  - `apps/ecommerce/views/B2bWholesale/__init__.py`
+  - `apps/ecommerce/views/B2bWholesale/B2bCompanyAccounts.py` (list, detail, create, edit, delete, punchout simulation)
+  - `apps/ecommerce/views/B2bWholesale/B2bCompanyUsers.py` (list, detail, create, edit, delete)
+  - `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py` (list, detail, create, edit, delete, submit, quote, accept, reject, convert to order)
+  - `apps/ecommerce/views/B2bWholesale/B2bQuickOrderTemplates.py` (list, detail, create, edit, delete, quick order matrix, CSV upload parse)
+  - `apps/ecommerce/views/B2bWholesale/B2bWholesaleHub.py` (operational overview cockpit)
+  - Re-export block in `apps/ecommerce/views/__init__.py`
+- [ ] URLs:
+  - `apps/ecommerce/urls/B2bWholesale/__init__.py`
+  - Re-export and include block in `apps/ecommerce/urls/__init__.py`
+- [ ] Admin:
+  - Surgical registration in `apps/ecommerce/admin.py`
+- [ ] Seeder:
+  - Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent seed data for all 4 models
+
+---
+
+## Wire-Up & Navigation (`apps/core/navigation.py`)
+- [ ] Add `LIVE_LINKS["9.17"]` mapping exact NavERP.md feature bullets to staff-facing views:
+  - `"Company Account Management"`: `"ecommerce:b2bcompanyaccount_list"`
+  - `"Quote Request & Negotiation"`: `"ecommerce:b2bquoterequest_list"`
+  - `"Punch-Out Catalog Integration"`: `"ecommerce:b2bcompanyaccount_list"`
+  - `"Credit Terms & Net Payment"`: `"ecommerce:b2bcompanyaccount_list"`
+  - `"Bulk Ordering & Quick Order"`: `"ecommerce:b2bquickordertemplate_list"`
+  - Extra live leaves:
+    - `"B2B Wholesale Hub"`: `"ecommerce:b2b_wholesale_hub"`
+    - `"Company Accounts"`: `"ecommerce:b2bcompanyaccount_list"`
+    - `"Company Buyers"`: `"ecommerce:b2bcompanyuser_list"`
+    - `"Quote Requests (RFQ)"`: `"ecommerce:b2bquoterequest_list"`
+    - `"Quick Order & Templates"`: `"ecommerce:b2bquickordertemplate_list"`
+
+---
+
+## Templates (`templates/ecommerce/b2b_wholesale/`)
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_wholesale_hub.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_account/list.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_account/detail.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_account/form.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_user/list.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_user/detail.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_company_user/form.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quote_request/list.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quote_request/detail.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quote_request/form.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quick_order_template/list.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quick_order_template/detail.html`
+- [ ] `templates/ecommerce/b2b_wholesale/b2b_quick_order_template/form.html`
+
+---
+
+## Verification & Smoke
+- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` -> claims `0032_...`
+- [ ] `venv\Scripts\python.exe manage.py migrate`
+- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run twice to verify idempotence)
+- [ ] `venv\Scripts\python.exe manage.py check`
+- [ ] `temp/smoke_9_17.py` smoke test script verifying:
+  - 200/302 for all new routes
+  - Content assertions (seeded company accounts, quotes, users, templates)
+  - Zero raw template tags or comment leaks
+  - Filter and search operations
+  - Cross-tenant IDOR isolation check (404 on other tenant's records)
+
+---
+
+## Close-Out & Review
+- [ ] Review passes (strictly sequential, one at a time):
+  - `code-reviewer` -> findings appended to `.claude/tasks/review-ecommerce-9.17.md`
+  - `explorer` -> findings appended
+  - `frontend-reviewer` -> findings appended
+  - `performance-reviewer` -> findings appended
+  - `qa-smoke-tester` -> findings appended
+  - `security-reviewer` -> findings appended
+- [ ] Deduplicate, prioritize (C/I/M), and commit `.claude/tasks/review-ecommerce-9.17.md`
+- [ ] `code-fixer` agent burns down all findings with instant single-file commits
+- [ ] Tests:
+  - `conftest.py` / test helpers
+  - `test_b2b_wholesale_models.py`
+  - `test_b2b_wholesale_forms.py`
+  - `test_b2b_wholesale_views.py`
+  - `test_b2b_wholesale_security.py`
+  - Full unfiltered test suite green
+- [ ] Update `.claude/skills/ecommerce/SKILL.md` + update `README.md`
+
+---
+
 # Sub-module 9.16: Mobile Commerce (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.16.md` (2026-11-02)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.15.
