@@ -198,7 +198,7 @@
                   <a href="{% url 'ecommerce:b2bquoterequest_edit' qr.pk %}" class="btn btn-icon" title="Edit Quote">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
-                  <form method="post" action="{% url 'ecommerce:b2bquoterequest_delete' qr.pk %}" class="inline" onsubmit="return confirm('Delete quote {{ qr.number }}?');">
+                  <form method="post" action="{% url 'ecommerce:b2bquoterequest_delete' qr.pk %}" class="inline" onsubmit="return confirm('Delete quote {{ qr.number|escapejs }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-icon text-rose-500 hover:text-rose-700" title="Delete">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
