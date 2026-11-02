@@ -175,7 +175,7 @@ def test_analyticsbi_productmerchandisingmetric_recalculate_tiers(ecom_merchandi
     # Best seller (> 100 units or > 2000 revenue)
     m.units_sold = 150
     m.gross_revenue = Decimal("3000.00")
-    m.cost_of_goods_sold = Decimal("1200.00")
+    m.cost_of_goods = Decimal("1200.00")
     m.recalculate_metrics()
     assert m.velocity_tier == "best_seller"
     assert m.gross_margin_pct == Decimal("60.00")
