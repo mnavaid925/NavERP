@@ -24,7 +24,7 @@ def account_security_alert_list(request):
         qs = qs.filter(
             Q(number__icontains=search_query)
             | Q(user__username__icontains=search_query)
-            | Q(party__legal_name__icontains=search_query)
+            | Q(party__name__icontains=search_query)
             | Q(ip_address__icontains=search_query)
             | Q(location_info__icontains=search_query)
             | Q(incident_details__icontains=search_query)
