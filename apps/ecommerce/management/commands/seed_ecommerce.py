@@ -3595,7 +3595,7 @@ class Command(BaseCommand):
         # 9.17 B2B & Wholesale Commerce Seeding
         # ------------------------------------------------------------------
         company_party = Party.objects.filter(tenant=tenant).first()
-        currency_obj = Currency.objects.filter(tenant=tenant).first()
+        currency_obj = Currency.objects.filter(code="USD").first() or Currency.objects.first()
         admin_user = get_user_model().objects.filter(is_superuser=True).first() or get_user_model().objects.first()
 
         # 1. B2bCompanyAccount
