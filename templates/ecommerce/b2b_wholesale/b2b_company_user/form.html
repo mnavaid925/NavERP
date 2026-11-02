@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bcompanyuser_list' %}" class="hover:text-brand">Company Buyers</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{% if company_user %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="user-plus" class="w-7 h-7 text-brand"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <a href="{% if company_user %}{% url 'ecommerce:b2bcompanyuser_detail' company_user.pk %}{% else %}{% url 'ecommerce:b2bcompanyuser_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+        <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300">
+          <div class="font-bold flex items-center gap-2 mb-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i>
+            Please correct the errors below:
+          </div>
+          <ul class="list-disc list-inside space-y-1">
+            {% for field, errors in form.errors.items %}
+              {% for err in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ err }}</li>
+              {% endfor %}
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Membership -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="building" class="w-4 h-4 text-brand"></i>
+          Company & User Account
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.company.id_for_label }}" class="form-label">
+              Wholesale Company <span class="text-rose-500">*</span>
+            </label>
+            {{ form.company }}
+          </div>
+
+          <div>
+            <label for="{{ form.user.id_for_label }}" class="form-label">
+              Login User Account <span class="text-rose-500">*</span>
+            </label>
+            {{ form.user }}
+          </div>
+
+          <div>
+            <label for="{{ form.role.id_for_label }}" class="form-label">Corporate Role Tier</label>
+            {{ form.role }}
+          </div>
+
+          <div>
+            <label for="{{ form.status.id_for_label }}" class="form-label">Membership Status</label>
+            {{ form.status }}
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="{{ form.party.id_for_label }}" class="form-label">Optional Party Record (Core Spine)</label>
+            {{ form.party }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Position & Approver Hierarchy -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="sitemap" class="w-4 h-4 text-brand"></i>
+          Position & Supervisor Routing
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.job_title.id_for_label }}" class="form-label">Job Title</label>
+            {{ form.job_title }}
+          </div>
+
+          <div>
+            <label for="{{ form.department.id_for_label }}" class="form-label">Department / Unit</label>
+            {{ form.department }}
+          </div>
+
+          <div class="sm:col-span-2">
+            <label for="{{ form.reports_to_approver.id_for_label }}" class="form-label">Direct Supervisor Approver</label>
+            {{ form.reports_to_approver }}
+            <div class="text-xs text-slate-500 mt-1">Orders exceeding this buyer's limit will be routed here for approval</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 3: Spending Governance -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="coins" class="w-4 h-4 text-brand"></i>
+          Spending Limits & Thresholds
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.order_spend_limit.id_for_label }}" class="form-label">Per-Order Spend Limit ($)</label>
+            {{ form.order_spend_limit }}
+            <div class="text-xs text-slate-500 mt-1">Set to 0.00 for unlimited order approval</div>
+          </div>
+
+          <div>
+            <label for="{{ form.monthly_spend_limit.id_for_label }}" class="form-label">Monthly Budget Limit ($)</label>
+            {{ form.monthly_spend_limit }}
+            <div class="text-xs text-slate-500 mt-1">Set to 0.00 for unlimited monthly budget</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Access Privileges -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="lock" class="w-4 h-4 text-brand"></i>
+          Purchasing Permissions & Authority
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            {{ form.can_place_orders }}
+            <span>Allow Checkout & Placing Orders</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            {{ form.can_request_quotes }}
+            <span>Allow Submitting RFQs & Quotes</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            {{ form.can_approve_orders }}
+            <span>Can Act as Supervisor Approver</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            {{ form.can_view_invoices }}
+            <span>Can View Invoices & AR Ledgers</span>
+          </label>
+
+          <label class="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+            {{ form.can_manage_users }}
+            <span>Can Invite & Manage Company Users</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if company_user %}{% url 'ecommerce:b2bcompanyuser_detail' company_user.pk %}{% else %}{% url 'ecommerce:b2bcompanyuser_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Save Company Buyer</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
