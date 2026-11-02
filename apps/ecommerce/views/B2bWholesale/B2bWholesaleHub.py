@@ -37,14 +37,14 @@ def b2b_wholesale_hub(request):
     ).count()
 
     recent_companies = ecommerce_scope(
-        B2bCompanyAccount.objects.select_related("company_party", "primary_contact").order_by("-created_at")[:5],
+        B2bCompanyAccount.objects.select_related("company_party", "primary_contact").order_by("-created_at"),
         request,
-    )
+    )[:5]
 
     recent_quotes = ecommerce_scope(
-        B2bQuoteRequest.objects.select_related("company", "requested_by", "currency").order_by("-created_at")[:5],
+        B2bQuoteRequest.objects.select_related("company", "requested_by", "currency").order_by("-created_at"),
         request,
-    )
+    )[:5]
 
     context = {
         "total_companies_count": co_stats["total_co"] or 0,
