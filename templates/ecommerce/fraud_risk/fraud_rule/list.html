@@ -60,10 +60,10 @@
     <div class="card-body">
         <form method="get" action="{% url 'ecommerce:fraud_rule_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div class="form-group mb-0 md:col-span-2">
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Search rule name, code, threshold..." class="form-input">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search rule name, code, threshold..." class="form-input" aria-label="Search fraud rules">
             </div>
             <div class="form-group mb-0">
-                <select name="scope" class="form-select">
+                <select name="scope" class="form-select" aria-label="Filter by rule scope">
                     <option value="">All Scopes</option>
                     {% for val, label in scope_choices %}
                     <option value="{{ val }}" {% if scope_filter == val %}selected{% endif %}>{{ label }}</option>
@@ -71,7 +71,7 @@
                 </select>
             </div>
             <div class="form-group mb-0">
-                <select name="action" class="form-select">
+                <select name="action" class="form-select" aria-label="Filter by action">
                     <option value="">All Actions</option>
                     {% for val, label in action_choices %}
                     <option value="{{ val }}" {% if action_filter == val %}selected{% endif %}>{{ label }}</option>
