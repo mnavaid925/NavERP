@@ -70,7 +70,7 @@ def b2bquoterequest_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    companies = ecommerce_scope(B2bCompanyAccount.objects.order_by("company_name"), request)
+    companies = ecommerce_scope(B2bCompanyAccount.objects.only("id", "company_name").order_by("company_name"), request)
 
     context = {
         "quote_requests": page_obj.object_list,
@@ -288,27 +288,21 @@ def b2bquoterequest_edit(request, pk):
 
 @login_required
 @tenant_admin_required
+@require_POST
 def b2bquoterequest_delete(request, pk):
     quote = ecommerce_object(request, B2bQuoteRequest, pk)
-    if request.method == "POST":
-        num = quote.number
-        co_name = quote.company.company_name
-        quote.delete()
-        write_audit_log(
-            request.user,
-            quote,
-            "delete",
-            {"number": num, "company": co_name},
-            tenant=request.tenant,
-        )
-        messages.success(request, f"Quote Request {num} has been deleted.")
-        return redirect("ecommerce:b2bquoterequest_list")
-
-    return render(
-        request,
-        "ecommerce/b2b_wholesale/b2b_quote_request/detail.html",
-        {"quote_request": quote, "show_delete_confirm": True, "line_items": quote.line_items_data or []},
+    num = quote.number
+    co_name = quote.company.company_name
+    quote.delete()
+    write_audit_log(
+        request.user,
+        quote,
+        "delete",
+        {"number": num, "company": co_name},
+        tenant=request.tenant,
     )
+    messages.success(request, f"Quote Request {num} has been deleted.")
+    return redirect("ecommerce:b2bquoterequest_list")
 
 
 @login_required
