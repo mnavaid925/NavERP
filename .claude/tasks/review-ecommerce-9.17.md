@@ -63,7 +63,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Passing non-numeric `?company=xyz` causes unhandled `ValueError` when Django coerces FK id.
   - *Fix*: Guard with `selected_company.isdigit()`.
 
-- [ ] **I2** — Missing state machine guards on quote conversion and state transitions (`accept`, `reject`, `convert_order`)
+- [x] **I2** — Missing state machine guards on quote conversion and state transitions (`accept`, `reject`, `convert_order`) — 080456e0
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:324, 338, 354`
   - *Problem*: Non-accepted or draft quotes can be converted to orders; quotes in terminal states can be accepted or rejected.
   - *Fix*: Enforce `quote.status == "accepted"` for conversion and `quote.status in ["quoted", "buyer_review"]` for accept/reject.
