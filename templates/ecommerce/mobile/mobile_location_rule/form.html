@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if is_edit %}Edit {{ location_rule.name }}{% else %}New Location Rule{% endif %} - Mobile Commerce | NavERP
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:mobile_hub' %}" class="hover:text-brand">Mobile Commerce</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:mobilelocationrule_list' %}" class="hover:text-brand">Location Rules</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{% if is_edit %}Edit {{ location_rule.number }}{% else %}New Rule{% endif %}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="map-pin" class="w-7 h-7 text-brand"></i>
+        {% if is_edit %}Edit Location & Geofence Rule{% else %}Create Location & Geofence Rule{% endif %}
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Configure store locator coordinates, circular geofence boundary, and proximity triggers
+      </p>
+    </div>
+  </div>
+
+  <form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+      {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Section 1: Store Venue & Rule Type -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="store" class="w-5 h-5 text-brand"></i>
+        Store Venue & Rule Type
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.name.id_for_label }}" class="form-label">Internal Rule Name *</label>
+          {{ form.name }}
+          {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.rule_type.id_for_label }}" class="form-label">Rule Type *</label>
+          {{ form.rule_type }}
+          {% if form.rule_type.errors %}<div class="form-error">{{ form.rule_type.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.store_name.id_for_label }}" class="form-label">Store / Venue Display Name *</label>
+          {{ form.store_name }}
+          {% if form.store_name.errors %}<div class="form-error">{{ form.store_name.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.fulfillment_center.id_for_label }}" class="form-label">Linked Physical Fulfillment Center</label>
+          {{ form.fulfillment_center }}
+          {% if form.fulfillment_center.errors %}<div class="form-error">{{ form.fulfillment_center.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Spatial Coordinates & Radius -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="compass" class="w-5 h-5 text-indigo-500"></i>
+        Spatial Coordinates & Geofence Boundary
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.latitude.id_for_label }}" class="form-label">Center Latitude *</label>
+          {{ form.latitude }}
+          {% if form.latitude.errors %}<div class="form-error">{{ form.latitude.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.longitude.id_for_label }}" class="form-label">Center Longitude *</label>
+          {{ form.longitude }}
+          {% if form.longitude.errors %}<div class="form-error">{{ form.longitude.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.radius_meters.id_for_label }}" class="form-label">Geofence Trigger Radius (Meters) *</label>
+          {{ form.radius_meters }}
+          {% if form.radius_meters.errors %}<div class="form-error">{{ form.radius_meters.errors }}</div>{% endif %}
+          <div class="text-xs text-slate-500 mt-1">Recommended: 100m–500m for store mode, 1,000m–5,000m for curbside pickup</div>
+        </div>
+
+        <div>
+          <label for="{{ form.dwell_time_seconds.id_for_label }}" class="form-label">Minimum Dwell Time (Seconds)</label>
+          {{ form.dwell_time_seconds }}
+          {% if form.dwell_time_seconds.errors %}<div class="form-error">{{ form.dwell_time_seconds.errors }}</div>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Trigger Action & Promotions -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="zap" class="w-5 h-5 text-amber-500"></i>
+        Trigger Action & Proximity Privileges
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.trigger_action.id_for_label }}" class="form-label">Action on Geofence Breach</label>
+          {{ form.trigger_action }}
+          {% if form.trigger_action.errors %}<div class="form-error">{{ form.trigger_action.errors }}</div>{% endif %}
+        </div>
+
+        <div>
+          <label for="{{ form.linked_promotion.id_for_label }}" class="form-label">Unlock Proximity Coupon</label>
+          {{ form.linked_promotion }}
+          {% if form.linked_promotion.errors %}<div class="form-error">{{ form.linked_promotion.errors }}</div>{% endif %}
+        </div>
+      </div>
+
+      <div>
+        <label for="{{ form.push_message.id_for_label }}" class="form-label">Proximity Push Message Body</label>
+        {{ form.push_message }}
+        {% if form.push_message.errors %}<div class="form-error">{{ form.push_message.errors }}</div>{% endif %}
+      </div>
+    </div>
+
+    <!-- Section 4: In-Store Shopping Mode & Curbside Radar -->
+    <div class="card p-5 space-y-4">
+      <h2 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+        <i data-lucide="navigation" class="w-5 h-5 text-green-500"></i>
+        Store Mode & Curbside Radar
+      </h2>
+
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+        <label class="flex items-center gap-2 cursor-pointer">
+          {{ form.enable_instore_mode }}
+          <span class="text-sm font-medium text-slate-900 dark:text-white">Enable In-Store Mode</span>
+        </label>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          {{ form.enable_bopis_checkin }}
+          <span class="text-sm font-medium text-slate-900 dark:text-white">Allow Curbside Check-in</span>
+        </label>
+
+        <label class="flex items-center gap-2 cursor-pointer">
+          {{ form.is_active }}
+          <span class="text-sm font-medium text-slate-900 dark:text-white">Rule Active in Radar</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex items-center justify-end gap-3 pt-2">
+      <a href="{% if is_edit %}{% url 'ecommerce:mobilelocationrule_detail' location_rule.pk %}{% else %}{% url 'ecommerce:mobilelocationrule_list' %}{% endif %}" class="btn btn-outline">
+        Cancel
+      </a>
+      <button type="submit" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>{% if is_edit %}Save Changes{% else %}Create Rule{% endif %}</span>
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
