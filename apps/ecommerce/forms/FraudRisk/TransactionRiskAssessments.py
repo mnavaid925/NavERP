@@ -13,7 +13,7 @@ from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 class TransactionRiskAssessmentForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = TransactionRiskAssessment
-        exclude = ["tenant", "number", "created_at", "updated_at", "reviewed_at"]
+        exclude = ["tenant", "number", "created_at", "updated_at", "reviewed_at", "analyst_user"]
         widgets = {
             "order": forms.Select(attrs={"class": "form-select"}),
             "customer_party": forms.Select(attrs={"class": "form-select"}),
@@ -34,7 +34,6 @@ class TransactionRiskAssessmentForm(TenantUniqueMixin, TenantModelForm):
             "device_fingerprint": forms.TextInput(attrs={"class": "form-input font-mono", "placeholder": "fp_a1b2c3d4..."}),
             "velocity_count_24h": forms.NumberInput(attrs={"class": "form-input", "placeholder": "1"}),
             "risk_factors_summary": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3, "placeholder": "Triggered rules, velocity spike notes..."}),
-            "analyst_user": forms.Select(attrs={"class": "form-select"}),
             "analyst_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Analyst investigation findings and justifications..."}),
         }
 
