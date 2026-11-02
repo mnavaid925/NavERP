@@ -24,7 +24,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Views call `write_audit_log(request, "action", "...", object_id=...)` with invalid kwargs. Authoritative signature in `apps/core/utils.py` is `write_audit_log(user, obj, action, changes=None, tenant=None)`. Every POST submission crashes with 500.
   - *Fix*: Correct all 15 calls to `write_audit_log(request.user, obj, "action", {"number": obj.number}, tenant=request.tenant)`.
 
-- [ ] **C3** — `EcommerceOrder.objects.create()` kwargs mismatch (`subtotal` vs `subtotal_amount`) and missing required shipping address fields
+- [x] **C3** — `EcommerceOrder.objects.create()` kwargs mismatch (`subtotal` vs `subtotal_amount`) and missing required shipping address fields — 7818e51f
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:360-372`
   - *Problem*: `subtotal` raises `TypeError: unexpected keyword argument 'subtotal'`. The model field is `subtotal_amount`. Non-nullable address fields (`shipping_name`, `shipping_address_line1`, `shipping_city`, `shipping_postal_code`, `shipping_country`) have no defaults and trigger IntegrityError.
   - *Fix*: Rename `subtotal` to `subtotal_amount` and provide fallback shipping address fields.
