@@ -13,6 +13,7 @@ class MobilePushCampaignForm(TenantUniqueMixin, TenantModelForm):
         exclude = [
             "tenant",
             "number",
+            "status",
             "created_at",
             "updated_at",
             "sent_at",
@@ -37,7 +38,6 @@ class MobilePushCampaignForm(TenantUniqueMixin, TenantModelForm):
             "target_product": forms.Select(attrs={"class": "form-select"}),
             "target_category": forms.Select(attrs={"class": "form-select"}),
             "target_coupon": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "scheduled_for": forms.DateTimeInput(attrs={"class": "form-input", "type": "datetime-local"}),
         }
 
