@@ -68,6 +68,10 @@ from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAcco
 from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
 from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
 from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
+from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
+from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
+from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
+from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
 
 
 @admin.register(StoreCategory)
@@ -913,6 +917,45 @@ class B2bQuickOrderTemplateAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["company", "created_by"]
     ordering = ["company", "name"]
+
+
+@admin.register(FraudRule)
+class FraudRuleAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "rule_code", "rule_scope", "rule_type", "action_to_take", "priority", "is_active"]
+    list_filter = ["rule_scope", "rule_type", "action_to_take", "is_active", "tenant"]
+    search_fields = ["number", "name", "rule_code", "threshold_value"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    ordering = ["priority", "name"]
+
+
+@admin.register(TransactionRiskAssessment)
+class TransactionRiskAssessmentAdmin(admin.ModelAdmin):
+    list_display = ["number", "order", "risk_score", "risk_tier", "recommended_action", "actual_decision", "avs_result_code", "cvv_result_code", "created_at"]
+    list_filter = ["risk_tier", "recommended_action", "actual_decision", "is_proxy_or_vpn", "is_geo_mismatch", "tenant"]
+    search_fields = ["number", "order__number", "ip_address", "device_fingerprint"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["order", "customer_party", "currency", "user", "analyst_user"]
+    ordering = ["-created_at"]
+
+
+@admin.register(ChargebackDispute)
+class ChargebackDisputeAdmin(admin.ModelAdmin):
+    list_display = ["number", "order", "dispute_amount", "currency", "reason_category", "stage", "evidence_due_date", "created_at"]
+    list_filter = ["stage", "reason_category", "payment_method_type", "tenant"]
+    search_fields = ["number", "order__number", "gateway_dispute_id", "reason_code"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["order", "customer_party", "currency"]
+    ordering = ["-created_at"]
+
+
+@admin.register(AccountSecurityAlert)
+class AccountSecurityAlertAdmin(admin.ModelAdmin):
+    list_display = ["number", "user", "alert_type", "severity", "automated_action_taken", "status", "created_at"]
+    list_filter = ["alert_type", "severity", "status", "automated_action_taken", "tenant"]
+    search_fields = ["number", "user__username", "ip_address", "location_info"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["user", "party", "assigned_investigator", "resolved_by"]
+    ordering = ["-created_at"]
 
 
 
