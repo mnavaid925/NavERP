@@ -162,8 +162,8 @@
             </td>
             <td>
               {% if dev.customer_profile %}
-              <div class="font-medium text-slate-900 dark:text-white">{{ dev.customer_profile.customer_number }}</div>
-              <div class="text-xs text-slate-500">{{ dev.customer_profile.user.email|default:"-" }}</div>
+              <div class="font-medium text-slate-900 dark:text-white">{{ dev.customer_profile.number }}</div>
+              <div class="text-xs text-slate-500">{% if dev.customer_profile.user %}{{ dev.customer_profile.user.email|default:dev.customer_profile.user.username }}{% else %}{{ dev.customer_profile.customer.name }}{% endif %}</div>
               {% elif dev.party %}
               <div class="font-medium text-slate-900 dark:text-white">{{ dev.party.name }}</div>
               <div class="text-xs text-slate-500">Guest / Pre-login</div>
