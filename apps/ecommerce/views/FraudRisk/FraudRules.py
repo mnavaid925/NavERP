@@ -110,8 +110,12 @@ def fraud_rule_list(request):
     elif is_active_filter == "0":
         qs = qs.filter(is_active=False)
 
-    total_count = qs.count()
-    active_count = qs.filter(is_active=True).count()
+    stats = qs.aggregate(
+        total_count=Count("id"),
+        active_count=Count("id", filter=Q(is_active=True)),
+    )
+    total_count = stats["total_count"]
+    active_count = stats["active_count"]
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
