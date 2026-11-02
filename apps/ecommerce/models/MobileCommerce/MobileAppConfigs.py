@@ -1,6 +1,12 @@
 import json
+from django.core.validators import RegexValidator
 from django.db import models
 from apps.ecommerce.models._base import TenantNumbered
+
+HEX_COLOR_VALIDATOR = RegexValidator(
+    regex=r"^#[0-9A-Fa-f]{6}$",
+    message="Color must be a valid 6-character hex code starting with # (e.g. #2563EB).",
+)
 
 
 class MobileAppConfig(TenantNumbered):
@@ -44,11 +50,13 @@ class MobileAppConfig(TenantNumbered):
     theme_color = models.CharField(
         max_length=7,
         default="#2563EB",
+        validators=[HEX_COLOR_VALIDATOR],
         help_text="Brand hex color for browser status bar",
     )
     background_color = models.CharField(
         max_length=7,
         default="#FFFFFF",
+        validators=[HEX_COLOR_VALIDATOR],
         help_text="Splash screen background hex color",
     )
     display_mode = models.CharField(
