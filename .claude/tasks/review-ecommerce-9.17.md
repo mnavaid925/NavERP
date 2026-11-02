@@ -73,7 +73,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: `reports_to_approver` missing from `reject_foreign`, and no validation check that approver belongs to the same company.
   - *Fix*: Add to `reject_foreign` and validate `approver.company_id == company.id` and `approver.pk != self.instance.pk`.
 
-- [ ] **I4** — Concurrency race condition on available credit limit deduction
+- [x] **I4** — Concurrency race condition on available credit limit deduction — f9dad94d
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:394-398`
   - *Problem*: `available_credit` is read and updated without row-level locking.
   - *Fix*: Use `select_for_update()` inside `transaction.atomic()`.
@@ -137,7 +137,7 @@ The deduplicated and prioritized findings below are structured for resolution by
 
 ## Minor Findings
 
-- [ ] **M1** — Arbitrary product fallback on missing line item products in order conversion
+- [x] **M1** — Arbitrary product fallback on missing line item products in order conversion — f9dad94d
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:377-380`
   - *Problem*: If product not found, falls back to first arbitrary product in tenant catalog.
   - *Fix*: Skip item with a warning message instead of assigning a random product.
