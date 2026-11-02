@@ -335,17 +335,17 @@
 ---
 
 ## 9.15-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO heavy external OLAP/ClickHouse/Snowflake warehouse dependency** — Calculations are performed cleanly via Django ORM aggregations and saved to SQLite/MySQL time-series tables.
-- [ ] **NO client-side JavaScript tracking pixel tag-manager injection** — Telemetry reads existing `Cart`, `CheckoutSession`, `EcommerceOrder`, and `ShopperBehaviorEvent` models.
-- [ ] **NO black-box predictive ML neural-network training in request cycle** — Advanced predictive AI belongs to Module 23 (`apps/ai`).
-- [ ] **NO direct third-party ad network API credentials management** — External ad spend sync is out of scope; touchpoints log UTM parameters and campaign tags.
-- [ ] **NO duplicate financial ledgers or GL account journal entries** — Net revenue and gross margin calculations in analytics represent merchandising performance and do not post to accounting general ledger (L29).
+- [x] **NO heavy external OLAP/ClickHouse/Snowflake warehouse dependency** — Calculations are performed cleanly via Django ORM aggregations and saved to SQLite/MySQL time-series tables.
+- [x] **NO client-side JavaScript tracking pixel tag-manager injection** — Telemetry reads existing `Cart`, `CheckoutSession`, `EcommerceOrder`, and `ShopperBehaviorEvent` models.
+- [x] **NO black-box predictive ML neural-network training in request cycle** — Advanced predictive AI belongs to Module 23 (`apps/ai`).
+- [x] **NO direct third-party ad network API credentials management** — External ad spend sync is out of scope; touchpoints log UTM parameters and campaign tags.
+- [x] **NO duplicate financial ledgers or GL account journal entries** — Net revenue and gross margin calculations in analytics represent merchandising performance and do not post to accounting general ledger (L29).
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/AnalyticsBi/`)
 
-- [ ] **`DailySalesSnapshot`** [Prefix: `EDSS-`] (`apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`)
+- [x] **`DailySalesSnapshot`** [Prefix: `EDSS-`] (`apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`)
   - **Purpose**: Pre-aggregated historical daily sales snapshot capturing top-line revenue, order counts, AOV, cart abandonment, and margin components for high-speed reporting and Chart.js trendlines.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Fields**:
@@ -376,7 +376,7 @@
   - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
   - **Key Methods**: `recalculate_from_orders(tenant, date)`
 
-- [ ] **`CustomerCohortMetric`** [Prefix: `ECCM-`] (`apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`)
+- [x] **`CustomerCohortMetric`** [Prefix: `ECCM-`] (`apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`)
   - **Purpose**: Period-over-period cohort retention and LTV tracking cube by acquisition month and period offset.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Fields**:
@@ -401,7 +401,7 @@
   - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
   - **Key Methods**: `recalculate_cohort(tenant, cohort_month, offset)`
 
-- [ ] **`ProductMerchandisingMetric`** [Prefix: `EPMM-`] (`apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`)
+- [x] **`ProductMerchandisingMetric`** [Prefix: `EPMM-`] (`apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`)
   - **Purpose**: Product and variant-level sales velocity, inventory turnover, margin contribution, and catalog health classification.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -430,7 +430,7 @@
   - **Excluded from Form**: `tenant`, `number`, `created_at`, `updated_at`
   - **Key Methods**: `classify_velocity()`
 
-- [ ] **`AttributionTouchpoint`** [Prefix: `EATT-`] (`apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`)
+- [x] **`AttributionTouchpoint`** [Prefix: `EATT-`] (`apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`)
   - **Purpose**: Marketing attribution event recording customer acquisition touchpoints, channel grouping, UTM parameters, and order attribution weighting.
   - **Inherits**: `TenantNumbered` (`apps/ecommerce/models/_base.py`)
   - **Choices**:
@@ -465,47 +465,47 @@
 ## Backend Packages (`apps/ecommerce/`)
 
 ### Models (`apps/ecommerce/models/AnalyticsBi/`)
-- [ ] Create `apps/ecommerce/models/AnalyticsBi/__init__.py`
-- [ ] Create `apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`
-- [ ] Create `apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`
-- [ ] Create `apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`
-- [ ] Create `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`
-- [ ] Update `apps/ecommerce/models/__init__.py` with 9.15 re-export block.
+- [x] Create `apps/ecommerce/models/AnalyticsBi/__init__.py`
+- [x] Create `apps/ecommerce/models/AnalyticsBi/DailySalesSnapshots.py`
+- [x] Create `apps/ecommerce/models/AnalyticsBi/CustomerCohortMetrics.py`
+- [x] Create `apps/ecommerce/models/AnalyticsBi/ProductMerchandisingMetrics.py`
+- [x] Create `apps/ecommerce/models/AnalyticsBi/AttributionTouchpoints.py`
+- [x] Update `apps/ecommerce/models/__init__.py` with 9.15 re-export block.
 
 ### Forms (`apps/ecommerce/forms/AnalyticsBi/`)
-- [ ] Create `apps/ecommerce/forms/AnalyticsBi/__init__.py`
-- [ ] Create `apps/ecommerce/forms/AnalyticsBi/DailySalesSnapshots.py` (`DailySalesSnapshotForm`, `DailySalesSnapshotFilterForm`)
-- [ ] Create `apps/ecommerce/forms/AnalyticsBi/CustomerCohortMetrics.py` (`CustomerCohortMetricForm`, `CustomerCohortMetricFilterForm`)
-- [ ] Create `apps/ecommerce/forms/AnalyticsBi/ProductMerchandisingMetrics.py` (`ProductMerchandisingMetricForm`, `ProductMerchandisingMetricFilterForm`)
-- [ ] Create `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py` (`AttributionTouchpointForm`, `AttributionTouchpointFilterForm`)
-- [ ] Update `apps/ecommerce/forms/__init__.py` with 9.15 re-export block.
+- [x] Create `apps/ecommerce/forms/AnalyticsBi/__init__.py`
+- [x] Create `apps/ecommerce/forms/AnalyticsBi/DailySalesSnapshots.py` (`DailySalesSnapshotForm`, `DailySalesSnapshotFilterForm`)
+- [x] Create `apps/ecommerce/forms/AnalyticsBi/CustomerCohortMetrics.py` (`CustomerCohortMetricForm`, `CustomerCohortMetricFilterForm`)
+- [x] Create `apps/ecommerce/forms/AnalyticsBi/ProductMerchandisingMetrics.py` (`ProductMerchandisingMetricForm`, `ProductMerchandisingMetricFilterForm`)
+- [x] Create `apps/ecommerce/forms/AnalyticsBi/AttributionTouchpoints.py` (`AttributionTouchpointForm`, `AttributionTouchpointFilterForm`)
+- [x] Update `apps/ecommerce/forms/__init__.py` with 9.15 re-export block.
 
 ### Views (`apps/ecommerce/views/AnalyticsBi/`)
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/__init__.py`
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py` (List, Detail, Create, Edit, Delete, Generate/Recalculate Snapshot Action)
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py` (List, Detail, Create, Edit, Delete, Recalculate Cohorts Action)
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py` (List, Detail, Create, Edit, Delete, Reclassify Velocity Action)
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/AttributionTouchpoints.py` (List, Detail, Create, Edit, Delete)
-- [ ] Create `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit` view with live sales cards, funnel drop-off pipeline, and Chart.js trendlines)
-- [ ] Update `apps/ecommerce/views/__init__.py` with 9.15 re-export block.
+- [x] Create `apps/ecommerce/views/AnalyticsBi/__init__.py`
+- [x] Create `apps/ecommerce/views/AnalyticsBi/DailySalesSnapshots.py` (List, Detail, Create, Edit, Delete, Generate/Recalculate Snapshot Action)
+- [x] Create `apps/ecommerce/views/AnalyticsBi/CustomerCohortMetrics.py` (List, Detail, Create, Edit, Delete, Recalculate Cohorts Action)
+- [x] Create `apps/ecommerce/views/AnalyticsBi/ProductMerchandisingMetrics.py` (List, Detail, Create, Edit, Delete, Reclassify Velocity Action)
+- [x] Create `apps/ecommerce/views/AnalyticsBi/AttributionTouchpoints.py` (List, Detail, Create, Edit, Delete)
+- [x] Create `apps/ecommerce/views/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit` view with live sales cards, funnel drop-off pipeline, and Chart.js trendlines)
+- [x] Update `apps/ecommerce/views/__init__.py` with 9.15 re-export block.
 
 ### URLs (`apps/ecommerce/urls/AnalyticsBi/`)
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/__init__.py`
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/DailySalesSnapshots.py` (`dailysalessnapshot_list/detail/create/edit/delete/generate`)
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/CustomerCohortMetrics.py` (`customercohortmetric_list/detail/create/edit/delete/recalculate`)
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/ProductMerchandisingMetrics.py` (`productmerchandisingmetric_list/detail/create/edit/delete/reclassify`)
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/AttributionTouchpoints.py` (`attributiontouchpoint_list/detail/create/edit/delete`)
-- [ ] Create `apps/ecommerce/urls/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit`)
-- [ ] Update `apps/ecommerce/urls/__init__.py` to concatenate 9.15 urlpatterns.
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/__init__.py`
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/DailySalesSnapshots.py` (`dailysalessnapshot_list/detail/create/edit/delete/generate`)
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/CustomerCohortMetrics.py` (`customercohortmetric_list/detail/create/edit/delete/recalculate`)
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/ProductMerchandisingMetrics.py` (`productmerchandisingmetric_list/detail/create/edit/delete/reclassify`)
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/AttributionTouchpoints.py` (`attributiontouchpoint_list/detail/create/edit/delete`)
+- [x] Create `apps/ecommerce/urls/AnalyticsBi/AnalyticsCockpit.py` (`analytics_cockpit`)
+- [x] Update `apps/ecommerce/urls/__init__.py` to concatenate 9.15 urlpatterns.
 
 ### Admin & Seeder
-- [ ] Register all 4 models in `apps/ecommerce/admin.py`.
-- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent demo snapshots, cohort retention rows, product merchandising metrics, and attribution touchpoints.
+- [x] Register all 4 models in `apps/ecommerce/admin.py`.
+- [x] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent demo snapshots, cohort retention rows, product merchandising metrics, and attribution touchpoints.
 
 ---
 
 ## Wire-Up
-- [ ] Add `LIVE_LINKS["9.15"]` entry in `apps/core/navigation.py`:
+- [x] Add `LIVE_LINKS["9.15"]` entry in `apps/core/navigation.py`:
   - Mapping:
     - `"Sales Performance Dashboards"` -> `"ecommerce:dailysalessnapshot_list"`
     - `"Customer Analytics"` -> `"ecommerce:customercohortmetric_list"`
@@ -522,19 +522,19 @@
 ---
 
 ## Templates (`templates/ecommerce/analytics_bi/`)
-- [ ] `daily_sales_snapshot/list.html`: Snapshot date filter, finalized status filter, gross/net sales, order count, AOV, conversion rate %, recalculate snapshot trigger, actions.
-- [ ] `daily_sales_snapshot/detail.html`: Full daily financial breakdown (gross sales, discounts, refunds, net sales, taxes, shipping, COGS, gross margin), order counts, cart conversion rates, audit metadata.
-- [ ] `daily_sales_snapshot/form.html`: Manual snapshot entry/override editor with financial validation.
-- [ ] `customer_cohort_metric/list.html`: Cohort month filter, period offset filter, initial size, active customers, retention %, cumulative LTV, churn rate %, actions.
-- [ ] `customer_cohort_metric/detail.html`: Cohort progression card with cumulative revenue, gross margin, customer retention rate %, and channel tag.
-- [ ] `customer_cohort_metric/form.html`: Cohort metric form editor.
-- [ ] `product_merchandising_metric/list.html`: Velocity tier filter (`best_seller`, `core_performer`, `slow_mover`, `dead_stock`), product search, units sold, revenue, gross margin %, return rate %, turnover ratio, actions.
-- [ ] `product_merchandising_metric/detail.html`: SKU merchandising card with sales velocity tier badge, margin analysis, refund rate, conversion rate, and inventory turnover.
-- [ ] `product_merchandising_metric/form.html`: Product merchandising metric editor.
-- [ ] `attribution_touchpoint/list.html`: Channel type filter, attribution model filter, campaign filter, touchpoint timestamp, UTM tags, attributed revenue, estimated CAC, actions.
-- [ ] `attribution_touchpoint/detail.html`: Touchpoint record with order/cart reference, UTM parameters, attribution weight, channel ROI, and referrer URL.
-- [ ] `attribution_touchpoint/form.html`: Attribution touchpoint manual entry editor.
-- [ ] `cockpit/cockpit.html`: Executive Analytics & Real-Time Operational Cockpit featuring:
+- [x] `daily_sales_snapshot/list.html`: Snapshot date filter, finalized status filter, gross/net sales, order count, AOV, conversion rate %, recalculate snapshot trigger, actions.
+- [x] `daily_sales_snapshot/detail.html`: Full daily financial breakdown (gross sales, discounts, refunds, net sales, taxes, shipping, COGS, gross margin), order counts, cart conversion rates, audit metadata.
+- [x] `daily_sales_snapshot/form.html`: Manual snapshot entry/override editor with financial validation.
+- [x] `customer_cohort_metric/list.html`: Cohort month filter, period offset filter, initial size, active customers, retention %, cumulative LTV, churn rate %, actions.
+- [x] `customer_cohort_metric/detail.html`: Cohort progression card with cumulative revenue, gross margin, customer retention rate %, and channel tag.
+- [x] `customer_cohort_metric/form.html`: Cohort metric form editor.
+- [x] `product_merchandising_metric/list.html`: Velocity tier filter (`best_seller`, `core_performer`, `slow_mover`, `dead_stock`), product search, units sold, revenue, gross margin %, return rate %, turnover ratio, actions.
+- [x] `product_merchandising_metric/detail.html`: SKU merchandising card with sales velocity tier badge, margin analysis, refund rate, conversion rate, and inventory turnover.
+- [x] `product_merchandising_metric/form.html`: Product merchandising metric editor.
+- [x] `attribution_touchpoint/list.html`: Channel type filter, attribution model filter, campaign filter, touchpoint timestamp, UTM tags, attributed revenue, estimated CAC, actions.
+- [x] `attribution_touchpoint/detail.html`: Touchpoint record with order/cart reference, UTM parameters, attribution weight, channel ROI, and referrer URL.
+- [x] `attribution_touchpoint/form.html`: Attribution touchpoint manual entry editor.
+- [x] `cockpit/cockpit.html`: Executive Analytics & Real-Time Operational Cockpit featuring:
   - Real-time sales KPI cards (today's revenue, order count, AOV, cart recovery rate)
   - Interactive visual checkout funnel stages (Sessions -> Carts -> Checkout Initiated -> Completed)
   - Chart.js 30-day daily sales & AOV trendlines
@@ -545,22 +545,22 @@
 ---
 
 ## Verification & Quality Gates
-- [ ] `venv\Scripts\python.exe manage.py makemigrations ecommerce` (yields `0027_...`)
-- [ ] `venv\Scripts\python.exe manage.py migrate`
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
-- [ ] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
-- [ ] `venv\Scripts\python.exe manage.py check` (0 issues)
-- [ ] `temp/smoke_analytics_bi.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, Chart.js assets, and cross-tenant IDOR isolation.
-- [ ] Verify sidebar 9.15 shows Live.
+- [x] `venv\Scripts\python.exe manage.py makemigrations ecommerce` (yields `0027_...`, `0028_...`, `0029_...`)
+- [x] `venv\Scripts\python.exe manage.py migrate`
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 1)
+- [x] `venv\Scripts\python.exe manage.py seed_ecommerce` (run 2 — must be strictly idempotent)
+- [x] `venv\Scripts\python.exe manage.py check` (0 issues)
+- [x] `temp/smoke_analytics_bi.py` smoke test verifying all new URLs return HTTP 200/302, rendered content assertions, Chart.js assets, and cross-tenant IDOR isolation.
+- [x] Verify sidebar 9.15 shows Live.
 
 ---
 
 ## Review & Tests & Close-Out (Phases 4–7)
-- [ ] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.15.md`
-- [ ] Phase 5: `code-fixer` agent burns down findings
-- [ ] Phase 6: Tests in serial order (`test_analyticsbi_models.py`, `test_analyticsbi_forms.py`, `test_analyticsbi_views.py`, `test_analyticsbi_security.py`)
-- [ ] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
-- [ ] Register gaps in `.agents/tasks/gaps-ecommerce-9.15.md`
+- [x] Phase 4: Six Reviewers in strict serial sequence (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) appending to `.claude/tasks/review-ecommerce-9.15.md`
+- [x] Phase 5: `code-fixer` agent burns down findings (23 of 23 findings resolved: C1–C5, I1–I10, M1–M8 fixed, 0 open)
+- [x] Phase 6: Tests in serial order (`test_analyticsbi_models.py`, `test_analyticsbi_forms.py`, `test_analyticsbi_views.py`, `test_analyticsbi_security.py`) — full unfiltered suite: 1,257 passed, 0 failed, 47 warnings
+- [x] Phase 7: Update `.claude/skills/ecommerce/SKILL.md` and `README.md`
+- [x] Register gaps in `.agents/tasks/gaps-ecommerce-9.15.md`
 
 ---
 
@@ -574,7 +574,21 @@
 ---
 
 ## Review notes
-(filled in at the end)
+### eCommerce 9.15 — Analytics & Business Intelligence (close-out 2026-11-02)
+
+- **Deliverables**:
+  - 4 Models: `DailySalesSnapshot` [EDSS-], `CustomerCohortMetric` [ECCM-], `ProductMerchandisingMetric` [EPMM-], `AttributionTouchpoint` [EATT-] with strict multi-tenancy (`tenant=request.tenant`), thread-safe auto-numbering, sargable timestamp ordering, and database composite unique constraint validation.
+  - 4 Form packages with `TenantUniqueMixin` checking instance constraints, explicit label-for associations, and query param sanitization.
+  - 25 URL routes and view endpoints covering CRUD, batch recalculations, and the executive real-time `analytics_cockpit`.
+  - 13 Responsive templates under `templates/ecommerce/analytics/` with color-named badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`), stat icon classes, Chart.js visualizations, and live conversion funnel stepper.
+  - Seeder extended in `apps/ecommerce/management/commands/seed_ecommerce.py` with 7 daily sales snapshots, 4 cohort retention offsets, 5 merchandising metrics, and 4 multi-touch attribution touchpoints, verified idempotent across two consecutive runs.
+  - Migrations `0027_dailysalessnapshot_customercohortmetric_and_more.py`, `0028_attributiontouchpoint_idx_eatt_ten_ts.py`, and `0029_productmerchandisingmetric_idx_epmm_ten_end_rev.py` applied cleanly.
+  - Full test suite: 1,257 passed, 0 failed, 47 warnings (100% green on unfiltered test run).
+  - Review: Six reviewers ran in strict serial sequence (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). All 23 findings (`C1`–`C5`, `I1`–`I10`, `M1`–`M8`) burned down with individual single-file git commits by `code-fixer` and marked `[x] fixed` in `.claude/tasks/review-ecommerce-9.15.md`.
+  - Skill `.claude/skills/ecommerce/SKILL.md` updated and committed.
+  - `README.md` updated marking 9.15 complete under Module 9.
+  - Gap register committed: `.agents/tasks/gaps-ecommerce-9.15.md` documenting 4 deferred cross-module integration points.
+  - **Gaps**: None open for core 9.15 build scope; deferred external integrations documented in gap register.
 
 ---
 
