@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support: CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, or 9.14), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence: sales performance dashboards, revenue AOV and cart abandonment trends, customer cohort retention & LTV curves, product merchandising turnover & margin velocity tiers, multi-touch marketing attribution models, real-time operational monitoring & executive analytics cockpit, CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, 9.14, or 9.15), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, and a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, and live preview. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, and an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, and real-time executive operational cockpits. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -79,6 +79,11 @@ apps/ecommerce/
 │   │   ├── BlogArticles.py          # BlogArticle model (EBLG-)
 │   │   ├── MediaAssets.py           # MediaAsset model (EMED-)
 │   │   └── ContentBlocks.py         # ContentBlock model (EBLK-)
+│   ├── AnalyticsBi/
+│   │   ├── DailySalesSnapshots.py   # DailySalesSnapshot model (EDSS-)
+│   │   ├── CustomerCohortMetrics.py # CustomerCohortMetric model (ECCM-)
+│   │   ├── ProductMerchandisingMetrics.py # ProductMerchandisingMetric model (EPMM-)
+│   │   └── AttributionTouchpoints.py # AttributionTouchpoint model (EATT-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -133,6 +138,11 @@ apps/ecommerce/
 │   │   ├── BlogArticles.py          # BlogArticleForm
 │   │   ├── MediaAssets.py           # MediaAssetForm
 │   │   └── ContentBlocks.py         # ContentBlockForm
+│   ├── AnalyticsBi/
+│   │   ├── DailySalesSnapshots.py   # DailySalesSnapshotForm
+│   │   ├── CustomerCohortMetrics.py # CustomerCohortMetricForm
+│   │   ├── ProductMerchandisingMetrics.py # ProductMerchandisingMetricForm
+│   │   └── AttributionTouchpoints.py # AttributionTouchpointForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -192,6 +202,12 @@ apps/ecommerce/
 │   │   ├── BlogArticles.py          # blogarticle CRUD
 │   │   ├── MediaAssets.py           # mediaasset CRUD
 │   │   └── ContentBlocks.py         # contentblock CRUD
+│   ├── AnalyticsBi/
+│   │   ├── DailySalesSnapshots.py   # dailysalessnapshot CRUD + recalculate action
+│   │   ├── CustomerCohortMetrics.py # customercohortmetric CRUD + recalculate action
+│   │   ├── ProductMerchandisingMetrics.py # productmerchandisingmetric CRUD + recalculate action
+│   │   ├── AttributionTouchpoints.py # attributiontouchpoint CRUD
+│   │   └── AnalyticsCockpit.py      # analytics_cockpit executive monitoring dashboard
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -256,6 +272,12 @@ apps/ecommerce/
 │   │   ├── BlogArticles.py          # cms/blog/ paths
 │   │   ├── MediaAssets.py           # cms/media/ paths
 │   │   └── ContentBlocks.py         # cms/blocks/ paths
+│   ├── AnalyticsBi/
+│   │   ├── DailySalesSnapshots.py   # analytics/snapshots/ paths
+│   │   ├── CustomerCohortMetrics.py # analytics/cohorts/ paths
+│   │   ├── ProductMerchandisingMetrics.py # analytics/merchandising/ paths
+│   │   ├── AttributionTouchpoints.py # analytics/attribution/ paths
+│   │   └── AnalyticsCockpit.py      # analytics/cockpit/ path
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -378,6 +400,16 @@ apps/ecommerce/
 | `KnowledgeBaseArticle` | `EKBA-` | `title`, `slug`, `category`, `summary`, `content`, `status`, `target_audience`, `is_featured`, `view_count`, `helpful_votes`, `unhelpful_votes`, `keywords`, `author` | `auth.User` (`author`) | `helpfulness_ratio`, auto-slug generation, scoped atomic `view_count` increment, heavy content deferral |
 | `OrderIssueClaim` | `ECLM-` | `order`, `customer`, `ticket`, `claim_type`, `status`, `claimed_amount`, `approved_amount`, `resolution_action`, `carrier_tracking_number`, `photo_evidence_url`, `customer_notes`, `decision_notes`, `reviewed_by`, `resolved_at` | `EcommerceOrder`, `CustomerAccountProfile`, `CustomerSupportTicket`, `auth.User` (`reviewed_by`) | Non-negative financial bounds, URL scheme validation, resolution timestamping, tenant isolation |
 | `CustomerSatisfactionSurvey` | `ECSF-` | `ticket`, `order`, `customer`, `survey_type`, `rating_score`, `sentiment`, `feedback_comment`, `agent_rated`, `follow_up_status`, `follow_up_notes`, `reviewed_by` | `CustomerSupportTicket`, `EcommerceOrder`, `CustomerAccountProfile`, `auth.User` (`agent_rated`, `reviewed_by`) | CSAT (1-5) and NPS (0-10) scoring, auto-sentiment classification (promoter/passive/detractor), negative review closed-loop flagging, manual override protection |
+
+---
+
+### Sub-module 9.15: Analytics & Business Intelligence
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `DailySalesSnapshot` | `EDSS-` | `snapshot_date`, `currency`, `gross_sales`, `net_sales`, `discounts_total`, `returns_total`, `tax_total`, `shipping_total`, `orders_count`, `units_sold`, `average_order_value`, `new_customers_count`, `returning_customers_count`, `conversion_rate`, `cart_abandonment_rate`, `carts_created_count`, `carts_abandoned_count`, `is_finalized`, `finalized_at` | None | `recalculate_from_orders()`, date validation, unique constraint per tenant+date+currency |
+| `CustomerCohortMetric` | `ECCM-` | `cohort_month`, `period_offset_months`, `acquisition_channel_tag`, `initial_cohort_size`, `retained_customers_count`, `retention_rate`, `churn_rate`, `period_gross_revenue`, `cumulative_gross_revenue`, `cumulative_ltv`, `repeat_order_count`, `is_finalized` | None | `calculate_metrics()`, non-negative metrics, unique constraint per tenant+cohort_month+offset+channel |
+| `ProductMerchandisingMetric` | `EPMM-` | `product`, `variant`, `metric_date`, `views_count`, `add_to_cart_count`, `cart_to_detail_rate`, `units_sold`, `gross_revenue`, `cost_of_goods`, `gross_margin_amount`, `gross_margin_rate`, `refunds_count`, `return_rate`, `ending_inventory_units`, `inventory_turnover_ratio`, `velocity_tier`, `notes` | `CatalogProduct`, `ProductVariant` | `calculate_merchandising_kpis()`, velocity tier classification (A/B/C/D), unique per tenant+product+variant+date |
+| `AttributionTouchpoint` | `EATT-` | `order`, `customer`, `touchpoint_timestamp`, `touchpoint_position`, `channel`, `campaign_name`, `source`, `medium`, `content`, `landing_page`, `referral_url`, `device_category`, `first_touch_weight`, `last_touch_weight`, `linear_weight`, `time_decay_weight`, `position_based_weight`, `attributed_revenue_linear`, `conversion_value` | `EcommerceOrder`, `CustomerAccountProfile` | `normalize_weights()`, non-negative weights and attribution values, sargable timestamp ordering |
 
 ---
 
@@ -729,6 +761,36 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.15 Analytics & Business Intelligence Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `analytics/cockpit/` | `analytics_cockpit` | `analytics_cockpit` | Real-time executive BI cockpit: revenue, conversion funnel, best sellers, active carts |
+| `analytics/snapshots/` | `dailysalessnapshot_list` | `dailysalessnapshot_list` | Daily sales snapshots table with date range and finalized filters |
+| `analytics/snapshots/create/` | `dailysalessnapshot_create` | `dailysalessnapshot_create` | Create daily sales snapshot record |
+| `analytics/snapshots/<int:pk>/` | `dailysalessnapshot_detail` | `dailysalessnapshot_detail` | Snapshot detail with sales breakdown, conversion rates, and cart abandonment |
+| `analytics/snapshots/<int:pk>/edit/` | `dailysalessnapshot_edit` | `dailysalessnapshot_edit` | Edit daily snapshot values and finalized flag |
+| `analytics/snapshots/<int:pk>/delete/` | `dailysalessnapshot_delete` | `dailysalessnapshot_delete` | Delete snapshot record (POST only, tenant admin required) |
+| `analytics/snapshots/recalculate/` | `dailysalessnapshot_recalculate` | `dailysalessnapshot_recalculate` | On-demand aggregation from orders and carts (POST only, tenant admin) |
+| `analytics/cohorts/` | `customercohortmetric_list` | `customercohortmetric_list` | Customer cohort retention matrix with month, offset, and channel filters |
+| `analytics/cohorts/create/` | `customercohortmetric_create` | `customercohortmetric_create` | Create cohort retention metric record |
+| `analytics/cohorts/<int:pk>/` | `customercohortmetric_detail` | `customercohortmetric_detail` | Cohort detail with retention curves, cumulative revenue, and LTV stats |
+| `analytics/cohorts/<int:pk>/edit/` | `customercohortmetric_edit` | `customercohortmetric_edit` | Edit cohort retention values |
+| `analytics/cohorts/<int:pk>/delete/` | `customercohortmetric_delete` | `customercohortmetric_delete` | Delete cohort record (POST only, tenant admin required) |
+| `analytics/cohorts/recalculate/` | `customercohortmetric_recalculate` | `customercohortmetric_recalculate` | Recompute cohort retention and cumulative LTV (POST only, tenant admin) |
+| `analytics/merchandising/` | `productmerchandisingmetric_list` | `productmerchandisingmetric_list` | Merchandising performance table with velocity tier and return rate filters |
+| `analytics/merchandising/create/` | `productmerchandisingmetric_create` | `productmerchandisingmetric_create` | Create product merchandising metric record |
+| `analytics/merchandising/<int:pk>/` | `productmerchandisingmetric_detail` | `productmerchandisingmetric_detail` | Merchandising detail: gross margin, inventory turnover, velocity scorecards |
+| `analytics/merchandising/<int:pk>/edit/` | `productmerchandisingmetric_edit` | `productmerchandisingmetric_edit` | Edit merchandising metrics and velocity tier |
+| `analytics/merchandising/<int:pk>/delete/` | `productmerchandisingmetric_delete` | `productmerchandisingmetric_delete` | Delete merchandising record (POST only, tenant admin required) |
+| `analytics/merchandising/recalculate/` | `productmerchandisingmetric_recalculate` | `productmerchandisingmetric_recalculate` | Recompute merchandising turnover and margin velocity (POST only, tenant admin) |
+| `analytics/attribution/` | `attributiontouchpoint_list` | `attributiontouchpoint_list` | Marketing attribution touchpoints table with channel, campaign, device filters |
+| `analytics/attribution/create/` | `attributiontouchpoint_create` | `attributiontouchpoint_create` | Record new marketing touchpoint |
+| `analytics/attribution/<int:pk>/` | `attributiontouchpoint_detail` | `attributiontouchpoint_detail` | Touchpoint detail with multi-touch attribution weight scorecard |
+| `analytics/attribution/<int:pk>/edit/` | `attributiontouchpoint_edit` | `attributiontouchpoint_edit` | Edit touchpoint channel, weights, or attributed revenue |
+| `analytics/attribution/<int:pk>/delete/` | `attributiontouchpoint_delete` | `attributiontouchpoint_delete` | Delete touchpoint record (POST only, tenant admin required) |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -806,6 +868,13 @@ Templates are stored under `templates/ecommerce/`:
   - `media/` — `list.html` (with responsive media grid, dimensions pills, folder filters), `detail.html` (with preview player, dimensions, copyable URL), `form.html` (file URL, alt text, dimensions).
   - `block/` — `list.html` (with block type pills and active toggles), `detail.html` (with live rendered component preview, styling attributes), `form.html` (block configuration, target catalog linking).
 
+- `analytics/`
+  - `cockpit.html` — Executive Real-Time Operations Cockpit: 24h revenue counters, live conversion funnel progress bar, active carts counter, top best sellers ranking table, and recent traffic touchpoints.
+  - `daily_sales_snapshot/` — `list.html` (with revenue and AOV KPI cards, finalized status badges, date range filter), `detail.html` (with financial breakdown, returns/discounts meters, cart abandonment rates, recalculate action), `form.html`.
+  - `customer_cohort_metric/` — `list.html` (with cohort month, period offset, acquisition channel filters, retention percentage badges), `detail.html` (with cohort retention curve scorecard, cumulative LTV breakdown, recalculate action), `form.html`.
+  - `product_merchandising_metric/` — `list.html` (with velocity tier color badges [A/B/C/D], turnover ratio, gross margin rate), `detail.html` (with merchandising economics, views to cart conversion, return rates, recalculate action), `form.html`.
+  - `attribution_touchpoint/` — `list.html` (with channel badges, device icons, attributed revenue, campaign filter), `detail.html` (with multi-touch attribution model weight scorecard, touchpoint positioning timeline), `form.html`.
+
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
 - Stat icon classes: `stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`.
@@ -876,6 +945,10 @@ The command provisions:
 - 4 Blog Editorial Articles (`EBLG-`): 2026 Sustainable Tech Trends (featured guide with reading time and tags), How to Build the Ultimate Workspace (published tutorial with markdown headings and media), NavERP Summer Product Announcements (news announcement), Customer Spotlight (draft post).
 - 4 Digital Media Assets (`EMED-`): Hero Banner 4K (hero image with dimensions), Workspace Showcase (product photography), Brand Intro Video (mp4 video asset), Product Catalog Summer 2026 PDF (document asset).
 - 4 Reusable Content Blocks (`EBLK-`): Summer Hero Spotlight (hero block with CTA and background styling), Product Categories Showcase Grid (category grid linked to electronics), Customer Testimonial Strip (quote block), Newsletter VIP Signup CTA (lead generation bar).
+- 7 Daily Sales Snapshots (`EDSS-`): Historical revenue trends, AOV, cart abandonment rates, units sold, and orders counts.
+- 4 Customer Cohort Metrics (`ECCM-`): Monthly acquisition retention offsets (months 0-3), churn rates, and cumulative LTV progression.
+- 5 Product Merchandising Metrics (`EPMM-`): Merchandising economics, inventory turnover ratios, gross margins, view-to-cart conversions, and velocity tiers (A/B/C/D).
+- 4 Attribution Touchpoints (`EATT-`): First-touch, last-touch, linear, time-decay, and position-based multi-touch marketing attribution touchpoints.
 - All demo data is scoped to tenant `acme`.
 
 ---
@@ -918,6 +991,14 @@ The command provisions:
     - `vendorpayout_execute`, `vendorpayout_delete`, and `vendorsuborder_dispute` are wrapped in `@transaction.atomic`. Payout execution excludes `withheld_dispute` and `refunded` sub-orders to prevent accidental disbursements.
 14. **AuditLog Verb Length Limit**:
     - Audit log action strings must not exceed 10 characters (e.g. use 'dispute', 'execute', 'moderate', 'suspend'). Full details are passed in the changes payload dictionary.
+15. **Sargable Time-Range Filters & Query Indexing**:
+    - Avoid `created_at__date=day` in high-volume tables (which forces full-table scans by applying SQL `DATE()` functions to every row). Instead, write sargable range lookups: `created_at__gte=start_dt, created_at__lt=end_dt`. Compound indexes (`tenant`, `touchpoint_timestamp`) ensure optimal multi-tenant index lookups.
+16. **Multi-Touch Marketing Attribution Model Weights**:
+    - Attribution models compute conversion credit based on touchpoint sequence: First-Touch assigns 1.0 to the earliest touchpoint; Last-Touch assigns 1.0 to the latest touchpoint; Linear distributes equally (`1/N`); Time-Decay weights recent touchpoints exponentially; Position-Based (U-shaped) allocates 40% to first, 40% to last, and 20% evenly across intermediate touches. Touchpoint forms enforce `sum(weights) <= 1.0` and non-negative attribution numbers.
+17. **Rate & Percentage Bounding Protection**:
+    - Computed metrics (`conversion_rate`, `cart_abandonment_rate`, `retention_rate`, `gross_margin_rate`) must clamp values within database precision limits (e.g. 0.00% to 100.00% or max 999.99%) to prevent DecimalField runtime overflows.
+18. **TenantUniqueMixin Constraint Integrity**:
+    - Because Django `ModelForm` default validation does not check `models.UniqueConstraint` expressions on the instance before DB save, `TenantUniqueMixin` invokes `self.instance.validate_constraints(exclude=exclude)` during form validation to catch duplicate composite unique keys (such as `tenant + snapshot_date + currency`) gracefully with form field errors rather than unhandled 500 `IntegrityError` exceptions.
 
 ---
 
@@ -1021,6 +1102,18 @@ LIVE_LINKS["9.14"] = {
     "Self-Service Knowledge Base": "ecommerce:knowledgebasearticle_list",
     "Order Inquiry & Issue Resolution": "ecommerce:orderissueclaim_list",
     "Customer Feedback & NPS": "ecommerce:customersatisfactionsurvey_list",
+}
+LIVE_LINKS["9.15"] = {
+    "Sales Performance Dashboards": "ecommerce:dailysalessnapshot_list",
+    "Customer Analytics": "ecommerce:customercohortmetric_list",
+    "Product & Merchandising Analytics": "ecommerce:productmerchandisingmetric_list",
+    "Marketing Attribution": "ecommerce:attributiontouchpoint_list",
+    "Real-Time Operational Monitoring": "ecommerce:analytics_cockpit",
+    "Sales Snapshots": "ecommerce:dailysalessnapshot_list",
+    "Customer Cohorts": "ecommerce:customercohortmetric_list",
+    "Merchandising Analytics": "ecommerce:productmerchandisingmetric_list",
+    "Attribution Touchpoints": "ecommerce:attributiontouchpoint_list",
+    "Analytics Executive Cockpit": "ecommerce:analytics_cockpit",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
