@@ -4118,6 +4118,59 @@ def ecom_b2b_template_b(tenant_b, ecom_b2b_company_b, user_b):
 # Sub-module 9.18: Fraud & Risk Management Helpers & Fixtures
 # ---------------------------------------------------------------------------
 
+FRAUDRISK_MODEL_FIELDS = {
+    "FraudRule": (
+        "id", "tenant", "number", "name", "rule_type", "evaluation_scope",
+        "risk_score_impact", "action_to_take", "is_active", "execution_priority",
+        "condition_expression", "description", "created_at", "updated_at",
+    ),
+    "TransactionRiskAssessment": (
+        "id", "tenant", "number", "order", "customer_party", "user",
+        "total_amount", "currency_code", "risk_score", "risk_tier",
+        "recommended_action", "actual_decision", "analyst_user", "reviewed_at",
+        "avs_result_code", "cvv_result_code", "ip_address", "device_fingerprint_id",
+        "geolocation_country", "rule_triggers_json", "notes", "created_at", "updated_at",
+    ),
+    "ChargebackDispute": (
+        "id", "tenant", "number", "order", "customer_party", "gateway_dispute_id",
+        "dispute_amount", "currency", "stage", "reason_category", "reason_code",
+        "evidence_submitted_json", "due_date", "representment_submitted_at",
+        "is_liability_shift", "resolution_notes", "created_at", "updated_at",
+    ),
+    "AccountSecurityAlert": (
+        "id", "tenant", "number", "party", "user", "alert_type", "severity",
+        "status", "automated_action_taken", "assigned_investigator", "resolved_by",
+        "resolved_at", "ip_address", "location_info", "user_agent",
+        "incident_details", "resolution_notes", "created_at", "updated_at",
+    ),
+}
+
+FRAUDRISK_CHOICES = {
+    "FraudRule": {
+        "rule_type": tuple(FraudRule.RULE_TYPE_CHOICES),
+        "evaluation_scope": tuple(FraudRule.EVALUATION_SCOPE_CHOICES),
+        "action_to_take": tuple(FraudRule.ACTION_CHOICES),
+    },
+    "TransactionRiskAssessment": {
+        "risk_tier": tuple(TransactionRiskAssessment.RISK_TIER_CHOICES),
+        "recommended_action": tuple(TransactionRiskAssessment.ACTION_CHOICES),
+        "actual_decision": tuple(TransactionRiskAssessment.DECISION_CHOICES),
+        "avs_result_code": tuple(TransactionRiskAssessment.VERIFICATION_RESULT_CHOICES),
+        "cvv_result_code": tuple(TransactionRiskAssessment.VERIFICATION_RESULT_CHOICES),
+    },
+    "ChargebackDispute": {
+        "stage": tuple(ChargebackDispute.STAGE_CHOICES),
+        "reason_category": tuple(ChargebackDispute.REASON_CATEGORY_CHOICES),
+    },
+    "AccountSecurityAlert": {
+        "alert_type": tuple(AccountSecurityAlert.ALERT_TYPE_CHOICES),
+        "severity": tuple(AccountSecurityAlert.SEVERITY_CHOICES),
+        "status": tuple(AccountSecurityAlert.STATUS_CHOICES),
+        "automated_action_taken": tuple(AccountSecurityAlert.AUTOMATED_ACTION_CHOICES),
+    },
+}
+
+
 def _fraudrisk_fraud_rule(tenant, **overrides):
     defaults = {
         "tenant": tenant,
