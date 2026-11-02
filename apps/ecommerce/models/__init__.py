@@ -67,6 +67,10 @@ from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAcco
 from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
 from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
 from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
+from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
+from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
+from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
+from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
 
 __all__ = [
     "TenantOwned",
@@ -159,4 +163,9 @@ __all__ = [
     "B2bCompanyUser",
     "B2bQuoteRequest",
     "B2bQuickOrderTemplate",
+    # 9.18 Fraud & Risk Management
+    "FraudRule",
+    "TransactionRiskAssessment",
+    "ChargebackDispute",
+    "AccountSecurityAlert",
 ]
