@@ -76,6 +76,10 @@ from apps.ecommerce.models import (
     B2bCompanyUser,
     B2bQuoteRequest,
     B2bQuickOrderTemplate,
+    FraudRule,
+    TransactionRiskAssessment,
+    ChargebackDispute,
+    AccountSecurityAlert,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -4108,6 +4112,175 @@ def ecom_b2b_template_b(tenant_b, ecom_b2b_company_b, user_b):
         created_by=user_b,
         name="Globex Recurring Reorder Kit",
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 9.18: Fraud & Risk Management Helpers & Fixtures
+# ---------------------------------------------------------------------------
+
+def _fraudrisk_fraud_rule(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": "High Velocity Transaction Rule",
+        "rule_type": "velocity",
+        "evaluation_scope": "checkout",
+        "risk_score_impact": 35,
+        "action_to_take": "review",
+        "is_active": True,
+        "execution_priority": 10,
+        "condition_expression": "orders_last_hour > 3",
+        "description": "Trigger manual review if rapid purchases detected.",
+    }
+    defaults.update(overrides)
+    return FraudRule.objects.create(**defaults)
+
+
+def _fraudrisk_transaction_risk_assessment(tenant, order=None, customer_party=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "customer_party": customer_party,
+        "total_amount": Decimal("149.99"),
+        "currency_code": "USD",
+        "risk_score": 45,
+        "risk_tier": "medium",
+        "recommended_action": "review",
+        "actual_decision": "pending",
+        "avs_result_code": "match",
+        "cvv_result_code": "match",
+        "ip_address": "198.51.100.42",
+        "device_fingerprint_id": "dfp_test_fixture_hash",
+        "geolocation_country": "US",
+    }
+    defaults.update(overrides)
+    return TransactionRiskAssessment.objects.create(**defaults)
+
+
+def _fraudrisk_chargeback_dispute(tenant, order=None, customer_party=None, currency=None, **overrides):
+    if currency is None:
+        currency = Currency.objects.filter(code="USD").first()
+        if currency is None:
+            currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
+    defaults = {
+        "tenant": tenant,
+        "order": order,
+        "customer_party": customer_party,
+        "gateway_dispute_id": "dp_test_918_gateway_ref",
+        "dispute_amount": Decimal("149.99"),
+        "currency": currency,
+        "stage": "needs_response",
+        "reason_category": "fraudulent",
+        "reason_code": "10.4",
+        "is_liability_shift": False,
+    }
+    defaults.update(overrides)
+    return ChargebackDispute.objects.create(**defaults)
+
+
+def _fraudrisk_account_security_alert(tenant, party=None, user=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "party": party,
+        "user": user,
+        "alert_type": "credential_stuffing",
+        "severity": "high",
+        "status": "new",
+        "automated_action_taken": "mfa_required",
+        "ip_address": "203.0.113.88",
+        "location_info": "Bucharest, Romania",
+        "user_agent": "Mozilla/5.0 Test Security Agent",
+        "incident_details": "12 failed login attempts within 60 seconds",
+    }
+    defaults.update(overrides)
+    return AccountSecurityAlert.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_fraud_rule_a(tenant_a):
+    return _fraudrisk_fraud_rule(tenant_a)
+
+
+@pytest.fixture
+def ecom_fraud_rule_b(tenant_b):
+    return _fraudrisk_fraud_rule(
+        tenant_b,
+        name="Globex Geolocation Mismatch Rule",
+        rule_type="geo_ip",
+        action_to_take="challenge",
+        risk_score_impact=40,
+    )
+
+
+@pytest.fixture
+def ecom_risk_assessment_a(tenant_a, user_a):
+    party_a = Party.objects.filter(tenant=tenant_a).first()
+    if not party_a:
+        party_a = Party.objects.create(tenant=tenant_a, name="Acme Test Party")
+    return _fraudrisk_transaction_risk_assessment(tenant_a, customer_party=party_a, user=user_a)
+
+
+@pytest.fixture
+def ecom_risk_assessment_b(tenant_b, user_b):
+    party_b = Party.objects.filter(tenant=tenant_b).first()
+    if not party_b:
+        party_b = Party.objects.create(tenant=tenant_b, name="Globex Test Party")
+    return _fraudrisk_transaction_risk_assessment(
+        tenant_b,
+        customer_party=party_b,
+        user=user_b,
+        risk_score=78,
+        risk_tier="high",
+        recommended_action="reject",
+        actual_decision="rejected",
+    )
+
+
+@pytest.fixture
+def ecom_chargeback_dispute_a(tenant_a):
+    party_a = Party.objects.filter(tenant=tenant_a).first()
+    if not party_a:
+        party_a = Party.objects.create(tenant=tenant_a, name="Acme Test Party")
+    return _fraudrisk_chargeback_dispute(tenant_a, customer_party=party_a)
+
+
+@pytest.fixture
+def ecom_chargeback_dispute_b(tenant_b):
+    party_b = Party.objects.filter(tenant=tenant_b).first()
+    if not party_b:
+        party_b = Party.objects.create(tenant=tenant_b, name="Globex Test Party")
+    return _fraudrisk_chargeback_dispute(
+        tenant_b,
+        customer_party=party_b,
+        gateway_dispute_id="dp_globex_test_ref",
+        dispute_amount=Decimal("499.00"),
+        stage="under_review",
+        reason_category="unrecognized",
+    )
+
+
+@pytest.fixture
+def ecom_security_alert_a(tenant_a, user_a):
+    party_a = Party.objects.filter(tenant=tenant_a).first()
+    if not party_a:
+        party_a = Party.objects.create(tenant=tenant_a, name="Acme Test Party")
+    return _fraudrisk_account_security_alert(tenant_a, party=party_a, user=user_a)
+
+
+@pytest.fixture
+def ecom_security_alert_b(tenant_b, user_b):
+    party_b = Party.objects.filter(tenant=tenant_b).first()
+    if not party_b:
+        party_b = Party.objects.create(tenant=tenant_b, name="Globex Test Party")
+    return _fraudrisk_account_security_alert(
+        tenant_b,
+        party=party_b,
+        user=user_b,
+        alert_type="impossible_travel",
+        severity="critical",
+        status="investigating",
+        automated_action_taken="session_revoked",
+    )
+
 
 
 
