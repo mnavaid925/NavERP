@@ -158,27 +158,21 @@ def b2bcompanyaccount_edit(request, pk):
 
 @login_required
 @tenant_admin_required
+@require_POST
 def b2bcompanyaccount_delete(request, pk):
     account = ecommerce_object(request, B2bCompanyAccount, pk)
-    if request.method == "POST":
-        name = account.company_name
-        num = account.number
-        account.delete()
-        write_audit_log(
-            request.user,
-            account,
-            "delete",
-            {"number": num, "company_name": name},
-            tenant=request.tenant,
-        )
-        messages.success(request, f"B2B Company Account {name} ({num}) has been deleted.")
-        return redirect("ecommerce:b2bcompanyaccount_list")
-
-    return render(
-        request,
-        "ecommerce/b2b_wholesale/b2b_company_account/detail.html",
-        {"company_account": account, "show_delete_confirm": True},
+    name = account.company_name
+    num = account.number
+    account.delete()
+    write_audit_log(
+        request.user,
+        account,
+        "delete",
+        {"number": num, "company_name": name},
+        tenant=request.tenant,
     )
+    messages.success(request, f"B2B Company Account {name} ({num}) has been deleted.")
+    return redirect("ecommerce:b2bcompanyaccount_list")
 
 
 @login_required
