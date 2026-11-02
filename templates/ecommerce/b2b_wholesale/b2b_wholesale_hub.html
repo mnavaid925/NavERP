@@ -178,7 +178,7 @@
                   <div class="text-xs text-slate-400 font-mono">{{ co.number }}</div>
                 </td>
                 <td class="font-mono text-xs font-semibold">${{ co.credit_limit|floatformat:2 }}</td>
-                <td><span class="badge badge-info text-xs">{{ co.get_payment_terms_display }}</span></td>
+                <td><span class="badge badge-blue text-xs">{{ co.get_payment_terms_display }}</span></td>
                 <td>
                   {% if co.status == "active" %}
                     <span class="badge badge-green text-xs">Active</span>
@@ -234,7 +234,7 @@
                   {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
                     <span class="badge badge-green text-xs">{{ qr.get_status_display }}</span>
                   {% elif qr.status == "quoted" %}
-                    <span class="badge badge-info text-xs">Quoted</span>
+                    <span class="badge badge-blue text-xs">Quoted</span>
                   {% else %}
                     <span class="badge badge-slate text-xs">{{ qr.get_status_display }}</span>
                   {% endif %}
