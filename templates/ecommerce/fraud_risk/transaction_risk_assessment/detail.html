@@ -183,7 +183,7 @@
             <div class="card-body text-sm space-y-3">
                 <div class="flex justify-between py-1 border-b border-border">
                     <span class="text-muted">Analyst:</span>
-                    <span class="font-medium">{{ assessment.analyst_user.username|default:"Unassigned" }}</span>
+                    <span class="font-medium">{% if assessment.analyst_user %}{{ assessment.analyst_user.username }}{% else %}Unassigned{% endif %}</span>
                 </div>
                 <div class="flex justify-between py-1 border-b border-border">
                     <span class="text-muted">Decision:</span>
