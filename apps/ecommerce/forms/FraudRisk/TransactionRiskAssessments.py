@@ -40,13 +40,14 @@ class TransactionRiskAssessmentForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        User = get_user_model()
         if self.tenant:
             self.fields["order"].queryset = EcommerceOrder.objects.filter(tenant=self.tenant)
             self.fields["customer_party"].queryset = Party.objects.filter(tenant=self.tenant)
         self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
-        self.fields["user"].queryset = User.objects.filter(is_active=True)
-        self.fields["analyst_user"].queryset = User.objects.filter(is_active=True)
+        if "user" in self.fields:
+            self.fields["user"].queryset = self.fields["user"].queryset.filter(is_active=True)
+        if "analyst_user" in self.fields:
+            self.fields["analyst_user"].queryset = self.fields["analyst_user"].queryset.filter(is_active=True)
 
     def clean_risk_score(self):
         score = self.cleaned_data.get("risk_score")
