@@ -3382,7 +3382,7 @@ class Command(BaseCommand):
 
         # 9.16 Mobile Commerce Seeding
         # MobileAppConfig
-        is_acme = "acme" in tenant.subdomain.lower() or "acme" in tenant.name.lower()
+        is_acme = "acme" in (tenant.slug or "").lower() or "acme" in tenant.name.lower()
         MobileAppConfig.objects.get_or_create(
             tenant=tenant,
             is_active=True,
@@ -3422,7 +3422,7 @@ class Command(BaseCommand):
             ("pwa-dev-01", "pwa_web", "Mobile Chrome / PWA", "Chrome 125", "1.0.0", "web_push", True, False, "denied", None, None),
         ]
         for dev_prefix, plat, model_name, os_v, app_v, prov, push_on, bio_on, loc_perm, lat, lng in device_specs:
-            dev_uuid = f"{dev_prefix}-{tenant.subdomain}"
+            dev_uuid = f"{dev_prefix}-{tenant.slug}"
             MobileDeviceRegistration.objects.get_or_create(
                 tenant=tenant,
                 device_uuid=dev_uuid,
