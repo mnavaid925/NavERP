@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Case {{ dispute.number }} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:chargeback_dispute_list' %}">Disputes</a>
+            <span>/</span>
+            <span class="font-mono">{{ dispute.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Dispute {{ dispute.number }}</h1>
+            {% if dispute.stage == "won" %}
+            <span class="badge badge-green">Won</span>
+            {% elif dispute.stage == "lost" %}
+            <span class="badge badge-red">Lost</span>
+            {% elif dispute.stage == "accepted" %}
+            <span class="badge badge-slate">Accepted</span>
+            {% elif dispute.stage == "needs_response" %}
+            <span class="badge badge-red">Action Required</span>
+            {% elif dispute.stage == "under_review" %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif dispute.stage == "representment_submitted" %}
+            <span class="badge badge-info">Representment Submitted</span>
+            {% else %}
+            <span class="badge badge-info">{{ dispute.get_stage_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm">Disputed Order: <span class="font-mono font-semibold">{{ dispute.order.number }}</span> · Gateway Reference: <span class="font-mono">{{ dispute.gateway_dispute_id|default:"-" }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:chargeback_dispute_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Disputes</span>
+        </a>
+        <a href="{% url 'ecommerce:chargeback_dispute_edit' dispute.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Case</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:chargeback_dispute_delete' dispute.pk %}" class="inline" onsubmit="return confirm('Delete dispute case {{ dispute.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Dispute Claim Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Disputed Amount</div>
+                        <div class="text-2xl font-bold mt-1 text-danger">
+                            {{ dispute.currency.symbol|default:"$" }}{{ dispute.dispute_amount }}
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Gateway Dispute Fee</div>
+                        <div class="text-xl font-bold mt-1 text-secondary">
+                            +{{ dispute.currency.symbol|default:"$" }}{{ dispute.dispute_fee }}
+                        </div>
+                    </div>
+                    <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
+                        <div class="text-xs text-muted uppercase font-medium">Evidence Due Date</div>
+                        <div class="text-lg font-bold mt-1 {% if dispute.stage == 'needs_response' %}text-danger font-mono{% else %}text-secondary{% endif %}">
+                            {{ dispute.evidence_due_date|date:"M d, Y"|default:"Not specified" }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Reason Category</span>
+                        <span class="font-semibold text-base">{{ dispute.get_reason_category_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Reason Code</span>
+                        <span class="font-mono font-semibold">{{ dispute.reason_code|default:"Unspecified" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Payment Method</span>
+                        <span>{{ dispute.get_payment_method_type_display }} ({{ dispute.card_brand|default:"-" }})</span>
+                    </div>
+                    <div>
+                        <span class="text-muted block text-xs uppercase font-medium">Customer Party</span>
+                        <span>{{ dispute.customer_party.legal_name|default:"Direct Consumer" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Evidence Dossier &amp; Rebuttal</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block mb-1">Evidence Package Summary:</span>
+                    {% if dispute.evidence_summary %}
+                    <p class="text-sm text-secondary bg-slate-50 p-3 rounded border border-border whitespace-pre-line">{{ dispute.evidence_summary }}</p>
+                    {% else %}
+                    <p class="text-sm text-muted italic">No evidence compiled yet. Collate tracking proof, customer correspondence, and delivery signatures.</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block mb-1">Representment Rebuttal Statement:</span>
+                    {% if dispute.representment_notes %}
+                    <p class="text-sm text-secondary bg-slate-50 p-3 rounded border border-border whitespace-pre-line">{{ dispute.representment_notes }}</p>
+                    {% else %}
+                    <p class="text-sm text-muted italic">No representment rebuttal letter authored yet.</p>
+                    {% endif %}
+                </div>
+
+                {% if dispute.outcome_notes %}
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block mb-1">Final Outcome &amp; Settlement Notes:</span>
+                    <p class="text-sm text-secondary bg-slate-50 p-3 rounded border border-border whitespace-pre-line">{{ dispute.outcome_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title font-semibold">Case Timeline</h2>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Case Received:</span>
+                    <span>{{ dispute.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Evidence Deadline:</span>
+                    <span class="font-mono font-semibold">{{ dispute.evidence_due_date|date:"Y-m-d"|default:"-" }}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-border">
+                    <span class="text-muted">Representment Sent:</span>
+                    <span>{{ dispute.representment_submitted_at|date:"M d, Y H:i"|default:"Not submitted" }}</span>
+                </div>
+                <div class="flex justify-between py-1">
+                    <span class="text-muted">Verdict Finalized:</span>
+                    <span>{{ dispute.resolved_at|date:"M d, Y H:i"|default:"Pending Scheme" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
