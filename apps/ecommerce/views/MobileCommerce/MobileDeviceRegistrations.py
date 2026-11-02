@@ -23,11 +23,11 @@ def mobiledeviceregistration_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(device_uuid__icontains(q))
-            | Q(device_model__icontains(q))
-            | Q(number__icontains(q))
-            | Q(customer_profile__customer_number__icontains(q))
-            | Q(party__name__icontains(q))
+            Q(device_uuid__icontains=q)
+            | Q(device_model__icontains=q)
+            | Q(number__icontains=q)
+            | Q(customer_profile__customer_number__icontains=q)
+            | Q(party__name__icontains=q)
         )
 
     selected_platform = request.GET.get("platform", "").strip()
