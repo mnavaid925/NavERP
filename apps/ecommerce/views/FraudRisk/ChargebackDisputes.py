@@ -72,12 +72,11 @@ def chargeback_dispute_create(request):
                 dispute.resolved_at = timezone.now()
             dispute.save()
             write_audit_log(
+                request.user,
+                dispute,
+                "create",
+                changes={"dispute_amount": str(dispute.dispute_amount), "stage": dispute.stage, "order": dispute.order.number if dispute.order else None},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ChargebackDispute",
-                object_id=dispute.pk,
-                changes={"dispute_amount": str(dispute.dispute_amount), "stage": dispute.stage, "order": dispute.order.number},
             )
             messages.success(request, f"Chargeback dispute case {dispute.number} registered.")
             return redirect("ecommerce:chargeback_dispute_detail", pk=dispute.pk)
@@ -118,12 +117,11 @@ def chargeback_dispute_edit(request, pk):
                 dispute.resolved_at = timezone.now()
             dispute.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ChargebackDispute",
-                object_id=dispute.pk,
+                request.user,
+                dispute,
+                "update",
                 changes={"stage": dispute.stage, "reason_category": dispute.reason_category},
+                tenant=request.tenant,
             )
             messages.success(request, f"Chargeback dispute case {dispute.number} updated.")
             return redirect("ecommerce:chargeback_dispute_detail", pk=dispute.pk)
@@ -143,14 +141,13 @@ def chargeback_dispute_edit(request, pk):
 def chargeback_dispute_delete(request, pk):
     dispute = ecommerce_object(request, ChargebackDispute, pk)
     number = dispute.number
-    dispute.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="ChargebackDispute",
-        object_id=pk,
+        request.user,
+        dispute,
+        "delete",
         changes={"number": number},
+        tenant=request.tenant,
     )
+    dispute.delete()
     messages.success(request, f"Chargeback dispute case {number} deleted.")
     return redirect("ecommerce:chargeback_dispute_list")
