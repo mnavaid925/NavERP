@@ -88,25 +88,25 @@ def analytics_cockpit(request):
         {
             "stage": "Checkout Started",
             "count": total_checkouts,
-            "pct": round((total_checkouts / total_carts) * 100.0, 1),
+            "pct": min(100.0, round((total_checkouts / total_carts) * 100.0, 1)),
             "color": "purple",
         },
         {
             "stage": "Shipping Selected",
             "count": shipping_sessions,
-            "pct": round((shipping_sessions / total_carts) * 100.0, 1),
+            "pct": min(100.0, round((shipping_sessions / total_carts) * 100.0, 1)),
             "color": "orange",
         },
         {
             "stage": "Payment Step",
             "count": payment_sessions,
-            "pct": round((payment_sessions / total_carts) * 100.0, 1),
+            "pct": min(100.0, round((payment_sessions / total_carts) * 100.0, 1)),
             "color": "amber",
         },
         {
             "stage": "Order Placed",
             "count": completed_orders,
-            "pct": round((completed_orders / total_carts) * 100.0, 1),
+            "pct": min(100.0, round((completed_orders / total_carts) * 100.0, 1)),
             "color": "green",
         },
     ]
