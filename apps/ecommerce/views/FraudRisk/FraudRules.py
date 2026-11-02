@@ -126,12 +126,11 @@ def fraud_rule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="FraudRule",
-                object_id=rule.pk,
+                request.user,
+                rule,
+                "create",
                 changes={"name": rule.name, "rule_scope": rule.rule_scope, "action_to_take": rule.action_to_take},
+                tenant=request.tenant,
             )
             messages.success(request, f"Fraud detection rule '{rule.name}' created successfully.")
             return redirect("ecommerce:fraud_rule_detail", pk=rule.pk)
@@ -162,12 +161,11 @@ def fraud_rule_edit(request, pk):
         if form.is_valid():
             rule = form.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="FraudRule",
-                object_id=rule.pk,
+                request.user,
+                rule,
+                "update",
                 changes={"name": rule.name, "is_active": rule.is_active, "action_to_take": rule.action_to_take},
+                tenant=request.tenant,
             )
             messages.success(request, f"Fraud detection rule '{rule.name}' updated successfully.")
             return redirect("ecommerce:fraud_rule_detail", pk=rule.pk)
@@ -187,14 +185,13 @@ def fraud_rule_edit(request, pk):
 def fraud_rule_delete(request, pk):
     rule = ecommerce_object(request, FraudRule, pk)
     name = rule.name
-    rule.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="FraudRule",
-        object_id=pk,
+        request.user,
+        rule,
+        "delete",
         changes={"name": name},
+        tenant=request.tenant,
     )
+    rule.delete()
     messages.success(request, f"Fraud detection rule '{name}' deleted successfully.")
     return redirect("ecommerce:fraud_rule_list")
