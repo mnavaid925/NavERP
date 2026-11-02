@@ -32,6 +32,10 @@
     </div>
 
     <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:mobileappconfig_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Configs</span>
+      </a>
       <a href="{% url 'ecommerce:pwa_manifest_json' %}" target="_blank" class="btn btn-outline flex items-center gap-2">
         <i data-lucide="file-code" class="w-4 h-4"></i>
         <span>Raw manifest.json</span>
