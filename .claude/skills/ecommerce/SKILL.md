@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce: Progressive Web App PWA manifest and offline caching, native device telemetry and APNs/FCM push registrations, push notification campaigns and dispatch simulation, store locator circular geofence rules, curbside pickup radar, mobile express wallets Apple Pay and Google Pay, mobile command hub console, sales performance dashboards, revenue AOV and cart abandonment trends, customer cohort retention & LTV curves, product merchandising turnover & margin velocity tiers, multi-touch marketing attribution models, real-time operational monitoring & executive analytics cockpit, CMS page builder, editorial blog articles & markdown tutorials, digital asset manager DAM, reusable modular content blocks, A/B testing variants, SEO metadata and layouts, omnichannel help desk tickets, WISMO order resolution, knowledge base articles & self-service documentation, order issue claims & transit damage adjudication, customer satisfaction surveys CSAT & NPS, closed-loop customer follow-up, SLA countdowns & breach tracking, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 9.11, 9.12, 9.13, 9.14, 9.15, or 9.16), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce: corporate buyer accounts, tiered role hierarchies, quote negotiation workflows, matrix quick order requisition kits, PunchOut cXML/OCI integration, wholesale hub console, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.17), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, and a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns with dispatch simulation and conversion attribution, circular store locator geofences with curbside pickup arrival radar, express mobile wallet checkout (Apple Pay & Google Pay), and a centralized Mobile Commerce Command Hub. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, and an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, and a simulated PunchOut procurement gateway (cXML/OCI). It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -89,6 +89,11 @@ apps/ecommerce/
 │   │   ├── MobileDeviceRegistrations.py # MobileDeviceRegistration model (EMDR-)
 │   │   ├── MobilePushCampaigns.py   # MobilePushCampaign model (EMPC-)
 │   │   └── MobileLocationRules.py   # MobileLocationRule model (EMLR-)
+│   ├── B2bWholesale/
+│   │   ├── B2bCompanyAccounts.py    # B2bCompanyAccount model (EBCA-)
+│   │   ├── B2bCompanyUsers.py       # B2bCompanyUser model (EBCU-)
+│   │   ├── B2bQuoteRequests.py      # B2bQuoteRequest (EBQR-) & B2bQuoteItem models
+│   │   └── B2bQuickOrderTemplates.py # B2bQuickOrderTemplate (EBQT-) & B2bQuickOrderItem models
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -153,6 +158,11 @@ apps/ecommerce/
 │   │   ├── MobileDeviceRegistrations.py # MobileDeviceRegistrationForm
 │   │   ├── MobilePushCampaigns.py   # MobilePushCampaignForm
 │   │   └── MobileLocationRules.py   # MobileLocationRuleForm
+│   ├── B2bWholesale/
+│   │   ├── B2bCompanyAccounts.py    # B2bCompanyAccountForm
+│   │   ├── B2bCompanyUsers.py       # B2bCompanyUserForm
+│   │   ├── B2bQuoteRequests.py      # B2bQuoteRequestForm, B2bQuoteItemForm
+│   │   └── B2bQuickOrderTemplates.py # B2bQuickOrderTemplateForm, B2bQuickOrderItemForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -224,6 +234,12 @@ apps/ecommerce/
 │   │   ├── MobileDeviceRegistrations.py # mobiledeviceregistration CRUD + telemetry ping
 │   │   ├── MobilePushCampaigns.py   # mobilepushcampaign CRUD + test_send dispatch simulation
 │   │   └── MobileLocationRules.py   # mobilelocationrule CRUD + geofence simulation
+│   ├── B2bWholesale/
+│   │   ├── B2bWholesaleHub.py       # b2b_wholesale_hub console dashboard
+│   │   ├── B2bCompanyAccounts.py    # b2bcompanyaccount CRUD & punchout test
+│   │   ├── B2bCompanyUsers.py       # b2bcompanyuser CRUD
+│   │   ├── B2bQuoteRequests.py      # b2bquoterequest CRUD + state transitions & convert-order
+│   │   └── B2bQuickOrderTemplates.py # b2bquickordertemplate CRUD, quick_order_matrix & CSV import
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -300,6 +316,12 @@ apps/ecommerce/
 │   │   ├── MobileDeviceRegistrations.py # mobile/devices/ paths & ping action
 │   │   ├── MobilePushCampaigns.py   # mobile/push-campaigns/ paths & test-send
 │   │   └── MobileLocationRules.py   # mobile/location-rules/ paths & simulate
+│   ├── B2bWholesale/
+│   │   ├── B2bWholesaleHub.py       # b2b/hub/ console path
+│   │   ├── B2bCompanyAccounts.py    # b2b/companies/ paths & punchout-test
+│   │   ├── B2bCompanyUsers.py       # b2b/users/ paths
+│   │   ├── B2bQuoteRequests.py      # b2b/quotes/ paths & action endpoints
+│   │   └── B2bQuickOrderTemplates.py # b2b/templates/ & b2b/quick-order/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -442,6 +464,18 @@ apps/ecommerce/
 | `MobileDeviceRegistration` | `EMDR-` | `customer_profile`, `party`, `device_uuid`, `device_platform`, `device_model`, `os_version`, `app_version`, `push_token`, `push_provider`, `push_enabled`, `last_latitude`, `last_longitude`, `last_active_at`, `is_active` | `CustomerAccountProfile`, `core.Party` | `record_activity(lat, lng)`, `reset_badge_count()`, compound indexes `(tenant, -last_active_at)` and `(tenant, is_active, push_enabled)`, unique per tenant+device_uuid |
 | `MobilePushCampaign` | `EMPC-` | `campaign_name`, `title`, `body_text`, `notification_image_url`, `deep_link_url`, `campaign_type`, `target_platform`, `target_product`, `target_category`, `target_coupon`, `scheduled_at`, `sent_at`, `status`, `target_audience_count`, `sent_count`, `delivered_count`, `opened_count`, `converted_revenue`, `created_by` | `CatalogProduct`, `StoreCategory`, `CouponPromotion`, `auth.User` (`created_by`) | `dispatch_simulation(device_count)`, `open_rate_pct`, `click_through_rate_pct`, status lifecycle guards (cannot re-dispatch cancelled) |
 | `MobileLocationRule` | `EMLR-` | `name`, `store_name`, `rule_type`, `latitude`, `longitude`, `radius_meters`, `trigger_action`, `notification_title`, `notification_message`, `fulfillment_center`, `linked_promotion`, `is_active` | `FulfillmentCenter`, `CouponPromotion` | `distance_to(lat, lng)` (clamped Haversine formula), `is_device_inside(lat, lng)`, boundary and coordinate range validation |
+
+---
+
+### Sub-module 9.17: B2B & Wholesale Commerce
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `B2bCompanyAccount` | `EBCA-` | `company_party`, `account_name`, `tax_id`, `tier`, `status`, `credit_limit`, `credit_used`, `payment_terms_days`, `preferred_currency`, `custom_discount_pct`, `is_tax_exempt`, `tax_exemption_cert`, `allow_quote_requests`, `notes` | `core.Party` (`company_party`), `accounting.Currency` (`preferred_currency`) | `available_credit` property, `is_credit_exceeded` flag, `clean()` validates non-negative credit and discount bounds, tenant-scoped unique constraints |
+| `B2bCompanyUser` | `EBCU-` | `company_account`, `user`, `role`, `approval_threshold_amount`, `monthly_spend_limit`, `monthly_spend_current`, `can_place_orders`, `can_request_quotes`, `is_active` | `B2bCompanyAccount`, `auth.User` | `can_approve(amount)`, `remaining_monthly_budget` property, cross-tenant validation against company account, unique per `(tenant, company_account, user)` |
+| `B2bQuoteRequest` | `EBQR-` | `company_account`, `requested_by`, `status`, `assigned_sales_rep`, `valid_until`, `subtotal_amount`, `discount_amount`, `total_amount`, `counter_offer_notes`, `buyer_notes`, `internal_notes`, `converted_order` | `B2bCompanyAccount`, `B2bCompanyUser`, `auth.User` (`assigned_sales_rep`), `EcommerceOrder` (`converted_order`) | `recalculate_totals()`, `convert_to_order()` atomic transaction generating `EcommerceOrder` and updating credit exposure, state transition guards |
+| `B2bQuoteItem` | `None` | `quote_request`, `product`, `variant`, `sku`, `product_name`, `requested_quantity`, `target_unit_price`, `offered_unit_price`, `subtotal` | `B2bQuoteRequest`, `CatalogProduct`, `ProductVariant` | Auto-syncs product/variant name & SKU, auto-calculates line subtotal |
+| `B2bQuickOrderTemplate` | `EBQT-` | `company_account`, `created_by`, `name`, `description`, `is_shared` | `B2bCompanyAccount`, `B2bCompanyUser` | `add_to_cart(cart)` creates cart items in atomic batch, total item count property |
+| `B2bQuickOrderItem` | `None` | `template`, `product`, `variant`, `sku`, `product_name`, `default_quantity` | `B2bQuickOrderTemplate`, `CatalogProduct`, `ProductVariant` | Auto-syncs SKU and product details, positive integer quantity guard |
 
 ---
 
@@ -854,6 +888,40 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 
 ---
 
+### 9.17 B2B & Wholesale Commerce Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `b2b/hub/` | `b2b_wholesale_hub` | `b2b_wholesale_hub` | Wholesale Command Center console dashboard |
+| `b2b/companies/` | `b2bcompanyaccount_list` | `b2bcompanyaccount_list` | B2B Corporate Buyer Accounts directory with tier and status filters |
+| `b2b/companies/new/` | `b2bcompanyaccount_create` | `b2bcompanyaccount_create` | Register new B2B corporate company account |
+| `b2b/companies/<int:pk>/` | `b2bcompanyaccount_detail` | `b2bcompanyaccount_detail` | Corporate account detail with credit utilization bar, buyer roster, and quote requests |
+| `b2b/companies/<int:pk>/edit/` | `b2bcompanyaccount_edit` | `b2bcompanyaccount_edit` | Edit corporate account credit limit, terms, discount, or tax exemption |
+| `b2b/companies/<int:pk>/delete/` | `b2bcompanyaccount_delete` | `b2bcompanyaccount_delete` | Delete company account (POST only, tenant admin required) |
+| `b2b/companies/<int:pk>/punchout-test/` | `b2bcompanyaccount_punchout_test` | `b2bcompanyaccount_punchout_test` | Test cXML/OCI simulated PunchOut checkout session |
+| `b2b/users/` | `b2bcompanyuser_list` | `b2bcompanyuser_list` | Corporate Buyer Users directory with role and status filters |
+| `b2b/users/new/` | `b2bcompanyuser_create` | `b2bcompanyuser_create` | Onboard company buyer user with role and spending thresholds |
+| `b2b/users/<int:pk>/` | `b2bcompanyuser_detail` | `b2bcompanyuser_detail` | Buyer user detail with monthly spend limit gauge and permissions |
+| `b2b/users/<int:pk>/edit/` | `b2bcompanyuser_edit` | `b2bcompanyuser_edit` | Edit company buyer user role, approval limits, and order permissions |
+| `b2b/users/<int:pk>/delete/` | `b2bcompanyuser_delete` | `b2bcompanyuser_delete` | Delete buyer user (POST only, tenant admin required) |
+| `b2b/quotes/` | `b2bquoterequest_list` | `b2bquoterequest_list` | B2B Quote Requests (RFQ) register with status and account filters |
+| `b2b/quotes/new/` | `b2bquoterequest_create` | `b2bquoterequest_create` | Submit custom quotation request with line items |
+| `b2b/quotes/<int:pk>/` | `b2bquoterequest_detail` | `b2bquoterequest_detail` | Quote request negotiation dossier with counter-offers and order conversion action |
+| `b2b/quotes/<int:pk>/edit/` | `b2bquoterequest_edit` | `b2bquoterequest_edit` | Edit quote line items, target pricing, discount, and buyer notes |
+| `b2b/quotes/<int:pk>/delete/` | `b2bquoterequest_delete` | `b2bquoterequest_delete` | Delete quote request (POST only, tenant admin required) |
+| `b2b/quotes/<int:pk>/submit/` | `b2bquoterequest_submit` | `b2bquoterequest_submit` | Buyer submits draft quote request for review (POST only) |
+| `b2b/quotes/<int:pk>/quote/` | `b2bquoterequest_quote` | `b2bquoterequest_quote` | Sales manager counters with proposed quote discount (POST only) |
+| `b2b/quotes/<int:pk>/accept/` | `b2bquoterequest_accept` | `b2bquoterequest_accept` | Buyer accepts proposed wholesale quote terms (POST only) |
+| `b2b/quotes/<int:pk>/reject/` | `b2bquoterequest_reject` | `b2bquoterequest_reject` | Reject quote request or counter-offer with reason (POST only) |
+| `b2b/quotes/<int:pk>/convert-order/` | `b2bquoterequest_convert_order` | `b2bquoterequest_convert_order` | Convert approved quote to live EcommerceOrder and update credit used (POST only) |
+| `b2b/templates/` | `b2bquickordertemplate_list` | `b2bquickordertemplate_list` | Quick Order Requisition Kits directory with visibility filters |
+| `b2b/templates/new/` | `b2bquickordertemplate_create` | `b2bquickordertemplate_create` | Create requisition order kit template with SKU items |
+| `b2b/templates/<int:pk>/` | `b2bquickordertemplate_detail` | `b2bquickordertemplate_detail` | Requisition kit detail with SKU line items and 1-click cart addition |
+| `b2b/templates/<int:pk>/edit/` | `b2bquickordertemplate_edit` | `b2bquickordertemplate_edit` | Edit requisition kit items and sharing permissions |
+| `b2b/templates/<int:pk>/delete/` | `b2bquickordertemplate_delete` | `b2bquickordertemplate_delete` | Delete requisition template (POST only, tenant admin required) |
+| `b2b/quick-order/` | `b2b_quick_order_matrix` | `b2b_quick_order_matrix` | Rapid bulk SKU matrix entry table and spreadsheet CSV import |
+
+---
+
 ## 4. Templates & Design System
 
 Templates are stored under `templates/ecommerce/`:
@@ -943,9 +1011,17 @@ Templates are stored under `templates/ecommerce/`:
   - `mobile_device_registration/` — `list.html` (with platform badges, push provider pills, active status, customer links), `detail.html` (with device hardware specs, telemetry coordinates, read-only push token, simulated ping trigger), `form.html`.
   - `mobile_push_campaign/` — `list.html` (with campaign status badges, platform targeting pills, delivery and revenue counters), `detail.html` (with phone lockscreen notification preview card, conversion scorecard, test send dispatch action), `form.html`.
   - `mobile_location_rule/` — `list.html` (with rule type and trigger action badges, radius meters), `detail.html` (with circular geofence radar simulator, inside/outside trigger feedback, coordinates validation), `form.html`.
+- `b2b_wholesale/`
+  - `wholesale_hub.html` — Wholesale Command Center console: active corporate accounts, registered buyer users, pending RFQ quote queue, credit exposure monitoring, rapid matrix ordering CTA, and PunchOut e-procurement gateway simulator.
+  - `company_account/` — `list.html` (with tier pills and account status badges), `detail.html` (with credit utilization progress bar, payment terms, buyer roster table, linked quote requests), `form.html` (12 fields with explicit label associations and credit limit bounding).
+  - `company_user/` — `list.html` (with role badges and spend limits), `detail.html` (with approval threshold cards, monthly spend progress gauge, permissions checklist, company account dossier), `form.html` (role selection, spend limits, order/quote permissions).
+  - `quote_request/` — `list.html` (with RFQ status badges and total values), `detail.html` (with quote lines pricing table, counter-offer response form, buyer notes, and convert to order action), `form.html` (company selection, target discounts, valid until dates).
+  - `order_template/` — `list.html` (with shared visibility badges and item counts), `detail.html` (with SKU requisition kit items table, default quantities, and 1-click batch add to cart action), `form.html` (template name, description, shared toggle).
+  - `quick_order_matrix.html` — Rapid multi-SKU fast-order matrix: dynamic SKU auto-lookup, real-time line total calculating, and CSV file upload parsing.
+  - `punchout_simulator.html` — Simulated cXML/OCI e-procurement checkout: raw cXML setup payload inspector, cart transfer simulator, and return URL redirection.
 
 **UI & Badge Rules:**
-- Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`.
+- Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-blue`, `badge-slate`.
 - Stat icon classes: `stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`.
 - Never use semantic `-success`, `-danger`, or `-warning` classes (which render unstyled).
 
@@ -1022,6 +1098,12 @@ The command provisions:
 - 4 Registered Mobile Devices (`EMDR-`): iPhone 16 Pro (iOS 18.2 / APNs), Samsung Galaxy S24 Ultra (Android 15 / FCM), Google Pixel 9 Pro (Android 15 / FCM), and Desktop Chrome PWA with live telemetry coordinates and active heartbeats.
 - 3 Mobile Push Campaigns (`EMPC-`): Weekend Flash Sale 20% off alert, Abandoned Cart express checkout reminder, and In-Store VIP Welcome push notification with deep-links and conversion tracking.
 - 3 Store Locator & Geofence Rules (`EMLR-`): Downtown Flagship Store 150m entry geofence (push discount), West Coast Distribution Center curbside pickup radar (arrival alert), and Metropolitan Store locator guide.
+- 2 B2B Corporate Company Accounts (`EBCA-`): Apex Industrial Supply (Tier 1 Preferred, $100,000 credit limit, Net 30 terms, 15% custom discount) and Nexus Heavy Industries (Tier 2 Standard, $50,000 credit limit, Net 15 terms, 10% discount).
+- 3 B2B Company Users (`EBCU-`): Corporate Administrator (Full order & quote approval), Procurement Manager ($25,000 threshold), and Purchasing Buyer ($5,000 threshold).
+- 2 B2B Quote Requests (`EBQR-`): Draft RFQ with customer-suggested line target pricing, and Approved Quote with counter-offer discount and order conversion capability.
+- 4 B2B Quote Line Items with variant SKU bindings, requested quantities, and target vs offered unit prices.
+- 2 B2B Quick Order Requisition Kits (`EBQT-`): Standard Warehouse Restock Kit and Heavy Machinery Monthly Kit with shared company access.
+- 4 B2B Quick Order Items with SKU references and default restock package quantities.
 - All demo data is scoped to tenant `acme` and `globex`.
 
 ---
@@ -1078,6 +1160,14 @@ The command provisions:
     - In `MobileLocationRule.distance_to()`, calculating `c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))` must clamp `a = min(1.0, max(0.0, a))` to prevent floating-point rounding errors on identical or antipodal coordinates from raising `ValueError: math domain error`.
 21. **Mobile Push Lifecycle & Status Guards**:
     - Cancelled push campaigns (`status='cancelled'`) are immutable and blocked from re-dispatch in `mobilepushcampaign_test_send`. Dispatch simulations advance status to `'sent'`, record delivery and open rates, and write an audit log row with verb `'SEND'`.
+22. **B2B Trade Credit Limits & Exposure Tracking**:
+    - Corporate company accounts maintain strict `credit_limit` and `credit_used` balances. Orders and quote conversions calculate available credit as `credit_limit - credit_used`. If an order or conversion pushes balance past limit, account flags `is_credit_exceeded` and sets credit hold warning.
+23. **B2B Tiered Buyer Roles & Authorization Thresholds**:
+    - `B2bCompanyUser` roles (`company_admin`, `procurement_manager`, `buyer`, `approver`, `finance_auditor`) govern ordering and quote authorization. Purchasing buyers exceeding `approval_threshold_amount` or their `monthly_spend_limit` are blocked from direct checkout and routed to company approval.
+24. **Quote Request (RFQ) State Machine & Atomic Order Conversion**:
+    - `B2bQuoteRequest` enforces valid state transitions: `draft` -> `submitted` -> `under_review` -> `approved` -> `converted_to_order` (or `rejected`/`expired`). Calling `convert_to_order()` atomically provisions an `EcommerceOrder`, transfers line items with negotiated quote pricing overrides, updates account `credit_used`, links the converted order, and writes an audit log with verb `'convert'`.
+25. **PunchOut e-Procurement Gateway (cXML/OCI)**:
+    - PunchOut simulation implements standard POSR (PunchOutSetupRequest) session generation and PunchOutOrderMessage response XML payload construction, allowing procurement buyers from enterprise ERPs (SAP Ariba, Coupa, Jaggaer) to inspect cart items and simulate electronic procurement roundtrips.
 
 ---
 
@@ -1205,6 +1295,18 @@ LIVE_LINKS["9.16"] = {
     "Registered Devices": "ecommerce:mobiledeviceregistration_list",
     "Push Campaigns": "ecommerce:mobilepushcampaign_list",
     "Location Rules": "ecommerce:mobilelocationrule_list",
+}
+LIVE_LINKS["9.17"] = {
+    "Company Account Management": "ecommerce:b2bcompanyaccount_list",
+    "Quote Request & Negotiation": "ecommerce:b2bquoterequest_list",
+    "Punch-Out Catalog Integration": "ecommerce:b2bcompanyaccount_list",
+    "Credit Terms & Net Payment": "ecommerce:b2bcompanyaccount_list",
+    "Bulk Ordering & Quick Order": "ecommerce:b2b_quick_order_matrix",
+    "B2B Wholesale Hub": "ecommerce:b2b_wholesale_hub",
+    "Company Accounts": "ecommerce:b2bcompanyaccount_list",
+    "Company Buyers": "ecommerce:b2bcompanyuser_list",
+    "Quote Requests (RFQ)": "ecommerce:b2bquoterequest_list",
+    "Quick Order & Templates": "ecommerce:b2bquickordertemplate_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
