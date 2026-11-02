@@ -101,6 +101,10 @@ from apps.ecommerce.forms.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccou
 from apps.ecommerce.forms.B2bWholesale.B2bCompanyUsers import B2bCompanyUserForm
 from apps.ecommerce.forms.B2bWholesale.B2bQuoteRequests import B2bQuoteRequestForm
 from apps.ecommerce.forms.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplateForm
+from apps.ecommerce.forms.FraudRisk.FraudRules import FraudRuleForm
+from apps.ecommerce.forms.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessmentForm
+from apps.ecommerce.forms.FraudRisk.ChargebackDisputes import ChargebackDisputeForm
+from apps.ecommerce.forms.FraudRisk.AccountSecurityAlerts import AccountSecurityAlertForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -205,4 +209,9 @@ __all__ = [
     "B2bCompanyUserForm",
     "B2bQuoteRequestForm",
     "B2bQuickOrderTemplateForm",
+    # 9.18 Fraud & Risk Management
+    "FraudRuleForm",
+    "TransactionRiskAssessmentForm",
+    "ChargebackDisputeForm",
+    "AccountSecurityAlertForm",
 ]
