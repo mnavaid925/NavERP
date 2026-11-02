@@ -3656,8 +3656,28 @@ class Command(BaseCommand):
             },
         )
 
-        # 2. B2bCompanyUser
-        B2bCompanyUser.objects.get_or_create(
+        # 2. B2bCompanyUser (3 users: Admin, Procurement Manager, Buyer)
+        User = get_user_model()
+        manager_user, _ = User.objects.get_or_create(
+            username="b2b_procurement_mgr",
+            defaults={
+                "email": "procurement@acme-industrial.com",
+                "first_name": "Marcus",
+                "last_name": "Vance",
+                "is_active": True,
+            },
+        )
+        buyer_user, _ = User.objects.get_or_create(
+            username="b2b_staff_buyer",
+            defaults={
+                "email": "buyer@acme-industrial.com",
+                "first_name": "Sarah",
+                "last_name": "Chen",
+                "is_active": True,
+            },
+        )
+
+        admin_cu, _ = B2bCompanyUser.objects.get_or_create(
             tenant=tenant,
             company=co_acme,
             user=admin_user,
@@ -3677,7 +3697,49 @@ class Command(BaseCommand):
             },
         )
 
-        # 3. B2bQuoteRequest
+        mgr_cu, _ = B2bCompanyUser.objects.get_or_create(
+            tenant=tenant,
+            company=co_acme,
+            user=manager_user,
+            defaults={
+                "party": company_party,
+                "role": "purchasing_manager",
+                "job_title": "Procurement Operations Manager",
+                "department": "Corporate Purchasing",
+                "reports_to_approver": admin_cu,
+                "order_spend_limit": Decimal("25000.00"),
+                "monthly_spend_limit": Decimal("100000.00"),
+                "can_place_orders": True,
+                "can_request_quotes": True,
+                "can_view_invoices": True,
+                "can_manage_users": False,
+                "can_approve_orders": True,
+                "status": "active",
+            },
+        )
+
+        B2bCompanyUser.objects.get_or_create(
+            tenant=tenant,
+            company=co_acme,
+            user=buyer_user,
+            defaults={
+                "party": company_party,
+                "role": "staff_buyer",
+                "job_title": "Senior Purchasing Agent",
+                "department": "Facility Operations",
+                "reports_to_approver": mgr_cu,
+                "order_spend_limit": Decimal("5000.00"),
+                "monthly_spend_limit": Decimal("20000.00"),
+                "can_place_orders": True,
+                "can_request_quotes": True,
+                "can_view_invoices": False,
+                "can_manage_users": False,
+                "can_approve_orders": False,
+                "status": "active",
+            },
+        )
+
+        # 3. B2bQuoteRequest (2 quotes: 1 quoted offer, 1 submitted RFQ)
         sample_var = ProductVariant.objects.filter(tenant=tenant).first()
         prod_pk = sample_var.product_id if sample_var else None
         sku_val = sample_var.sku if sample_var else "SKU-B2B-100"
@@ -3723,7 +3785,30 @@ class Command(BaseCommand):
             },
         )
 
-        # 4. B2bQuickOrderTemplate
+        B2bQuoteRequest.objects.get_or_create(
+            tenant=tenant,
+            company=co_acme,
+            buyer_notes="Urgent requisition for manufacturing line expansion.",
+            defaults={
+                "requested_by": buyer_user,
+                "assigned_sales_rep": admin_user,
+                "currency": currency_obj,
+                "status": "submitted",
+                "target_budget": Decimal("20000.00"),
+                "original_subtotal": Decimal("18500.00"),
+                "quoted_discount_percent": Decimal("0.00"),
+                "quoted_total": Decimal("18500.00"),
+                "tax_amount": Decimal("0.00"),
+                "shipping_estimate": Decimal("350.00"),
+                "target_delivery_date": timezone.now().date() + timedelta(days=14),
+                "valid_until": timezone.now() + timedelta(days=15),
+                "submitted_at": timezone.now() - timedelta(days=1),
+                "line_items_data": sample_items,
+                "merchant_notes": "Pending sales engineering review for quantity discount.",
+            },
+        )
+
+        # 4. B2bQuickOrderTemplate (2 templates: 1 company shared, 1 private)
         template_items = [
             {
                 "product_id": prod_pk,
@@ -3748,6 +3833,23 @@ class Command(BaseCommand):
                 "total_items_count": len(template_items),
                 "times_ordered": 6,
                 "last_ordered_at": timezone.now() - timedelta(days=15),
+                "is_active": True,
+            },
+        )
+
+        B2bQuickOrderTemplate.objects.get_or_create(
+            tenant=tenant,
+            name="Ad-hoc Maintenance Hardware Kit",
+            defaults={
+                "company": co_acme,
+                "created_by": buyer_user,
+                "description": "Rapid replacement parts for preventive facility maintenance.",
+                "scope": "private_user",
+                "cadence": "ad_hoc",
+                "items_data": template_items,
+                "total_items_count": len(template_items),
+                "times_ordered": 2,
+                "last_ordered_at": timezone.now() - timedelta(days=5),
                 "is_active": True,
             },
         )
