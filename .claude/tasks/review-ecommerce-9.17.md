@@ -68,7 +68,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Non-accepted or draft quotes can be converted to orders; quotes in terminal states can be accepted or rejected.
   - *Fix*: Enforce `quote.status == "accepted"` for conversion and `quote.status in ["quoted", "buyer_review"]` for accept/reject.
 
-- [ ] **I3** — Approver cross-company leakage & missing `reject_foreign` in `B2bCompanyUserForm`
+- [x] **I3** — Approver cross-company leakage & missing `reject_foreign` in `B2bCompanyUserForm` — 6d25870e
   - *Location*: `apps/ecommerce/forms/B2bWholesale/B2bCompanyUsers.py:59`
   - *Problem*: `reports_to_approver` missing from `reject_foreign`, and no validation check that approver belongs to the same company.
   - *Fix*: Add to `reject_foreign` and validate `approver.company_id == company.id` and `approver.pk != self.instance.pk`.
