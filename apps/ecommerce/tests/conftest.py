@@ -3580,9 +3580,9 @@ ANALYTICSBI_MODEL_FIELDS = {
     "ProductMerchandisingMetric": (
         "id", "tenant", "number", "product", "variant", "period_start",
         "period_end", "velocity_tier", "units_sold", "gross_revenue",
-        "cost_of_goods_sold", "gross_margin_pct", "return_units_count",
-        "return_rate_pct", "page_views_count", "conversion_rate_pct",
-        "inventory_turnover_ratio", "created_at", "updated_at",
+        "cost_of_goods", "gross_margin_pct", "refunds_count",
+        "return_rate_pct", "page_views_count", "add_to_cart_count",
+        "conversion_rate_pct", "inventory_turnover_ratio", "created_at", "updated_at",
     ),
     "AttributionTouchpoint": (
         "id", "tenant", "number", "order", "cart", "channel_type",
@@ -3650,11 +3650,12 @@ def _analyticsbi_merchandising_metric(tenant, product, **overrides):
         "velocity_tier": "best_seller",
         "units_sold": 50,
         "gross_revenue": Decimal("5000.00"),
-        "cost_of_goods_sold": Decimal("2000.00"),
+        "cost_of_goods": Decimal("2000.00"),
         "gross_margin_pct": Decimal("60.00"),
-        "return_units_count": 2,
+        "refunds_count": 2,
         "return_rate_pct": Decimal("4.00"),
         "page_views_count": 500,
+        "add_to_cart_count": 50,
         "conversion_rate_pct": Decimal("10.00"),
         "inventory_turnover_ratio": Decimal("4.50"),
     }
