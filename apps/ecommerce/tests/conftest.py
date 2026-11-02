@@ -3735,30 +3735,36 @@ MOBILECOMMERCE_PAGE_SIZE = 15
 MOBILECOMMERCE_MODEL_FIELDS = {
     "MobileAppConfig": (
         "id", "tenant", "number", "app_name", "short_name", "description",
-        "theme_color", "background_color", "start_url", "display_mode",
-        "orientation", "enable_pwa", "enable_apple_pay", "apple_merchant_id",
-        "enable_google_pay", "google_merchant_id", "firebase_sender_id",
-        "app_store_url", "play_store_url", "is_active", "created_at", "updated_at",
+        "theme_color", "background_color", "display_mode", "orientation",
+        "start_url", "scope", "icon_192_url", "icon_512_url",
+        "offline_cache_strategy", "offline_fallback_html", "enable_pwa",
+        "enable_biometric_login", "min_ios_version", "min_android_version",
+        "apple_pay_merchant_id", "google_pay_gateway_id", "enable_apple_pay",
+        "enable_google_pay", "enable_in_app_wallet", "enable_express_checkout",
+        "is_active", "created_at", "updated_at",
     ),
     "MobileDeviceRegistration": (
         "id", "tenant", "number", "customer_profile", "party", "device_uuid",
         "device_platform", "device_model", "os_version", "app_version",
-        "push_token", "push_provider", "push_enabled", "last_latitude",
+        "push_token", "push_provider", "push_enabled", "biometric_enrolled",
+        "location_permission", "badge_count", "last_latitude",
         "last_longitude", "last_active_at", "is_active", "created_at", "updated_at",
     ),
     "MobilePushCampaign": (
-        "id", "tenant", "number", "campaign_name", "title", "body_text",
-        "notification_image_url", "deep_link_url", "campaign_type",
-        "target_platform", "target_product", "target_category", "target_coupon",
-        "scheduled_at", "sent_at", "status", "target_audience_count",
-        "sent_count", "delivered_count", "opened_count", "converted_revenue",
-        "created_by", "created_at", "updated_at",
+        "id", "tenant", "number", "campaign_name", "campaign_type",
+        "target_platform", "notification_title", "notification_body",
+        "image_url", "badge_increment", "sound_name", "deep_link_type",
+        "deep_link_url", "target_product", "target_category", "target_coupon",
+        "status", "scheduled_for", "sent_at", "sent_count", "delivered_count",
+        "opened_count", "converted_count", "converted_revenue", "created_by",
+        "created_at", "updated_at",
     ),
     "MobileLocationRule": (
-        "id", "tenant", "number", "name", "store_name", "rule_type",
-        "latitude", "longitude", "radius_meters", "trigger_action",
-        "notification_title", "notification_message", "fulfillment_center",
-        "linked_promotion", "is_active", "created_at", "updated_at",
+        "id", "tenant", "number", "name", "rule_type", "fulfillment_center",
+        "store_name", "latitude", "longitude", "radius_meters", "trigger_action",
+        "linked_promotion", "push_message", "enable_bopis_checkin",
+        "enable_instore_mode", "dwell_time_seconds", "is_active",
+        "created_at", "updated_at",
     ),
 }
 
@@ -3776,10 +3782,9 @@ def _mobilecommerce_app_config(tenant, **overrides):
         "orientation": "portrait",
         "enable_pwa": True,
         "enable_apple_pay": True,
-        "apple_merchant_id": "merchant.com.example.store",
+        "apple_pay_merchant_id": "merchant.com.example.store",
         "enable_google_pay": True,
-        "google_merchant_id": "BCR2DN6TZXXXXXX",
-        "firebase_sender_id": "102938475612",
+        "google_pay_gateway_id": "BCR2DN6TZXXXXXX",
         "is_active": True,
     }
     defaults.update(overrides)
@@ -3812,17 +3817,17 @@ def _mobilecommerce_push_campaign(tenant, created_by=None, **overrides):
     defaults = {
         "tenant": tenant,
         "campaign_name": "Flash Sale Push Alert",
-        "title": "Exclusive Flash Sale Today!",
-        "body_text": "Enjoy 20% off all catalog items with mobile checkout.",
-        "notification_image_url": "https://images.example.com/push/banner.jpg",
+        "campaign_type": "promotional",
+        "notification_title": "Exclusive Flash Sale Today!",
+        "notification_body": "Enjoy 20% off all catalog items with mobile checkout.",
+        "image_url": "https://images.example.com/push/banner.jpg",
         "deep_link_url": "navstore://products/flash-sale",
-        "campaign_type": "flash_sale",
         "target_platform": "all",
         "status": "draft",
-        "target_audience_count": 100,
         "sent_count": 0,
         "delivered_count": 0,
         "opened_count": 0,
+        "converted_count": 0,
         "converted_revenue": Decimal("0.00"),
         "created_by": created_by,
     }
@@ -3839,9 +3844,8 @@ def _mobilecommerce_location_rule(tenant, fulfillment_center=None, linked_promot
         "latitude": Decimal("37.774900"),
         "longitude": Decimal("-122.419400"),
         "radius_meters": 150,
-        "trigger_action": "push_discount",
-        "notification_title": "Welcome Downtown!",
-        "notification_message": "Show this alert at counter for 10% in-store discount.",
+        "trigger_action": "apply_coupon",
+        "push_message": "Show this alert at counter for 10% in-store discount.",
         "fulfillment_center": fulfillment_center,
         "linked_promotion": linked_promotion,
         "is_active": True,
@@ -3891,13 +3895,13 @@ def ecom_mobile_push_b(tenant_b, admin_user_b):
 
 
 @pytest.fixture
-def ecom_mobile_location_a(tenant_a, ecom_fulfillment_center_a):
-    return _mobilecommerce_location_rule(tenant_a, fulfillment_center=ecom_fulfillment_center_a)
+def ecom_mobile_location_a(tenant_a, ecom_center_a):
+    return _mobilecommerce_location_rule(tenant_a, fulfillment_center=ecom_center_a)
 
 
 @pytest.fixture
-def ecom_mobile_location_b(tenant_b, ecom_fulfillment_center_b):
-    return _mobilecommerce_location_rule(tenant_b, fulfillment_center=ecom_fulfillment_center_b, name="Globex Geofence")
+def ecom_mobile_location_b(tenant_b, ecom_center_b):
+    return _mobilecommerce_location_rule(tenant_b, fulfillment_center=ecom_center_b, name="Globex Geofence")
 
 
 
