@@ -2,7 +2,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -38,9 +38,14 @@ def mobileappconfig_list(request):
     elif pwa_filter in ("0", "false", "False"):
         qs = qs.filter(enable_pwa=False)
 
-    total_count = ecommerce_scope(MobileAppConfig.objects.all(), request).count()
-    active_count = ecommerce_scope(MobileAppConfig.objects.filter(is_active=True), request).count()
-    pwa_count = ecommerce_scope(MobileAppConfig.objects.filter(enable_pwa=True), request).count()
+    stats = ecommerce_scope(MobileAppConfig.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+        pwa=Count("id", filter=Q(enable_pwa=True)),
+    )
+    total_count = stats["total"] or 0
+    active_count = stats["active"] or 0
+    pwa_count = stats["pwa"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
@@ -154,7 +159,7 @@ def pwa_manifest_json(request):
     """Serve dynamically generated Web App Manifest for current tenant."""
     tenant = getattr(request, "tenant", None)
     if tenant:
-        config = MobileAppConfig.objects.filter(tenant=tenant, is_active=True).first()
+        config = MobileAppConfig.objects.filter(tenant=tenant, is_active=True, enable_pwa=True).first()
     else:
         config = None
 
