@@ -2838,7 +2838,7 @@ LIVE_LINKS = {
         "Quote Request & Negotiation": "ecommerce:b2bquoterequest_list",
         "Punch-Out Catalog Integration": "ecommerce:b2bcompanyaccount_list",
         "Credit Terms & Net Payment": "ecommerce:b2bcompanyaccount_list",
-        "Bulk Ordering & Quick Order": "ecommerce:b2bquickordertemplate_list",
+        "Bulk Ordering & Quick Order": "ecommerce:b2b_quick_order_matrix",
         # Extra live leaves
         "B2B Wholesale Hub": "ecommerce:b2b_wholesale_hub",
         "Company Accounts": "ecommerce:b2bcompanyaccount_list",
