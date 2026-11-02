@@ -181,7 +181,7 @@
                 {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
                   <span class="badge badge-green">{{ qr.get_status_display }}</span>
                 {% elif qr.status == "quoted" %}
-                  <span class="badge badge-info">Quoted / Offer Sent</span>
+                  <span class="badge badge-blue">Quoted / Offer Sent</span>
                 {% elif qr.status == "under_review" or qr.status == "submitted" or qr.status == "buyer_review" %}
                   <span class="badge badge-amber">{{ qr.get_status_display }}</span>
                 {% elif qr.status == "rejected" %}
