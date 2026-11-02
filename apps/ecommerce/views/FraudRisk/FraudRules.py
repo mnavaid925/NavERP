@@ -38,7 +38,7 @@ def fraud_risk_hub(request):
 
     recent_assessments = assessments_qs.select_related("order", "currency")[:5]
     recent_disputes = disputes_qs.select_related("order", "currency")[:5]
-    recent_alerts = alerts_qs.select_related("user")[:5]
+    recent_alerts = alerts_qs.select_related("user", "party")[:5]
 
     context = {
         "total_rules": total_rules,
