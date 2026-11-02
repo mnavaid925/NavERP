@@ -186,6 +186,7 @@ class B2bCompanyAccount(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_ebca_ten_created"),
             models.Index(fields=["tenant", "status"], name="idx_ebca_ten_stat"),
             models.Index(fields=["tenant", "credit_status"], name="idx_ebca_ten_cred"),
             models.Index(fields=["tenant", "company_party"], name="idx_ebca_ten_party"),
@@ -195,9 +196,13 @@ class B2bCompanyAccount(TenantNumbered):
         return f"{self.company_name} ({self.number})"
 
     def save(self, *args, **kwargs):
-        # On initial creation, default available credit to credit limit if not manually set
+        # On initial creation or first credit limit grant from 0, default available credit to credit limit
         if not self.pk and self.available_credit == Decimal("0.00") and self.credit_limit > Decimal("0.00"):
             self.available_credit = self.credit_limit
+        elif self.pk:
+            orig = B2bCompanyAccount.objects.filter(pk=self.pk).only("credit_limit", "available_credit").first()
+            if orig and orig.credit_limit == Decimal("0.00") and orig.available_credit == Decimal("0.00") and self.credit_limit > Decimal("0.00"):
+                self.available_credit = self.credit_limit
         super().save(*args, **kwargs)
 
     def has_available_credit(self, amount):
