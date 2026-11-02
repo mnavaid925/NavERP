@@ -109,10 +109,11 @@ def b2bcompanyuser_create(request):
             cu.tenant = request.tenant
             cu.save()
             write_audit_log(
-                request,
+                request.user,
+                cu,
                 "create",
-                f"Added company buyer {cu.user.username} to {cu.company.company_name} ({cu.number})",
-                object_id=cu.pk,
+                {"number": cu.number, "username": cu.user.username},
+                tenant=request.tenant,
             )
             messages.success(request, f"Company buyer {cu.user.username} added successfully.")
             return redirect("ecommerce:b2bcompanyuser_detail", pk=cu.pk)
@@ -135,10 +136,11 @@ def b2bcompanyuser_edit(request, pk):
         if form.is_valid():
             cu = form.save()
             write_audit_log(
-                request,
+                request.user,
+                cu,
                 "update",
-                f"Updated company buyer {cu.user.username} for {cu.company.company_name} ({cu.number})",
-                object_id=cu.pk,
+                {"number": cu.number, "username": cu.user.username},
+                tenant=request.tenant,
             )
             messages.success(request, f"Company buyer {cu.user.username} updated successfully.")
             return redirect("ecommerce:b2bcompanyuser_detail", pk=cu.pk)
@@ -163,10 +165,11 @@ def b2bcompanyuser_delete(request, pk):
         num = cu.number
         cu.delete()
         write_audit_log(
-            request,
+            request.user,
+            cu,
             "delete",
-            f"Removed company buyer {username} from {co_name} ({num})",
-            object_id=pk,
+            {"number": num, "username": username, "company": co_name},
+            tenant=request.tenant,
         )
         messages.success(request, f"Company buyer {username} has been removed.")
         return redirect("ecommerce:b2bcompanyuser_list")
