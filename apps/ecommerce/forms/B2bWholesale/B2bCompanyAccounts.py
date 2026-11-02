@@ -43,7 +43,7 @@ class B2bCompanyAccountForm(TenantUniqueMixin, TenantModelForm):
         User = get_user_model()
         if self.tenant:
             self.fields["company_party"].queryset = Party.objects.filter(tenant=self.tenant)
-            self.fields["preferred_currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+        self.fields["preferred_currency"].queryset = Currency.objects.filter(is_active=True)
         self.fields["primary_contact"].queryset = User.objects.filter(is_active=True)
         self.fields["default_approver"].queryset = User.objects.filter(is_active=True)
 
@@ -67,5 +67,5 @@ class B2bCompanyAccountForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["company_party", "preferred_currency"])
+        reject_foreign(self, cleaned, ["company_party"])
         return cleaned
