@@ -39,7 +39,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Raw `Decimal()` casting on discount and prices without catching `decimal.InvalidOperation`, checking `is_finite()`, non-negativity, or bounds.
   - *Fix*: Validate `decimal.InvalidOperation`, ensure finite and non-negative, and clamp discounts to `0 <= val <= 100`.
 
-- [ ] **C6** — Plaintext secret exposure of `punchout_shared_secret` in form and DOM (L20)
+- [x] **C6** — Plaintext secret exposure of `punchout_shared_secret` in form and DOM (L20) — d88ba949
   - *Location*: `apps/ecommerce/forms/B2bWholesale/B2bCompanyAccounts.py:34`
   - *Problem*: Rendered as `TextInput`, exposing plaintext secret in DOM attributes and browser inspection.
   - *Fix*: Use `forms.PasswordInput(render_value=False)` and retain existing secret on blank edit in `clean_punchout_shared_secret()`.
