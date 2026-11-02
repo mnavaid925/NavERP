@@ -58,7 +58,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     <div class="p-4 bg-slate-50 border border-border rounded-lg text-center">
                         <div class="text-xs text-muted uppercase font-medium">Risk Score</div>
-                        <div class="text-3xl font-extrabold mt-1 {% if assessment.risk_score > 60 %}text-danger{% elif assessment.risk_score > 25 %}text-warn{% else %}text-green{% endif %}">
+                        <div class="text-3xl font-extrabold mt-1 {% if assessment.risk_score > 60 %}text-danger{% elif assessment.risk_score > 25 %}text-warn{% else %}text-ok{% endif %}">
                             {{ assessment.risk_score }} <span class="text-xs text-muted font-normal">/ 100</span>
                         </div>
                     </div>
@@ -72,7 +72,7 @@
                             {% elif assessment.recommended_action == "review" %}
                             <span class="text-primary">Manual Analyst Review</span>
                             {% else %}
-                            <span class="text-green">Immediate Approval</span>
+                            <span class="text-ok">Immediate Approval</span>
                             {% endif %}
                         </div>
                     </div>
@@ -124,13 +124,13 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div class="p-3 bg-slate-50 rounded border border-border">
                         <span class="text-xs text-muted uppercase font-medium block">AVS Result Code</span>
-                        <span class="font-bold text-base mt-1 block {% if assessment.avs_result_code == 'match' %}text-green{% elif assessment.avs_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
+                        <span class="font-bold text-base mt-1 block {% if assessment.avs_result_code == 'match' %}text-ok{% elif assessment.avs_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
                             {{ assessment.get_avs_result_code_display }}
                         </span>
                     </div>
                     <div class="p-3 bg-slate-50 rounded border border-border">
                         <span class="text-xs text-muted uppercase font-medium block">CVV Verification</span>
-                        <span class="font-bold text-base mt-1 block {% if assessment.cvv_result_code == 'match' %}text-green{% elif assessment.cvv_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
+                        <span class="font-bold text-base mt-1 block {% if assessment.cvv_result_code == 'match' %}text-ok{% elif assessment.cvv_result_code == 'no_match' %}text-danger{% else %}text-muted{% endif %}">
                             {{ assessment.get_cvv_result_code_display }}
                         </span>
                     </div>
