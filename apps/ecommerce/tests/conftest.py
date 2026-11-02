@@ -3928,9 +3928,9 @@ B2BWHOLESALE_MODEL_FIELDS = {
     "B2bCompanyUser": (
         "id", "tenant", "number", "company", "user", "party", "role",
         "job_title", "department", "reports_to_approver", "order_spend_limit",
-        "monthly_spend_limit", "can_place_orders", "can_request_quotes",
+        "monthly_spend_limit", "monthly_spend_current", "can_place_orders", "can_request_quotes",
         "can_view_invoices", "can_manage_users", "can_approve_orders",
-        "status", "notes", "created_at", "updated_at",
+        "status", "created_at", "updated_at",
     ),
     "B2bQuoteRequest": (
         "id", "tenant", "number", "company", "requested_by",
@@ -3970,12 +3970,23 @@ B2BWHOLESALE_CHOICES = {
 }
 
 
-def _b2bwholesale_company_account(tenant, primary_contact=None, company_party=None, **overrides):
+def _b2bwholesale_company_account(tenant, primary_contact=None, company_party=None, preferred_currency=None, **overrides):
+    if company_party is None:
+        company_party = Party.objects.filter(tenant=tenant).first() or Party.objects.create(
+            tenant=tenant,
+            name=overrides.get("company_name", "Atlas Wholesale Distribution Ltd"),
+            kind="organization",
+        )
+    if preferred_currency is None:
+        preferred_currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+        if preferred_currency is None:
+            preferred_currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
     defaults = {
         "tenant": tenant,
         "company_name": "Atlas Wholesale Distribution Ltd",
         "company_party": company_party,
         "primary_contact": primary_contact,
+        "preferred_currency": preferred_currency,
         "credit_limit": Decimal("50000.00"),
         "available_credit": Decimal("50000.00"),
         "payment_terms": "net_30",
@@ -3992,7 +4003,7 @@ def _b2bwholesale_company_user(tenant, company, user, **overrides):
         "tenant": tenant,
         "company": company,
         "user": user,
-        "role": "staff_buyer",
+        "role": "buyer",
         "order_spend_limit": Decimal("5000.00"),
         "monthly_spend_limit": Decimal("20000.00"),
         "can_place_orders": True,
@@ -4003,11 +4014,16 @@ def _b2bwholesale_company_user(tenant, company, user, **overrides):
     return B2bCompanyUser.objects.create(**defaults)
 
 
-def _b2bwholesale_quote_request(tenant, company, requested_by=None, **overrides):
+def _b2bwholesale_quote_request(tenant, company, requested_by=None, currency=None, **overrides):
+    if currency is None:
+        currency = Currency.objects.filter(code="USD").first() or Currency.objects.first()
+        if currency is None:
+            currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
     defaults = {
         "tenant": tenant,
         "company": company,
         "requested_by": requested_by,
+        "currency": currency,
         "status": "submitted",
         "target_budget": Decimal("10000.00"),
         "original_subtotal": Decimal("9500.00"),
