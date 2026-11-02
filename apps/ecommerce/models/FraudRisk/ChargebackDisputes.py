@@ -147,6 +147,7 @@ class ChargebackDispute(TenantNumbered):
             models.Index(fields=["tenant", "stage"], name="idx_ecbd_ten_stage"),
             models.Index(fields=["tenant", "reason_category"], name="idx_ecbd_ten_reason"),
             models.Index(fields=["tenant", "order"], name="idx_ecbd_ten_order"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_ecbd_ten_created"),
         ]
 
     def __str__(self):
