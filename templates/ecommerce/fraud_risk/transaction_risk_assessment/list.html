@@ -95,7 +95,15 @@
                         {% else %}
                         <span class="text-xs text-muted">Pre-Order Evaluation</span>
                         {% endif %}
-                        <div class="text-xs text-muted">{{ item.customer_party.name|default:item.user.username|default:"Guest Checkout" }}</div>
+                        <div class="text-xs text-muted">
+                            {% if item.customer_party %}
+                                {{ item.customer_party.name }}
+                            {% elif item.user %}
+                                {{ item.user.username }}
+                            {% else %}
+                                Guest Checkout
+                            {% endif %}
+                        </div>
                     </td>
                     <td>
                         <span class="font-semibold">{{ item.currency.symbol|default:"$" }}{{ item.transaction_amount }}</span>
