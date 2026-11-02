@@ -29,10 +29,10 @@
     <div class="card-body">
         <form method="get" action="{% url 'ecommerce:account_security_alert_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div class="form-group mb-0 md:col-span-2">
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Search alert #, user, IP, location, details..." class="form-input">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search alert #, user, IP, location, details..." class="form-input" aria-label="Search security alerts">
             </div>
             <div class="form-group mb-0">
-                <select name="severity" class="form-select">
+                <select name="severity" class="form-select" aria-label="Filter by severity">
                     <option value="">All Severities</option>
                     {% for val, label in severity_choices %}
                     <option value="{{ val }}" {% if severity_filter == val %}selected{% endif %}>{{ label }}</option>
@@ -40,7 +40,7 @@
                 </select>
             </div>
             <div class="form-group mb-0">
-                <select name="status" class="form-select">
+                <select name="status" class="form-select" aria-label="Filter by alert status">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
