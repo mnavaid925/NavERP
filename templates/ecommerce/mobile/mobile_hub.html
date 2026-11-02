@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Mobile Commerce Console | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:catalogproduct_list' %}" class="hover:text-brand">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">Mobile Commerce</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="smartphone" class="w-7 h-7 text-brand"></i>
+        Mobile Commerce Command Hub
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        PWA manifest status, mobile express wallets, push notification re-engagement, and geofenced retail store radar
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <a href="{% url 'ecommerce:pwa_manifest_json' %}" target="_blank" class="btn btn-outline flex items-center gap-1.5 text-xs">
+        <i data-lucide="file-code" class="w-4 h-4"></i>
+        <span>manifest.json</span>
+      </a>
+      <a href="{% url 'ecommerce:mobileappconfig_list' %}" class="btn btn-outline flex items-center gap-1.5 text-xs">
+        <i data-lucide="settings" class="w-4 h-4"></i>
+        <span>App Config</span>
+      </a>
+      <a href="{% url 'ecommerce:mobiledeviceregistration_list' %}" class="btn btn-outline flex items-center gap-1.5 text-xs">
+        <i data-lucide="tablet-smartphone" class="w-4 h-4"></i>
+        <span>Devices</span>
+      </a>
+      <a href="{% url 'ecommerce:mobilepushcampaign_list' %}" class="btn btn-primary flex items-center gap-1.5 text-xs">
+        <i data-lucide="bell" class="w-4 h-4"></i>
+        <span>Push Campaigns</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i data-lucide="smartphone" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ total_devices }}</div>
+        <div class="text-xs text-slate-500">
+          Installed Devices ({{ ios_devices }} iOS · {{ android_devices }} Android · {{ pwa_devices }} PWA)
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <i data-lucide="send" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ total_push_sent }}</div>
+        <div class="text-xs text-slate-500">
+          Push Sent ({{ total_push_opened }} Opened)
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i data-lucide="dollar-sign" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-green-600">${{ total_push_revenue|floatformat:2 }}</div>
+        <div class="text-xs text-slate-500">
+          Attributed Mobile Push Revenue
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange">
+        <i data-lucide="radar" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ active_geofences }}</div>
+        <div class="text-xs text-slate-500">
+          Active Geofence Proximity Rules
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA & Mobile Wallet Health Bar -->
+  <div class="card p-5">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="flex items-center gap-3">
+        {% if app_config %}
+        <span class="w-4 h-4 rounded-full border border-slate-300 shadow-sm" style="background-color: {{ app_config.theme_color }};"></span>
+        <div>
+          <div class="font-semibold text-slate-900 dark:text-white text-sm flex items-center gap-2">
+            <span>{{ app_config.app_name }}</span>
+            <span class="text-xs text-slate-400 font-mono">({{ app_config.short_name }})</span>
+          </div>
+          <div class="text-xs text-slate-500 mt-0.5">
+            Display: {{ app_config.get_display_mode_display }} · Strategy: {{ app_config.get_offline_cache_strategy_display }}
+          </div>
+        </div>
+        {% else %}
+        <span class="w-4 h-4 rounded-full bg-slate-300"></span>
+        <div>
+          <div class="font-semibold text-slate-800 dark:text-slate-200 text-sm">Default Mobile Storefront</div>
+          <div class="text-xs text-slate-500">No primary configuration created yet.</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        {% if pwa_enabled %}
+        <span class="badge badge-info">PWA Manifest Active</span>
+        {% else %}
+        <span class="badge badge-muted">PWA Disabled</span>
+        {% endif %}
+
+        {% if apple_pay_enabled %}
+        <span class="badge badge-slate">Apple Pay Ready</span>
+        {% else %}
+        <span class="badge badge-muted">Apple Pay Off</span>
+        {% endif %}
+
+        {% if google_pay_enabled %}
+        <span class="badge badge-green">Google Pay Ready</span>
+        {% else %}
+        <span class="badge badge-muted">Google Pay Off</span>
+        {% endif %}
+
+        {% if app_config %}
+        <a href="{% url 'ecommerce:mobileappconfig_edit' app_config.pk %}" class="btn btn-outline text-xs py-1 px-2.5">
+          Configure
+        </a>
+        {% else %}
+        <a href="{% url 'ecommerce:mobileappconfig_create' %}" class="btn btn-primary text-xs py-1 px-2.5">
+          Setup App Config
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Push Campaigns -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="bell" class="w-5 h-5 text-brand"></i>
+          Recent Push Campaigns
+        </h3>
+        <a href="{% url 'ecommerce:mobilepushcampaign_list' %}" class="text-xs text-brand hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+
+      <div class="space-y-3">
+        {% for camp in recent_campaigns %}
+        <div class="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition">
+          <div class="min-w-0 flex-1 pr-3">
+            <div class="font-medium text-xs text-slate-900 dark:text-white truncate">
+              <a href="{% url 'ecommerce:mobilepushcampaign_detail' camp.pk %}" class="hover:text-brand">
+                {{ camp.campaign_name }}
+              </a>
+            </div>
+            <div class="text-[11px] text-slate-500 truncate mt-0.5">
+              {{ camp.notification_title }}
+            </div>
+          </div>
+          <div class="text-right flex items-center gap-2 shrink-0">
+            {% if camp.status == 'sent' %}
+            <span class="badge badge-green">Sent</span>
+            {% elif camp.status == 'scheduled' %}
+            <span class="badge badge-amber">Scheduled</span>
+            {% else %}
+            <span class="badge badge-muted">Draft</span>
+            {% endif %}
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">
+              {{ camp.opened_count }} opens
+            </span>
+          </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-6 text-xs text-slate-400">
+          No push campaigns recorded yet.
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Active Store Locations & Geofences -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="map-pin" class="w-5 h-5 text-purple-500"></i>
+          Store Locator & Geofence Radars
+        </h3>
+        <a href="{% url 'ecommerce:mobilelocationrule_list' %}" class="text-xs text-brand hover:underline">
+          View All &rarr;
+        </a>
+      </div>
+
+      <div class="space-y-3">
+        {% for loc in recent_locations %}
+        <div class="flex items-center justify-between p-3 rounded-lg border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition">
+          <div class="min-w-0 flex-1 pr-3">
+            <div class="font-medium text-xs text-slate-900 dark:text-white truncate">
+              <a href="{% url 'ecommerce:mobilelocationrule_detail' loc.pk %}" class="hover:text-brand">
+                {{ loc.name }}
+              </a>
+            </div>
+            <div class="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+              <span>{{ loc.store_name }}</span>
+              <span>· Radius: {{ loc.radius_meters }}m</span>
+            </div>
+          </div>
+          <div class="text-right shrink-0">
+            {% if loc.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="text-center py-6 text-xs text-slate-400">
+          No store location or geofence rules configured.
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Registered Mobile Devices -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="tablet-smartphone" class="w-5 h-5 text-blue-500"></i>
+        Recent Device Installations
+      </h3>
+      <a href="{% url 'ecommerce:mobiledeviceregistration_list' %}" class="text-xs text-brand hover:underline">
+        View All Devices &rarr;
+      </a>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Device #</th>
+            <th>Platform & Model</th>
+            <th>Linked Customer / Party</th>
+            <th>Push Status</th>
+            <th>Last Active Ping</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dev in recent_devices %}
+          <tr>
+            <td class="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <a href="{% url 'ecommerce:mobiledeviceregistration_detail' dev.pk %}" class="text-brand hover:underline">
+                {{ dev.number }}
+              </a>
+            </td>
+            <td>
+              <div class="flex items-center gap-1.5">
+                {% if dev.device_platform == 'ios' %}
+                <span class="badge badge-slate">iOS</span>
+                {% elif dev.device_platform == 'android' %}
+                <span class="badge badge-green">Android</span>
+                {% else %}
+                <span class="badge badge-info">PWA</span>
+                {% endif %}
+                <span class="text-xs font-medium text-slate-800 dark:text-slate-200">{{ dev.device_model|default:"Generic Client" }}</span>
+              </div>
+            </td>
+            <td class="text-xs text-slate-600 dark:text-slate-400">
+              {% if dev.customer_profile %}
+              {{ dev.customer_profile.customer_number }}
+              {% elif dev.party %}
+              {{ dev.party.name }}
+              {% else %}
+              <span class="text-slate-400">Guest Visitor</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if dev.push_enabled %}
+              <span class="badge badge-green">Opted-in</span>
+              {% else %}
+              <span class="badge badge-muted">Off</span>
+              {% endif %}
+            </td>
+            <td class="text-xs text-slate-600 dark:text-slate-400">
+              {% if dev.last_active_at %}{{ dev.last_active_at|date:"M d, H:i" }}{% else %}—{% endif %}
+            </td>
+            <td class="text-right">
+              <a href="{% url 'ecommerce:mobiledeviceregistration_detail' dev.pk %}" class="btn-icon" title="View details">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-4 text-xs text-slate-400">
+              No registered devices yet.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
