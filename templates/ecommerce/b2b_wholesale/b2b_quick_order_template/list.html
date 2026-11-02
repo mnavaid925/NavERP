@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Quick Order Templates - B2B Wholesale | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">Requisition Templates</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="bookmark" class="w-7 h-7 text-brand"></i>
+        Quick Order Templates & Requisition Lists
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Saved recurring order kits, scheduled supply templates, and rapid replenishment lists
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2b_quick_order_matrix' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+        <span>Quick Order Grid / CSV</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bquickordertemplate_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>New Reorder Template</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i data-lucide="bookmark" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ total_count }}</div>
+        <div class="text-xs text-slate-500">Total Reorder Templates</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i data-lucide="check-circle" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ active_count }}</div>
+        <div class="text-xs text-slate-500">Active Recurring Lists</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div>
+        <label for="filter-q" class="form-label text-xs uppercase text-slate-500">Search</label>
+        <div class="relative">
+          <input
+            type="text"
+            id="filter-q"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Search template name, company..."
+            class="form-input pl-9 w-full"
+          />
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div>
+        <label for="filter-company" class="form-label text-xs uppercase text-slate-500">Company</label>
+        <select id="filter-company" name="company" class="form-select w-full">
+          <option value="">All Companies</option>
+          {% for co in companies %}
+            <option value="{{ co.pk }}" {% if selected_company == co.pk|stringformat:"d" %}selected{% endif %}>
+              {{ co.company_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label for="filter-cadence" class="form-label text-xs uppercase text-slate-500">Cadence</label>
+        <select id="filter-cadence" name="cadence" class="form-select w-full">
+          <option value="">All Frequencies</option>
+          {% for val, label in cadence_choices %}
+            <option value="{{ val }}" {% if selected_cadence == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="flex items-end gap-2">
+        <button type="submit" class="btn btn-primary flex-1 flex items-center justify-center gap-2">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          <span>Apply</span>
+        </button>
+        {% if search_query or selected_company or selected_cadence or selected_scope %}
+          <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="btn btn-outline" title="Reset Filters">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table View -->
+  <div class="card overflow-hidden">
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Template Name</th>
+            <th>Company</th>
+            <th>Visibility Scope</th>
+            <th>Frequency / Cadence</th>
+            <th class="text-right">Items Count</th>
+            <th class="text-right">Times Ordered</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tmpl in quick_order_templates %}
+            <tr>
+              <td>
+                <a href="{% url 'ecommerce:b2bquickordertemplate_detail' tmpl.pk %}" class="font-bold text-slate-900 dark:text-white hover:text-brand">
+                  {{ tmpl.name }}
+                </a>
+                <div class="text-xs text-slate-400 font-mono">{{ tmpl.number }}</div>
+                {% if tmpl.description %}
+                  <div class="text-xs text-slate-500 truncate max-w-xs">{{ tmpl.description }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{% url 'ecommerce:b2bcompanyaccount_detail' tmpl.company.pk %}" class="font-medium text-brand hover:underline">
+                  {{ tmpl.company.company_name }}
+                </a>
+              </td>
+              <td>
+                {% if tmpl.scope == "company_shared" %}
+                  <span class="badge badge-info">Company Shared</span>
+                {% else %}
+                  <span class="badge badge-slate">Private</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge badge-slate">{{ tmpl.get_cadence_display }}</span>
+              </td>
+              <td class="text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                {{ tmpl.total_items_count }} SKUs
+              </td>
+              <td class="text-right font-mono text-slate-600 dark:text-slate-400">
+                {{ tmpl.times_ordered }}
+              </td>
+              <td>
+                {% if tmpl.is_active %}
+                  <span class="badge badge-green">Active</span>
+                {% else %}
+                  <span class="badge badge-muted">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-right">
+                <div class="table-actions justify-end">
+                  <a href="{% url 'ecommerce:b2bquickordertemplate_detail' tmpl.pk %}" class="btn btn-icon" title="View Template">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </a>
+                  <a href="{% url 'ecommerce:b2bquickordertemplate_edit' tmpl.pk %}" class="btn btn-icon" title="Edit Template">
+                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                  </a>
+                  <form method="post" action="{% url 'ecommerce:b2bquickordertemplate_delete' tmpl.pk %}" class="inline" onsubmit="return confirm('Delete template {{ tmpl.name }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-icon text-rose-500 hover:text-rose-700" title="Delete">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="8">
+                <div class="empty-state p-8 text-center">
+                  <div class="stat-icon blue mx-auto mb-3">
+                    <i data-lucide="bookmark" class="w-6 h-6"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-slate-800 dark:text-slate-200">No Quick Order Templates Found</h3>
+                  <p class="text-sm text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                    Create reusable requisition lists and replenishment kits for your wholesale buyers.
+                  </p>
+                  <a href="{% url 'ecommerce:b2bquickordertemplate_create' %}" class="btn btn-primary inline-flex items-center gap-2">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Create First Template</span>
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+      <div class="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-sm">
+        <div class="text-slate-500">
+          Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} templates
+        </div>
+        <div class="pagination flex items-center gap-1">
+          {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_company %}&company={{ selected_company }}{% endif %}{% if selected_cadence %}&cadence={{ selected_cadence }}{% endif %}" class="btn btn-outline btn-sm">
+              Previous
+            </a>
+          {% endif %}
+          <span class="px-3 py-1 text-slate-600 dark:text-slate-400 font-medium">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+          </span>
+          {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if selected_company %}&company={{ selected_company }}{% endif %}{% if selected_cadence %}&cadence={{ selected_cadence }}{% endif %}" class="btn btn-outline btn-sm">
+              Next
+            </a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
