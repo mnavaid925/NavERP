@@ -68,6 +68,10 @@ from apps.ecommerce.models import (
     CustomerCohortMetric,
     ProductMerchandisingMetric,
     AttributionTouchpoint,
+    MobileAppConfig,
+    MobileDeviceRegistration,
+    MobilePushCampaign,
+    MobileLocationRule,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -3720,6 +3724,181 @@ def ecom_attribution_touchpoint_a(tenant_a):
 @pytest.fixture
 def ecom_attribution_touchpoint_b(tenant_b):
     return _analyticsbi_attribution_touchpoint(tenant_b)
+
+
+# ---------------------------------------------------------------------------
+# 9.16 Mobile Commerce
+# ---------------------------------------------------------------------------
+
+MOBILECOMMERCE_PAGE_SIZE = 15
+
+MOBILECOMMERCE_MODEL_FIELDS = {
+    "MobileAppConfig": (
+        "id", "tenant", "number", "app_name", "short_name", "description",
+        "theme_color", "background_color", "start_url", "display_mode",
+        "orientation", "enable_pwa", "enable_apple_pay", "apple_merchant_id",
+        "enable_google_pay", "google_merchant_id", "firebase_sender_id",
+        "app_store_url", "play_store_url", "is_active", "created_at", "updated_at",
+    ),
+    "MobileDeviceRegistration": (
+        "id", "tenant", "number", "customer_profile", "party", "device_uuid",
+        "device_platform", "device_model", "os_version", "app_version",
+        "push_token", "push_provider", "push_enabled", "last_latitude",
+        "last_longitude", "last_active_at", "is_active", "created_at", "updated_at",
+    ),
+    "MobilePushCampaign": (
+        "id", "tenant", "number", "campaign_name", "title", "body_text",
+        "notification_image_url", "deep_link_url", "campaign_type",
+        "target_platform", "target_product", "target_category", "target_coupon",
+        "scheduled_at", "sent_at", "status", "target_audience_count",
+        "sent_count", "delivered_count", "opened_count", "converted_revenue",
+        "created_by", "created_at", "updated_at",
+    ),
+    "MobileLocationRule": (
+        "id", "tenant", "number", "name", "store_name", "rule_type",
+        "latitude", "longitude", "radius_meters", "trigger_action",
+        "notification_title", "notification_message", "fulfillment_center",
+        "linked_promotion", "is_active", "created_at", "updated_at",
+    ),
+}
+
+
+def _mobilecommerce_app_config(tenant, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "app_name": f"Mobile Store {tenant.name}",
+        "short_name": "MobileStore",
+        "description": "Enterprise mobile app experience",
+        "theme_color": "#2563EB",
+        "background_color": "#FFFFFF",
+        "start_url": "/ecommerce/",
+        "display_mode": "standalone",
+        "orientation": "portrait",
+        "enable_pwa": True,
+        "enable_apple_pay": True,
+        "apple_merchant_id": "merchant.com.example.store",
+        "enable_google_pay": True,
+        "google_merchant_id": "BCR2DN6TZXXXXXX",
+        "firebase_sender_id": "102938475612",
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return MobileAppConfig.objects.create(**defaults)
+
+
+def _mobilecommerce_device_registration(tenant, customer_profile=None, party=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "customer_profile": customer_profile,
+        "party": party,
+        "device_uuid": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6",
+        "device_platform": "ios",
+        "device_model": "iPhone 16 Pro",
+        "os_version": "iOS 18.2",
+        "app_version": "2.4.0",
+        "push_token": "apns-sample-push-token-64chars-long-0123456789abcdef0123456789abcdef",
+        "push_provider": "apns",
+        "push_enabled": True,
+        "last_latitude": Decimal("37.774900"),
+        "last_longitude": Decimal("-122.419400"),
+        "last_active_at": timezone.now(),
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return MobileDeviceRegistration.objects.create(**defaults)
+
+
+def _mobilecommerce_push_campaign(tenant, created_by=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "campaign_name": "Flash Sale Push Alert",
+        "title": "Exclusive Flash Sale Today!",
+        "body_text": "Enjoy 20% off all catalog items with mobile checkout.",
+        "notification_image_url": "https://images.example.com/push/banner.jpg",
+        "deep_link_url": "navstore://products/flash-sale",
+        "campaign_type": "flash_sale",
+        "target_platform": "all",
+        "status": "draft",
+        "target_audience_count": 100,
+        "sent_count": 0,
+        "delivered_count": 0,
+        "opened_count": 0,
+        "converted_revenue": Decimal("0.00"),
+        "created_by": created_by,
+    }
+    defaults.update(overrides)
+    return MobilePushCampaign.objects.create(**defaults)
+
+
+def _mobilecommerce_location_rule(tenant, fulfillment_center=None, linked_promotion=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": "Downtown Flagship Geofence",
+        "store_name": "Downtown Store",
+        "rule_type": "geofence_entry",
+        "latitude": Decimal("37.774900"),
+        "longitude": Decimal("-122.419400"),
+        "radius_meters": 150,
+        "trigger_action": "push_discount",
+        "notification_title": "Welcome Downtown!",
+        "notification_message": "Show this alert at counter for 10% in-store discount.",
+        "fulfillment_center": fulfillment_center,
+        "linked_promotion": linked_promotion,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return MobileLocationRule.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_mobile_config_a(tenant_a):
+    return _mobilecommerce_app_config(tenant_a)
+
+
+@pytest.fixture
+def ecom_mobile_config_b(tenant_b):
+    return _mobilecommerce_app_config(tenant_b, short_name="GlobexMobile", app_name="Globex App")
+
+
+@pytest.fixture
+def ecom_mobile_device_a(tenant_a, ecom_customer_profile_a):
+    return _mobilecommerce_device_registration(
+        tenant_a,
+        customer_profile=ecom_customer_profile_a,
+        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
+    )
+
+
+@pytest.fixture
+def ecom_mobile_device_b(tenant_b, ecom_customer_profile_b):
+    return _mobilecommerce_device_registration(
+        tenant_b,
+        customer_profile=ecom_customer_profile_b,
+        device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
+        device_platform="android",
+        push_provider="fcm",
+    )
+
+
+@pytest.fixture
+def ecom_mobile_push_a(tenant_a, admin_user_a):
+    return _mobilecommerce_push_campaign(tenant_a, created_by=admin_user_a)
+
+
+@pytest.fixture
+def ecom_mobile_push_b(tenant_b, admin_user_b):
+    return _mobilecommerce_push_campaign(tenant_b, created_by=admin_user_b, campaign_name="Globex Push")
+
+
+@pytest.fixture
+def ecom_mobile_location_a(tenant_a, ecom_fulfillment_center_a):
+    return _mobilecommerce_location_rule(tenant_a, fulfillment_center=ecom_fulfillment_center_a)
+
+
+@pytest.fixture
+def ecom_mobile_location_b(tenant_b, ecom_fulfillment_center_b):
+    return _mobilecommerce_location_rule(tenant_b, fulfillment_center=ecom_fulfillment_center_b, name="Globex Geofence")
+
 
 
 
