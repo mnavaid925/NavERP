@@ -26,7 +26,7 @@ def mobiledeviceregistration_list(request):
             Q(device_uuid__icontains=q)
             | Q(device_model__icontains=q)
             | Q(number__icontains=q)
-            | Q(customer_profile__customer_number__icontains=q)
+            | Q(customer_profile__number__icontains=q)
             | Q(party__name__icontains=q)
         )
 
