@@ -215,7 +215,7 @@
                   <a href="{% url 'ecommerce:b2bcompanyaccount_edit' acc.pk %}" class="btn btn-icon" title="Edit Company">
                     <i data-lucide="pencil" class="w-4 h-4"></i>
                   </a>
-                  <form method="post" action="{% url 'ecommerce:b2bcompanyaccount_delete' acc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete company account {{ acc.company_name }}?');">
+                  <form method="post" action="{% url 'ecommerce:b2bcompanyaccount_delete' acc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete company account {{ acc.company_name|escapejs }}?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-icon text-rose-500 hover:text-rose-700" title="Delete">
                       <i data-lucide="trash-2" class="w-4 h-4"></i>
