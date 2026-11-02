@@ -3447,7 +3447,7 @@ class Command(BaseCommand):
             )
 
         # MobilePushCampaign
-        cat_prod = CatalogProduct.objects.filter(tenant=tenant, is_active=True).first()
+        cat_prod = CatalogProduct.objects.filter(tenant=tenant, status="active").first()
         store_cat = StoreCategory.objects.filter(tenant=tenant, is_active=True).first()
         promo_cpn = CouponPromotion.objects.filter(tenant=tenant, is_active=True).first()
         admin_user = get_user_model().objects.filter(is_superuser=True).first() or get_user_model().objects.first()
