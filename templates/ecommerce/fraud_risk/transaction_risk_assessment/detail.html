@@ -95,11 +95,11 @@
                     </div>
                     <div>
                         <span class="text-muted block text-xs uppercase font-medium">Customer Party</span>
-                        <span>{{ assessment.customer_party.name|default:"Unregistered Guest" }}</span>
+                        <span>{% if assessment.customer_party %}{{ assessment.customer_party.name }}{% else %}Unregistered Guest{% endif %}</span>
                     </div>
                     <div>
                         <span class="text-muted block text-xs uppercase font-medium">User Account</span>
-                        <span>{{ assessment.user.username|default:"Guest Shopper" }}</span>
+                        <span>{% if assessment.user %}{{ assessment.user.username }}{% else %}Guest Shopper{% endif %}</span>
                     </div>
                     <div>
                         <span class="text-muted block text-xs uppercase font-medium">Currency</span>
