@@ -131,12 +131,17 @@ def b2bquickordertemplate_create(request):
             qtys = request.POST.getlist("item_qty[]")
             notes = request.POST.getlist("item_notes[]")
 
+            valid_pids = [int(p) for p in product_ids if p and str(p).isdigit()]
+            products_map = {
+                p.pk: p for p in CatalogProduct.objects.filter(tenant=request.tenant, pk__in=valid_pids).prefetch_related("variants")
+            }
+
             items_data = []
             for idx, pid in enumerate(product_ids):
-                if pid:
-                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
+                if pid and str(pid).isdigit():
+                    prod = products_map.get(int(pid))
                     if prod:
-                        var = prod.variants.first()
+                        var = prod.variants.all()[0] if prod.variants.all() else None
                         prod_sku = var.sku if var else prod.number
                         default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
@@ -193,12 +198,17 @@ def b2bquickordertemplate_edit(request, pk):
                 qtys = request.POST.getlist("item_qty[]")
                 notes = request.POST.getlist("item_notes[]")
 
+                valid_pids = [int(p) for p in product_ids if p and str(p).isdigit()]
+                products_map = {
+                    p.pk: p for p in CatalogProduct.objects.filter(tenant=request.tenant, pk__in=valid_pids).prefetch_related("variants")
+                }
+
                 items_data = []
                 for idx, pid in enumerate(product_ids):
-                    if pid:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
+                    if pid and str(pid).isdigit():
+                        prod = products_map.get(int(pid))
                         if prod:
-                            var = prod.variants.first()
+                            var = prod.variants.all()[0] if prod.variants.all() else None
                             prod_sku = var.sku if var else prod.number
                             default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
@@ -282,8 +292,11 @@ def b2b_quick_order_matrix(request):
                 decoded = csv_file.read().decode("utf-8-sig")
                 reader = csv.reader(io.StringIO(decoded))
                 header = next(reader, None)
+                rows = list(reader)
 
-                for row_idx, row in enumerate(reader, start=2):
+                raw_skus = set()
+                parsed_rows = []
+                for row_idx, row in enumerate(rows, start=2):
                     if not row or not any(row):
                         continue
                     sku = row[0].strip() if len(row) > 0 else ""
@@ -291,46 +304,61 @@ def b2b_quick_order_matrix(request):
                         qty = int(row[1].strip()) if len(row) > 1 and row[1].strip() else 1
                     except ValueError:
                         qty = 1
-
                     if sku:
-                        var = ProductVariant.objects.filter(tenant=request.tenant, sku__iexact=sku).select_related("product").first()
-                        if var:
-                            p_price = var.price or Decimal("0.00")
-                            parsed_items.append({
-                                "product_id": var.product_id,
-                                "sku": var.sku,
-                                "name": var.name or (var.product.name if var.product else var.sku),
-                                "qty": qty,
-                                "price": float(p_price),
-                                "line_total": float(Decimal(str(qty)) * p_price),
-                                "found": True,
-                            })
-                        else:
-                            prod = CatalogProduct.objects.filter(tenant=request.tenant, number__iexact=sku).prefetch_related("variants").first()
-                            if prod:
-                                first_v = prod.variants.first()
-                                p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
-                                p_sku = first_v.sku if first_v else prod.number
-                                parsed_items.append({
-                                    "product_id": prod.pk,
-                                    "sku": p_sku,
-                                    "name": prod.name,
-                                    "qty": qty,
-                                    "price": float(p_price),
-                                    "line_total": float(Decimal(str(qty)) * p_price),
-                                    "found": True,
-                                })
-                            else:
-                                csv_errors.append(f"Row {row_idx}: SKU '{sku}' not found in active catalog.")
-                                parsed_items.append({
-                                    "product_id": None,
-                                    "sku": sku,
-                                    "name": "Item not found in catalog",
-                                    "qty": qty,
-                                    "price": 0.0,
-                                    "line_total": 0.0,
-                                    "found": False,
-                                })
+                        raw_skus.add(sku)
+                        parsed_rows.append((row_idx, sku, qty))
+
+                # Batch fetch variants and products by sku/number
+                variants_map = {
+                    v.sku.lower(): v
+                    for v in ProductVariant.objects.filter(tenant=request.tenant, sku__in=list(raw_skus)).select_related("product")
+                }
+                missing_skus = [s for s in raw_skus if s.lower() not in variants_map]
+                products_map = {
+                    p.number.lower(): p
+                    for p in CatalogProduct.objects.filter(tenant=request.tenant, number__in=missing_skus).prefetch_related("variants")
+                }
+
+                for row_idx, sku, qty in parsed_rows:
+                    sku_lower = sku.lower()
+                    if sku_lower in variants_map:
+                        var = variants_map[sku_lower]
+                        p_price = var.price or Decimal("0.00")
+                        parsed_items.append({
+                            "product_id": var.product_id,
+                            "sku": var.sku,
+                            "name": var.name or (var.product.name if var.product else var.sku),
+                            "qty": qty,
+                            "price": float(p_price),
+                            "line_total": float(Decimal(str(qty)) * p_price),
+                            "found": True,
+                        })
+                    elif sku_lower in products_map:
+                        prod = products_map[sku_lower]
+                        variants_list = prod.variants.all()
+                        first_v = variants_list[0] if variants_list else None
+                        p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
+                        p_sku = first_v.sku if first_v else prod.number
+                        parsed_items.append({
+                            "product_id": prod.pk,
+                            "sku": p_sku,
+                            "name": prod.name,
+                            "qty": qty,
+                            "price": float(p_price),
+                            "line_total": float(Decimal(str(qty)) * p_price),
+                            "found": True,
+                        })
+                    else:
+                        csv_errors.append(f"Row {row_idx}: SKU '{sku}' not found in active catalog.")
+                        parsed_items.append({
+                            "product_id": None,
+                            "sku": sku,
+                            "name": "Item not found in catalog",
+                            "qty": qty,
+                            "price": 0.0,
+                            "line_total": 0.0,
+                            "found": False,
+                        })
                 if parsed_items:
                     success_message = f"Parsed {len(parsed_items)} items from uploaded CSV file."
             except Exception as e:
@@ -340,6 +368,8 @@ def b2b_quick_order_matrix(request):
             # Parse manual SKU matrix
             skus = request.POST.getlist("matrix_sku[]")
             qtys = request.POST.getlist("matrix_qty[]")
+            raw_entries = []
+            sku_set = set()
             for idx, s in enumerate(skus):
                 sku_val = s.strip()
                 if sku_val:
@@ -347,35 +377,59 @@ def b2b_quick_order_matrix(request):
                         q_val = int(qtys[idx]) if idx < len(qtys) and qtys[idx] else 1
                     except ValueError:
                         q_val = 1
-                    var = ProductVariant.objects.filter(tenant=request.tenant, sku__iexact=sku_val).select_related("product").first()
-                    if var:
-                        p_price = var.price or Decimal("0.00")
-                        parsed_items.append({
-                            "product_id": var.product_id,
-                            "sku": var.sku,
-                            "name": var.name or (var.product.name if var.product else var.sku),
-                            "qty": q_val,
-                            "price": float(p_price),
-                            "line_total": float(Decimal(str(q_val)) * p_price),
-                            "found": True,
-                        })
-                    else:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, number__iexact=sku_val).prefetch_related("variants").first()
-                        if prod:
-                            first_v = prod.variants.first()
-                            p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
-                            p_sku = first_v.sku if first_v else prod.number
-                            parsed_items.append({
-                                "product_id": prod.pk,
-                                "sku": p_sku,
-                                "name": prod.name,
-                                "qty": q_val,
-                                "price": float(p_price),
-                                "line_total": float(Decimal(str(q_val)) * p_price),
-                                "found": True,
-                            })
-                        else:
-                            csv_errors.append(f"SKU '{sku_val}' not found in active catalog.")
+                    sku_set.add(sku_val)
+                    raw_entries.append((sku_val, q_val))
+
+            variants_map = {
+                v.sku.lower(): v
+                for v in ProductVariant.objects.filter(tenant=request.tenant, sku__in=list(sku_set)).select_related("product")
+            }
+            missing_skus = [s for s in sku_set if s.lower() not in variants_map]
+            products_map = {
+                p.number.lower(): p
+                for p in CatalogProduct.objects.filter(tenant=request.tenant, number__in=missing_skus).prefetch_related("variants")
+            }
+
+            for sku_val, q_val in raw_entries:
+                sku_lower = sku_val.lower()
+                if sku_lower in variants_map:
+                    var = variants_map[sku_lower]
+                    p_price = var.price or Decimal("0.00")
+                    parsed_items.append({
+                        "product_id": var.product_id,
+                        "sku": var.sku,
+                        "name": var.name or (var.product.name if var.product else var.sku),
+                        "qty": q_val,
+                        "price": float(p_price),
+                        "line_total": float(Decimal(str(q_val)) * p_price),
+                        "found": True,
+                    })
+                elif sku_lower in products_map:
+                    prod = products_map[sku_lower]
+                    variants_list = prod.variants.all()
+                    first_v = variants_list[0] if variants_list else None
+                    p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
+                    p_sku = first_v.sku if first_v else prod.number
+                    parsed_items.append({
+                        "product_id": prod.pk,
+                        "sku": p_sku,
+                        "name": prod.name,
+                        "qty": q_val,
+                        "price": float(p_price),
+                        "line_total": float(Decimal(str(q_val)) * p_price),
+                        "found": True,
+                    })
+                else:
+                    csv_errors.append(f"SKU '{sku_val}' not found in active catalog.")
+                    parsed_items.append({
+                        "product_id": None,
+                        "sku": sku_val,
+                        "name": "Item not found in catalog",
+                        "qty": q_val,
+                        "price": 0.0,
+                        "line_total": 0.0,
+                        "found": False,
+                    })
 
             if parsed_items:
                 success_message = f"Validated {len(parsed_items)} items from Quick Order matrix."
