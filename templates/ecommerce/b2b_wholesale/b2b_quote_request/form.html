@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="hover:text-brand">Quote Requests</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">{% if quote_request %}Edit{% else %}New{% endif %}</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="file-plus" class="w-7 h-7 text-brand"></i>
+        {{ title }}
+      </h1>
+    </div>
+    <a href="{% if quote_request %}{% url 'ecommerce:b2bquoterequest_detail' quote_request.pk %}{% else %}{% url 'ecommerce:b2bquoterequest_list' %}{% endif %}" class="btn btn-outline">
+      Cancel
+    </a>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card p-6">
+    <form method="post" class="space-y-6">
+      {% csrf_token %}
+
+      {% if form.errors %}
+        <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300">
+          <div class="font-bold flex items-center gap-2 mb-2">
+            <i data-lucide="alert-circle" class="w-4 h-4"></i>
+            Please correct the errors below:
+          </div>
+          <ul class="list-disc list-inside space-y-1">
+            {% for field, errors in form.errors.items %}
+              {% for err in errors %}
+                <li><strong>{{ field|title }}:</strong> {{ err }}</li>
+              {% endfor %}
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+
+      <!-- Section 1: Client & Representatives -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="building" class="w-4 h-4 text-brand"></i>
+          Client Company & Representatives
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="{{ form.company.id_for_label }}" class="form-label">
+              Wholesale Client Company <span class="text-rose-500">*</span>
+            </label>
+            {{ form.company }}
+          </div>
+
+          <div>
+            <label for="{{ form.currency.id_for_label }}" class="form-label">
+              Quotation Currency <span class="text-rose-500">*</span>
+            </label>
+            {{ form.currency }}
+          </div>
+
+          <div>
+            <label for="{{ form.requested_by.id_for_label }}" class="form-label">Submitting Buyer</label>
+            {{ form.requested_by }}
+          </div>
+
+          <div>
+            <label for="{{ form.assigned_sales_rep.id_for_label }}" class="form-label">Assigned Sales Executive</label>
+            {{ form.assigned_sales_rep }}
+          </div>
+
+          <div>
+            <label for="{{ form.status.id_for_label }}" class="form-label">RFQ Lifecycle Status</label>
+            {{ form.status }}
+          </div>
+
+          <div>
+            <label for="{{ form.target_budget.id_for_label }}" class="form-label">Buyer Target Budget ($)</label>
+            {{ form.target_budget }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Items Selection Matrix -->
+      <div>
+        <div class="flex items-center justify-between pb-2 mb-4 border-b border-slate-100 dark:border-slate-800">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <i data-lucide="layers" class="w-4 h-4 text-brand"></i>
+            Quoted Product Items
+          </h2>
+          <button type="button" id="add-item-row" class="btn btn-outline btn-sm flex items-center gap-1">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add Item Row</span>
+          </button>
+        </div>
+
+        <div class="table-wrap mb-4">
+          <table class="table" id="items-table">
+            <thead>
+              <tr>
+                <th style="width: 40%;">Product</th>
+                <th style="width: 15%;" class="text-right">Quantity</th>
+                <th style="width: 20%;" class="text-right">Unit Price ($)</th>
+                <th style="width: 20%;">Notes</th>
+                <th style="width: 5%;" class="text-center">Del</th>
+              </tr>
+            </thead>
+            <tbody id="items-tbody">
+              {% if quote_request and quote_request.line_items_data %}
+                {% for itm in quote_request.line_items_data %}
+                  <tr>
+                    <td>
+                      <select name="item_product_id[]" class="form-select w-full item-product-select">
+                        <option value="">-- Choose Catalog Product --</option>
+                        {% for prod in products %}
+                          <option value="{{ prod.pk }}" data-price="{{ prod.retail_price }}" {% if itm.product_id == prod.pk %}selected{% endif %}>
+                            {{ prod.name }} ({{ prod.sku }})
+                          </option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                    <td>
+                      <input type="number" name="item_qty[]" value="{{ itm.requested_qty|default:1 }}" min="1" class="form-input text-right w-full" />
+                    </td>
+                    <td>
+                      <input type="number" step="0.01" name="item_unit_price[]" value="{{ itm.quoted_unit_price|default:itm.requested_unit_price|default:0.00 }}" class="form-input text-right w-full font-mono" />
+                    </td>
+                    <td>
+                      <input type="text" name="item_notes[]" value="{{ itm.notes|default:'' }}" placeholder="Custom specs..." class="form-input text-xs w-full" />
+                    </td>
+                    <td class="text-center">
+                      <button type="button" class="text-rose-500 hover:text-rose-700 remove-row-btn" title="Remove row">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                      </button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td>
+                    <select name="item_product_id[]" class="form-select w-full item-product-select">
+                      <option value="">-- Choose Catalog Product --</option>
+                      {% for prod in products %}
+                        <option value="{{ prod.pk }}" data-price="{{ prod.retail_price }}">{{ prod.name }} ({{ prod.sku }})</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                  <td>
+                    <input type="number" name="item_qty[]" value="10" min="1" class="form-input text-right w-full" />
+                  </td>
+                  <td>
+                    <input type="number" step="0.01" name="item_unit_price[]" placeholder="0.00" class="form-input text-right w-full font-mono" />
+                  </td>
+                  <td>
+                    <input type="text" name="item_notes[]" placeholder="Custom specs..." class="form-input text-xs w-full" />
+                  </td>
+                  <td class="text-center">
+                    <button type="button" class="text-rose-500 hover:text-rose-700 remove-row-btn" title="Remove row">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Section 3: Financial Pricing Summary -->
+      <div>
+        <h2 class="text-base font-bold text-slate-900 dark:text-white pb-2 mb-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+          <i data-lucide="calculator" class="w-4 h-4 text-brand"></i>
+          Proposal Pricing & Discounts
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label for="{{ form.original_subtotal.id_for_label }}" class="form-label">Catalog Subtotal ($)</label>
+            {{ form.original_subtotal }}
+          </div>
+
+          <div>
+            <label for="{{ form.quoted_discount_percent.id_for_label }}" class="form-label">Negotiated Discount (%)</label>
+            {{ form.quoted_discount_percent }}
+          </div>
+
+          <div>
+            <label for="{{ form.quoted_total.id_for_label }}" class="form-label">Quoted Final Total ($)</label>
+            {{ form.quoted_total }}
+          </div>
+
+          <div>
+            <label for="{{ form.tax_amount.id_for_label }}" class="form-label">Estimated Tax ($)</label>
+            {{ form.tax_amount }}
+          </div>
+
+          <div>
+            <label for="{{ form.shipping_estimate.id_for_label }}" class="form-label">Freight / Shipping ($)</label>
+            {{ form.shipping_estimate }}
+          </div>
+
+          <div>
+            <label for="{{ form.target_delivery_date.id_for_label }}" class="form-label">Target Delivery Date</label>
+            {{ form.target_delivery_date }}
+          </div>
+
+          <div class="sm:col-span-3">
+            <label for="{{ form.valid_until.id_for_label }}" class="form-label">Proposal Expiration Timestamp</label>
+            {{ form.valid_until }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 4: Notes -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="{{ form.buyer_notes.id_for_label }}" class="form-label">Buyer Specifications & Request Notes</label>
+          {{ form.buyer_notes }}
+        </div>
+
+        <div>
+          <label for="{{ form.merchant_notes.id_for_label }}" class="form-label">Internal Merchant Negotiation Remarks</label>
+          {{ form.merchant_notes }}
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="{{ form.rejection_reason.id_for_label }}" class="form-label">Rejection Reason (if applicable)</label>
+          {{ form.rejection_reason }}
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <a href="{% if quote_request %}{% url 'ecommerce:b2bquoterequest_detail' quote_request.pk %}{% else %}{% url 'ecommerce:b2bquoterequest_list' %}{% endif %}" class="btn btn-outline">
+          Cancel
+        </a>
+        <button type="submit" class="btn btn-primary flex items-center gap-2">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          <span>Save Quote Proposal</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const tbody = document.getElementById('items-tbody');
+    const addBtn = document.getElementById('add-item-row');
+
+    if (addBtn && tbody) {
+      addBtn.addEventListener('click', function() {
+        const firstRow = tbody.querySelector('tr');
+        if (firstRow) {
+          const clone = firstRow.cloneNode(true);
+          clone.querySelectorAll('input').forEach(input => {
+            if (input.name.includes('qty')) input.value = 1;
+            else input.value = '';
+          });
+          clone.querySelector('select').selectedIndex = 0;
+          tbody.appendChild(clone);
+          if (window.lucide) lucide.createIcons();
+        }
+      });
+
+      tbody.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-row-btn')) {
+          const rows = tbody.querySelectorAll('tr');
+          if (rows.length > 1) {
+            e.target.closest('tr').remove();
+          }
+        }
+      });
+
+      tbody.addEventListener('change', function(e) {
+        if (e.target.classList.contains('item-product-select')) {
+          const opt = e.target.selectedOptions[0];
+          const price = opt.getAttribute('data-price');
+          if (price) {
+            const row = e.target.closest('tr');
+            const priceInput = row.querySelector('input[name="item_unit_price[]"]');
+            if (priceInput && (!priceInput.value || priceInput.value === '0.00' || priceInput.value === '0')) {
+              priceInput.value = price;
+            }
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}
