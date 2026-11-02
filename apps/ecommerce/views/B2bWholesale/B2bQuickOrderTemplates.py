@@ -72,7 +72,7 @@ def b2bquickordertemplate_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    companies = ecommerce_scope(B2bCompanyAccount.objects.order_by("company_name"), request)
+    companies = ecommerce_scope(B2bCompanyAccount.objects.only("id", "company_name").order_by("company_name"), request)
 
     context = {
         "quick_order_templates": page_obj.object_list,
@@ -146,7 +146,9 @@ def b2bquickordertemplate_create(request):
                         default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
                             q_val = int(qtys[idx]) if idx < len(qtys) else 1
-                        except (ValueError, IndexError):
+                            if q_val <= 0 or q_val > 100000:
+                                q_val = 1
+                        except (ValueError, TypeError, IndexError):
                             q_val = 1
                         n_val = notes[idx] if idx < len(notes) else ""
                         items_data.append({
@@ -213,7 +215,9 @@ def b2bquickordertemplate_edit(request, pk):
                             default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
                                 q_val = int(qtys[idx]) if idx < len(qtys) else 1
-                            except (ValueError, IndexError):
+                                if q_val <= 0 or q_val > 100000:
+                                    q_val = 1
+                            except (ValueError, TypeError, IndexError):
                                 q_val = 1
                             n_val = notes[idx] if idx < len(notes) else ""
                             items_data.append({
@@ -252,27 +256,21 @@ def b2bquickordertemplate_edit(request, pk):
 
 @login_required
 @tenant_admin_required
+@require_POST
 def b2bquickordertemplate_delete(request, pk):
     tmpl = ecommerce_object(request, B2bQuickOrderTemplate, pk)
-    if request.method == "POST":
-        name = tmpl.name
-        num = tmpl.number
-        tmpl.delete()
-        write_audit_log(
-            request.user,
-            tmpl,
-            "delete",
-            {"number": num, "name": name},
-            tenant=request.tenant,
-        )
-        messages.success(request, f"Template {name} has been deleted.")
-        return redirect("ecommerce:b2bquickordertemplate_list")
-
-    return render(
-        request,
-        "ecommerce/b2b_wholesale/b2b_quick_order_template/detail.html",
-        {"template_obj": tmpl, "show_delete_confirm": True, "items_data": tmpl.items_data or []},
+    name = tmpl.name
+    num = tmpl.number
+    tmpl.delete()
+    write_audit_log(
+        request.user,
+        tmpl,
+        "delete",
+        {"number": num, "name": name},
+        tenant=request.tenant,
     )
+    messages.success(request, f"Template {name} has been deleted.")
+    return redirect("ecommerce:b2bquickordertemplate_list")
 
 
 @login_required
@@ -302,7 +300,9 @@ def b2b_quick_order_matrix(request):
                     sku = row[0].strip() if len(row) > 0 else ""
                     try:
                         qty = int(row[1].strip()) if len(row) > 1 and row[1].strip() else 1
-                    except ValueError:
+                        if qty <= 0 or qty > 100000:
+                            qty = 1
+                    except (ValueError, TypeError):
                         qty = 1
                     if sku:
                         raw_skus.add(sku)
@@ -375,7 +375,9 @@ def b2b_quick_order_matrix(request):
                 if sku_val:
                     try:
                         q_val = int(qtys[idx]) if idx < len(qtys) and qtys[idx] else 1
-                    except ValueError:
+                        if q_val <= 0 or q_val > 100000:
+                            q_val = 1
+                    except (ValueError, TypeError):
                         q_val = 1
                     sku_set.add(sku_val)
                     raw_entries.append((sku_val, q_val))
