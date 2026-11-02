@@ -21,20 +21,39 @@ def fraud_risk_hub(request):
     disputes_qs = ecommerce_scope(ChargebackDispute.objects.all(), request)
     alerts_qs = ecommerce_scope(AccountSecurityAlert.objects.all(), request)
 
-    total_rules = rules_qs.count()
-    active_rules = rules_qs.filter(is_active=True).count()
+    rules_stats = rules_qs.aggregate(
+        total_rules=Count("id"),
+        active_rules=Count("id", filter=Q(is_active=True)),
+    )
+    total_rules = rules_stats["total_rules"]
+    active_rules = rules_stats["active_rules"]
 
-    total_assessments = assessments_qs.count()
-    high_risk_assessments = assessments_qs.filter(risk_tier__in=["high", "critical"]).count()
-    pending_reviews = assessments_qs.filter(actual_decision="pending").count()
+    assessments_stats = assessments_qs.aggregate(
+        total_assessments=Count("id"),
+        high_risk_assessments=Count("id", filter=Q(risk_tier__in=["high", "critical"])),
+        pending_reviews=Count("id", filter=Q(actual_decision="pending")),
+    )
+    total_assessments = assessments_stats["total_assessments"]
+    high_risk_assessments = assessments_stats["high_risk_assessments"]
+    pending_reviews = assessments_stats["pending_reviews"]
 
-    total_disputes = disputes_qs.count()
-    open_disputes = disputes_qs.filter(stage__in=["inquiry", "needs_response", "under_review"]).count()
-    dispute_amount_total = disputes_qs.aggregate(total=Sum("dispute_amount"))["total"] or 0
+    disputes_stats = disputes_qs.aggregate(
+        total_disputes=Count("id"),
+        open_disputes=Count("id", filter=Q(stage__in=["inquiry", "needs_response", "under_review"])),
+        dispute_amount_total=Sum("dispute_amount"),
+    )
+    total_disputes = disputes_stats["total_disputes"]
+    open_disputes = disputes_stats["open_disputes"]
+    dispute_amount_total = disputes_stats["dispute_amount_total"] or 0
 
-    total_alerts = alerts_qs.count()
-    open_alerts = alerts_qs.filter(status__in=["new", "investigating"]).count()
-    critical_alerts = alerts_qs.filter(severity="critical", status__in=["new", "investigating"]).count()
+    alerts_stats = alerts_qs.aggregate(
+        total_alerts=Count("id"),
+        open_alerts=Count("id", filter=Q(status__in=["new", "investigating"])),
+        critical_alerts=Count("id", filter=Q(severity="critical", status__in=["new", "investigating"])),
+    )
+    total_alerts = alerts_stats["total_alerts"]
+    open_alerts = alerts_stats["open_alerts"]
+    critical_alerts = alerts_stats["critical_alerts"]
 
     recent_assessments = assessments_qs.select_related("order", "currency")[:5]
     recent_disputes = disputes_qs.select_related("order", "currency")[:5]
