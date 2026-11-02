@@ -2846,6 +2846,19 @@ LIVE_LINKS = {
         "Quote Requests (RFQ)": "ecommerce:b2bquoterequest_list",
         "Quick Order & Templates": "ecommerce:b2bquickordertemplate_list",
     },
+    "9.18": {
+        "Transaction Fraud Detection": "ecommerce:fraud_rule_list",
+        "Machine Learning Risk Scoring": "ecommerce:transaction_risk_assessment_list",
+        "Chargeback Management": "ecommerce:chargeback_dispute_list",
+        "Account Takeover Prevention": "ecommerce:account_security_alert_list",
+        "Compliance Screening": "ecommerce:fraud_risk_hub",
+        # Extra live leaves
+        "Fraud & Risk Hub": "ecommerce:fraud_risk_hub",
+        "Fraud Rules Engine": "ecommerce:fraud_rule_list",
+        "Risk Assessments": "ecommerce:transaction_risk_assessment_list",
+        "Chargeback Disputes": "ecommerce:chargeback_dispute_list",
+        "Security Alerts (ATO)": "ecommerce:account_security_alert_list",
+    },
 
 
 
