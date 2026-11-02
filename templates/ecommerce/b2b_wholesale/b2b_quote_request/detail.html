@@ -216,7 +216,7 @@
         <form method="post" action="{% url 'ecommerce:b2bquoterequest_quote' quote_request.pk %}" class="flex items-center gap-2">
           {% csrf_token %}
           <div class="relative w-28">
-            <input type="number" step="0.1" name="quoted_discount_percent" value="{{ quote_request.quoted_discount_percent }}" class="form-input pr-7 text-right" placeholder="10.0" />
+            <input type="number" step="0.1" name="quoted_discount_percent" aria-label="Quoted discount percentage" value="{{ quote_request.quoted_discount_percent }}" class="form-input pr-7 text-right" placeholder="10.0" />
             <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
           </div>
           <button type="submit" class="btn btn-primary flex items-center gap-2 whitespace-nowrap">
@@ -250,7 +250,7 @@
 
         <form method="post" action="{% url 'ecommerce:b2bquoterequest_reject' quote_request.pk %}" class="flex items-center gap-2">
           {% csrf_token %}
-          <input type="text" name="rejection_reason" placeholder="Decline reason..." class="form-input text-xs w-40" />
+          <input type="text" name="rejection_reason" aria-label="Decline reason" placeholder="Decline reason..." class="form-input text-xs w-40" />
           <button type="submit" class="btn btn-outline text-rose-600 border-rose-300 hover:bg-rose-50">
             Decline
           </button>
