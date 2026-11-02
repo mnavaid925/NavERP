@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}B2B & Wholesale Commerce Hub | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <!-- Hub Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:ecommerce_landing' %}" class="hover:text-brand">eCommerce</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">Sub-module 9.17</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="briefcase" class="w-7 h-7 text-brand"></i>
+        B2B & Wholesale Commerce
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Corporate buyer accounts, tiered role hierarchies, RFQ negotiation, trade credit terms, and quick ordering
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2b_quick_order_matrix' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+        <span>Quick Order Grid</span>
+      </a>
+      <a href="{% url 'ecommerce:b2bcompanyaccount_create' %}" class="btn btn-primary flex items-center gap-2">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Register Company</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Key Operational Stat Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="stat-icon blue">
+        <i data-lucide="building-2" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ total_companies_count }}</div>
+        <div class="text-xs text-slate-500">Total B2B Companies</div>
+        <div class="text-xs text-emerald-600 font-medium mt-0.5">{{ active_companies_count }} Active Accounts</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon purple">
+        <i data-lucide="users" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ active_buyers_count }}</div>
+        <div class="text-xs text-slate-500">Corporate Buyers</div>
+        <div class="text-xs text-slate-400 mt-0.5">Assigned to Organization Trees</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon orange">
+        <i data-lucide="clock" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">{{ open_rfqs_count }}</div>
+        <div class="text-xs text-slate-500">Open RFQs / Quotes</div>
+        <div class="text-xs text-brand font-medium mt-0.5">${{ quoted_pipeline_value|floatformat:2 }} Quoted Pipeline</div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-icon green">
+        <i data-lucide="credit-card" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <div class="text-2xl font-bold text-slate-900 dark:text-white">${{ total_credit_granted|floatformat:2 }}</div>
+        <div class="text-xs text-slate-500">Approved Trade Credit Lines</div>
+        <div class="text-xs text-emerald-600 font-medium mt-0.5">${{ available_credit_sum|floatformat:2 }} Available Credit</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Functional Pillars Navigation Grid -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Pillar 1: Company Accounts & Buyer Hierarchy -->
+    <div class="card p-5 space-y-3 flex flex-col justify-between">
+      <div>
+        <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 mb-3">
+          <i data-lucide="building" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Company Account Management</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Multi-user business accounts, role hierarchies (Admins, Managers, Buyers, Approvers), and purchase approval thresholds.
+        </p>
+      </div>
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+        <a href="{% url 'ecommerce:b2bcompanyaccount_list' %}" class="btn btn-outline btn-sm flex-1 text-center">
+          Companies
+        </a>
+        <a href="{% url 'ecommerce:b2bcompanyuser_list' %}" class="btn btn-outline btn-sm flex-1 text-center">
+          Buyers
+        </a>
+      </div>
+    </div>
+
+    <!-- Pillar 2: RFQ & Quote Negotiation -->
+    <div class="card p-5 space-y-3 flex flex-col justify-between">
+      <div>
+        <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center text-purple-600 mb-3">
+          <i data-lucide="file-text" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Quote Requests & Negotiation</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Negotiable RFQ lifecycle, volume pricing proposals, customer counter-offers, and one-click conversion to sales orders.
+        </p>
+      </div>
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+        <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="btn btn-outline btn-sm flex-1 text-center">
+          Browse RFQs
+        </a>
+        <a href="{% url 'ecommerce:b2bquoterequest_create' %}" class="btn btn-primary btn-sm flex-1 text-center">
+          New Quote
+        </a>
+      </div>
+    </div>
+
+    <!-- Pillar 3: Bulk Ordering & Requisitions -->
+    <div class="card p-5 space-y-3 flex flex-col justify-between">
+      <div>
+        <div class="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 mb-3">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Bulk Ordering & Requisitions</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          Reorder templates, scheduled recurring kits, CSV spreadsheet upload ordering, and high-speed SKU quick order grids.
+        </p>
+      </div>
+      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
+        <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="btn btn-outline btn-sm flex-1 text-center">
+          Templates ({{ active_templates_count }})
+        </a>
+        <a href="{% url 'ecommerce:b2b_quick_order_matrix' %}" class="btn btn-primary btn-sm flex-1 text-center">
+          Quick Order
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Activity Tables Grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Recent Companies -->
+    <div class="card overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="building-2" class="w-4 h-4 text-brand"></i>
+          Recently Registered Companies
+        </div>
+        <a href="{% url 'ecommerce:b2bcompanyaccount_list' %}" class="text-xs text-brand hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Company</th>
+              <th>Credit Line</th>
+              <th>Terms</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for co in recent_companies %}
+              <tr>
+                <td>
+                  <a href="{% url 'ecommerce:b2bcompanyaccount_detail' co.pk %}" class="font-medium text-slate-800 dark:text-slate-200 hover:text-brand">
+                    {{ co.company_name }}
+                  </a>
+                  <div class="text-xs text-slate-400 font-mono">{{ co.number }}</div>
+                </td>
+                <td class="font-mono text-xs font-semibold">${{ co.credit_limit|floatformat:2 }}</td>
+                <td><span class="badge badge-info text-xs">{{ co.get_payment_terms_display }}</span></td>
+                <td>
+                  {% if co.status == "active" %}
+                    <span class="badge badge-green text-xs">Active</span>
+                  {% else %}
+                    <span class="badge badge-amber text-xs">{{ co.get_status_display }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="text-center p-6 text-slate-400 text-sm">
+                  No company accounts created yet.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recent Quotes -->
+    <div class="card overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="file-text" class="w-4 h-4 text-brand"></i>
+          Recent RFQs & Quotes
+        </div>
+        <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="text-xs text-brand hover:underline">
+          View All
+        </a>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Quote #</th>
+              <th>Company</th>
+              <th class="text-right">Quoted Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for qr in recent_quotes %}
+              <tr>
+                <td>
+                  <a href="{% url 'ecommerce:b2bquoterequest_detail' qr.pk %}" class="font-mono font-bold text-brand hover:underline">
+                    {{ qr.number }}
+                  </a>
+                </td>
+                <td class="text-slate-800 dark:text-slate-200">{{ qr.company.company_name }}</td>
+                <td class="text-right font-mono font-bold">${{ qr.quoted_total|floatformat:2 }}</td>
+                <td>
+                  {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
+                    <span class="badge badge-green text-xs">{{ qr.get_status_display }}</span>
+                  {% elif qr.status == "quoted" %}
+                    <span class="badge badge-info text-xs">Quoted</span>
+                  {% else %}
+                    <span class="badge badge-slate text-xs">{{ qr.get_status_display }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="4" class="text-center p-6 text-slate-400 text-sm">
+                  No quote requests submitted yet.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
