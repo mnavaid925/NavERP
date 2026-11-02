@@ -36,7 +36,9 @@ class B2bCompanyUserForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             self.fields["company"].queryset = B2bCompanyAccount.objects.filter(tenant=self.tenant)
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant)
-            approver_qs = B2bCompanyUser.objects.filter(tenant=self.tenant, can_approve_orders=True)
+            approver_qs = B2bCompanyUser.objects.filter(
+                tenant=self.tenant, can_approve_orders=True
+            ).select_related("user", "company")
             if self.instance and self.instance.pk:
                 approver_qs = approver_qs.exclude(pk=self.instance.pk)
             self.fields["reports_to_approver"].queryset = approver_qs
