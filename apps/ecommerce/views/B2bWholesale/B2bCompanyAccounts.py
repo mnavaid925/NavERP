@@ -110,10 +110,11 @@ def b2bcompanyaccount_create(request):
             account.tenant = request.tenant
             account.save()
             write_audit_log(
-                request,
+                request.user,
+                account,
                 "create",
-                f"Created B2B company account {account.company_name} ({account.number})",
-                object_id=account.pk,
+                {"number": account.number, "company_name": account.company_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"B2B Company Account {account.company_name} registered successfully.")
             return redirect("ecommerce:b2bcompanyaccount_detail", pk=account.pk)
@@ -136,10 +137,11 @@ def b2bcompanyaccount_edit(request, pk):
         if form.is_valid():
             account = form.save()
             write_audit_log(
-                request,
+                request.user,
+                account,
                 "update",
-                f"Updated B2B company account {account.company_name} ({account.number})",
-                object_id=account.pk,
+                {"number": account.number, "company_name": account.company_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"B2B Company Account {account.company_name} updated successfully.")
             return redirect("ecommerce:b2bcompanyaccount_detail", pk=account.pk)
@@ -163,10 +165,11 @@ def b2bcompanyaccount_delete(request, pk):
         num = account.number
         account.delete()
         write_audit_log(
-            request,
+            request.user,
+            account,
             "delete",
-            f"Deleted B2B company account {name} ({num})",
-            object_id=pk,
+            {"number": num, "company_name": name},
+            tenant=request.tenant,
         )
         messages.success(request, f"B2B Company Account {name} ({num}) has been deleted.")
         return redirect("ecommerce:b2bcompanyaccount_list")
