@@ -23,8 +23,10 @@
         <span class="badge badge-slate">iOS</span>
         {% elif device.device_platform == 'android' %}
         <span class="badge badge-green">Android</span>
-        {% else %}
+        {% elif device.device_platform == 'pwa_web' %}
         <span class="badge badge-info">PWA Web</span>
+        {% else %}
+        <span class="badge badge-slate">{{ device.get_device_platform_display }}</span>
         {% endif %}
         {% if device.is_active %}
         <span class="badge badge-green">Active</span>
@@ -36,6 +38,10 @@
     </div>
 
     <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:mobiledeviceregistration_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Devices</span>
+      </a>
       <form method="post" action="{% url 'ecommerce:mobiledeviceregistration_ping' device.pk %}" class="inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline flex items-center gap-2">
