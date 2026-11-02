@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from apps.accounting.models.GeneralLedger.Currencies import Currency
 from apps.core.forms import TenantModelForm
 from apps.core.models.Party import Party
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
@@ -48,6 +48,11 @@ class TransactionRiskAssessmentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["user"].queryset = self.fields["user"].queryset.filter(is_active=True)
         if "analyst_user" in self.fields:
             self.fields["analyst_user"].queryset = self.fields["analyst_user"].queryset.filter(is_active=True)
+
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["order", "customer_party"])
+        return cleaned
 
     def clean_risk_score(self):
         score = self.cleaned_data.get("risk_score")
