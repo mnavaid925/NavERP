@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction Risk Assessments — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <span>Assessments</span>
+        </div>
+        <h1 class="page-title">Transaction Risk Assessments</h1>
+        <p class="text-secondary text-sm">Real-time fraud scoring, AVS/CVV signal validation, and manual analyst review queues</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:fraud_risk_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Overview Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:transaction_risk_assessment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Assessment</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:transaction_risk_assessment_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search assessment #, order, IP, device, party..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <select name="tier" class="form-select">
+                    <option value="">All Risk Tiers</option>
+                    {% for val, label in tier_choices %}
+                    <option value="{{ val }}" {% if tier_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="decision" class="form-select">
+                    <option value="">All Decisions</option>
+                    {% for val, label in decision_choices %}
+                    <option value="{{ val }}" {% if decision_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or tier_filter or action_filter or decision_filter %}
+                <a href="{% url 'ecommerce:transaction_risk_assessment_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Assessment #</th>
+                    <th>Order &amp; Customer</th>
+                    <th>Amount</th>
+                    <th>Risk Score</th>
+                    <th>Signals (AVS/CVV)</th>
+                    <th>Recommendation</th>
+                    <th>Actual Decision</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in assessments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:transaction_risk_assessment_detail' item.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ item.number }}
+                        </a>
+                        {% if item.is_proxy_or_vpn %}
+                        <span class="badge badge-amber text-xs block w-fit mt-1">Proxy/VPN</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.order %}
+                        <span class="font-mono text-xs font-semibold">{{ item.order.number }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">Pre-Order Evaluation</span>
+                        {% endif %}
+                        <div class="text-xs text-muted">{{ item.customer_party.legal_name|default:item.user.username|default:"Guest Checkout" }}</div>
+                    </td>
+                    <td>
+                        <span class="font-semibold">{{ item.currency.symbol|default:"$" }}{{ item.transaction_amount }}</span>
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-base {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warning{% else %}text-green{% endif %}">
+                                {{ item.risk_score }}
+                            </span>
+                            <span class="text-xs text-muted">/100</span>
+                        </div>
+                        <span class="text-xs block text-muted">{{ item.get_risk_tier_display }}</span>
+                    </td>
+                    <td class="text-xs">
+                        <div>AVS: <span class="font-mono {% if item.avs_result_code == 'match' %}text-green font-bold{% elif item.avs_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_avs_result_code_display }}</span></div>
+                        <div>CVV: <span class="font-mono {% if item.cvv_result_code == 'match' %}text-green font-bold{% elif item.cvv_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_cvv_result_code_display }}</span></div>
+                    </td>
+                    <td>
+                        {% if item.recommended_action == "reject" %}
+                        <span class="badge badge-red">Reject</span>
+                        {% elif item.recommended_action == "challenge" %}
+                        <span class="badge badge-amber">Challenge 3DS</span>
+                        {% elif item.recommended_action == "review" %}
+                        <span class="badge badge-info">Manual Review</span>
+                        {% else %}
+                        <span class="badge badge-green">Approve</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.actual_decision == "approved_auto" %}
+                        <span class="badge badge-green">Auto-Approved</span>
+                        {% elif item.actual_decision == "approved_manual" %}
+                        <span class="badge badge-green">Analyst Approved</span>
+                        {% elif item.actual_decision == "declined_auto" %}
+                        <span class="badge badge-red">Auto-Declined</span>
+                        {% elif item.actual_decision == "declined_manual" %}
+                        <span class="badge badge-red">Analyst Declined</span>
+                        {% elif item.actual_decision == "challenged" %}
+                        <span class="badge badge-amber">3DS Challenged</span>
+                        {% else %}
+                        <span class="badge badge-info">Pending Review</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-muted font-mono">
+                        {{ item.created_at|date:"M d, H:i" }}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:transaction_risk_assessment_detail' item.pk %}" class="btn-icon" title="View Assessment">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:transaction_risk_assessment_edit' item.pk %}" class="btn-icon" title="Edit Assessment">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:transaction_risk_assessment_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete assessment {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-danger" title="Delete Assessment">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i data-lucide="shield-check"></i></div>
+                            <div class="empty-state-title">No Risk Assessments Found</div>
+                            <div class="empty-state-text">No transaction evaluations match the current filter parameters.</div>
+                            <div class="empty-state-action">
+                                <a href="{% url 'ecommerce:transaction_risk_assessment_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Record New Assessment</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
