@@ -192,13 +192,13 @@
     <div class="card-footer">
         <div class="pagination">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
                 Previous
             </a>
             {% endif %}
             <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if action_filter %}&action={{ action_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}" class="pagination-link">
                 Next
             </a>
             {% endif %}
