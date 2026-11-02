@@ -29,7 +29,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: `subtotal` raises `TypeError: unexpected keyword argument 'subtotal'`. The model field is `subtotal_amount`. Non-nullable address fields (`shipping_name`, `shipping_address_line1`, `shipping_city`, `shipping_postal_code`, `shipping_country`) have no defaults and trigger IntegrityError.
   - *Fix*: Rename `subtotal` to `subtotal_amount` and provide fallback shipping address fields.
 
-- [ ] **C4** — Mass assignment of workflow-controlled `status` and financial totals in `B2bQuoteRequestForm`
+- [x] **C4** — Mass assignment of workflow-controlled `status` and financial totals in `B2bQuoteRequestForm` — 56a6c89f
   - *Location*: `apps/ecommerce/forms/B2bWholesale/B2bQuoteRequests.py:14-24`
   - *Problem*: `status`, `original_subtotal`, `quoted_discount_percent`, `quoted_total` are not excluded and are rendered as editable form inputs, allowing buyers to bypass sales review and set arbitrary pricing.
   - *Fix*: Add `status`, `original_subtotal`, `quoted_discount_percent`, `quoted_total` to `Meta.exclude` in `B2bQuoteRequestForm`.
