@@ -168,7 +168,7 @@
                 {% endif %}
               </td>
               <td>
-                <span class="badge badge-info">{{ acc.get_payment_terms_display }}</span>
+                <span class="badge badge-blue">{{ acc.get_payment_terms_display }}</span>
                 {% if acc.requires_po_number %}
                   <div class="text-xs text-slate-500 mt-1 flex items-center gap-1">
                     <i data-lucide="check" class="w-3 h-3 text-slate-400"></i> PO Required
@@ -191,7 +191,7 @@
                 {% elif acc.credit_status == "suspended" %}
                   <span class="badge badge-red">Suspended</span>
                 {% else %}
-                  <span class="badge badge-muted">{{ acc.get_credit_status_display }}</span>
+                  <span class="badge badge-slate">{{ acc.get_credit_status_display }}</span>
                 {% endif %}
               </td>
               <td>
