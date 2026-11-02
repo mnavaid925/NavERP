@@ -2820,6 +2820,19 @@ LIVE_LINKS = {
         "Attribution Touchpoints": "ecommerce:attributiontouchpoint_list",
         "Analytics Cockpit": "ecommerce:analytics_cockpit",
     },
+    "9.16": {
+        "Progressive Web App (PWA)": "ecommerce:mobileappconfig_list",
+        "Native Mobile Apps (iOS/Android)": "ecommerce:mobiledeviceregistration_list",
+        "Mobile Payment Integration": "ecommerce:mobileappconfig_list",
+        "Location-Based Services": "ecommerce:mobilelocationrule_list",
+        "Social & Messaging Commerce": "ecommerce:mobilepushcampaign_list",
+        # Extra live leaves
+        "Mobile Hub": "ecommerce:mobile_hub",
+        "App Configurations": "ecommerce:mobileappconfig_list",
+        "Registered Devices": "ecommerce:mobiledeviceregistration_list",
+        "Push Campaigns": "ecommerce:mobilepushcampaign_list",
+        "Location Rules": "ecommerce:mobilelocationrule_list",
+    },
 
 
 
