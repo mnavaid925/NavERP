@@ -4,7 +4,7 @@ from django import forms
 from apps.accounting.models.GeneralLedger.Currencies import Currency
 from apps.core.forms import TenantModelForm
 from apps.core.models.Party import Party
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
 from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder
 
@@ -37,6 +37,11 @@ class ChargebackDisputeForm(TenantUniqueMixin, TenantModelForm):
             self.fields["order"].queryset = EcommerceOrder.objects.filter(tenant=self.tenant)
             self.fields["customer_party"].queryset = Party.objects.filter(tenant=self.tenant)
         self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
+
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["order", "customer_party"])
+        return cleaned
 
     def clean_dispute_amount(self):
         val = self.cleaned_data.get("dispute_amount")
