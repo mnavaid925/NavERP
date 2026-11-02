@@ -93,6 +93,10 @@ from apps.ecommerce.forms.AnalyticsBi.DailySalesSnapshots import DailySalesSnaps
 from apps.ecommerce.forms.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetricForm
 from apps.ecommerce.forms.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetricForm
 from apps.ecommerce.forms.AnalyticsBi.AttributionTouchpoints import AttributionTouchpointForm
+from apps.ecommerce.forms.MobileCommerce.MobileAppConfigs import MobileAppConfigForm
+from apps.ecommerce.forms.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistrationForm
+from apps.ecommerce.forms.MobileCommerce.MobilePushCampaigns import MobilePushCampaignForm
+from apps.ecommerce.forms.MobileCommerce.MobileLocationRules import MobileLocationRuleForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -187,4 +191,9 @@ __all__ = [
     "CustomerCohortMetricForm",
     "ProductMerchandisingMetricForm",
     "AttributionTouchpointForm",
+    # 9.16 Mobile Commerce
+    "MobileAppConfigForm",
+    "MobileDeviceRegistrationForm",
+    "MobilePushCampaignForm",
+    "MobileLocationRuleForm",
 ]
