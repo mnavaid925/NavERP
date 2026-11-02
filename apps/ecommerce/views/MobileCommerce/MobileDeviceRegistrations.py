@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -51,11 +51,16 @@ def mobiledeviceregistration_list(request):
     elif selected_status in ("0", "false", "False"):
         qs = qs.filter(is_active=False)
 
-    base_all = ecommerce_scope(MobileDeviceRegistration.objects.all(), request)
-    total_count = base_all.count()
-    ios_count = base_all.filter(device_platform="ios").count()
-    android_count = base_all.filter(device_platform="android").count()
-    pwa_count = base_all.filter(device_platform="pwa_web").count()
+    base_stats = ecommerce_scope(MobileDeviceRegistration.objects.all(), request).aggregate(
+        total=Count("id"),
+        ios=Count("id", filter=Q(device_platform="ios")),
+        android=Count("id", filter=Q(device_platform="android")),
+        pwa=Count("id", filter=Q(device_platform="pwa_web")),
+    )
+    total_count = base_stats["total"] or 0
+    ios_count = base_stats["ios"] or 0
+    android_count = base_stats["android"] or 0
+    pwa_count = base_stats["pwa"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
