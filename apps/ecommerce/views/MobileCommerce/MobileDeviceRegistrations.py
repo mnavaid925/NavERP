@@ -16,7 +16,11 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def mobiledeviceregistration_list(request):
     qs = ecommerce_scope(
-        MobileDeviceRegistration.objects.all().select_related("customer_profile", "party"),
+        MobileDeviceRegistration.objects.all().select_related(
+            "customer_profile__user",
+            "customer_profile__customer",
+            "party",
+        ),
         request,
     )
 
