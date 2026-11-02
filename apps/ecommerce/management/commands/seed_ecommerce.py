@@ -70,6 +70,10 @@ from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnap
 from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
 from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
 from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
+from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfig
+from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
+from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
+from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -3373,6 +3377,213 @@ class Command(BaseCommand):
                     "estimated_cac": cac,
                     "landing_page_url": f"https://store.nav-erp.com/?utm_source={src}&utm_campaign={cmp_name}",
                     "referrer_url": f"https://{src}.com/referral",
+                },
+            )
+
+        # 9.16 Mobile Commerce Seeding
+        # MobileAppConfig
+        is_acme = "acme" in tenant.subdomain.lower() or "acme" in tenant.name.lower()
+        MobileAppConfig.objects.get_or_create(
+            tenant=tenant,
+            is_active=True,
+            defaults={
+                "app_name": "Acme Gear Mobile Store" if is_acme else "Globex Retail App",
+                "short_name": "Acme Store" if is_acme else "Globex Store",
+                "description": "Official mobile commerce shopping app and progressive web application.",
+                "theme_color": "#2563EB" if is_acme else "#059669",
+                "background_color": "#FFFFFF",
+                "display_mode": "standalone",
+                "orientation": "portrait",
+                "start_url": "/",
+                "scope": "/",
+                "icon_192_url": "/static/img/icons/icon-192.png",
+                "icon_512_url": "/static/img/icons/icon-512.png",
+                "offline_cache_strategy": "stale_while_revalidate",
+                "enable_pwa": True,
+                "enable_biometric_login": True,
+                "min_ios_version": "15.0",
+                "min_android_version": "10.0",
+                "apple_pay_merchant_id": "merchant.com.acme.store" if is_acme else "",
+                "google_pay_gateway_id": "acme-google-gateway" if is_acme else "globex-gpay",
+                "enable_apple_pay": is_acme,
+                "enable_google_pay": True,
+                "enable_in_app_wallet": True,
+                "enable_express_checkout": True,
+            },
+        )
+
+        # MobileDeviceRegistration
+        cust_profile = CustomerAccountProfile.objects.filter(tenant=tenant).first()
+        party_obj = Party.objects.filter(tenant=tenant).first()
+        device_specs = [
+            ("ios-dev-01", "ios", "iPhone 15 Pro", "iOS 17.5.1", "1.4.0", "apns", True, True, "always", Decimal("40.712776"), Decimal("-74.005974")),
+            ("ios-dev-02", "ios", "iPad Air 5th Gen", "iPadOS 17.5", "1.4.0", "apns", True, True, "while_in_use", Decimal("40.730610"), Decimal("-73.935242")),
+            ("and-dev-01", "android", "Google Pixel 8 Pro", "Android 14", "1.4.0", "fcm", True, True, "while_in_use", Decimal("40.758896"), Decimal("-73.985130")),
+            ("pwa-dev-01", "pwa_web", "Mobile Chrome / PWA", "Chrome 125", "1.0.0", "web_push", True, False, "denied", None, None),
+        ]
+        for dev_prefix, plat, model_name, os_v, app_v, prov, push_on, bio_on, loc_perm, lat, lng in device_specs:
+            dev_uuid = f"{dev_prefix}-{tenant.subdomain}"
+            MobileDeviceRegistration.objects.get_or_create(
+                tenant=tenant,
+                device_uuid=dev_uuid,
+                defaults={
+                    "customer_profile": cust_profile,
+                    "party": party_obj,
+                    "device_platform": plat,
+                    "device_model": model_name,
+                    "os_version": os_v,
+                    "app_version": app_v,
+                    "push_token": f"token-{dev_uuid}-xyz987" if push_on else "",
+                    "push_provider": prov,
+                    "push_enabled": push_on,
+                    "biometric_enrolled": bio_on,
+                    "location_permission": loc_perm,
+                    "badge_count": 1 if push_on else 0,
+                    "last_latitude": lat,
+                    "last_longitude": lng,
+                    "last_active_at": timezone.now() - timedelta(minutes=45),
+                    "is_active": True,
+                },
+            )
+
+        # MobilePushCampaign
+        cat_prod = CatalogProduct.objects.filter(tenant=tenant, is_active=True).first()
+        store_cat = StoreCategory.objects.filter(tenant=tenant, is_active=True).first()
+        promo_cpn = CouponPromotion.objects.filter(tenant=tenant, is_active=True).first()
+        admin_user = get_user_model().objects.filter(is_superuser=True).first() or get_user_model().objects.first()
+
+        push_samples = [
+            (
+                "Weekend Flash Sale Launch",
+                "promotional",
+                "all",
+                "Weekend Flash Sale: 20% Off Storewide!",
+                "Enjoy exclusive mobile savings on all catalog items today. Tap to claim.",
+                "sent",
+                timezone.now() - timedelta(days=1),
+                timezone.now() - timedelta(days=1),
+                180,
+                175,
+                78,
+                16,
+                Decimal("720.00"),
+                "product",
+                cat_prod,
+                store_cat,
+                promo_cpn,
+            ),
+            (
+                "Abandoned Cart Recovery Automated Trigger",
+                "abandoned_cart",
+                "all",
+                "Items in your cart are selling fast!",
+                "Your reserved items are waiting. Complete your order before inventory expires.",
+                "scheduled",
+                timezone.now() + timedelta(days=1),
+                None,
+                0,
+                0,
+                0,
+                0,
+                Decimal("0.00"),
+                "cart",
+                None,
+                None,
+                None,
+            ),
+            (
+                "In-Store Welcome VIP Perk",
+                "geofence_proximity",
+                "ios_only",
+                "Welcome to our Flagship Store!",
+                "Enjoy personalized in-store assistance and instant VIP checkout.",
+                "draft",
+                None,
+                None,
+                0,
+                0,
+                0,
+                0,
+                Decimal("0.00"),
+                "home",
+                None,
+                None,
+                promo_cpn,
+            ),
+        ]
+        for cname, ctype, tplat, title, body, cstat, sched_t, sent_t, scnt, dcnt, ocnt, ccnt, crev, dlink_t, prod, cat, cpn in push_samples:
+            MobilePushCampaign.objects.get_or_create(
+                tenant=tenant,
+                campaign_name=cname,
+                defaults={
+                    "campaign_type": ctype,
+                    "target_platform": tplat,
+                    "notification_title": title,
+                    "notification_body": body,
+                    "badge_increment": 1,
+                    "sound_name": "default",
+                    "deep_link_type": dlink_t,
+                    "target_product": prod,
+                    "target_category": cat,
+                    "target_coupon": cpn,
+                    "status": cstat,
+                    "scheduled_for": sched_t,
+                    "sent_at": sent_t,
+                    "sent_count": scnt,
+                    "delivered_count": dcnt,
+                    "opened_count": ocnt,
+                    "converted_count": ccnt,
+                    "converted_revenue": crev,
+                    "created_by": admin_user,
+                },
+            )
+
+        # MobileLocationRule
+        fc_obj = FulfillmentCenter.objects.filter(tenant=tenant).first()
+        loc_rules = [
+            (
+                "Downtown Flagship Store & Geofence",
+                "geofence_entry",
+                "Downtown Flagship Store",
+                Decimal("40.712800"),
+                Decimal("-74.006000"),
+                500,
+                "display_store_mode",
+                "Welcome to Downtown Flagship! In-store shopping mode is active.",
+                True,
+                True,
+            ),
+            (
+                "Curbside Pickup Express Arrival Radar",
+                "curbside_pickup",
+                "Suburban Distribution Hub",
+                Decimal("40.758900"),
+                Decimal("-73.985100"),
+                2000,
+                "notify_store_associates",
+                "Curbside arrival detected! Our associates have been notified for trunk hand-off.",
+                True,
+                False,
+            ),
+        ]
+        for rname, rtype, sname, rlat, rlng, rad, act, pmsg, bopis, in_store in loc_rules:
+            MobileLocationRule.objects.get_or_create(
+                tenant=tenant,
+                name=rname,
+                defaults={
+                    "rule_type": rtype,
+                    "store_name": sname,
+                    "fulfillment_center": fc_obj,
+                    "latitude": rlat,
+                    "longitude": rlng,
+                    "radius_meters": rad,
+                    "trigger_action": act,
+                    "linked_promotion": promo_cpn,
+                    "push_message": pmsg,
+                    "enable_bopis_checkin": bopis,
+                    "enable_instore_mode": in_store,
+                    "dwell_time_seconds": 120,
+                    "is_active": True,
                 },
             )
 
