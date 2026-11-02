@@ -153,8 +153,10 @@
                 <span class="badge badge-slate">iOS</span>
                 {% elif dev.device_platform == 'android' %}
                 <span class="badge badge-green">Android</span>
-                {% else %}
+                {% elif dev.device_platform == 'pwa_web' %}
                 <span class="badge badge-info">PWA</span>
+                {% else %}
+                <span class="badge badge-slate">{{ dev.get_device_platform_display }}</span>
                 {% endif %}
                 <span class="font-medium text-slate-900 dark:text-white">{{ dev.device_model|default:"Generic Client" }}</span>
               </div>
@@ -203,19 +205,19 @@
               <div class="flex items-center justify-end gap-1">
                 <form method="post" action="{% url 'ecommerce:mobiledeviceregistration_ping' dev.pk %}" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn-icon text-indigo-600 hover:text-indigo-800" title="Simulate telemetry ping">
+                  <button type="submit" class="btn-icon text-indigo-600 hover:text-indigo-800" title="Simulate telemetry ping" aria-label="Simulate telemetry ping">
                     <i data-lucide="radio" class="w-4 h-4"></i>
                   </button>
                 </form>
-                <a href="{% url 'ecommerce:mobiledeviceregistration_detail' dev.pk %}" class="btn-icon" title="View details">
+                <a href="{% url 'ecommerce:mobiledeviceregistration_detail' dev.pk %}" class="btn-icon" title="View details" aria-label="View details">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:mobiledeviceregistration_edit' dev.pk %}" class="btn-icon" title="Edit device">
+                <a href="{% url 'ecommerce:mobiledeviceregistration_edit' dev.pk %}" class="btn-icon" title="Edit device" aria-label="Edit device">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
                 <form method="post" action="{% url 'ecommerce:mobiledeviceregistration_delete' dev.pk %}" onsubmit="return confirm('Delete device {{ dev.number }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete" aria-label="Delete">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
@@ -231,7 +233,7 @@
                 <p class="text-sm text-slate-500 mt-1">Register a native iOS/Android client or PWA push subscription.</p>
                 <div class="mt-4">
                   <a href="{% url 'ecommerce:mobiledeviceregistration_create' %}" class="btn btn-primary">
-                    Register Device
+                    <i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i>Register Device
                   </a>
                 </div>
               </div>
