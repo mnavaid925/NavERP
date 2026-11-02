@@ -31,6 +31,10 @@
     </div>
 
     <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:mobilelocationrule_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Location Rules</span>
+      </a>
       <a href="{% url 'ecommerce:mobilelocationrule_edit' location_rule.pk %}" class="btn btn-primary flex items-center gap-2">
         <i data-lucide="pencil" class="w-4 h-4"></i>
         <span>Edit Rule</span>
@@ -165,12 +169,12 @@
         <form method="post" action="{% url 'ecommerce:mobilelocationrule_simulate' location_rule.pk %}" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {% csrf_token %}
           <div>
-            <label class="form-label text-xs">Test Latitude</label>
-            <input type="text" name="test_lat" value="{{ location_rule.latitude }}" class="form-input text-xs font-mono w-full">
+            <label for="sim-test-lat" class="form-label text-xs">Test Latitude</label>
+            <input type="text" id="sim-test-lat" name="test_lat" value="{{ location_rule.latitude }}" class="form-input text-xs font-mono w-full">
           </div>
           <div>
-            <label class="form-label text-xs">Test Longitude</label>
-            <input type="text" name="test_lng" value="{{ location_rule.longitude }}" class="form-input text-xs font-mono w-full">
+            <label for="sim-test-lng" class="form-label text-xs">Test Longitude</label>
+            <input type="text" id="sim-test-lng" name="test_lng" value="{{ location_rule.longitude }}" class="form-input text-xs font-mono w-full">
           </div>
           <div class="flex items-end">
             <button type="submit" class="btn btn-outline text-xs w-full flex items-center justify-center gap-2">
