@@ -63,6 +63,10 @@ from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfi
 from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
 from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
 from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
+from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccount
+from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
+from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
+from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
 
 __all__ = [
     "TenantOwned",
@@ -150,4 +154,9 @@ __all__ = [
     "MobileDeviceRegistration",
     "MobilePushCampaign",
     "MobileLocationRule",
+    # 9.17 B2B & Wholesale Commerce
+    "B2bCompanyAccount",
+    "B2bCompanyUser",
+    "B2bQuoteRequest",
+    "B2bQuickOrderTemplate",
 ]
