@@ -14,7 +14,7 @@ The deduplicated and prioritized findings below are structured for resolution by
 
 ## Critical Findings
 
-- [ ] **C1** — `NoReverseMatch` 500 crash in Quote Detail template on converted orders
+- [x] **C1** — `NoReverseMatch` 500 crash in Quote Detail template on converted orders — 548f1c06
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_quote_request/detail.html:37`
   - *Problem*: Template uses `{% url 'ecommerce:order_detail' quote_request.converted_order.pk %}`. The URL pattern in `apps/ecommerce/urls/OrderManagement/EcommerceOrders.py:8` is named `ecommerceorder_detail`. Causes fatal 500 when viewing converted quotes.
   - *Fix*: Update to `{% url 'ecommerce:ecommerceorder_detail' quote_request.converted_order.pk %}`.
