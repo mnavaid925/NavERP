@@ -64,6 +64,10 @@ from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfi
 from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
 from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
 from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
+from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccount
+from apps.ecommerce.models.B2bWholesale.B2bCompanyUsers import B2bCompanyUser
+from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
+from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
 
 
 @admin.register(StoreCategory)
@@ -869,6 +873,47 @@ class MobileLocationRuleAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["fulfillment_center", "linked_promotion"]
     ordering = ["store_name", "-created_at"]
+
+
+@admin.register(B2bCompanyAccount)
+class B2bCompanyAccountAdmin(admin.ModelAdmin):
+    list_display = ["number", "company_name", "credit_limit", "available_credit", "payment_terms", "credit_status", "status", "punchout_enabled"]
+    list_filter = ["status", "credit_status", "payment_terms", "punchout_enabled", "tenant"]
+    search_fields = ["number", "company_name", "company_tax_id", "business_registration_number"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["company_party", "primary_contact", "preferred_currency"]
+    ordering = ["-created_at"]
+
+
+@admin.register(B2bCompanyUser)
+class B2bCompanyUserAdmin(admin.ModelAdmin):
+    list_display = ["number", "user", "company", "role", "order_spend_limit", "monthly_spend_limit", "status"]
+    list_filter = ["role", "status", "tenant"]
+    search_fields = ["number", "user__username", "user__email", "company__company_name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["company", "user", "party"]
+    ordering = ["company", "user__username"]
+
+
+@admin.register(B2bQuoteRequest)
+class B2bQuoteRequestAdmin(admin.ModelAdmin):
+    list_display = ["number", "company", "requested_by", "original_subtotal", "quoted_discount_percent", "quoted_total", "status", "valid_until"]
+    list_filter = ["status", "tenant"]
+    search_fields = ["number", "company__company_name", "requested_by__username"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["company", "requested_by", "assigned_sales_rep", "currency", "converted_order"]
+    ordering = ["-created_at"]
+
+
+@admin.register(B2bQuickOrderTemplate)
+class B2bQuickOrderTemplateAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "company", "scope", "cadence", "total_items_count", "times_ordered", "is_active"]
+    list_filter = ["scope", "cadence", "is_active", "tenant"]
+    search_fields = ["number", "name", "company__company_name"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["company", "created_by"]
+    ordering = ["company", "name"]
+
 
 
 
