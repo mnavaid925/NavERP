@@ -91,10 +91,19 @@ class DailySalesSnapshot(TenantNumbered):
         taxes_collected = order_stats["sum_tax"] or Decimal("0.00")
         net_sales = order_stats["sum_grand"] or Decimal("0.00")
 
-        # Carts created and abandoned on that date
-        carts = Cart.objects.filter(tenant=tenant, created_at__date=date)
-        carts_created = carts.count()
-        carts_abandoned = carts.filter(status="abandoned").count()
+        from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrderLine
+        units_sold = (
+            EcommerceOrderLine.objects.filter(order__in=orders).aggregate(u=Sum("quantity"))["u"]
+            or 0
+        )
+
+        # Carts created and abandoned on that date (consolidated query)
+        cart_stats = Cart.objects.filter(tenant=tenant, created_at__date=date).aggregate(
+            created=Count("id"),
+            abandoned=Count("id", filter=Q(status="abandoned")),
+        )
+        carts_created = cart_stats["created"] or 0
+        carts_abandoned = cart_stats["abandoned"] or 0
 
         aov = Decimal("0.00")
         if orders_count > 0:
@@ -118,6 +127,7 @@ class DailySalesSnapshot(TenantNumbered):
                 "shipping_collected": shipping_collected,
                 "taxes_collected": taxes_collected,
                 "orders_count": orders_count,
+                "units_sold": units_sold,
                 "average_order_value": aov,
                 "carts_created": carts_created,
                 "carts_abandoned": carts_abandoned,
@@ -131,6 +141,7 @@ class DailySalesSnapshot(TenantNumbered):
             snapshot.shipping_collected = shipping_collected
             snapshot.taxes_collected = taxes_collected
             snapshot.orders_count = orders_count
+            snapshot.units_sold = units_sold
             snapshot.average_order_value = aov
             snapshot.carts_created = carts_created
             snapshot.carts_abandoned = carts_abandoned
