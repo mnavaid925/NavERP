@@ -46,7 +46,7 @@ class B2bQuoteRequestForm(TenantUniqueMixin, TenantModelForm):
         User = get_user_model()
         if self.tenant:
             self.fields["company"].queryset = B2bCompanyAccount.objects.filter(tenant=self.tenant)
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+        self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
         self.fields["requested_by"].queryset = User.objects.filter(is_active=True)
         self.fields["assigned_sales_rep"].queryset = User.objects.filter(is_active=True)
 
@@ -76,5 +76,5 @@ class B2bQuoteRequestForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["company", "currency"])
+        reject_foreign(self, cleaned, ["company"])
         return cleaned
