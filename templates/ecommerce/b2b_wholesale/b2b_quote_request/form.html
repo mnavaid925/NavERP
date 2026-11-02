@@ -120,8 +120,8 @@
                       <select name="item_product_id[]" class="form-select w-full item-product-select">
                         <option value="">-- Choose Catalog Product --</option>
                         {% for prod in products %}
-                          <option value="{{ prod.pk }}" data-price="{{ prod.retail_price }}" {% if itm.product_id == prod.pk %}selected{% endif %}>
-                            {{ prod.name }} ({{ prod.sku }})
+                          <option value="{{ prod.pk }}" data-price="{{ prod.display_price|default:'0.00' }}" {% if itm.product_id == prod.pk %}selected{% endif %}>
+                            {{ prod.name }} ({{ prod.display_sku|default:prod.number }})
                           </option>
                         {% endfor %}
                       </select>
