@@ -27,7 +27,8 @@ def _prepare_product_choices(request, limit=30):
         )[:limit]
     )
     for p in products:
-        var = p.variants.first()
+        vars_list = list(p.variants.all())
+        var = vars_list[0] if vars_list else None
         p.display_sku = var.sku if var else p.number
         p.display_price = var.price if (var and var.price) else Decimal("0.00")
     return products
