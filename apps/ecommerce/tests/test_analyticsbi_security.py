@@ -120,13 +120,8 @@ def test_analyticsbi_http_method_enforcement(auth_client_a, ecom_sales_snapshot_
 # Role-Based Authorization Tests (@tenant_admin_required)
 # ==============================================================================
 
-def test_analyticsbi_non_admin_forbidden_on_delete(client, user_a, ecom_sales_snapshot_a):
+def test_analyticsbi_non_admin_forbidden_on_delete(member_client, ecom_sales_snapshot_a):
     """Assert non-admin tenant member receives 403 Forbidden when calling delete."""
-    # Ensure user_a has role member (not tenant admin)
-    user_a.role = "member"
-    user_a.save()
-    client.force_login(user_a)
-
     url = reverse("ecommerce:dailysalessnapshot_delete", kwargs={"pk": ecom_sales_snapshot_a.pk})
-    resp = client.post(url)
+    resp = member_client.post(url)
     assert resp.status_code == 403
