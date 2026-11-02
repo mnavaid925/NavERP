@@ -174,7 +174,7 @@ def test_fraudrisk_model_tenant_isolation_and_uniqueness(tenant_a, tenant_b, use
     assert alert_a in AccountSecurityAlert.objects.filter(tenant=tenant_a)
     assert alert_b not in AccountSecurityAlert.objects.filter(tenant=tenant_a)
 
-    # Unique constraint on (tenant, number)
+    # Unique constraint on (tenant, number) within same tenant raises IntegrityError
     with pytest.raises(IntegrityError):
         with transaction.atomic():
             FraudRule.objects.create(
@@ -184,16 +184,10 @@ def test_fraudrisk_model_tenant_isolation_and_uniqueness(tenant_a, tenant_b, use
                 threshold_value="5",
             )
 
-    # Cross-tenant same number is allowed
-    cross_tenant_rule = FraudRule.objects.create(
-        tenant=tenant_b,
-        number=rule_a.number,
-        name="Cross-Tenant Reused Number Rule",
-        threshold_value="5",
-    )
-    assert cross_tenant_rule.pk is not None
-    assert cross_tenant_rule.number == rule_a.number
-    assert cross_tenant_rule.tenant != rule_a.tenant
+    # Identical number exists across distinct tenants without conflict (tenant-scoped sequencing)
+    assert rule_a.number == rule_b.number
+    assert rule_a.tenant != rule_b.tenant
+    assert rule_a.pk != rule_b.pk
 
 
 # ==============================================================================
