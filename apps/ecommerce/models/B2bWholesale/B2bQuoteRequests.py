@@ -154,6 +154,8 @@ class B2bQuoteRequest(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_ebqr_ten_created"),
+            models.Index(fields=["tenant", "company", "status"], name="idx_ebqr_ten_co_stat"),
             models.Index(fields=["tenant", "status"], name="idx_ebqr_ten_stat"),
             models.Index(fields=["tenant", "company"], name="idx_ebqr_ten_co"),
             models.Index(fields=["tenant", "valid_until"], name="idx_ebqr_ten_valid"),
@@ -164,14 +166,17 @@ class B2bQuoteRequest(TenantNumbered):
 
     def recalculate_totals(self):
         """Recalculate subtotal and quoted total from line items and discounts."""
-        subtotal = Decimal("0.00")
-        for item in self.line_items_data:
-            qty = Decimal(str(item.get("requested_qty", 1)))
-            unit_price = Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0))
-            line_tot = (qty * unit_price).quantize(Decimal("0.01"))
-            item["line_total"] = float(line_tot)
-            subtotal += line_tot
-        self.original_subtotal = subtotal
+        if self.line_items_data:
+            subtotal = Decimal("0.00")
+            for item in self.line_items_data:
+                qty = Decimal(str(item.get("requested_qty", 1)))
+                unit_price = Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0))
+                line_tot = (qty * unit_price).quantize(Decimal("0.01"))
+                item["line_total"] = float(line_tot)
+                subtotal += line_tot
+            self.original_subtotal = subtotal
+        else:
+            subtotal = self.original_subtotal or Decimal("0.00")
 
         if self.quoted_discount_percent and self.quoted_discount_percent > Decimal("0.00"):
             disc_factor = Decimal("1.00") - (self.quoted_discount_percent / Decimal("100.00"))
