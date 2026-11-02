@@ -44,7 +44,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Rendered as `TextInput`, exposing plaintext secret in DOM attributes and browser inspection.
   - *Fix*: Use `forms.PasswordInput(render_value=False)` and retain existing secret on blank edit in `clean_punchout_shared_secret()`.
 
-- [ ] **C7** — Nullable ForeignKeys in template filter arguments cause 500 crashes on unassigned quotes and templates (L10)
+- [x] **C7** — Nullable ForeignKeys in template filter arguments cause 500 crashes on unassigned quotes and templates (L10) — 39b1291a, 7708aabe, cf1f6b92, 72bcfb86
   - *Location*: `templates/ecommerce/b2b_wholesale/b2b_quote_request/detail.html:121, 128`, `list.html:153`, `b2b_company_account/detail.html:354`, `b2b_quick_order_template/detail.html:88`
   - *Problem*: `requested_by.get_full_name|default:requested_by.username` raises `VariableDoesNotExist` 500 when `requested_by`, `assigned_sales_rep`, or `created_by` is None.
   - *Fix*: Wrap all with explicit `{% if obj.fk %}...{% else %}...{% endif %}` guards.
