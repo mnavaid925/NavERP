@@ -34,7 +34,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: `status`, `original_subtotal`, `quoted_discount_percent`, `quoted_total` are not excluded and are rendered as editable form inputs, allowing buyers to bypass sales review and set arbitrary pricing.
   - *Fix*: Add `status`, `original_subtotal`, `quoted_discount_percent`, `quoted_total` to `Meta.exclude` in `B2bQuoteRequestForm`.
 
-- [ ] **C5** — Unhandled `decimal.InvalidOperation` 500 crash, non-finite values, and negative quote totals (L35)
+- [x] **C5** — Unhandled `decimal.InvalidOperation` 500 crash, non-finite values, and negative quote totals (L35) — 00f5b5f5
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuoteRequests.py:141-152, 214-225, 306`
   - *Problem*: Raw `Decimal()` casting on discount and prices without catching `decimal.InvalidOperation`, checking `is_finite()`, non-negativity, or bounds.
   - *Fix*: Validate `decimal.InvalidOperation`, ensure finite and non-negative, and clamp discounts to `0 <= val <= 100`.
