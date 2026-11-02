@@ -19,7 +19,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: Template uses `{% url 'ecommerce:order_detail' quote_request.converted_order.pk %}`. The URL pattern in `apps/ecommerce/urls/OrderManagement/EcommerceOrders.py:8` is named `ecommerceorder_detail`. Causes fatal 500 when viewing converted quotes.
   - *Fix*: Update to `{% url 'ecommerce:ecommerceorder_detail' quote_request.converted_order.pk %}`.
 
-- [ ] **C2** — `write_audit_log` signature mismatch causes 500 on all form POST & action endpoints
+- [x] **C2** — `write_audit_log` signature mismatch causes 500 on all form POST & action endpoints — 47c731ae, eaea115f, fda95803, 86ff4439
   - *Location*: 15 call sites across `apps/ecommerce/views/B2bWholesale/B2bCompanyAccounts.py`, `B2bCompanyUsers.py`, `B2bQuoteRequests.py`, `B2bQuickOrderTemplates.py`
   - *Problem*: Views call `write_audit_log(request, "action", "...", object_id=...)` with invalid kwargs. Authoritative signature in `apps/core/utils.py` is `write_audit_log(user, obj, action, changes=None, tenant=None)`. Every POST submission crashes with 500.
   - *Fix*: Correct all 15 calls to `write_audit_log(request.user, obj, "action", {"number": obj.number}, tenant=request.tenant)`.
