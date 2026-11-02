@@ -169,15 +169,15 @@
             </td>
             <td class="text-right">
               <div class="flex items-center justify-end gap-1">
-                <a href="{% url 'ecommerce:mobileappconfig_detail' cfg.pk %}" class="btn-icon" title="View details">
+                <a href="{% url 'ecommerce:mobileappconfig_detail' cfg.pk %}" class="btn-icon" title="View details" aria-label="View details">
                   <i data-lucide="eye" class="w-4 h-4"></i>
                 </a>
-                <a href="{% url 'ecommerce:mobileappconfig_edit' cfg.pk %}" class="btn-icon" title="Edit config">
+                <a href="{% url 'ecommerce:mobileappconfig_edit' cfg.pk %}" class="btn-icon" title="Edit config" aria-label="Edit config">
                   <i data-lucide="pencil" class="w-4 h-4"></i>
                 </a>
                 <form method="post" action="{% url 'ecommerce:mobileappconfig_delete' cfg.pk %}" onsubmit="return confirm('Delete configuration {{ cfg.short_name }}?');" class="inline">
                   {% csrf_token %}
-                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                  <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete" aria-label="Delete">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                   </button>
                 </form>
@@ -193,7 +193,7 @@
                 <p class="text-sm text-slate-500 mt-1">Configure your PWA manifest, offline fallbacks, and mobile wallets.</p>
                 <div class="mt-4">
                   <a href="{% url 'ecommerce:mobileappconfig_create' %}" class="btn btn-primary">
-                    Create Configuration
+                    <i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i>Create Configuration
                   </a>
                 </div>
               </div>
