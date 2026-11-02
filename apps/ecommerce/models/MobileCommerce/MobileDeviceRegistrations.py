@@ -139,6 +139,8 @@ class MobileDeviceRegistration(TenantNumbered):
             models.Index(fields=["tenant", "device_platform"], name="idx_emdr_ten_plat"),
             models.Index(fields=["tenant", "customer_profile"], name="idx_emdr_ten_cust"),
             models.Index(fields=["tenant", "is_active"], name="idx_emdr_ten_act"),
+            models.Index(fields=["tenant", "-last_active_at"], name="idx_emdr_ten_last_act"),
+            models.Index(fields=["tenant", "is_active", "push_enabled"], name="idx_emdr_ten_push_act"),
         ]
 
     def __str__(self):
