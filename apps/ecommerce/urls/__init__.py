@@ -15,6 +15,7 @@ from apps.ecommerce.urls.ContentManagement import urlpatterns as _contentmanagem
 from apps.ecommerce.urls.AnalyticsBi import urlpatterns as _analyticsbi_urls
 from apps.ecommerce.urls.MobileCommerce import urlpatterns as _mobilecommerce_urls
 from apps.ecommerce.urls.B2bWholesale import urlpatterns as _b2bwholesale_urls
+from apps.ecommerce.urls.FraudRisk import urlpatterns as _fraudrisk_urls
 
 app_name = "ecommerce"
 
@@ -36,6 +37,7 @@ urlpatterns = (
     + list(_analyticsbi_urls)
     + list(_mobilecommerce_urls)
     + list(_b2bwholesale_urls)
+    + list(_fraudrisk_urls)
 )
 
 
