@@ -3865,19 +3865,19 @@ def ecom_mobile_config_b(tenant_b):
 
 
 @pytest.fixture
-def ecom_mobile_device_a(tenant_a, ecom_customer_profile_a):
+def ecom_mobile_device_a(tenant_a, ecom_profile_a):
     return _mobilecommerce_device_registration(
         tenant_a,
-        customer_profile=ecom_customer_profile_a,
+        customer_profile=ecom_profile_a,
         device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee1",
     )
 
 
 @pytest.fixture
-def ecom_mobile_device_b(tenant_b, ecom_customer_profile_b):
+def ecom_mobile_device_b(tenant_b, ecom_profile_b):
     return _mobilecommerce_device_registration(
         tenant_b,
-        customer_profile=ecom_customer_profile_b,
+        customer_profile=ecom_profile_b,
         device_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeee2",
         device_platform="android",
         push_provider="fcm",
@@ -3885,13 +3885,13 @@ def ecom_mobile_device_b(tenant_b, ecom_customer_profile_b):
 
 
 @pytest.fixture
-def ecom_mobile_push_a(tenant_a, admin_user_a):
-    return _mobilecommerce_push_campaign(tenant_a, created_by=admin_user_a)
+def ecom_mobile_push_a(tenant_a, user_a):
+    return _mobilecommerce_push_campaign(tenant_a, created_by=user_a)
 
 
 @pytest.fixture
-def ecom_mobile_push_b(tenant_b, admin_user_b):
-    return _mobilecommerce_push_campaign(tenant_b, created_by=admin_user_b, campaign_name="Globex Push")
+def ecom_mobile_push_b(tenant_b, user_b):
+    return _mobilecommerce_push_campaign(tenant_b, created_by=user_b, campaign_name="Globex Push")
 
 
 @pytest.fixture
