@@ -110,7 +110,7 @@
                     </td>
                     <td>
                         <div class="flex items-center gap-2">
-                            <span class="font-bold text-base {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warn{% else %}text-green{% endif %}">
+                            <span class="font-bold text-base {% if item.risk_score > 60 %}text-danger{% elif item.risk_score > 25 %}text-warn{% else %}text-ok{% endif %}">
                                 {{ item.risk_score }}
                             </span>
                             <span class="text-xs text-muted">/100</span>
@@ -118,8 +118,8 @@
                         <span class="text-xs block text-muted">{{ item.get_risk_tier_display }}</span>
                     </td>
                     <td class="text-xs">
-                        <div>AVS: <span class="font-mono {% if item.avs_result_code == 'match' %}text-green font-bold{% elif item.avs_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_avs_result_code_display }}</span></div>
-                        <div>CVV: <span class="font-mono {% if item.cvv_result_code == 'match' %}text-green font-bold{% elif item.cvv_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_cvv_result_code_display }}</span></div>
+                        <div>AVS: <span class="font-mono {% if item.avs_result_code == 'match' %}text-ok font-bold{% elif item.avs_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_avs_result_code_display }}</span></div>
+                        <div>CVV: <span class="font-mono {% if item.cvv_result_code == 'match' %}text-ok font-bold{% elif item.cvv_result_code == 'no_match' %}text-danger font-bold{% else %}text-muted{% endif %}">{{ item.get_cvv_result_code_display }}</span></div>
                     </td>
                     <td>
                         {% if item.recommended_action == "reject" %}
