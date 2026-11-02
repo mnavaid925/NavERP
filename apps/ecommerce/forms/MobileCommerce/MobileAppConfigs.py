@@ -1,3 +1,4 @@
+import re
 from django import forms
 from apps.core.forms import TenantModelForm
 from apps.ecommerce.forms._common import TenantUniqueMixin
@@ -32,10 +33,14 @@ class MobileAppConfigForm(TenantUniqueMixin, TenantModelForm):
         val = self.cleaned_data.get("theme_color", "").strip()
         if val and not val.startswith("#"):
             val = "#" + val
+        if val and not re.match(r"^#[0-9A-Fa-f]{6}$", val):
+            raise forms.ValidationError("Theme color must be a valid 6-character hex color (e.g. #2563EB).")
         return val
 
     def clean_background_color(self):
         val = self.cleaned_data.get("background_color", "").strip()
         if val and not val.startswith("#"):
             val = "#" + val
+        if val and not re.match(r"^#[0-9A-Fa-f]{6}$", val):
+            raise forms.ValidationError("Background color must be a valid 6-character hex color (e.g. #FFFFFF).")
         return val
