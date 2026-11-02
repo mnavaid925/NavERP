@@ -238,7 +238,7 @@
       <div class="flex items-center gap-2">
         <i data-lucide="users" class="w-5 h-5 text-brand"></i>
         <h2 class="text-lg font-bold text-slate-900 dark:text-white">Authorized Company Buyers</h2>
-        <span class="badge badge-slate text-xs">{{ company_users.count }} Users</span>
+        <span class="badge badge-slate text-xs">{{ company_users|length }} Users</span>
       </div>
       <a href="{% url 'ecommerce:b2bcompanyuser_create' %}?company={{ company_account.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
         <i data-lucide="user-plus" class="w-4 h-4"></i>
@@ -385,6 +385,58 @@
               <td colspan="7" class="text-center p-6 text-slate-400 text-sm">
                 No quote requests submitted for this company yet.
               </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Saved Quick Order Templates Section -->
+  <div class="card overflow-hidden">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="bookmark" class="w-5 h-5 text-brand"></i>
+        <h2 class="text-lg font-bold text-slate-900 dark:text-white">Saved Quick Order Templates</h2>
+        <span class="badge badge-slate text-xs">{{ quick_order_templates|length }}</span>
+      </div>
+      <a href="{% url 'ecommerce:b2bquickordertemplate_create' %}?company={{ company_account.pk }}" class="btn btn-outline btn-sm flex items-center gap-1">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        <span>Add Template</span>
+      </a>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Template Name</th>
+            <th>Scope</th>
+            <th>Cadence</th>
+            <th class="text-right">Items</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tmpl in quick_order_templates %}
+            <tr>
+              <td>
+                <a href="{% url 'ecommerce:b2bquickordertemplate_detail' tmpl.pk %}" class="font-bold text-slate-900 dark:text-white hover:text-brand">
+                  {{ tmpl.name }}
+                </a>
+                <div class="text-xs text-slate-400 font-mono">{{ tmpl.number }}</div>
+              </td>
+              <td><span class="badge badge-info">{{ tmpl.get_scope_display }}</span></td>
+              <td><span class="badge badge-slate">{{ tmpl.get_cadence_display }}</span></td>
+              <td class="text-right font-mono">{{ tmpl.total_items_count }} SKUs</td>
+              <td class="text-right">
+                <a href="{% url 'ecommerce:b2bquickordertemplate_detail' tmpl.pk %}" class="btn btn-icon" title="View Template">
+                  <i data-lucide="eye" class="w-4 h-4"></i>
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" class="text-center p-6 text-slate-400 text-sm">No quick order templates saved for this company yet.</td>
             </tr>
           {% endfor %}
         </tbody>
