@@ -141,7 +141,7 @@
         <div>
           <div class="text-xs text-slate-400">Payment Terms</div>
           <div class="mt-1">
-            <span class="badge badge-info">{{ company_account.get_payment_terms_display }}</span>
+            <span class="badge badge-blue">{{ company_account.get_payment_terms_display }}</span>
           </div>
         </div>
         <div>
@@ -156,7 +156,7 @@
             {% elif company_account.credit_status == "suspended" %}
               <span class="badge badge-red">Suspended</span>
             {% else %}
-              <span class="badge badge-muted">{{ company_account.get_credit_status_display }}</span>
+              <span class="badge badge-slate">{{ company_account.get_credit_status_display }}</span>
             {% endif %}
           </div>
         </div>
@@ -267,7 +267,7 @@
                 <div class="text-xs text-slate-400 font-mono">{{ cu.user.email }}</div>
               </td>
               <td>
-                <span class="badge badge-info">{{ cu.get_role_display }}</span>
+                <span class="badge badge-blue">{{ cu.get_role_display }}</span>
               </td>
               <td>{{ cu.department|default:"—" }}</td>
               <td class="text-right font-mono">
@@ -297,7 +297,7 @@
                 {% elif cu.status == "invited" %}
                   <span class="badge badge-amber">Invited</span>
                 {% else %}
-                  <span class="badge badge-muted">{{ cu.get_status_display }}</span>
+                  <span class="badge badge-slate">{{ cu.get_status_display }}</span>
                 {% endif %}
               </td>
               <td class="text-right">
@@ -365,7 +365,7 @@
                 {% if qr.status == "accepted" or qr.status == "converted_to_order" %}
                   <span class="badge badge-green">{{ qr.get_status_display }}</span>
                 {% elif qr.status == "quoted" %}
-                  <span class="badge badge-info">Quoted / Offer Sent</span>
+                  <span class="badge badge-blue">Quoted / Offer Sent</span>
                 {% elif qr.status == "under_review" or qr.status == "submitted" %}
                   <span class="badge badge-amber">{{ qr.get_status_display }}</span>
                 {% elif qr.status == "rejected" %}
@@ -425,7 +425,7 @@
                 </a>
                 <div class="text-xs text-slate-400 font-mono">{{ tmpl.number }}</div>
               </td>
-              <td><span class="badge badge-info">{{ tmpl.get_scope_display }}</span></td>
+              <td><span class="badge badge-blue">{{ tmpl.get_scope_display }}</span></td>
               <td><span class="badge badge-slate">{{ tmpl.get_cadence_display }}</span></td>
               <td class="text-right font-mono">{{ tmpl.total_items_count }} SKUs</td>
               <td class="text-right">
