@@ -15,7 +15,22 @@ from apps.ecommerce.forms.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrd
 from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccount
 from apps.ecommerce.models.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplate
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
+from apps.ecommerce.models.ProductCatalog.ProductVariants import ProductVariant
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
+
+
+def _prepare_product_choices(request, limit=30):
+    products = list(
+        ecommerce_scope(
+            CatalogProduct.objects.filter(status="active").prefetch_related("variants").order_by("name"),
+            request,
+        )[:limit]
+    )
+    for p in products:
+        var = p.variants.first()
+        p.display_sku = var.sku if var else p.number
+        p.display_price = var.price if (var and var.price) else Decimal("0.00")
+    return products
 
 
 @login_required
@@ -101,7 +116,7 @@ def b2bquickordertemplate_create(request):
         initial["company"] = company_id
     initial["created_by"] = request.user.pk
 
-    products = ecommerce_scope(CatalogProduct.objects.filter(is_active=True).order_by("name"), request)[:30]
+    products = _prepare_product_choices(request, 30)
 
     if request.method == "POST":
         form = B2bQuickOrderTemplateForm(request.POST, tenant=request.tenant)
@@ -119,8 +134,11 @@ def b2bquickordertemplate_create(request):
             items_data = []
             for idx, pid in enumerate(product_ids):
                 if pid:
-                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first()
+                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
                     if prod:
+                        var = prod.variants.first()
+                        prod_sku = var.sku if var else prod.number
+                        default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
                             q_val = int(qtys[idx]) if idx < len(qtys) else 1
                         except (ValueError, IndexError):
@@ -128,10 +146,10 @@ def b2bquickordertemplate_create(request):
                         n_val = notes[idx] if idx < len(notes) else ""
                         items_data.append({
                             "product_id": prod.pk,
-                            "sku": prod.sku,
+                            "sku": prod_sku,
                             "name": prod.name,
                             "default_quantity": q_val,
-                            "unit_price": float(prod.retail_price),
+                            "unit_price": float(default_price),
                             "uom": "EA",
                             "notes": n_val,
                         })
@@ -161,7 +179,7 @@ def b2bquickordertemplate_create(request):
 @login_required
 def b2bquickordertemplate_edit(request, pk):
     tmpl = ecommerce_object(request, B2bQuickOrderTemplate, pk)
-    products = ecommerce_scope(CatalogProduct.objects.filter(is_active=True).order_by("name"), request)[:30]
+    products = _prepare_product_choices(request, 30)
 
     if request.method == "POST":
         form = B2bQuickOrderTemplateForm(request.POST, instance=tmpl, tenant=request.tenant)
@@ -177,8 +195,11 @@ def b2bquickordertemplate_edit(request, pk):
                 items_data = []
                 for idx, pid in enumerate(product_ids):
                     if pid:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first()
+                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
                         if prod:
+                            var = prod.variants.first()
+                            prod_sku = var.sku if var else prod.number
+                            default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
                                 q_val = int(qtys[idx]) if idx < len(qtys) else 1
                             except (ValueError, IndexError):
@@ -186,10 +207,10 @@ def b2bquickordertemplate_edit(request, pk):
                             n_val = notes[idx] if idx < len(notes) else ""
                             items_data.append({
                                 "product_id": prod.pk,
-                                "sku": prod.sku,
+                                "sku": prod_sku,
                                 "name": prod.name,
                                 "default_quantity": q_val,
-                                "unit_price": float(prod.retail_price),
+                                "unit_price": float(default_price),
                                 "uom": "EA",
                                 "notes": n_val,
                             })
@@ -245,7 +266,7 @@ def b2bquickordertemplate_delete(request, pk):
 def b2b_quick_order_matrix(request):
     """Bulk quick order entry and CSV upload parser."""
     companies = ecommerce_scope(B2bCompanyAccount.objects.filter(status="active").order_by("company_name"), request)
-    products = ecommerce_scope(CatalogProduct.objects.filter(is_active=True).order_by("name"), request)[:50]
+    products = _prepare_product_choices(request, 50)
 
     parsed_items = []
     csv_errors = []
@@ -269,28 +290,44 @@ def b2b_quick_order_matrix(request):
                         qty = 1
 
                     if sku:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, sku__iexact=sku).first()
-                        if prod:
+                        var = ProductVariant.objects.filter(tenant=request.tenant, sku__iexact=sku).select_related("product").first()
+                        if var:
+                            p_price = var.price or Decimal("0.00")
                             parsed_items.append({
-                                "product_id": prod.pk,
-                                "sku": prod.sku,
-                                "name": prod.name,
+                                "product_id": var.product_id,
+                                "sku": var.sku,
+                                "name": var.name or (var.product.name if var.product else var.sku),
                                 "qty": qty,
-                                "price": float(prod.retail_price),
-                                "line_total": float(Decimal(str(qty)) * prod.retail_price),
+                                "price": float(p_price),
+                                "line_total": float(Decimal(str(qty)) * p_price),
                                 "found": True,
                             })
                         else:
-                            csv_errors.append(f"Row {row_idx}: SKU '{sku}' not found in active catalog.")
-                            parsed_items.append({
-                                "product_id": None,
-                                "sku": sku,
-                                "name": "Item not found in catalog",
-                                "qty": qty,
-                                "price": 0.0,
-                                "line_total": 0.0,
-                                "found": False,
-                            })
+                            prod = CatalogProduct.objects.filter(tenant=request.tenant, number__iexact=sku).prefetch_related("variants").first()
+                            if prod:
+                                first_v = prod.variants.first()
+                                p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
+                                p_sku = first_v.sku if first_v else prod.number
+                                parsed_items.append({
+                                    "product_id": prod.pk,
+                                    "sku": p_sku,
+                                    "name": prod.name,
+                                    "qty": qty,
+                                    "price": float(p_price),
+                                    "line_total": float(Decimal(str(qty)) * p_price),
+                                    "found": True,
+                                })
+                            else:
+                                csv_errors.append(f"Row {row_idx}: SKU '{sku}' not found in active catalog.")
+                                parsed_items.append({
+                                    "product_id": None,
+                                    "sku": sku,
+                                    "name": "Item not found in catalog",
+                                    "qty": qty,
+                                    "price": 0.0,
+                                    "line_total": 0.0,
+                                    "found": False,
+                                })
                 if parsed_items:
                     success_message = f"Parsed {len(parsed_items)} items from uploaded CSV file."
             except Exception as e:
@@ -307,19 +344,35 @@ def b2b_quick_order_matrix(request):
                         q_val = int(qtys[idx]) if idx < len(qtys) and qtys[idx] else 1
                     except ValueError:
                         q_val = 1
-                    prod = CatalogProduct.objects.filter(tenant=request.tenant, sku__iexact=sku_val).first()
-                    if prod:
+                    var = ProductVariant.objects.filter(tenant=request.tenant, sku__iexact=sku_val).select_related("product").first()
+                    if var:
+                        p_price = var.price or Decimal("0.00")
                         parsed_items.append({
-                            "product_id": prod.pk,
-                            "sku": prod.sku,
-                            "name": prod.name,
+                            "product_id": var.product_id,
+                            "sku": var.sku,
+                            "name": var.name or (var.product.name if var.product else var.sku),
                             "qty": q_val,
-                            "price": float(prod.retail_price),
-                            "line_total": float(Decimal(str(q_val)) * prod.retail_price),
+                            "price": float(p_price),
+                            "line_total": float(Decimal(str(q_val)) * p_price),
                             "found": True,
                         })
                     else:
-                        csv_errors.append(f"SKU '{sku_val}' not found in active catalog.")
+                        prod = CatalogProduct.objects.filter(tenant=request.tenant, number__iexact=sku_val).prefetch_related("variants").first()
+                        if prod:
+                            first_v = prod.variants.first()
+                            p_price = first_v.price if (first_v and first_v.price) else Decimal("0.00")
+                            p_sku = first_v.sku if first_v else prod.number
+                            parsed_items.append({
+                                "product_id": prod.pk,
+                                "sku": p_sku,
+                                "name": prod.name,
+                                "qty": q_val,
+                                "price": float(p_price),
+                                "line_total": float(Decimal(str(q_val)) * p_price),
+                                "found": True,
+                            })
+                        else:
+                            csv_errors.append(f"SKU '{sku_val}' not found in active catalog.")
 
             if parsed_items:
                 success_message = f"Validated {len(parsed_items)} items from Quick Order matrix."
