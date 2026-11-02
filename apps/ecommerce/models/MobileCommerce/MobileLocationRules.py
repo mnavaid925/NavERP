@@ -139,3 +139,6 @@ class MobileLocationRule(TenantNumbered):
     def is_within_geofence(self, target_lat, target_lng):
         dist = self.distance_to(target_lat, target_lng)
         return dist <= self.radius_meters
+
+    def is_device_inside(self, target_lat, target_lng):
+        return self.is_within_geofence(target_lat, target_lng)
