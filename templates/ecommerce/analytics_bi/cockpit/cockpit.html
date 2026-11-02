@@ -193,7 +193,7 @@
             {% for m in top_best_sellers %}
             <tr>
               <td class="text-xs font-medium">
-                <a href="{% url 'ecommerce:productmerchandisingmetric_detail' m.pk %}" class="hover:text-brand font-semibold">
+                <a href="{% url 'ecommerce:productmerchandisingmetric_detail' m.pk %}" class="hover:text-brand font-semibold truncate max-w-xs block">
                   {{ m.product.name }}
                 </a>
               </td>
