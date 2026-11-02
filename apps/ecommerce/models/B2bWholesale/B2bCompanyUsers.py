@@ -126,6 +126,8 @@ class B2bCompanyUser(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_ebcu_ten_created"),
+            models.Index(fields=["tenant", "company", "status"], name="idx_ebcu_ten_co_stat"),
             models.Index(fields=["tenant", "role"], name="idx_ebcu_ten_role"),
             models.Index(fields=["tenant", "status"], name="idx_ebcu_ten_stat"),
         ]
