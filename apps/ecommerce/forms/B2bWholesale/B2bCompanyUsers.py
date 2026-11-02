@@ -56,5 +56,12 @@ class B2bCompanyUserForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["company", "party"])
+        reject_foreign(self, cleaned, ["company", "party", "reports_to_approver"])
+        company = cleaned.get("company")
+        approver = cleaned.get("reports_to_approver")
+        if approver:
+            if self.instance and self.instance.pk and approver.pk == self.instance.pk:
+                self.add_error("reports_to_approver", "A user cannot report to themselves as approver.")
+            if company and approver.company_id != company.id:
+                self.add_error("reports_to_approver", "The designated approver must belong to the same wholesale company.")
         return cleaned
