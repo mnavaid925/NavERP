@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Quick Order & CSV Upload - B2B Wholesale | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="hover:text-brand">Templates</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">Bulk Quick Order</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="file-spreadsheet" class="w-7 h-7 text-brand"></i>
+        Bulk Quick Order & CSV Importer
+      </h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Rapidly populate wholesale orders by uploading spreadsheet CSV files or typing SKU part numbers
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:b2bquickordertemplate_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="bookmark" class="w-4 h-4"></i>
+        <span>Saved Requisition Templates</span>
+      </a>
+      <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="btn btn-outline">
+        Wholesale Hub
+      </a>
+    </div>
+  </div>
+
+  {% if success_message %}
+    <div class="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-2 dark:bg-emerald-950/20 dark:border-emerald-900 dark:text-emerald-200">
+      <i data-lucide="check-circle" class="w-5 h-5 text-emerald-600"></i>
+      <span>{{ success_message }}</span>
+    </div>
+  {% endif %}
+
+  {% if csv_errors %}
+    <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm dark:bg-rose-950/20 dark:border-rose-900 dark:text-rose-300">
+      <div class="font-bold flex items-center gap-2 mb-2">
+        <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        <span>CSV Validation Warnings ({{ csv_errors|length }})</span>
+      </div>
+      <ul class="list-disc list-inside space-y-1 text-xs">
+        {% for err in csv_errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Option A: CSV Spreadsheet Upload -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <i data-lucide="upload-cloud" class="w-5 h-5 text-brand"></i>
+        Upload Order CSV Spreadsheet
+      </div>
+      <p class="text-xs text-slate-500">
+        Upload a simple two-column CSV file with headers: <code class="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded font-mono">sku,quantity</code>.
+      </p>
+
+      <form method="post" enctype="multipart/form-data" class="space-y-4">
+        {% csrf_token %}
+        <div class="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg p-6 text-center hover:border-brand transition-colors">
+          <i data-lucide="file-up" class="w-8 h-8 text-slate-400 mx-auto mb-2"></i>
+          <input type="file" name="csv_file" accept=".csv" required class="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand/10 file:text-brand hover:file:bg-brand/20 cursor-pointer" />
+        </div>
+        <button type="submit" class="btn btn-primary w-full flex items-center justify-center gap-2">
+          <i data-lucide="upload" class="w-4 h-4"></i>
+          <span>Process & Parse CSV</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Option B: Fast SKU Input Matrix -->
+    <div class="card p-5 space-y-4">
+      <div class="card-header pb-3 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <i data-lucide="edit-3" class="w-5 h-5 text-brand"></i>
+        Quick SKU Entry Matrix
+      </div>
+      <p class="text-xs text-slate-500">
+        Directly type known wholesale SKU part numbers and quantities to quickly generate an order.
+      </p>
+
+      <form method="post" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="manual_submit" value="1" />
+        <div class="space-y-2" id="matrix-container">
+          <div class="flex items-center gap-2">
+            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+            <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+          </div>
+        </div>
+        <div class="flex items-center gap-2 pt-2">
+          <button type="button" id="add-matrix-row" class="btn btn-outline btn-sm text-xs flex items-center gap-1">
+            <i data-lucide="plus" class="w-3 h-3"></i> Add Row
+          </button>
+          <button type="submit" class="btn btn-primary btn-sm flex-1 flex items-center justify-center gap-1">
+            <i data-lucide="check" class="w-4 h-4"></i> Validate & Add
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Parsed Items Table -->
+  {% if parsed_items %}
+    <div class="card overflow-hidden">
+      <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="shopping-cart" class="w-5 h-5 text-brand"></i>
+          Validated Quick Order Items ({{ parsed_items|length }})
+        </div>
+        <div class="text-sm font-mono font-bold text-slate-900 dark:text-white">
+          Ready for Cart Checkout
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>SKU</th>
+              <th>Product Name</th>
+              <th class="text-right">Quantity</th>
+              <th class="text-right">Unit Price</th>
+              <th class="text-right">Line Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in parsed_items %}
+              <tr {% if not item.found %}class="bg-rose-50/50 dark:bg-rose-950/10"{% endif %}>
+                <td>
+                  {% if item.found %}
+                    <span class="badge badge-green flex items-center gap-1 w-fit">
+                      <i data-lucide="check" class="w-3 h-3"></i> Catalog Match
+                    </span>
+                  {% else %}
+                    <span class="badge badge-red flex items-center gap-1 w-fit">
+                      <i data-lucide="x" class="w-3 h-3"></i> Unknown SKU
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="font-mono text-xs font-bold">{{ item.sku }}</td>
+                <td class="text-slate-800 dark:text-slate-200 font-medium">{{ item.name }}</td>
+                <td class="text-right font-mono font-bold">{{ item.qty }}</td>
+                <td class="text-right font-mono text-slate-600 dark:text-slate-400">
+                  {% if item.found %}${{ item.price|floatformat:2 }}{% else %}—{% endif %}
+                </td>
+                <td class="text-right font-mono font-bold text-brand">
+                  {% if item.found %}${{ item.line_total|floatformat:2 }}{% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('matrix-container');
+    const addRowBtn = document.getElementById('add-matrix-row');
+
+    if (addRowBtn && container) {
+      addRowBtn.addEventListener('click', function() {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2';
+        row.innerHTML = `
+          <input type="text" name="matrix_sku[]" placeholder="Enter SKU..." class="form-input text-xs flex-1 font-mono uppercase" />
+          <input type="number" name="matrix_qty[]" value="1" min="1" placeholder="Qty" class="form-input text-xs w-20 text-right" />
+        `;
+        container.appendChild(row);
+      });
+    }
+  });
+</script>
+{% endblock %}
