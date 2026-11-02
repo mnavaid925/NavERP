@@ -12,83 +12,96 @@ Six specialized reviewers (`code-reviewer`, `explorer`, `frontend-reviewer`, `pe
 
 ## Critical Findings
 
-- [ ] **C1** — **Chained N+1 queries in `mobiledeviceregistration_list` on `customer_profile__user` and `customer_profile__customer`**
+- [x] **C1** — **Chained N+1 queries in `mobiledeviceregistration_list` on `customer_profile__user` and `customer_profile__customer`**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileDeviceRegistrations.py:18-21` and `templates/ecommerce/mobile/mobile_device_registration/list.html:164-166`
   - *Problem*: In `list.html`, `{{ dev.customer_profile.user.email... }}` and `{{ dev.customer_profile.customer.name }}` dereference unjoined models on every row of the 15-row list.
   - *Fix*: Add `.select_related("customer_profile__user", "customer_profile__customer", "party")` to `mobiledeviceregistration_list`.
+  - *Status*: [x] fixed — `9b8de880` fix(ecommerce): eliminate chained N+1 queries in mobile device registration list
 
-- [ ] **C2** — **Chained N+1 queries in `MobileDeviceRegistrationForm` customer profile dropdown (`CustomerAccountProfile.__str__`)**
+- [x] **C2** — **Chained N+1 queries in `MobileDeviceRegistrationForm` customer profile dropdown (`CustomerAccountProfile.__str__`)**
   - *Location*: `apps/ecommerce/forms/MobileCommerce/MobileDeviceRegistrations.py:31`
   - *Problem*: In `MobileDeviceRegistrationForm.__init__`, `CustomerAccountProfile` dropdown evaluates `str(profile)` which touches `self.customer` (`core.Party`), causing $1 + N$ queries.
   - *Fix*: Add `.select_related("customer")` to `customer_profile` queryset in `MobileDeviceRegistrationForm.__init__`.
+  - *Status*: [x] fixed — `112fc981` fix(ecommerce): select related customer on customer profile field in mobile device form
 
 ---
 
 ## Important Findings
 
-- [ ] **I1** — **Unvalidated numeric input & unhandled `InvalidOperation` exception in `mobiledeviceregistration_ping` (L35)**
+- [x] **I1** — **Unvalidated numeric input & unhandled `InvalidOperation` exception in `mobiledeviceregistration_ping` (L35)**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileDeviceRegistrations.py:171-182`
   - *Problem*: Hand-parsed coordinates with raw `float(lat)`/`float(lng)` without `math.isfinite()` or geographic range constraints (`[-90.0, 90.0]`, `[-180.0, 180.0]`) cause `device.record_activity()` to fail with unhandled `InvalidOperation` or DB column overflow on NaN/Inf/large values.
   - *Fix*: Check `math.isfinite()` and clamp valid ranges (`-90.0 <= lat <= 90.0`, `-180.0 <= lng <= 180.0`).
+  - *Status*: [x] fixed — `c2d0b9e1` fix(ecommerce): validate finite coordinates and geographic bounds in device ping
 
-- [ ] **I2** — **Coordinates parsing and math domain error in `mobilelocationrule_simulate` & `MobileLocationRule.distance_to` (L35)**
+- [x] **I2** — **Coordinates parsing and math domain error in `mobilelocationrule_simulate` & `MobileLocationRule.distance_to` (L35)**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileLocationRules.py:170-176` and `apps/ecommerce/models/MobileCommerce/MobileLocationRules.py:127-130`
   - *Problem*: `mobilelocationrule_simulate` parses `test_lat` and `test_lng` with raw `float()` without checking `math.isfinite()`. In `MobileLocationRule.distance_to()`, calculating `c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))` fails with `ValueError: math domain error` if floating-point inaccuracy or out-of-range coords causes `a > 1.0`.
   - *Fix*: In `distance_to`, clamp `a` to `[0.0, 1.0]` and clamp `1 - a` to `>= 0.0`. In `mobilelocationrule_simulate`, validate `math.isfinite()` and bounds `[-90.0, 90.0]` / `[-180.0, 180.0]`.
+  - *Status*: [x] fixed — `f95d686f` fix(ecommerce): prevent math domain error and validate coordinates in distance_to; `58c1bb2e` fix(ecommerce): validate finite coordinates and require explicit simulation inputs in location rule simulate
 
-- [ ] **I3** — **Missing view-level status guard in `mobilepushcampaign_test_send`**
+- [x] **I3** — **Missing view-level status guard in `mobilepushcampaign_test_send`**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobilePushCampaigns.py:170-184`
   - *Problem*: A cancelled campaign can be dispatched via direct POST, mutating its status to `sent` and incrementing metrics.
   - *Fix*: Add a status guard `if campaign.status == "cancelled":` with error message and redirect.
+  - *Status*: [x] fixed — `3d74cd29` fix(ecommerce): add status guard against dispatching cancelled push campaign
 
-- [ ] **I4** — **Mass assignment of workflow-controlled `status` in `MobilePushCampaignForm`**
+- [x] **I4** — **Mass assignment of workflow-controlled `status` in `MobilePushCampaignForm`**
   - *Location*: `apps/ecommerce/forms/MobileCommerce/MobilePushCampaigns.py:13-25, 40`
   - *Problem*: `status` is not in `Meta.exclude` and is rendered as an editable `<select>` input, allowing arbitrary modification of campaign lifecycle states.
   - *Fix*: Add `"status"` to `Meta.exclude` in `MobilePushCampaignForm`.
+  - *Status*: [x] fixed — `ab0a09b9` fix(ecommerce): exclude workflow-controlled status field from push campaign form; `91cfced1` fix(ecommerce): remove excluded status field from mobile push campaign template
 
-- [ ] **I5** — **CSS/Style Injection via unconstrained color inputs in `MobileAppConfig` (L26)**
+- [x] **I5** — **CSS/Style Injection via unconstrained color inputs in `MobileAppConfig` (L26)**
   - *Location*: `apps/ecommerce/models/MobileCommerce/MobileAppConfigs.py:44-53`, `apps/ecommerce/forms/MobileCommerce/MobileAppConfigs.py:31-41`
   - *Problem*: `theme_color` and `background_color` lack model-level `RegexValidator(r"^#[0-9A-Fa-f]{6}$")` and are rendered directly into inline `style="background-color: {{ config.theme_color }};"`.
   - *Fix*: Add `RegexValidator(r"^#[0-9A-Fa-f]{6}$")` to model fields and validate hex in form `clean()`.
+  - *Status*: [x] fixed — `cc0bbf4f` fix(ecommerce): add regex validator for hex colors in MobileAppConfig model; `2606016a` fix(ecommerce): validate hex format for theme and background colors in MobileAppConfigForm; `8b479df7` fix(ecommerce): migration for MobileAppConfig hex color validators
 
-- [ ] **I6** — **Push token exposed as editable text input in `MobileDeviceRegistrationForm` (L20)**
+- [x] **I6** — **Push token exposed as editable text input in `MobileDeviceRegistrationForm` (L20)**
   - *Location*: `apps/ecommerce/forms/MobileCommerce/MobileDeviceRegistrations.py:12, 21`
   - *Problem*: `push_token` is included as an editable field in `MobileDeviceRegistrationForm`, risking notification hijacking or credential overwriting.
   - *Fix*: Add `"push_token"` to `Meta.exclude` in `MobileDeviceRegistrationForm`.
+  - *Status*: [x] fixed — `195e1ae3` fix(ecommerce): exclude push token from mobile device registration form; `8945f40c` fix(ecommerce): display read-only push token instead of editable input
 
-- [ ] **I7** — **Unconsolidated KPI aggregates in `MobileHub.py`**
+- [x] **I7** — **Unconsolidated KPI aggregates in `MobileHub.py`**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileHub.py:19-35`
   - *Problem*: Device stats execute 4 separate COUNT queries and push campaign stats execute 2 separate queries.
   - *Fix*: Consolidate device counts into a single conditional aggregate and push campaign stats into a single aggregate.
+  - *Status*: [x] fixed — `6a664645` perf(ecommerce): consolidate device and push KPI aggregates and prune joins in mobile hub
 
-- [ ] **I8** — **Missing composite indexes on `MobileDeviceRegistration`**
+- [x] **I8** — **Missing composite indexes on `MobileDeviceRegistration`**
   - *Location*: `apps/ecommerce/models/MobileCommerce/MobileDeviceRegistrations.py:138-142`
   - *Problem*: High-volume telemetry table lacks composite indexes on `(tenant, -last_active_at)` (for default ordering and cockpit query) and `(tenant, is_active, push_enabled)` (for push broadcast dispatch).
   - *Fix*: Add indexes `models.Index(fields=["tenant", "-last_active_at"], name="idx_emdr_ten_last_act")` and `models.Index(fields=["tenant", "is_active", "push_enabled"], name="idx_emdr_ten_push_act")` with migration.
+  - *Status*: [x] fixed — `7c975eb5` perf(ecommerce): add composite indexes on mobile device registration; `70e208d0` perf(ecommerce): migration for mobile device registration composite indexes
 
-- [ ] **I9** — **Hardcoded fallbacks and missing status handlers in status/type badge `{% else %}` branches (L33)**
+- [x] **I9** — **Hardcoded fallbacks and missing status handlers in status/type badge `{% else %}` branches (L33)**
   - *Location*:
     - `templates/ecommerce/mobile/mobile_push_campaign/list.html:163-174`, `detail.html:22-32`, `mobile_hub.html:178-184`
     - `templates/ecommerce/mobile/mobile_location_rule/list.html:144-155`
     - `templates/ecommerce/mobile/mobile_device_registration/list.html:152-158`, `detail.html:22-28`, `mobile_hub.html:275-281`
   - *Problem*: Badges in `mobile_push_campaign` and `mobile_hub` fall through to hardcoded "Draft" instead of `{{ camp.get_status_display }}`; `sending` and `cancelled` statuses were omitted in `mobile_hub.html`; `rule_type` badge put `curbside_pickup` in `{% else %}` without testing explicitly; platform badge omitted `pwa_web` check.
   - *Fix*: Explicitly check each choice value and provide `{{ obj.get_FIELD_display }}` in the `{% else %}` branch.
+  - *Status*: [x] fixed — `aa77b78d`, `cc0d5a6d`, `2c558c2b`, `e7579386`, `433cca17`, `4fb68265` explicit status/platform/rule-type choices and fallback display across push, location, device, and hub templates
 
-- [ ] **I10** — **Missing label associations in Location Rule simulator form (WCAG A11y)**
+- [x] **I10** — **Missing label associations in Location Rule simulator form (WCAG A11y)**
   - *Location*: `templates/ecommerce/mobile/mobile_location_rule/detail.html:167-174`
   - *Problem*: Simulator inputs lack `id` attributes and labels lack `for` attributes.
   - *Fix*: Add matching `id` and `for` attributes (`sim-test-lat`, `sim-test-lng`).
+  - *Status*: [x] fixed — `b0cf52d6` fix(ecommerce): associate labels in simulator form and add back button in location rule detail
 
 ---
 
 ## Minor Findings
 
-- [ ] **M1** — **Public PWA manifest serves configuration even when PWA is disabled**
+- [x] **M1** — **Public PWA manifest serves configuration even when PWA is disabled**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileAppConfigs.py:157`
   - *Problem*: `pwa_manifest_json` filters only on `is_active=True` without checking `enable_pwa=True`.
   - *Fix*: Filter `MobileAppConfig.objects.filter(tenant=tenant, is_active=True, enable_pwa=True).first()`.
+  - *Status*: [x] fixed — `32e00123` fix(ecommerce): require enable_pwa in manifest view and consolidate header stat counts
 
-- [ ] **M2** — **Detail templates lack explicit secondary Back button in header action bar**
+- [x] **M2** — **Detail templates lack explicit secondary Back button in header action bar**
   - *Location*:
     - `templates/ecommerce/mobile/mobile_app_config/detail.html:34`
     - `templates/ecommerce/mobile/mobile_device_registration/detail.html:38`
@@ -96,28 +109,34 @@ Six specialized reviewers (`code-reviewer`, `explorer`, `frontend-reviewer`, `pe
     - `templates/ecommerce/mobile/mobile_location_rule/detail.html:33`
   - *Problem*: Back navigation is only present via breadcrumbs.
   - *Fix*: Add explicit secondary Back button pointing to the entity list view.
+  - *Status*: [x] fixed — `7f1cc7a4`, `4fb68265`, `cc0d5a6d`, `b0cf52d6` add explicit secondary back buttons on all 4 detail templates
 
-- [ ] **M3** — **Missing `aria-label` attributes on icon-only buttons (`.btn-icon`)**
+- [x] **M3** — **Missing `aria-label` attributes on icon-only buttons (`.btn-icon`)**
   - *Location*: List templates actions column (`mobile_app_config`, `mobile_device_registration`, `mobile_push_campaign`, `mobile_location_rule`, `mobile_hub`).
   - *Problem*: Interactive controls carry `title` but lack `aria-label`.
   - *Fix*: Add matching `aria-label` to each `.btn-icon` element.
+  - *Status*: [x] fixed — `44ae9af7`, `433cca17`, `aa77b78d`, `e7579386`, `2c558c2b` add aria-label attributes to all icon-only action buttons across list and hub templates
 
-- [ ] **M4** — **Redundant SQL joins on unrendered related models in list and hub queries**
+- [x] **M4** — **Redundant SQL joins on unrendered related models in list and hub queries**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobilePushCampaigns.py:20` and `MobileHub.py:41`
   - *Problem*: `select_related` joins models not rendered in the template.
   - *Fix*: Prune unused foreign keys from `select_related`.
+  - *Status*: [x] fixed — `b1b2154a`, `6a664645` prune redundant joins on unrendered models in push campaigns list and mobile hub queries
 
-- [ ] **M5** — **Unconsolidated count queries in list view header stat cards**
+- [x] **M5** — **Unconsolidated count queries in list view header stat cards**
   - *Location*: `MobileDeviceRegistrations.py:47-51`, `MobileAppConfigs.py:41-43`, `MobilePushCampaigns.py:44-48`, `MobileLocationRules.py:45-48`
   - *Problem*: Multiple individual `COUNT(*)` queries fired before pagination.
   - *Fix*: Consolidate into single `aggregate(Count(...), ...)` calls.
+  - *Status*: [x] fixed — `aed4e632`, `32e00123`, `b1b2154a`, `125998e4` consolidate header stat count queries into single aggregate calls across device, app config, push campaign, and location rule views
 
-- [ ] **M6** — **Empty-state action buttons lack Lucide plus icon**
+- [x] **M6** — **Empty-state action buttons lack Lucide plus icon**
   - *Location*: List templates empty states.
   - *Problem*: Empty-state buttons lack `<i data-lucide="plus" ...>`.
   - *Fix*: Add `<i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i>`.
+  - *Status*: [x] fixed — `44ae9af7`, `433cca17`, `aa77b78d`, `e7579386` add plus icon to empty state primary action buttons across all list templates
 
-- [ ] **M7** — **Location rule simulator default test coordinates**
+- [x] **M7** — **Location rule simulator default test coordinates**
   - *Location*: `apps/ecommerce/views/MobileCommerce/MobileLocationRules.py:165`
   - *Problem*: Defaulting to rule center coordinates when POST inputs are blank causes instant 0m inside match.
   - *Fix*: Reject blank simulation inputs with an informational flash message instead of auto-matching.
+  - *Status*: [x] fixed — `58c1bb2e` fix(ecommerce): validate finite coordinates and require explicit simulation inputs in location rule simulate
