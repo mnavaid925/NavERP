@@ -97,6 +97,10 @@ from apps.ecommerce.forms.MobileCommerce.MobileAppConfigs import MobileAppConfig
 from apps.ecommerce.forms.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistrationForm
 from apps.ecommerce.forms.MobileCommerce.MobilePushCampaigns import MobilePushCampaignForm
 from apps.ecommerce.forms.MobileCommerce.MobileLocationRules import MobileLocationRuleForm
+from apps.ecommerce.forms.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccountForm
+from apps.ecommerce.forms.B2bWholesale.B2bCompanyUsers import B2bCompanyUserForm
+from apps.ecommerce.forms.B2bWholesale.B2bQuoteRequests import B2bQuoteRequestForm
+from apps.ecommerce.forms.B2bWholesale.B2bQuickOrderTemplates import B2bQuickOrderTemplateForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -196,4 +200,9 @@ __all__ = [
     "MobileDeviceRegistrationForm",
     "MobilePushCampaignForm",
     "MobileLocationRuleForm",
+    # 9.17 B2B & Wholesale Commerce
+    "B2bCompanyAccountForm",
+    "B2bCompanyUserForm",
+    "B2bQuoteRequestForm",
+    "B2bQuickOrderTemplateForm",
 ]
