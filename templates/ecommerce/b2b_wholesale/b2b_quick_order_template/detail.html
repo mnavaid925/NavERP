@@ -85,7 +85,7 @@
         <span class="badge badge-info">{{ template_obj.get_scope_display }}</span>
         <span class="badge badge-slate">{{ template_obj.get_cadence_display }}</span>
       </div>
-      <div class="text-xs text-slate-500 mt-1">Authored by: {{ template_obj.created_by.get_full_name|default:template_obj.created_by.username|default:"System" }}</div>
+      <div class="text-xs text-slate-500 mt-1">Authored by: {% if template_obj.created_by %}{{ template_obj.created_by.get_full_name|default:template_obj.created_by.username }}{% else %}System{% endif %}</div>
     </div>
 
     <div class="card p-5 space-y-2">
