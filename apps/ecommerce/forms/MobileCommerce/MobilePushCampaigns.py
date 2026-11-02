@@ -44,7 +44,7 @@ class MobilePushCampaignForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["target_product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["target_product"].queryset = CatalogProduct.objects.filter(tenant=self.tenant, status="active")
             self.fields["target_category"].queryset = StoreCategory.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["target_coupon"].queryset = CouponPromotion.objects.filter(tenant=self.tenant, is_active=True)
 
