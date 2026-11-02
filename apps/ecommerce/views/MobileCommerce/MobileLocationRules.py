@@ -1,3 +1,5 @@
+import math
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -167,10 +169,22 @@ def mobilelocationrule_simulate(request, pk):
     lat_str = request.POST.get("test_lat", "").strip()
     lng_str = request.POST.get("test_lng", "").strip()
 
+    if not lat_str or not lng_str:
+        messages.info(request, "Please enter test latitude and longitude coordinates to simulate.")
+        return redirect("ecommerce:mobilelocationrule_detail", pk=rule.pk)
+
     try:
-        lat = float(lat_str) if lat_str else float(rule.latitude)
-        lng = float(lng_str) if lng_str else float(rule.longitude)
-    except ValueError:
+        lat = float(lat_str)
+        lng = float(lng_str)
+        if not (
+            math.isfinite(lat)
+            and math.isfinite(lng)
+            and -90.0 <= lat <= 90.0
+            and -180.0 <= lng <= 180.0
+        ):
+            messages.error(request, "Coordinates must be finite and within valid ranges (-90..90 lat, -180..180 lng).")
+            return redirect("ecommerce:mobilelocationrule_detail", pk=rule.pk)
+    except (ValueError, TypeError):
         messages.error(request, "Invalid coordinates provided for simulation.")
         return redirect("ecommerce:mobilelocationrule_detail", pk=rule.pk)
 
