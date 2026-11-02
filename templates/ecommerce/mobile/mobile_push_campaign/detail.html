@@ -27,8 +27,10 @@
         <span class="badge badge-info">Sending</span>
         {% elif campaign.status == 'cancelled' %}
         <span class="badge badge-red">Cancelled</span>
-        {% else %}
+        {% elif campaign.status == 'draft' %}
         <span class="badge badge-muted">Draft</span>
+        {% else %}
+        <span class="badge badge-slate">{{ campaign.get_status_display }}</span>
         {% endif %}
         <span class="badge badge-slate">{{ campaign.get_target_platform_display }}</span>
       </div>
@@ -36,6 +38,10 @@
     </div>
 
     <div class="flex items-center gap-3">
+      <a href="{% url 'ecommerce:mobilepushcampaign_list' %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i>
+        <span>Back to Campaigns</span>
+      </a>
       <form method="post" action="{% url 'ecommerce:mobilepushcampaign_test_send' campaign.pk %}" class="inline">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline flex items-center gap-2">
