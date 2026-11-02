@@ -72,6 +72,10 @@ from apps.ecommerce.models import (
     MobileDeviceRegistration,
     MobilePushCampaign,
     MobileLocationRule,
+    B2bCompanyAccount,
+    B2bCompanyUser,
+    B2bQuoteRequest,
+    B2bQuickOrderTemplate,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -3902,6 +3906,193 @@ def ecom_mobile_location_a(tenant_a, ecom_center_a):
 @pytest.fixture
 def ecom_mobile_location_b(tenant_b, ecom_center_b):
     return _mobilecommerce_location_rule(tenant_b, fulfillment_center=ecom_center_b, name="Globex Geofence")
+
+
+# ----------------------------------------------------------------------
+# 9.17 B2B & Wholesale Commerce Contract Constants & Fixtures
+# ----------------------------------------------------------------------
+B2BWHOLESALE_PAGE_SIZE = 20
+
+B2BWHOLESALE_MODEL_FIELDS = {
+    "B2bCompanyAccount": (
+        "id", "tenant", "number", "company_name", "company_party",
+        "primary_contact", "preferred_currency", "company_tax_id",
+        "business_registration_number", "website", "industry", "credit_limit",
+        "available_credit", "payment_terms", "credit_status",
+        "requires_po_number", "requires_order_approval",
+        "approval_threshold_amount", "default_approver", "punchout_enabled",
+        "punchout_protocol", "punchout_identity", "punchout_shared_secret",
+        "punchout_return_url", "wholesale_discount_percent", "status",
+        "notes", "created_at", "updated_at",
+    ),
+    "B2bCompanyUser": (
+        "id", "tenant", "number", "company", "user", "party", "role",
+        "job_title", "department", "reports_to_approver", "order_spend_limit",
+        "monthly_spend_limit", "can_place_orders", "can_request_quotes",
+        "can_view_invoices", "can_manage_users", "can_approve_orders",
+        "status", "notes", "created_at", "updated_at",
+    ),
+    "B2bQuoteRequest": (
+        "id", "tenant", "number", "company", "requested_by",
+        "assigned_sales_rep", "currency", "status", "target_budget",
+        "original_subtotal", "quoted_discount_percent", "quoted_total",
+        "tax_amount", "shipping_estimate", "target_delivery_date",
+        "valid_until", "submitted_at", "quoted_at", "accepted_at",
+        "converted_order", "line_items_data", "buyer_notes", "merchant_notes",
+        "rejection_reason", "created_at", "updated_at",
+    ),
+    "B2bQuickOrderTemplate": (
+        "id", "tenant", "number", "name", "company", "created_by",
+        "description", "scope", "cadence", "items_data", "total_items_count",
+        "times_ordered", "last_ordered_at", "is_active", "created_at",
+        "updated_at",
+    ),
+}
+
+B2BWHOLESALE_CHOICES = {
+    "B2bCompanyAccount": {
+        "payment_terms": tuple(B2bCompanyAccount.PAYMENT_TERMS_CHOICES),
+        "credit_status": tuple(B2bCompanyAccount.CREDIT_STATUS_CHOICES),
+        "punchout_protocol": tuple(B2bCompanyAccount.PUNCHOUT_PROTOCOL_CHOICES),
+        "status": tuple(B2bCompanyAccount.STATUS_CHOICES),
+    },
+    "B2bCompanyUser": {
+        "role": tuple(B2bCompanyUser.ROLE_CHOICES),
+        "status": tuple(B2bCompanyUser.STATUS_CHOICES),
+    },
+    "B2bQuoteRequest": {
+        "status": tuple(B2bQuoteRequest.STATUS_CHOICES),
+    },
+    "B2bQuickOrderTemplate": {
+        "scope": tuple(B2bQuickOrderTemplate.SCOPE_CHOICES),
+        "cadence": tuple(B2bQuickOrderTemplate.CADENCE_CHOICES),
+    },
+}
+
+
+def _b2bwholesale_company_account(tenant, primary_contact=None, company_party=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "company_name": "Atlas Wholesale Distribution Ltd",
+        "company_party": company_party,
+        "primary_contact": primary_contact,
+        "credit_limit": Decimal("50000.00"),
+        "available_credit": Decimal("50000.00"),
+        "payment_terms": "net_30",
+        "credit_status": "good_standing",
+        "wholesale_discount_percent": Decimal("10.00"),
+        "status": "active",
+    }
+    defaults.update(overrides)
+    return B2bCompanyAccount.objects.create(**defaults)
+
+
+def _b2bwholesale_company_user(tenant, company, user, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "company": company,
+        "user": user,
+        "role": "staff_buyer",
+        "order_spend_limit": Decimal("5000.00"),
+        "monthly_spend_limit": Decimal("20000.00"),
+        "can_place_orders": True,
+        "can_request_quotes": True,
+        "status": "active",
+    }
+    defaults.update(overrides)
+    return B2bCompanyUser.objects.create(**defaults)
+
+
+def _b2bwholesale_quote_request(tenant, company, requested_by=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "company": company,
+        "requested_by": requested_by,
+        "status": "submitted",
+        "target_budget": Decimal("10000.00"),
+        "original_subtotal": Decimal("9500.00"),
+        "quoted_discount_percent": Decimal("0.00"),
+        "quoted_total": Decimal("9500.00"),
+        "shipping_estimate": Decimal("250.00"),
+        "buyer_notes": "Bulk supply order for northern facility.",
+    }
+    defaults.update(overrides)
+    return B2bQuoteRequest.objects.create(**defaults)
+
+
+def _b2bwholesale_quick_order_template(tenant, company, created_by=None, **overrides):
+    defaults = {
+        "tenant": tenant,
+        "name": "Weekly MRO Replenishment Kit",
+        "company": company,
+        "created_by": created_by,
+        "description": "Standard weekly maintenance stock.",
+        "scope": "company_shared",
+        "cadence": "weekly",
+        "items_data": [
+            {
+                "sku": "MRO-KIT-01",
+                "name": "Industrial Lubricant Pack",
+                "default_quantity": 10,
+                "unit_price": 45.0,
+            }
+        ],
+        "total_items_count": 1,
+        "times_ordered": 0,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return B2bQuickOrderTemplate.objects.create(**defaults)
+
+
+@pytest.fixture
+def ecom_b2b_company_a(tenant_a, user_a):
+    return _b2bwholesale_company_account(tenant_a, primary_contact=user_a)
+
+
+@pytest.fixture
+def ecom_b2b_company_b(tenant_b, user_b):
+    return _b2bwholesale_company_account(
+        tenant_b,
+        primary_contact=user_b,
+        company_name="Globex Wholesale Industrial Ltd",
+    )
+
+
+@pytest.fixture
+def ecom_b2b_user_a(tenant_a, ecom_b2b_company_a, user_a):
+    return _b2bwholesale_company_user(tenant_a, ecom_b2b_company_a, user_a, role="company_admin")
+
+
+@pytest.fixture
+def ecom_b2b_user_b(tenant_b, ecom_b2b_company_b, user_b):
+    return _b2bwholesale_company_user(tenant_b, ecom_b2b_company_b, user_b, role="company_admin")
+
+
+@pytest.fixture
+def ecom_b2b_quote_a(tenant_a, ecom_b2b_company_a, user_a):
+    return _b2bwholesale_quote_request(tenant_a, ecom_b2b_company_a, requested_by=user_a)
+
+
+@pytest.fixture
+def ecom_b2b_quote_b(tenant_b, ecom_b2b_company_b, user_b):
+    return _b2bwholesale_quote_request(tenant_b, ecom_b2b_company_b, requested_by=user_b)
+
+
+@pytest.fixture
+def ecom_b2b_template_a(tenant_a, ecom_b2b_company_a, user_a):
+    return _b2bwholesale_quick_order_template(tenant_a, ecom_b2b_company_a, created_by=user_a)
+
+
+@pytest.fixture
+def ecom_b2b_template_b(tenant_b, ecom_b2b_company_b, user_b):
+    return _b2bwholesale_quick_order_template(
+        tenant_b,
+        ecom_b2b_company_b,
+        created_by=user_b,
+        name="Globex Recurring Reorder Kit",
+    )
+
 
 
 
