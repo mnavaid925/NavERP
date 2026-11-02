@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce: corporate buyer accounts, tiered role hierarchies, quote negotiation workflows, matrix quick order requisition kits, PunchOut cXML/OCI integration, wholesale hub console, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.17), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management: rule evaluation engines, composite transaction risk scoring, multi-tier risk decisions [allow, review, challenge, reject], chargeback dispute workflows with reason codes and representment evidence tracking, account security alerts with automated threat mitigation [mfa_required, session_revoked, account_locked], fraud risk hub cockpit, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.18), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce)
+# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, and an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, and a simulated PunchOut procurement gateway (cXML/OCI). It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, a simulated PunchOut procurement gateway (cXML/OCI), and an enterprise Fraud & Risk Management engine (9.18) powering heuristic and velocity fraud rule evaluation, composite transaction risk assessment scoring with automated decisions and manual analyst review queues, chargeback and inquiry dispute case management with representment evidence tracking, and account security alert monitoring with automated policy responses. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -94,6 +94,11 @@ apps/ecommerce/
 │   │   ├── B2bCompanyUsers.py       # B2bCompanyUser model (EBCU-)
 │   │   ├── B2bQuoteRequests.py      # B2bQuoteRequest (EBQR-) & B2bQuoteItem models
 │   │   └── B2bQuickOrderTemplates.py # B2bQuickOrderTemplate (EBQT-) & B2bQuickOrderItem models
+│   ├── FraudRisk/
+│   │   ├── FraudRules.py            # FraudRule model (EFRR-)
+│   │   ├── TransactionRiskAssessments.py # TransactionRiskAssessment model (ETRA-)
+│   │   ├── ChargebackDisputes.py    # ChargebackDispute model (ECBD-)
+│   │   └── AccountSecurityAlerts.py # AccountSecurityAlert model (EASA-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -163,6 +168,11 @@ apps/ecommerce/
 │   │   ├── B2bCompanyUsers.py       # B2bCompanyUserForm
 │   │   ├── B2bQuoteRequests.py      # B2bQuoteRequestForm, B2bQuoteItemForm
 │   │   └── B2bQuickOrderTemplates.py # B2bQuickOrderTemplateForm, B2bQuickOrderItemForm
+│   ├── FraudRisk/
+│   │   ├── FraudRules.py            # FraudRuleForm
+│   │   ├── TransactionRiskAssessments.py # TransactionRiskAssessmentForm
+│   │   ├── ChargebackDisputes.py    # ChargebackDisputeForm
+│   │   └── AccountSecurityAlerts.py # AccountSecurityAlertForm
 │   └── __init__.py                  # Re-exports of all forms
 ├── views/
 │   ├── _common.py                   # ecommerce_scope, ecommerce_object, csv_safe, write_audit_log
@@ -240,6 +250,11 @@ apps/ecommerce/
 │   │   ├── B2bCompanyUsers.py       # b2bcompanyuser CRUD
 │   │   ├── B2bQuoteRequests.py      # b2bquoterequest CRUD + state transitions & convert-order
 │   │   └── B2bQuickOrderTemplates.py # b2bquickordertemplate CRUD, quick_order_matrix & CSV import
+│   ├── FraudRisk/
+│   │   ├── FraudRules.py            # fraud_risk_hub & fraudrule CRUD
+│   │   ├── TransactionRiskAssessments.py # transactionriskassessment CRUD
+│   │   ├── ChargebackDisputes.py    # chargebackdispute CRUD
+│   │   └── AccountSecurityAlerts.py # accountsecurityalert CRUD
 │   └── __init__.py                  # Re-exports of all views
 ├── urls/
 │   ├── ProductCatalog/
@@ -322,6 +337,11 @@ apps/ecommerce/
 │   │   ├── B2bCompanyUsers.py       # b2b/users/ paths
 │   │   ├── B2bQuoteRequests.py      # b2b/quotes/ paths & action endpoints
 │   │   └── B2bQuickOrderTemplates.py # b2b/templates/ & b2b/quick-order/ paths
+│   ├── FraudRisk/
+│   │   ├── FraudRules.py            # fraud-risk/hub/ & rules/ paths
+│   │   ├── TransactionRiskAssessments.py # fraud-risk/assessments/ paths
+│   │   ├── ChargebackDisputes.py    # fraud-risk/disputes/ paths
+│   │   └── AccountSecurityAlerts.py # fraud-risk/alerts/ paths
 │   └── __init__.py                  # Concatenates all urlpatterns with app_name="ecommerce"
 ├── admin.py                         # Django admin registrations
 ├── apps.py                          # EcommerceConfig
@@ -476,6 +496,16 @@ apps/ecommerce/
 | `B2bQuoteItem` | `None` | `quote_request`, `product`, `variant`, `sku`, `product_name`, `requested_quantity`, `target_unit_price`, `offered_unit_price`, `subtotal` | `B2bQuoteRequest`, `CatalogProduct`, `ProductVariant` | Auto-syncs product/variant name & SKU, auto-calculates line subtotal |
 | `B2bQuickOrderTemplate` | `EBQT-` | `company_account`, `created_by`, `name`, `description`, `is_shared` | `B2bCompanyAccount`, `B2bCompanyUser` | `add_to_cart(cart)` creates cart items in atomic batch, total item count property |
 | `B2bQuickOrderItem` | `None` | `template`, `product`, `variant`, `sku`, `product_name`, `default_quantity` | `B2bQuickOrderTemplate`, `CatalogProduct`, `ProductVariant` | Auto-syncs SKU and product details, positive integer quantity guard |
+
+---
+
+### Sub-module 9.18: Fraud & Risk Management
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `FraudRule` | `EFRR-` | `name`, `rule_type`, `evaluation_scope`, `risk_score_impact`, `action_to_take`, `is_active`, `execution_priority`, `condition_expression`, `description` | None | Priority-ordered rule evaluations, risk score modifiers, action overrides (`allow`, `review`, `challenge`, `reject`) |
+| `TransactionRiskAssessment` | `ETRA-` | `order`, `customer_party`, `user`, `total_amount`, `currency_code`, `risk_score`, `risk_tier`, `recommended_action`, `actual_decision`, `analyst_user`, `reviewed_at`, `avs_result_code`, `cvv_result_code`, `ip_address`, `device_fingerprint_id`, `geolocation_country`, `rule_triggers_json`, `notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `auth.User` (`user`, `analyst_user`) | Multi-variable telemetry evaluation, composite risk scoring (0–100), composite index `["tenant", "-created_at"]` |
+| `ChargebackDispute` | `ECBD-` | `order`, `customer_party`, `gateway_dispute_id`, `dispute_amount`, `currency`, `stage`, `reason_category`, `reason_code`, `evidence_submitted_json`, `due_date`, `representment_submitted_at`, `is_liability_shift`, `resolution_notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `accounting.Currency` (`currency`) | Statutory card network dispute lifecycle, evidence submission tracking, composite index `["tenant", "-created_at"]` |
+| `AccountSecurityAlert` | `EASA-` | `party`, `user`, `alert_type`, `severity`, `status`, `automated_action_taken`, `assigned_investigator`, `resolved_by`, `resolved_at`, `ip_address`, `location_info`, `user_agent`, `incident_details`, `resolution_notes` | `core.Party` (`party`), `auth.User` (`user`, `assigned_investigator`, `resolved_by`) | Automated threat mitigation policies (`mfa_required`, `session_revoked`, `account_locked`), incident timeline, composite index `["tenant", "-created_at"]` |
 
 ---
 
@@ -920,6 +950,31 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `b2b/templates/<int:pk>/delete/` | `b2bquickordertemplate_delete` | `b2bquickordertemplate_delete` | Delete requisition template (POST only, tenant admin required) |
 | `b2b/quick-order/` | `b2b_quick_order_matrix` | `b2b_quick_order_matrix` | Rapid bulk SKU matrix entry table and spreadsheet CSV import |
 
+### 9.18 Fraud & Risk Management Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `fraud-risk/hub/` | `fraud_risk_hub` | `fraud_risk_hub` | Fraud & Risk Management command center hub |
+| `fraud-risk/rules/` | `fraud_rule_list` | `fraud_rule_list` | Fraud rules register with scope, type, and action filters |
+| `fraud-risk/rules/create/` | `fraud_rule_create` | `fraud_rule_create` | Create new fraud evaluation rule |
+| `fraud-risk/rules/<int:pk>/` | `fraud_rule_detail` | `fraud_rule_detail` | Fraud rule detail with priority and trigger conditions |
+| `fraud-risk/rules/<int:pk>/edit/` | `fraud_rule_edit` | `fraud_rule_edit` | Edit fraud evaluation rule and active status |
+| `fraud-risk/rules/<int:pk>/delete/` | `fraud_rule_delete` | `fraud_rule_delete` | Delete fraud rule (POST only) |
+| `fraud-risk/assessments/` | `transaction_risk_assessment_list` | `transaction_risk_assessment_list` | Transaction risk assessments register with tier and decision filters |
+| `fraud-risk/assessments/create/` | `transaction_risk_assessment_create` | `transaction_risk_assessment_create` | Record new transaction risk assessment evaluation |
+| `fraud-risk/assessments/<int:pk>/` | `transaction_risk_assessment_detail` | `transaction_risk_assessment_detail` | Transaction assessment detail with AVS/CVV signals and geolocation |
+| `fraud-risk/assessments/<int:pk>/edit/` | `transaction_risk_assessment_edit` | `transaction_risk_assessment_edit` | Review risk assessment and record analyst decision |
+| `fraud-risk/assessments/<int:pk>/delete/` | `transaction_risk_assessment_delete` | `transaction_risk_assessment_delete` | Delete transaction risk assessment (POST only) |
+| `fraud-risk/disputes/` | `chargeback_dispute_list` | `chargeback_dispute_list` | Chargeback & inquiry disputes register with stage and reason filters |
+| `fraud-risk/disputes/create/` | `chargeback_dispute_create` | `chargeback_dispute_create` | File incoming payment chargeback or retrieval dispute |
+| `fraud-risk/disputes/<int:pk>/` | `chargeback_dispute_detail` | `chargeback_dispute_detail` | Dispute case dossier with network reason codes and evidence |
+| `fraud-risk/disputes/<int:pk>/edit/` | `chargeback_dispute_edit` | `chargeback_dispute_edit` | Edit dispute stage, representment submission, and outcome |
+| `fraud-risk/disputes/<int:pk>/delete/` | `chargeback_dispute_delete` | `chargeback_dispute_delete` | Delete chargeback dispute case (POST only) |
+| `fraud-risk/alerts/` | `account_security_alert_list` | `account_security_alert_list` | Account security alerts register with severity and status filters |
+| `fraud-risk/alerts/create/` | `account_security_alert_create` | `account_security_alert_create` | Log account security incident or takeover alert |
+| `fraud-risk/alerts/<int:pk>/` | `account_security_alert_detail` | `account_security_alert_detail` | Security alert detail with IP telemetry and investigation notes |
+| `fraud-risk/alerts/<int:pk>/edit/` | `account_security_alert_edit` | `account_security_alert_edit` | Triage security alert, assign investigator, and update status |
+| `fraud-risk/alerts/<int:pk>/delete/` | `account_security_alert_delete` | `account_security_alert_delete` | Delete account security alert (POST only) |
+
 ---
 
 ## 4. Templates & Design System
@@ -1019,6 +1074,12 @@ Templates are stored under `templates/ecommerce/`:
   - `order_template/` — `list.html` (with shared visibility badges and item counts), `detail.html` (with SKU requisition kit items table, default quantities, and 1-click batch add to cart action), `form.html` (template name, description, shared toggle).
   - `quick_order_matrix.html` — Rapid multi-SKU fast-order matrix: dynamic SKU auto-lookup, real-time line total calculating, and CSV file upload parsing.
   - `punchout_simulator.html` — Simulated cXML/OCI e-procurement checkout: raw cXML setup payload inspector, cart transfer simulator, and return URL redirection.
+- `fraud_risk/`
+  - `fraud_risk_hub.html` — Fraud & Risk Management command center hub with KPI counters, active rule summary, recent assessments, dispute queue, and security alerts.
+  - `fraud_rule/` — `list.html` (with evaluation scope, rule type, risk impact badges, and search/status filters), `detail.html` (with execution priority, condition expression code block, and actions), `form.html` (comprehensive rule configuration controls).
+  - `transaction_risk_assessment/` — `list.html` (with risk score gauges, tier color badges, AVS/CVV signals, action filters), `detail.html` (with telemetry signals, device fingerprint hash, geolocation, rule triggers JSON, analyst notes), `form.html` (risk assessment evaluation inputs).
+  - `chargeback_dispute/` — `list.html` (with dispute stage pills, reason codes, due dates, amount counters), `detail.html` (with dispute case dossier, representment evidence, network reason category, resolution notes), `form.html` (chargeback case tracking controls).
+  - `account_security_alert/` — `list.html` (with alert severity badges, incident status pills, automated policy response badges), `detail.html` (with origin IP address, geolocation, user agent fingerprint, incident telemetry, investigation findings), `form.html` (security alert triage and mitigation controls).
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-blue`, `badge-slate`.
@@ -1307,6 +1368,18 @@ LIVE_LINKS["9.17"] = {
     "Company Buyers": "ecommerce:b2bcompanyuser_list",
     "Quote Requests (RFQ)": "ecommerce:b2bquoterequest_list",
     "Quick Order & Templates": "ecommerce:b2bquickordertemplate_list",
+}
+LIVE_LINKS["9.18"] = {
+    "Rule-Based Fraud Detection": "ecommerce:fraud_rule_list",
+    "Machine Learning Risk Scoring": "ecommerce:transaction_risk_assessment_list",
+    "Chargeback & Dispute Management": "ecommerce:chargeback_dispute_list",
+    "Account Takeover Protection": "ecommerce:account_security_alert_list",
+    "Blacklists & Whitelists": "ecommerce:fraud_rule_list",
+    "Fraud & Risk Hub": "ecommerce:fraud_risk_hub",
+    "Fraud Rules": "ecommerce:fraud_rule_list",
+    "Risk Assessments": "ecommerce:transaction_risk_assessment_list",
+    "Chargeback Disputes": "ecommerce:chargeback_dispute_list",
+    "Security Alerts": "ecommerce:account_security_alert_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
