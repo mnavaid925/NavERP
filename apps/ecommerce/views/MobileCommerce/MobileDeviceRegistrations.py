@@ -99,10 +99,11 @@ def mobiledeviceregistration_create(request):
             device.last_active_at = timezone.now()
             device.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=device,
                 action="CREATE",
-                instance=device,
-                message=f"Created MobileDeviceRegistration {device.number} ({device.device_uuid})",
+                changes={"uuid": device.device_uuid},
+                tenant=request.tenant,
             )
             messages.success(request, f"Device {device.number} registered successfully.")
             return redirect("ecommerce:mobiledeviceregistration_detail", pk=device.pk)
@@ -125,10 +126,11 @@ def mobiledeviceregistration_edit(request, pk):
         if form.is_valid():
             device = form.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=device,
                 action="UPDATE",
-                instance=device,
-                message=f"Updated MobileDeviceRegistration {device.number}",
+                changes={"uuid": device.device_uuid},
+                tenant=request.tenant,
             )
             messages.success(request, f"Device {device.number} updated successfully.")
             return redirect("ecommerce:mobiledeviceregistration_detail", pk=device.pk)
@@ -152,10 +154,11 @@ def mobiledeviceregistration_delete(request, pk):
     number = device.number
     uuid_str = device.device_uuid
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=device,
         action="DELETE",
-        instance=device,
-        message=f"Deleted MobileDeviceRegistration {number} ({uuid_str})",
+        changes={"number": number, "uuid": uuid_str},
+        tenant=request.tenant,
     )
     device.delete()
     messages.success(request, f"Device {number} ({uuid_str[:8]}...) deleted.")
