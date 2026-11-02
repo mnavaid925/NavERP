@@ -56,17 +56,11 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label for="{{ form.target_platform.id_for_label }}" class="form-label">Target Platform</label>
           {{ form.target_platform }}
           {% if form.target_platform.errors %}<div class="form-error">{{ form.target_platform.errors }}</div>{% endif %}
-        </div>
-
-        <div>
-          <label for="{{ form.status.id_for_label }}" class="form-label">Status</label>
-          {{ form.status }}
-          {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
         </div>
 
         <div>
