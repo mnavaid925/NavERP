@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Chargeback Disputes — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:fraud_risk_hub' %}">Fraud &amp; Risk</a>
+            <span>/</span>
+            <span>Chargeback Disputes</span>
+        </div>
+        <h1 class="page-title">Chargeback &amp; Dispute Management</h1>
+        <p class="text-secondary text-sm">Dispute representment workflows, reason code categorization, and win-rate tracking</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:fraud_risk_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Overview Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:chargeback_dispute_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Register Dispute</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:chargeback_dispute_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search case #, gateway dispute ID, order, code..." class="form-input">
+            </div>
+            <div class="form-group mb-0">
+                <select name="stage" class="form-select">
+                    <option value="">All Stages</option>
+                    {% for val, label in stage_choices %}
+                    <option value="{{ val }}" {% if stage_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="reason" class="form-select">
+                    <option value="">All Reason Categories</option>
+                    {% for val, label in reason_choices %}
+                    <option value="{{ val }}" {% if reason_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or stage_filter or reason_filter %}
+                <a href="{% url 'ecommerce:chargeback_dispute_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Case #</th>
+                    <th>Order &amp; Customer</th>
+                    <th>Gateway ID</th>
+                    <th>Disputed Amount</th>
+                    <th>Reason</th>
+                    <th>Stage</th>
+                    <th>Evidence Due</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dispute in disputes %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:chargeback_dispute_detail' dispute.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ dispute.number }}
+                        </a>
+                        {% if dispute.payment_method_type %}
+                        <span class="block text-xs text-muted font-mono">{{ dispute.card_brand|default:dispute.get_payment_method_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-semibold">{{ dispute.order.number }}</span>
+                        <div class="text-xs text-muted">{{ dispute.customer_party.legal_name|default:"Direct Consumer" }}</div>
+                    </td>
+                    <td class="font-mono text-xs text-muted">
+                        {{ dispute.gateway_dispute_id|default:"-" }}
+                    </td>
+                    <td>
+                        <span class="font-bold text-danger">{{ dispute.currency.symbol|default:"$" }}{{ dispute.dispute_amount }}</span>
+                        <span class="block text-xs text-muted">Fee: +{{ dispute.currency.symbol|default:"$" }}{{ dispute.dispute_fee }}</span>
+                    </td>
+                    <td class="text-xs">
+                        <span class="font-medium">{{ dispute.get_reason_category_display }}</span>
+                        {% if dispute.reason_code %}
+                        <span class="block font-mono text-muted">Code: {{ dispute.reason_code }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if dispute.stage == "won" %}
+                        <span class="badge badge-green">Won</span>
+                        {% elif dispute.stage == "lost" %}
+                        <span class="badge badge-red">Lost</span>
+                        {% elif dispute.stage == "accepted" %}
+                        <span class="badge badge-slate">Accepted</span>
+                        {% elif dispute.stage == "needs_response" %}
+                        <span class="badge badge-red">Action Required</span>
+                        {% elif dispute.stage == "under_review" %}
+                        <span class="badge badge-amber">Under Review</span>
+                        {% elif dispute.stage == "representment_submitted" %}
+                        <span class="badge badge-info">Representment Submitted</span>
+                        {% else %}
+                        <span class="badge badge-info">{{ dispute.get_stage_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs font-mono">
+                        {% if dispute.evidence_due_date %}
+                        <span class="{% if dispute.stage == 'needs_response' %}text-danger font-bold{% else %}text-muted{% endif %}">
+                            {{ dispute.evidence_due_date|date:"Y-m-d" }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:chargeback_dispute_detail' dispute.pk %}" class="btn-icon" title="View Case">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:chargeback_dispute_edit' dispute.pk %}" class="btn-icon" title="Edit Case">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:chargeback_dispute_delete' dispute.pk %}" class="inline" onsubmit="return confirm('Delete dispute case {{ dispute.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-danger" title="Delete Case">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i data-lucide="scale"></i></div>
+                            <div class="empty-state-title">No Chargeback Disputes</div>
+                            <div class="empty-state-text">No dispute cases match your search or filter parameters.</div>
+                            <div class="empty-state-action">
+                                <a href="{% url 'ecommerce:chargeback_dispute_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Register New Dispute</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if stage_filter %}&stage={{ stage_filter }}{% endif %}{% if reason_filter %}&reason={{ reason_filter }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if stage_filter %}&stage={{ stage_filter }}{% endif %}{% if reason_filter %}&reason={{ reason_filter }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
