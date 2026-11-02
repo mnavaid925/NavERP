@@ -4120,47 +4120,52 @@ def ecom_b2b_template_b(tenant_b, ecom_b2b_company_b, user_b):
 
 FRAUDRISK_MODEL_FIELDS = {
     "FraudRule": (
-        "id", "tenant", "number", "name", "rule_type", "evaluation_scope",
-        "risk_score_impact", "action_to_take", "is_active", "execution_priority",
-        "condition_expression", "description", "created_at", "updated_at",
+        "id", "tenant", "number", "name", "rule_code", "rule_scope", "rule_type",
+        "condition_operator", "threshold_value", "risk_score_impact", "action_to_take",
+        "priority", "is_active", "description", "created_at", "updated_at",
     ),
     "TransactionRiskAssessment": (
         "id", "tenant", "number", "order", "customer_party", "user",
-        "total_amount", "currency_code", "risk_score", "risk_tier",
-        "recommended_action", "actual_decision", "analyst_user", "reviewed_at",
-        "avs_result_code", "cvv_result_code", "ip_address", "device_fingerprint_id",
-        "geolocation_country", "rule_triggers_json", "notes", "created_at", "updated_at",
+        "transaction_amount", "currency", "risk_score", "risk_tier",
+        "recommended_action", "actual_decision", "avs_result_code", "cvv_result_code",
+        "ip_address", "billing_country", "ip_country", "is_geo_mismatch",
+        "is_proxy_or_vpn", "device_fingerprint", "velocity_count_24h",
+        "risk_factors_summary", "analyst_user", "analyst_notes", "reviewed_at",
+        "created_at", "updated_at",
     ),
     "ChargebackDispute": (
-        "id", "tenant", "number", "order", "customer_party", "gateway_dispute_id",
-        "dispute_amount", "currency", "stage", "reason_category", "reason_code",
-        "evidence_submitted_json", "due_date", "representment_submitted_at",
-        "is_liability_shift", "resolution_notes", "created_at", "updated_at",
+        "id", "tenant", "number", "order", "customer_party", "currency",
+        "dispute_amount", "dispute_fee", "gateway_dispute_id", "payment_method_type",
+        "card_brand", "reason_category", "reason_code", "stage", "evidence_due_date",
+        "evidence_summary", "representment_notes", "representment_submitted_at",
+        "resolved_at", "outcome_notes", "created_at", "updated_at",
     ),
     "AccountSecurityAlert": (
-        "id", "tenant", "number", "party", "user", "alert_type", "severity",
-        "status", "automated_action_taken", "assigned_investigator", "resolved_by",
-        "resolved_at", "ip_address", "location_info", "user_agent",
-        "incident_details", "resolution_notes", "created_at", "updated_at",
+        "id", "tenant", "number", "user", "party", "alert_type", "severity",
+        "status", "automated_action_taken", "ip_address", "location_info",
+        "user_agent", "incident_details", "assigned_investigator",
+        "investigation_notes", "resolved_by", "resolved_at", "created_at", "updated_at",
     ),
 }
 
 FRAUDRISK_CHOICES = {
     "FraudRule": {
+        "rule_scope": tuple(FraudRule.RULE_SCOPE_CHOICES),
         "rule_type": tuple(FraudRule.RULE_TYPE_CHOICES),
-        "evaluation_scope": tuple(FraudRule.EVALUATION_SCOPE_CHOICES),
+        "condition_operator": tuple(FraudRule.CONDITION_OPERATOR_CHOICES),
         "action_to_take": tuple(FraudRule.ACTION_CHOICES),
     },
     "TransactionRiskAssessment": {
         "risk_tier": tuple(TransactionRiskAssessment.RISK_TIER_CHOICES),
-        "recommended_action": tuple(TransactionRiskAssessment.ACTION_CHOICES),
-        "actual_decision": tuple(TransactionRiskAssessment.DECISION_CHOICES),
-        "avs_result_code": tuple(TransactionRiskAssessment.VERIFICATION_RESULT_CHOICES),
-        "cvv_result_code": tuple(TransactionRiskAssessment.VERIFICATION_RESULT_CHOICES),
+        "recommended_action": tuple(TransactionRiskAssessment.RECOMMENDED_ACTION_CHOICES),
+        "actual_decision": tuple(TransactionRiskAssessment.ACTUAL_DECISION_CHOICES),
+        "avs_result_code": tuple(TransactionRiskAssessment.AVS_RESULT_CHOICES),
+        "cvv_result_code": tuple(TransactionRiskAssessment.CVV_RESULT_CHOICES),
     },
     "ChargebackDispute": {
-        "stage": tuple(ChargebackDispute.STAGE_CHOICES),
+        "payment_method_type": tuple(ChargebackDispute.PAYMENT_METHOD_CHOICES),
         "reason_category": tuple(ChargebackDispute.REASON_CATEGORY_CHOICES),
+        "stage": tuple(ChargebackDispute.STAGE_CHOICES),
     },
     "AccountSecurityAlert": {
         "alert_type": tuple(AccountSecurityAlert.ALERT_TYPE_CHOICES),
@@ -4175,26 +4180,32 @@ def _fraudrisk_fraud_rule(tenant, **overrides):
     defaults = {
         "tenant": tenant,
         "name": "High Velocity Transaction Rule",
-        "rule_type": "velocity",
-        "evaluation_scope": "checkout",
+        "rule_code": "R-VEL-01",
+        "rule_scope": "checkout",
+        "rule_type": "velocity_orders",
+        "condition_operator": "gt",
+        "threshold_value": "3",
         "risk_score_impact": 35,
-        "action_to_take": "review",
+        "action_to_take": "flag_review",
+        "priority": 10,
         "is_active": True,
-        "execution_priority": 10,
-        "condition_expression": "orders_last_hour > 3",
         "description": "Trigger manual review if rapid purchases detected.",
     }
     defaults.update(overrides)
     return FraudRule.objects.create(**defaults)
 
 
-def _fraudrisk_transaction_risk_assessment(tenant, order=None, customer_party=None, **overrides):
+def _fraudrisk_transaction_risk_assessment(tenant, order=None, customer_party=None, currency=None, **overrides):
+    if currency is None:
+        currency = Currency.objects.filter(code="USD").first()
+        if currency is None:
+            currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
     defaults = {
         "tenant": tenant,
         "order": order,
         "customer_party": customer_party,
-        "total_amount": Decimal("149.99"),
-        "currency_code": "USD",
+        "transaction_amount": Decimal("149.99"),
+        "currency": currency,
         "risk_score": 45,
         "risk_tier": "medium",
         "recommended_action": "review",
@@ -4202,8 +4213,14 @@ def _fraudrisk_transaction_risk_assessment(tenant, order=None, customer_party=No
         "avs_result_code": "match",
         "cvv_result_code": "match",
         "ip_address": "198.51.100.42",
-        "device_fingerprint_id": "dfp_test_fixture_hash",
-        "geolocation_country": "US",
+        "billing_country": "US",
+        "ip_country": "US",
+        "is_geo_mismatch": False,
+        "is_proxy_or_vpn": False,
+        "device_fingerprint": "dfp_test_fixture_hash",
+        "velocity_count_24h": 1,
+        "risk_factors_summary": "Normal velocity, AVS match.",
+        "analyst_notes": "",
     }
     defaults.update(overrides)
     return TransactionRiskAssessment.objects.create(**defaults)
@@ -4214,17 +4231,22 @@ def _fraudrisk_chargeback_dispute(tenant, order=None, customer_party=None, curre
         currency = Currency.objects.filter(code="USD").first()
         if currency is None:
             currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$")
+    if order is None:
+        order = _ordermanagement_order(tenant, customer=customer_party, currency=currency)
     defaults = {
         "tenant": tenant,
         "order": order,
         "customer_party": customer_party,
         "gateway_dispute_id": "dp_test_918_gateway_ref",
         "dispute_amount": Decimal("149.99"),
+        "dispute_fee": Decimal("15.00"),
         "currency": currency,
+        "payment_method_type": "credit_card",
+        "card_brand": "Visa",
         "stage": "needs_response",
         "reason_category": "fraudulent",
         "reason_code": "10.4",
-        "is_liability_shift": False,
+        "evidence_summary": "Delivery signature on file",
     }
     defaults.update(overrides)
     return ChargebackDispute.objects.create(**defaults)
@@ -4238,11 +4260,12 @@ def _fraudrisk_account_security_alert(tenant, party=None, user=None, **overrides
         "alert_type": "credential_stuffing",
         "severity": "high",
         "status": "new",
-        "automated_action_taken": "mfa_required",
+        "automated_action_taken": "challenge_mfa",
         "ip_address": "203.0.113.88",
         "location_info": "Bucharest, Romania",
         "user_agent": "Mozilla/5.0 Test Security Agent",
         "incident_details": "12 failed login attempts within 60 seconds",
+        "investigation_notes": "",
     }
     defaults.update(overrides)
     return AccountSecurityAlert.objects.create(**defaults)
@@ -4258,8 +4281,10 @@ def ecom_fraud_rule_b(tenant_b):
     return _fraudrisk_fraud_rule(
         tenant_b,
         name="Globex Geolocation Mismatch Rule",
-        rule_type="geo_ip",
-        action_to_take="challenge",
+        rule_code="R-GEO-02",
+        rule_scope="checkout",
+        rule_type="country_mismatch",
+        action_to_take="challenge_3ds",
         risk_score_impact=40,
     )
 
@@ -4284,7 +4309,7 @@ def ecom_risk_assessment_b(tenant_b, user_b):
         risk_score=78,
         risk_tier="high",
         recommended_action="reject",
-        actual_decision="rejected",
+        actual_decision="declined_auto",
     )
 
 
@@ -4331,7 +4356,7 @@ def ecom_security_alert_b(tenant_b, user_b):
         alert_type="impossible_travel",
         severity="critical",
         status="investigating",
-        automated_action_taken="session_revoked",
+        automated_action_taken="terminate_sessions",
     )
 
 
