@@ -10,7 +10,7 @@ from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurit
 class AccountSecurityAlertForm(TenantUniqueMixin, TenantModelForm):
     class Meta:
         model = AccountSecurityAlert
-        exclude = ["tenant", "number", "created_at", "updated_at", "resolved_at"]
+        exclude = ["tenant", "number", "created_at", "updated_at", "resolved_at", "resolved_by"]
         widgets = {
             "user": forms.Select(attrs={"class": "form-select"}),
             "party": forms.Select(attrs={"class": "form-select"}),
@@ -24,7 +24,6 @@ class AccountSecurityAlertForm(TenantUniqueMixin, TenantModelForm):
             "incident_details": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 3, "placeholder": "15 failed password attempts in 60s, matched known botnet IP..."}),
             "assigned_investigator": forms.Select(attrs={"class": "form-select"}),
             "investigation_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Investigator case notes, user contact log..."}),
-            "resolved_by": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
