@@ -59,6 +59,10 @@ from apps.ecommerce.models.AnalyticsBi.DailySalesSnapshots import DailySalesSnap
 from apps.ecommerce.models.AnalyticsBi.CustomerCohortMetrics import CustomerCohortMetric
 from apps.ecommerce.models.AnalyticsBi.ProductMerchandisingMetrics import ProductMerchandisingMetric
 from apps.ecommerce.models.AnalyticsBi.AttributionTouchpoints import AttributionTouchpoint
+from apps.ecommerce.models.MobileCommerce.MobileAppConfigs import MobileAppConfig
+from apps.ecommerce.models.MobileCommerce.MobileDeviceRegistrations import MobileDeviceRegistration
+from apps.ecommerce.models.MobileCommerce.MobilePushCampaigns import MobilePushCampaign
+from apps.ecommerce.models.MobileCommerce.MobileLocationRules import MobileLocationRule
 
 __all__ = [
     "TenantOwned",
@@ -141,4 +145,9 @@ __all__ = [
     "CustomerCohortMetric",
     "ProductMerchandisingMetric",
     "AttributionTouchpoint",
+    # 9.16 Mobile Commerce
+    "MobileAppConfig",
+    "MobileDeviceRegistration",
+    "MobilePushCampaign",
+    "MobileLocationRule",
 ]
