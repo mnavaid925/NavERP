@@ -98,10 +98,11 @@ def mobilepushcampaign_create(request):
                 campaign.created_by = request.user
             campaign.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=campaign,
                 action="CREATE",
-                instance=campaign,
-                message=f"Created MobilePushCampaign {campaign.number} ({campaign.campaign_name})",
+                changes={"name": campaign.campaign_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Push Campaign '{campaign.campaign_name}' created successfully.")
             return redirect("ecommerce:mobilepushcampaign_detail", pk=campaign.pk)
@@ -124,10 +125,11 @@ def mobilepushcampaign_edit(request, pk):
         if form.is_valid():
             campaign = form.save()
             write_audit_log(
-                request=request,
+                user=request.user,
+                obj=campaign,
                 action="UPDATE",
-                instance=campaign,
-                message=f"Updated MobilePushCampaign {campaign.number}",
+                changes={"name": campaign.campaign_name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Push Campaign '{campaign.campaign_name}' updated successfully.")
             return redirect("ecommerce:mobilepushcampaign_detail", pk=campaign.pk)
@@ -151,10 +153,11 @@ def mobilepushcampaign_delete(request, pk):
     number = campaign.number
     name = campaign.campaign_name
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=campaign,
         action="DELETE",
-        instance=campaign,
-        message=f"Deleted MobilePushCampaign {number} ({name})",
+        changes={"number": number, "name": name},
+        tenant=request.tenant,
     )
     campaign.delete()
     messages.success(request, f"Campaign '{name}' ({number}) deleted.")
@@ -178,10 +181,11 @@ def mobilepushcampaign_test_send(request, pk):
     count = max(1, device_qs.count())
     campaign.dispatch_simulation(device_count=count)
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=campaign,
         action="SEND",
-        instance=campaign,
-        message=f"Dispatched push campaign {campaign.number} to {count} devices",
+        changes={"dispatched_count": count},
+        tenant=request.tenant,
     )
     messages.success(request, f"Campaign '{campaign.campaign_name}' dispatched to {count} registered devices.")
     return redirect("ecommerce:mobilepushcampaign_detail", pk=campaign.pk)
