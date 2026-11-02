@@ -79,6 +79,7 @@ def test_analyticsbi_dailysalessnapshot_create_view(auth_client_a, tenant_a):
         "currency": "USD",
         "gross_sales": "1000.00",
         "discounts_total": "50.00",
+        "refunds_total": "0.00",
         "net_sales": "950.00",
         "shipping_collected": "40.00",
         "taxes_collected": "60.00",
