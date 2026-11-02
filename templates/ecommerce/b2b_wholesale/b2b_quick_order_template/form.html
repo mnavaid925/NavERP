@@ -127,7 +127,7 @@
                         <option value="">-- Choose Product --</option>
                         {% for prod in products %}
                           <option value="{{ prod.pk }}" {% if itm.product_id == prod.pk %}selected{% endif %}>
-                            {{ prod.name }} ({{ prod.sku }})
+                            {{ prod.name }} ({{ prod.display_sku|default:prod.number }})
                           </option>
                         {% endfor %}
                       </select>
@@ -151,7 +151,7 @@
                     <select name="item_product_id[]" class="form-select w-full">
                       <option value="">-- Choose Product --</option>
                       {% for prod in products %}
-                        <option value="{{ prod.pk }}">{{ prod.name }} ({{ prod.sku }})</option>
+                        <option value="{{ prod.pk }}">{{ prod.name }} ({{ prod.display_sku|default:prod.number }})</option>
                       {% endfor %}
                     </select>
                   </td>
