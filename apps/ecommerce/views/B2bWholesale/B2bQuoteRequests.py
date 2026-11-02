@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -140,11 +140,18 @@ def b2bquoterequest_create(request):
                         default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
                             q_val = int(qtys[idx]) if idx < len(qtys) else 1
+                            if q_val < 1:
+                                q_val = 1
                         except (ValueError, IndexError):
                             q_val = 1
                         try:
-                            p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else default_price
-                        except (ValueError, IndexError):
+                            if idx < len(unit_prices) and unit_prices[idx]:
+                                p_val = Decimal(str(unit_prices[idx]))
+                                if not p_val.is_finite() or p_val < Decimal("0.00"):
+                                    p_val = default_price
+                            else:
+                                p_val = default_price
+                        except (ValueError, IndexError, InvalidOperation, TypeError):
                             p_val = default_price
 
                         n_val = notes[idx] if idx < len(notes) else ""
@@ -214,11 +221,18 @@ def b2bquoterequest_edit(request, pk):
                             default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
                                 q_val = int(qtys[idx]) if idx < len(qtys) else 1
+                                if q_val < 1:
+                                    q_val = 1
                             except (ValueError, IndexError):
                                 q_val = 1
                             try:
-                                p_val = Decimal(str(unit_prices[idx])) if idx < len(unit_prices) and unit_prices[idx] else default_price
-                            except (ValueError, IndexError):
+                                if idx < len(unit_prices) and unit_prices[idx]:
+                                    p_val = Decimal(str(unit_prices[idx]))
+                                    if not p_val.is_finite() or p_val < Decimal("0.00"):
+                                        p_val = default_price
+                                else:
+                                    p_val = default_price
+                            except (ValueError, IndexError, InvalidOperation, TypeError):
                                 p_val = default_price
 
                             n_val = notes[idx] if idx < len(notes) else ""
@@ -306,8 +320,14 @@ def b2bquoterequest_quote(request, pk):
     discount = request.POST.get("quoted_discount_percent")
     if discount:
         try:
-            quote.quoted_discount_percent = Decimal(str(discount))
-        except (ValueError, TypeError):
+            d_dec = Decimal(str(discount))
+            if d_dec.is_finite() and Decimal("0.00") <= d_dec <= Decimal("100.00"):
+                quote.quoted_discount_percent = d_dec
+            elif d_dec.is_finite() and d_dec > Decimal("100.00"):
+                quote.quoted_discount_percent = Decimal("100.00")
+            elif d_dec.is_finite() and d_dec < Decimal("0.00"):
+                quote.quoted_discount_percent = Decimal("0.00")
+        except (ValueError, TypeError, InvalidOperation):
             pass
 
     quote.recalculate_totals()
