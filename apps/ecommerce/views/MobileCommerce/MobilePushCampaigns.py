@@ -24,9 +24,9 @@ def mobilepushcampaign_list(request):
     q = request.GET.get("q", "").strip()
     if q:
         qs = qs.filter(
-            Q(campaign_name__icontains(q))
-            | Q(notification_title__icontains(q))
-            | Q(number__icontains(q))
+            Q(campaign_name__icontains=q)
+            | Q(notification_title__icontains=q)
+            | Q(number__icontains=q)
         )
 
     selected_status = request.GET.get("status", "").strip()
