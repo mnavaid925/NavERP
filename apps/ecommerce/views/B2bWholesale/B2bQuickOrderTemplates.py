@@ -158,10 +158,11 @@ def b2bquickordertemplate_create(request):
             tmpl.save()
 
             write_audit_log(
-                request,
+                request.user,
+                tmpl,
                 "create",
-                f"Created Quick Order Template {tmpl.name} ({tmpl.number})",
-                object_id=tmpl.pk,
+                {"number": tmpl.number, "name": tmpl.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Quick Order Template {tmpl.name} created successfully.")
             return redirect("ecommerce:b2bquickordertemplate_detail", pk=tmpl.pk)
@@ -219,10 +220,11 @@ def b2bquickordertemplate_edit(request, pk):
             tmpl.save()
 
             write_audit_log(
-                request,
+                request.user,
+                tmpl,
                 "update",
-                f"Updated Quick Order Template {tmpl.name} ({tmpl.number})",
-                object_id=tmpl.pk,
+                {"number": tmpl.number, "name": tmpl.name},
+                tenant=request.tenant,
             )
             messages.success(request, f"Quick Order Template {tmpl.name} updated successfully.")
             return redirect("ecommerce:b2bquickordertemplate_detail", pk=tmpl.pk)
@@ -247,10 +249,11 @@ def b2bquickordertemplate_delete(request, pk):
         num = tmpl.number
         tmpl.delete()
         write_audit_log(
-            request,
+            request.user,
+            tmpl,
             "delete",
-            f"Deleted Quick Order Template {name} ({num})",
-            object_id=pk,
+            {"number": num, "name": name},
+            tenant=request.tenant,
         )
         messages.success(request, f"Template {name} has been deleted.")
         return redirect("ecommerce:b2bquickordertemplate_list")
