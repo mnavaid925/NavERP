@@ -3,7 +3,7 @@ import math
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -44,9 +44,12 @@ def mobilelocationrule_list(request):
     elif selected_status in ("0", "false", "False"):
         qs = qs.filter(is_active=False)
 
-    base_all = ecommerce_scope(MobileLocationRule.objects.all(), request)
-    total_count = base_all.count()
-    active_count = base_all.filter(is_active=True).count()
+    base_stats = ecommerce_scope(MobileLocationRule.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    total_count = base_stats["total"] or 0
+    active_count = base_stats["active"] or 0
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
