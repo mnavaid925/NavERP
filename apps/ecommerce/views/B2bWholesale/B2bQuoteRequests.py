@@ -129,13 +129,19 @@ def b2bquoterequest_create(request):
             unit_prices = request.POST.getlist("item_unit_price[]")
             notes = request.POST.getlist("item_notes[]")
 
+            valid_pids = [int(p) for p in product_ids if p and str(p).isdigit()]
+            products_map = {
+                p.pk: p for p in CatalogProduct.objects.filter(tenant=request.tenant, pk__in=valid_pids).prefetch_related("variants")
+            }
+
             line_items = []
             subtotal = Decimal("0.00")
             for idx, pid in enumerate(product_ids):
-                if pid:
-                    prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
+                if pid and str(pid).isdigit():
+                    prod = products_map.get(int(pid))
                     if prod:
-                        var = prod.variants.first()
+                        variants_list = prod.variants.all()
+                        var = variants_list[0] if variants_list else None
                         prod_sku = var.sku if var else prod.number
                         default_price = var.price if (var and var.price) else Decimal("0.00")
                         try:
@@ -210,13 +216,19 @@ def b2bquoterequest_edit(request, pk):
                 unit_prices = request.POST.getlist("item_unit_price[]")
                 notes = request.POST.getlist("item_notes[]")
 
+                valid_pids = [int(p) for p in product_ids if p and str(p).isdigit()]
+                products_map = {
+                    p.pk: p for p in CatalogProduct.objects.filter(tenant=request.tenant, pk__in=valid_pids).prefetch_related("variants")
+                }
+
                 line_items = []
                 subtotal = Decimal("0.00")
                 for idx, pid in enumerate(product_ids):
-                    if pid:
-                        prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first()
+                    if pid and str(pid).isdigit():
+                        prod = products_map.get(int(pid))
                         if prod:
-                            var = prod.variants.first()
+                            variants_list = prod.variants.all()
+                            var = variants_list[0] if variants_list else None
                             prod_sku = var.sku if var else prod.number
                             default_price = var.price if (var and var.price) else Decimal("0.00")
                             try:
@@ -411,14 +423,24 @@ def b2bquoterequest_convert_order(request, pk):
             shipping_address=party_addr,
         )
 
+        # Batch fetch products for line items
+        pids = [int(item.get("product_id")) for item in quote.line_items_data if item.get("product_id") and str(item.get("product_id")).isdigit()]
+        products_map = {
+            p.pk: p for p in CatalogProduct.objects.filter(tenant=request.tenant, pk__in=pids).prefetch_related("variants")
+        }
+        fallback_prod = None
+
         # Create order items
         for item in quote.line_items_data:
             pid = item.get("product_id")
-            prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).prefetch_related("variants").first() if pid else None
+            prod = products_map.get(int(pid)) if pid and str(pid).isdigit() else None
             if not prod:
-                prod = CatalogProduct.objects.filter(tenant=request.tenant).prefetch_related("variants").first()
+                if fallback_prod is None:
+                    fallback_prod = CatalogProduct.objects.filter(tenant=request.tenant).prefetch_related("variants").first()
+                prod = fallback_prod
             if prod:
-                var = prod.variants.first()
+                variants_list = prod.variants.all()
+                var = variants_list[0] if variants_list else None
                 item_sku = item.get("sku") or (var.sku if var else prod.number)
                 EcommerceOrderLine.objects.create(
                     tenant=request.tenant,
