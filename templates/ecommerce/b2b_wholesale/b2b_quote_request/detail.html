@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Quote {{ quote_request.number }} - {{ quote_request.company.company_name }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Page Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="hover:text-brand">Quote Requests</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200 font-mono">{{ quote_request.number }}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="file-text" class="w-7 h-7 text-brand"></i>
+          Quote {{ quote_request.number }}
+        </h1>
+        {% if quote_request.status == "accepted" or quote_request.status == "converted_to_order" %}
+          <span class="badge badge-green">{{ quote_request.get_status_display }}</span>
+        {% elif quote_request.status == "quoted" %}
+          <span class="badge badge-info">Quoted / Offer Sent</span>
+        {% elif quote_request.status == "under_review" or quote_request.status == "submitted" or quote_request.status == "buyer_review" %}
+          <span class="badge badge-amber">{{ quote_request.get_status_display }}</span>
+        {% elif quote_request.status == "rejected" %}
+          <span class="badge badge-red">Rejected</span>
+        {% else %}
+          <span class="badge badge-slate">{{ quote_request.get_status_display }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap">
+      {% if quote_request.converted_order %}
+        <a href="{% url 'ecommerce:order_detail' quote_request.converted_order.pk %}" class="btn btn-outline flex items-center gap-2 text-brand">
+          <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+          <span>View Order {{ quote_request.converted_order.number }}</span>
+        </a>
+      {% endif %}
+
+      {% if quote_request.status == "accepted" and not quote_request.converted_order %}
+        <form method="post" action="{% url 'ecommerce:b2bquoterequest_convert_order' quote_request.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Convert to Order</span>
+          </button>
+        </form>
+      {% endif %}
+
+      {% if quote_request.status == "draft" or quote_request.status == "rejected" %}
+        <form method="post" action="{% url 'ecommerce:b2bquoterequest_submit' quote_request.pk %}" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-2">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span>Submit for Review</span>
+          </button>
+        </form>
+      {% endif %}
+
+      <a href="{% url 'ecommerce:b2bquoterequest_edit' quote_request.pk %}" class="btn btn-outline flex items-center gap-2">
+        <i data-lucide="pencil" class="w-4 h-4"></i>
+        <span>Edit</span>
+      </a>
+
+      <a href="{% url 'ecommerce:b2bquoterequest_list' %}" class="btn btn-outline">
+        Back to List
+      </a>
+    </div>
+  </div>
+
+  {% if show_delete_confirm %}
+    <div class="card p-6 border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
+      <div class="flex items-start gap-4">
+        <div class="stat-icon red">
+          <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-rose-900 dark:text-rose-200">Confirm Quote Deletion</h3>
+          <p class="text-sm text-rose-700 dark:text-rose-300 mt-1">
+            Permanently delete Quote Request <strong>{{ quote_request.number }}</strong> for {{ quote_request.company.company_name }}?
+          </p>
+          <div class="flex items-center gap-3 mt-4">
+            <form method="post" action="{% url 'ecommerce:b2bquoterequest_delete' quote_request.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-danger flex items-center gap-2">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                <span>Confirm Permanent Delete</span>
+              </button>
+            </form>
+            <a href="{% url 'ecommerce:b2bquoterequest_detail' quote_request.pk %}" class="btn btn-outline">
+              Cancel
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Overview Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Company & Buyer -->
+    <div class="card p-5 space-y-3">
+      <div class="card-header pb-2 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <i data-lucide="building-2" class="w-4 h-4 text-brand"></i>
+        Client Organization
+      </div>
+      <div class="text-sm space-y-2">
+        <div>
+          <div class="text-xs text-slate-400">Company Account</div>
+          <a href="{% url 'ecommerce:b2bcompanyaccount_detail' quote_request.company.pk %}" class="font-bold text-brand hover:underline">
+            {{ quote_request.company.company_name }}
+          </a>
+          <div class="text-xs text-slate-500 font-mono">{{ quote_request.company.number }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Submitted By</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">
+            {{ quote_request.requested_by.get_full_name|default:quote_request.requested_by.username }}
+          </div>
+          <div class="text-xs text-slate-400">{{ quote_request.requested_by.email }}</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Assigned Sales Executive</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">
+            {{ quote_request.assigned_sales_rep.get_full_name|default:quote_request.assigned_sales_rep.username|default:"Unassigned" }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing Summary -->
+    <div class="card p-5 space-y-3">
+      <div class="card-header pb-2 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <i data-lucide="calculator" class="w-4 h-4 text-brand"></i>
+        Pricing & Proposal
+      </div>
+      <div class="text-sm space-y-2">
+        <div class="flex justify-between">
+          <span class="text-slate-500">Catalog Subtotal:</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">${{ quote_request.original_subtotal|floatformat:2 }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Volume Discount:</span>
+          <span class="font-mono font-semibold text-amber-600">-{{ quote_request.quoted_discount_percent|floatformat:1 }}%</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Sales Tax:</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">${{ quote_request.tax_amount|floatformat:2 }}</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-slate-500">Freight / Shipping:</span>
+          <span class="font-mono text-slate-800 dark:text-slate-200">${{ quote_request.shipping_estimate|floatformat:2 }}</span>
+        </div>
+        <div class="flex justify-between pt-2 border-t border-slate-100 dark:border-slate-800 font-bold">
+          <span class="text-slate-900 dark:text-white">Quoted Total:</span>
+          <span class="font-mono text-lg text-brand">${{ quote_request.quoted_total|floatformat:2 }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Timeline & Validity -->
+    <div class="card p-5 space-y-3">
+      <div class="card-header pb-2 border-b border-slate-100 dark:border-slate-800 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+        <i data-lucide="calendar" class="w-4 h-4 text-brand"></i>
+        Delivery & Validity
+      </div>
+      <div class="text-sm space-y-2">
+        <div>
+          <div class="text-xs text-slate-400">Target Delivery Date</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">
+            {{ quote_request.target_delivery_date|date:"F d, Y"|default:"Not specified" }}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Offer Valid Until</div>
+          <div class="font-medium text-slate-800 dark:text-slate-200">
+            {{ quote_request.valid_until|date:"F d, Y H:i"|default:"No expiration" }}
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Target Budget</div>
+          <div class="font-mono font-medium text-slate-800 dark:text-slate-200">
+            {% if quote_request.target_budget %}${{ quote_request.target_budget|floatformat:2 }}{% else %}Unspecified{% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Negotiation / Quote Action Bar -->
+  {% if quote_request.status == "submitted" or quote_request.status == "under_review" %}
+    <div class="card p-5 bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h3 class="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-2">
+            <i data-lucide="badge-dollar-sign" class="w-5 h-5 text-blue-600"></i>
+            Dispatch Quote Offer to Client
+          </h3>
+          <p class="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+            Set custom negotiated discount percentage and finalize proposal for client review.
+          </p>
+        </div>
+        <form method="post" action="{% url 'ecommerce:b2bquoterequest_quote' quote_request.pk %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <div class="relative w-28">
+            <input type="number" step="0.1" name="quoted_discount_percent" value="{{ quote_request.quoted_discount_percent }}" class="form-input pr-7 text-right" placeholder="10.0" />
+            <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">%</span>
+          </div>
+          <button type="submit" class="btn btn-primary flex items-center gap-2 whitespace-nowrap">
+            <i data-lucide="send" class="w-4 h-4"></i>
+            <span>Send Quote</span>
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if quote_request.status == "quoted" or quote_request.status == "buyer_review" %}
+    <div class="card p-5 bg-amber-50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h3 class="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+          <i data-lucide="help-circle" class="w-5 h-5 text-amber-600"></i>
+          Client Offer Review
+        </h3>
+        <p class="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+          The quote has been offered to the client. Record client decision below.
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <form method="post" action="{% url 'ecommerce:b2bquoterequest_accept' quote_request.pk %}">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-primary flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>Accept Proposal</span>
+          </button>
+        </form>
+
+        <form method="post" action="{% url 'ecommerce:b2bquoterequest_reject' quote_request.pk %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="text" name="rejection_reason" placeholder="Decline reason..." class="form-input text-xs w-40" />
+          <button type="submit" class="btn btn-outline text-rose-600 border-rose-300 hover:bg-rose-50">
+            Decline
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Line Items Table -->
+  <div class="card overflow-hidden">
+    <div class="p-4 border-b border-slate-200 dark:border-slate-800 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+      <i data-lucide="layers" class="w-5 h-5 text-brand"></i>
+      Requested Products & Quantities
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Product / SKU</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Catalog Unit Price</th>
+            <th class="text-right">Quoted Unit Price</th>
+            <th class="text-right">Line Total</th>
+            <th>Item Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in line_items %}
+            <tr>
+              <td>
+                <div class="font-medium text-slate-800 dark:text-slate-200">{{ item.name }}</div>
+                <div class="text-xs font-mono text-slate-400">{{ item.sku }}</div>
+              </td>
+              <td class="text-right font-mono font-medium">{{ item.requested_qty }}</td>
+              <td class="text-right font-mono text-slate-500">${{ item.requested_unit_price|floatformat:2 }}</td>
+              <td class="text-right font-mono font-bold text-slate-900 dark:text-white">${{ item.quoted_unit_price|floatformat:2 }}</td>
+              <td class="text-right font-mono font-bold text-brand">${{ item.line_total|floatformat:2 }}</td>
+              <td class="text-xs text-slate-500">{{ item.notes|default:"—" }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="text-center p-6 text-slate-400 text-sm">
+                No individual line items stored in this quote payload. Subtotal calculated from overall quote estimate.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Notes Section -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="card p-5 space-y-2">
+      <div class="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2">
+        <i data-lucide="message-square" class="w-4 h-4 text-brand"></i>
+        Buyer Specifications & Instructions
+      </div>
+      <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">
+        {{ quote_request.buyer_notes|default:"No special buyer instructions provided." }}
+      </p>
+    </div>
+
+    <div class="card p-5 space-y-2">
+      <div class="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2">
+        <i data-lucide="lock" class="w-4 h-4 text-amber-500"></i>
+        Internal Merchant Underwriting Notes
+      </div>
+      <p class="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-line">
+        {{ quote_request.merchant_notes|default:"No internal merchant notes recorded." }}
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
