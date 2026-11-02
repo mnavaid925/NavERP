@@ -49,7 +49,7 @@ The deduplicated and prioritized findings below are structured for resolution by
   - *Problem*: `requested_by.get_full_name|default:requested_by.username` raises `VariableDoesNotExist` 500 when `requested_by`, `assigned_sales_rep`, or `created_by` is None.
   - *Fix*: Wrap all with explicit `{% if obj.fk %}...{% else %}...{% endif %}` guards.
 
-- [ ] **C8** — N+1 query loops in Quick Order matrix, CSV upload parsing, and quote/template line item processing
+- [x] **C8** — N+1 query loops in Quick Order matrix, CSV upload parsing, and quote/template line item processing — 6ae0ed13, 9617d387
   - *Location*: `apps/ecommerce/views/B2bWholesale/B2bQuickOrderTemplates.py:284-375`, `B2bQuoteRequests.py:136, 209, 377`
   - *Problem*: Sequential DB queries per row in loops inside `b2b_quick_order_matrix`, `b2bquoterequest_create/edit/convert`, and `b2bquickordertemplate_create/edit`.
   - *Fix*: Collect SKUs / IDs upfront and batch fetch using `sku__in` / `pk__in` with in-memory dictionary lookup.
