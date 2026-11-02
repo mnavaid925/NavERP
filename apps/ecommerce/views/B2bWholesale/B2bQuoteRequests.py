@@ -13,7 +13,7 @@ from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.B2bWholesale.B2bQuoteRequests import B2bQuoteRequestForm
 from apps.ecommerce.models.B2bWholesale.B2bCompanyAccounts import B2bCompanyAccount
 from apps.ecommerce.models.B2bWholesale.B2bQuoteRequests import B2bQuoteRequest
-from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderItem
+from apps.ecommerce.models.OrderManagement.EcommerceOrders import EcommerceOrder, EcommerceOrderLine
 from apps.ecommerce.models.ProductCatalog.CatalogProducts import CatalogProduct
 from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 
@@ -354,17 +354,19 @@ def b2bquoterequest_convert_order(request, pk):
         for item in quote.line_items_data:
             pid = item.get("product_id")
             prod = CatalogProduct.objects.filter(tenant=request.tenant, pk=pid).first() if pid else None
-            EcommerceOrderItem.objects.create(
-                tenant=request.tenant,
-                order=order,
-                product=prod,
-                sku=item.get("sku", "B2B-ITEM"),
-                product_name=item.get("name", "Wholesale Item"),
-                quantity=item.get("requested_qty", 1),
-                unit_price=Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0)),
-                line_subtotal=Decimal(str(item.get("line_total", 0))),
-                line_total=Decimal(str(item.get("line_total", 0))),
-            )
+            if not prod:
+                prod = CatalogProduct.objects.filter(tenant=request.tenant).first()
+            if prod:
+                EcommerceOrderLine.objects.create(
+                    tenant=request.tenant,
+                    order=order,
+                    product=prod,
+                    sku=item.get("sku") or prod.sku,
+                    product_name=item.get("name") or prod.name,
+                    quantity=item.get("requested_qty", 1),
+                    unit_price=Decimal(str(item.get("quoted_unit_price") or item.get("requested_unit_price") or 0)),
+                    line_total=Decimal(str(item.get("line_total", 0))),
+                )
 
         # Deduct credit if applicable
         if quote.company.available_credit >= quote.quoted_total:
