@@ -101,9 +101,17 @@
                         {% endif %}
                     </td>
                     <td>
-                        <div class="font-medium text-sm">{{ alert.user.username|default:alert.party.name|default:"Unregistered Guest" }}</div>
+                        <div class="font-medium text-sm">
+                            {% if alert.party %}
+                                {{ alert.party.name }}
+                            {% elif alert.user %}
+                                {{ alert.user.username }}
+                            {% else %}
+                                Unregistered Guest
+                            {% endif %}
+                        </div>
                         {% if alert.party and alert.user %}
-                        <span class="text-xs text-muted">{{ alert.party.name }}</span>
+                        <span class="text-xs text-muted">@{{ alert.user.username }}</span>
                         {% endif %}
                     </td>
                     <td class="text-xs font-mono">
