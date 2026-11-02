@@ -26,7 +26,7 @@
             {% elif rule.action_to_take == "flag_review" %}
             <span class="badge badge-info">Manual Review</span>
             {% else %}
-            <span class="badge badge-green">Allow</span>
+            <span class="badge badge-green">{{ rule.get_action_to_take_display }}</span>
             {% endif %}
         </div>
         <p class="text-secondary text-sm">Rule Identifier: <span class="font-mono">{{ rule.rule_code|default:"(No Code)" }}</span></p>
