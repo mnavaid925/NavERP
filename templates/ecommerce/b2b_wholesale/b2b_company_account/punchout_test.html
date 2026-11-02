@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}PunchOut Simulator - {{ company_account.company_name }} | NavERP{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-4xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-sm text-slate-500 mb-1">
+        <a href="{% url 'ecommerce:b2b_wholesale_hub' %}" class="hover:text-brand">B2B Wholesale</a>
+        <span>/</span>
+        <a href="{% url 'ecommerce:b2bcompanyaccount_detail' company_account.pk %}" class="hover:text-brand">{{ company_account.company_name }}</a>
+        <span>/</span>
+        <span class="text-slate-800 dark:text-slate-200">PunchOut Test</span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="external-link" class="w-7 h-7 text-brand"></i>
+        PunchOut e-Procurement Simulator
+      </h1>
+      <p class="text-sm text-slate-500 mt-1">
+        Simulate cXML / OCI PunchOutSetupRequest handshake and verify return URL payload generation
+      </p>
+    </div>
+    <a href="{% url 'ecommerce:b2bcompanyaccount_detail' company_account.pk %}" class="btn btn-outline">
+      Back to Company
+    </a>
+  </div>
+
+  <!-- Status Overview Card -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-4">
+      <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+        <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-500"></i>
+        Handshake Configuration State
+      </div>
+      <div>
+        {% if company_account.punchout_enabled %}
+          <span class="badge badge-green">PunchOut Active</span>
+        {% else %}
+          <span class="badge badge-amber">PunchOut Disabled</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+      <div>
+        <div class="text-xs text-slate-400">Protocol</div>
+        <div class="font-bold uppercase text-slate-800 dark:text-slate-200">{{ test_payload.protocol }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-400">Buyer Network ID</div>
+        <div class="font-mono text-xs text-slate-800 dark:text-slate-200">{{ test_payload.buyer_identity }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-400">Currency</div>
+        <div class="font-mono text-xs text-slate-800 dark:text-slate-200">{{ test_payload.currency }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-slate-400">Secret Configured</div>
+        <div class="text-xs font-semibold {% if test_payload.shared_secret_configured %}text-emerald-600{% else %}text-rose-500{% endif %}">
+          {% if test_payload.shared_secret_configured %}Yes (Secured){% else %}Missing{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Raw Payload Inspector -->
+  <div class="card p-5 space-y-4">
+    <div class="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+      <i data-lucide="code" class="w-4 h-4 text-brand"></i>
+      Simulated cXML PunchOutSetupResponse
+    </div>
+    <div class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto">
+      <pre>{{ cxml_response }}</pre>
+    </div>
+    <p class="text-xs text-slate-500">
+      When an enterprise buyer punches out from SAP Ariba or Coupa, their procurement engine sends a SetupRequest XML. NavERP authenticates the buyer, sets a session token, and returns this response redirecting their browser directly into the wholesale catalog.
+    </p>
+  </div>
+</div>
+{% endblock %}
