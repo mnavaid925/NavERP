@@ -29,9 +29,11 @@ class AccountSecurityAlertForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        User = get_user_model()
         if self.tenant:
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant)
-        self.fields["user"].queryset = User.objects.filter(is_active=True)
-        self.fields["assigned_investigator"].queryset = User.objects.filter(is_active=True)
-        self.fields["resolved_by"].queryset = User.objects.filter(is_active=True)
+        if "user" in self.fields:
+            self.fields["user"].queryset = self.fields["user"].queryset.filter(is_active=True)
+        if "assigned_investigator" in self.fields:
+            self.fields["assigned_investigator"].queryset = self.fields["assigned_investigator"].queryset.filter(is_active=True)
+        if "resolved_by" in self.fields:
+            self.fields["resolved_by"].queryset = self.fields["resolved_by"].queryset.filter(is_active=True)
