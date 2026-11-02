@@ -22,7 +22,7 @@
         {% if template_obj.is_active %}
           <span class="badge badge-green">Active</span>
         {% else %}
-          <span class="badge badge-muted">Inactive</span>
+          <span class="badge badge-slate">Inactive</span>
         {% endif %}
       </div>
     </div>
@@ -82,7 +82,7 @@
     <div class="card p-5 space-y-2">
       <div class="text-xs text-slate-400">Visibility & Cadence</div>
       <div class="flex items-center gap-2">
-        <span class="badge badge-info">{{ template_obj.get_scope_display }}</span>
+        <span class="badge badge-blue">{{ template_obj.get_scope_display }}</span>
         <span class="badge badge-slate">{{ template_obj.get_cadence_display }}</span>
       </div>
       <div class="text-xs text-slate-500 mt-1">Authored by: {% if template_obj.created_by %}{{ template_obj.created_by.get_full_name|default:template_obj.created_by.username }}{% else %}System{% endif %}</div>
