@@ -78,12 +78,11 @@ def account_security_alert_create(request):
                     alert.resolved_by = request.user
             alert.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="AccountSecurityAlert",
-                object_id=alert.pk,
+                request.user,
+                alert,
+                "create",
                 changes={"alert_type": alert.alert_type, "severity": alert.severity, "status": alert.status},
+                tenant=request.tenant,
             )
             messages.success(request, f"Security alert {alert.number} created.")
             return redirect("ecommerce:account_security_alert_detail", pk=alert.pk)
@@ -124,12 +123,11 @@ def account_security_alert_edit(request, pk):
                     alert.resolved_by = request.user
             alert.save()
             write_audit_log(
-                tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="AccountSecurityAlert",
-                object_id=alert.pk,
+                request.user,
+                alert,
+                "update",
                 changes={"status": alert.status, "severity": alert.severity},
+                tenant=request.tenant,
             )
             messages.success(request, f"Security alert {alert.number} updated.")
             return redirect("ecommerce:account_security_alert_detail", pk=alert.pk)
@@ -149,14 +147,13 @@ def account_security_alert_edit(request, pk):
 def account_security_alert_delete(request, pk):
     alert = ecommerce_object(request, AccountSecurityAlert, pk)
     number = alert.number
-    alert.delete()
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="AccountSecurityAlert",
-        object_id=pk,
+        request.user,
+        alert,
+        "delete",
         changes={"number": number},
+        tenant=request.tenant,
     )
+    alert.delete()
     messages.success(request, f"Security alert {number} deleted.")
     return redirect("ecommerce:account_security_alert_list")
