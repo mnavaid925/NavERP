@@ -187,6 +187,7 @@ class TransactionRiskAssessment(TenantNumbered):
             models.Index(fields=["tenant", "actual_decision"], name="idx_etra_ten_dec"),
             models.Index(fields=["tenant", "order"], name="idx_etra_ten_order"),
             models.Index(fields=["tenant", "customer_party"], name="idx_etra_ten_party"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_etra_ten_created"),
         ]
 
     def __str__(self):
