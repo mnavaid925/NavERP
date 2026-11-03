@@ -40,7 +40,7 @@ class EtlPipelineVersionForm(TenantUniqueMixin, forms.ModelForm):
         self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant)
+            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant).only("id", "name", "number")
             self.fields["environment_instance"].queryset = EnvironmentInstance.objects.filter(tenant=self.tenant)
         if self.instance and self.instance.pk and self.instance.dag_definition:
             self.fields["dag_definition_raw"].initial = json.dumps(self.instance.dag_definition, indent=2)
