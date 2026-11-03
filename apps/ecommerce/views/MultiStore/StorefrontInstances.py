@@ -63,7 +63,9 @@ def storefront_instance_detail(request, pk):
         pk=pk,
         select_related=("default_currency", "root_category", "default_fulfillment_center"),
     )
-    catalog_assignments = storefront.catalog_assignments.select_related("product", "custom_currency")[:10]
+    catalog_assignments = storefront.catalog_assignments.select_related(
+        "product", "product__item", "custom_currency"
+    ).prefetch_related("product__variants")[:10]
     environments = storefront.environments.all()[:10]
 
     context = {
