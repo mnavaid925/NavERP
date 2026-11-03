@@ -281,3 +281,49 @@ Opportunities exist around `select_related` on detail views, composite indexes, 
 - **Remediation:** Use `.only("id", "name")`.
 
 ---
+
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester` — Runtime Report Mode)
+
+### Executive Summary
+A comprehensive runtime verification suite was executed across all 17 endpoints and 25 view actions of Sub-module 9.19 (*Integration & API Ecosystem*). The execution verified GET rendering, POST state mutations, filter handling, junk parameter resilience, pagination boundaries, comment leak absence, and cross-tenant IDOR isolation using real seeded data.
+
+- **Zero HTTP 500 Server Crashes:** All 17 endpoints rendered cleanly without unhandled exceptions.
+- **Strict Multi-Tenant Isolation:** Cross-tenant IDOR access (GET detail/edit and POST delete/actions) strictly returned **404 Not Found** across all 20 tested vectors (both `admin_globex` -> Acme and `admin_acme` -> Globex).
+- **Template Hygiene:** Zero comment leaks (`{#` or `{% comment`) and zero unescaped template tags across all 13 rendered HTML templates.
+- **CSRF Protection:** All mutating HTML forms and inline action buttons contain valid CSRF middleware tokens.
+
+### Critical Findings
+*None. All endpoints are fully operational, tenant-isolated, CSRF-protected, and crash-free.*
+
+### Important Findings
+
+#### 1. AuditLog Action Length Exceeds Column Width and Emits Error Log
+- **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
+- **Problem:** When executing `POST /ecommerce/integration-api/connectors/<pk>/test-connection/`, `write_audit_log` is called with `action="test_connection"`. The underlying `AuditLog.action` column is `CharField(max_length=10)`. Runtime emits an `ERROR` log and clamps the verb to `'test_conne'`.
+- **Remediation:** Pass `action="test"` or `action="ping"` (under 10 chars) and record `"action_type": "test_connection"` inside the `changes` dictionary.
+
+#### 2. Comma-Separated Scope String Fails to Split into Individual Badges
+- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 112)
+- **Problem:** `credential.scopes.split` invokes `str.split(sep=None)` with whitespace delimiter, yielding a 1-item list: `['read_catalog,read_orders,write_orders']`, rendering 1 monolithic badge instead of separate badges.
+- **Remediation:** Add helper property `@property def scopes_list(self): return [s.strip() for s in (self.scopes or "").split(",") if s.strip()]` on `ApiCredential` and iterate over `credential.scopes_list` in template.
+
+#### 3. Missing Filter Controls and Active Filter Parameter Loss During Pagination
+- **Files:**
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–228)
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–231)
+- **Problem:**
+  1. `ecommerce_connector_list` parses `provider` from GET and passes `provider_choices` / `provider_filter`, but the filter `<form>` lacks `<select name="provider">`. In pagination links, `&provider=...` is omitted.
+  2. `integration_sync_job_list` parses `direction` and `trigger` from GET and passes `direction_choices` / `trigger_choices`, but the filter `<form>` lacks dropdowns for either. Pagination links drop `&direction=...` and `&trigger=...`.
+- **Remediation:** Add `<select name="provider">` to `ecommerce_connector/list.html`, add `<select name="direction">` and `<select name="trigger">` to `integration_sync_job/list.html`, and append parameters to pagination controls.
+
+### Minor Findings
+
+#### 4. Undefined Theme Badge Class `.badge-purple`
+- **Files:**
+  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
+  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
+- **Problem:** `<span class="badge badge-purple">Admin Private</span>` renders without theme color styling because `.badge-purple` is not declared in `static/css/theme.css`.
+- **Remediation:** Change to `badge-info` (primary indigo accent) or `badge-slate`.
+
+---
