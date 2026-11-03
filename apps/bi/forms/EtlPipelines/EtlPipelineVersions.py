@@ -1,4 +1,5 @@
 import json
+import re
 
 from django import forms
 
@@ -43,6 +44,12 @@ class EtlPipelineVersionForm(TenantUniqueMixin, forms.ModelForm):
             self.fields["environment_instance"].queryset = EnvironmentInstance.objects.filter(tenant=self.tenant)
         if self.instance and self.instance.pk and self.instance.dag_definition:
             self.fields["dag_definition_raw"].initial = json.dumps(self.instance.dag_definition, indent=2)
+
+    def clean_version_number(self):
+        v = self.cleaned_data.get("version_number", "").strip()
+        if not re.match(r"^[a-zA-Z0-9_\.\-]+$", v):
+            raise forms.ValidationError("Version number can only contain alphanumeric characters, underscores, dots, and hyphens.")
+        return v
 
     def clean_dag_definition_raw(self):
         raw = self.cleaned_data.get("dag_definition_raw", "").strip()
