@@ -71,6 +71,10 @@ from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
 from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
 from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
 from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
+from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceConnector
+from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
+from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
+from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
 
 __all__ = [
     "TenantOwned",
@@ -168,4 +172,9 @@ __all__ = [
     "TransactionRiskAssessment",
     "ChargebackDispute",
     "AccountSecurityAlert",
+    # 9.19 Integration & API Ecosystem
+    "EcommerceConnector",
+    "IntegrationSyncJob",
+    "WebhookSubscription",
+    "ApiCredential",
 ]
