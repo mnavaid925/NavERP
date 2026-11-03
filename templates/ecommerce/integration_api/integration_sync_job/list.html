@@ -108,7 +108,7 @@
                     <span>Filter</span>
                 </button>
                 {% if search_query or status_filter or entity_filter or direction_filter or trigger_filter or connector_filter %}
-                <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -187,21 +187,21 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'ecommerce:integrationsyncjob_detail' job.pk %}" class="btn btn-outline btn-icon" title="View Details">
+                            <a href="{% url 'ecommerce:integrationsyncjob_detail' job.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:integrationsyncjob_edit' job.pk %}" class="btn btn-outline btn-icon" title="Edit Parameters">
+                            <a href="{% url 'ecommerce:integrationsyncjob_edit' job.pk %}" class="btn btn-outline btn-icon" title="Edit Parameters" aria-label="Edit Parameters">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:integrationsyncjob_retry' job.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-icon" title="Retry Sync Job">
+                                <button type="submit" class="btn btn-outline btn-icon" title="Retry Sync Job" aria-label="Retry Sync Job">
                                     <i data-lucide="repeat"></i>
                                 </button>
                             </form>
                             <form method="post" action="{% url 'ecommerce:integrationsyncjob_delete' job.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete sync job {{ job.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Job">
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Job" aria-label="Delete Job">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
