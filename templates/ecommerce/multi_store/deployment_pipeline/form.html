@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Deployment — {{ pipeline.release_version }}{% else %}Trigger Deployment Pipeline{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:deployment_pipeline_list' %}">Deployments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ pipeline.number }}{% else %}New Pipeline{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Deployment: {{ pipeline.release_version }}{% else %}Trigger CI/CD Deployment Pipeline{% endif %}</h1>
+        <p class="text-secondary text-sm">Initiate build artifacts, blue-green deployment target slots, and canary traffic percentages</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:deployment_pipeline_detail' pipeline.pk %}{% else %}{% url 'ecommerce:deployment_pipeline_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="git-branch" class="w-4 h-4 text-primary"></i>
+                    <span>Release Version &amp; Source Control</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.environment.id_for_label }}">Target Environment *</label>
+                        {{ form.environment }}
+                        {% if form.environment.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.environment.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.release_version.id_for_label }}">Release Version / Tag *</label>
+                        {{ form.release_version }}
+                        {% if form.release_version.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.release_version.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.git_branch.id_for_label }}">Git Branch</label>
+                        {{ form.git_branch }}
+                        {% if form.git_branch.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.git_branch.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.git_commit_sha.id_for_label }}">Git Commit SHA *</label>
+                        {{ form.git_commit_sha }}
+                        {% if form.git_commit_sha.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.git_commit_sha.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-primary"></i>
+                    <span>Deployment Strategy &amp; Slot Configuration</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.deployment_strategy.id_for_label }}">Strategy</label>
+                        {{ form.deployment_strategy }}
+                        {% if form.deployment_strategy.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.deployment_strategy.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.target_slot.id_for_label }}">Target Slot</label>
+                        {{ form.target_slot }}
+                        {% if form.target_slot.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_slot.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.status.id_for_label }}">Pipeline Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.preview_endpoint_url.id_for_label }}">Preview Endpoint URL</label>
+                        {{ form.preview_endpoint_url }}
+                        <span class="text-xs text-muted">Pre-promotion verification endpoint</span>
+                        {% if form.preview_endpoint_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.preview_endpoint_url.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.traffic_percentage.id_for_label }}">Live Traffic Percentage (0 - 100%)</label>
+                        {{ form.traffic_percentage }}
+                        {% if form.traffic_percentage.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.traffic_percentage.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.build_duration_seconds.id_for_label }}">Build Duration (seconds)</label>
+                        {{ form.build_duration_seconds }}
+                        {% if form.build_duration_seconds.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.build_duration_seconds.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group flex flex-col justify-end">
+                        <label class="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 border border-slate-200 rounded">
+                            {{ form.migration_executed }}
+                            <div>
+                                <span class="font-medium text-sm block">Database Migrations Applied</span>
+                                <span class="text-xs text-muted block">Check if this deployment applies schema changes</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label class="form-label font-medium" for="{{ form.deployment_notes.id_for_label }}">Deployment Notes / Release Changelog</label>
+                    {{ form.deployment_notes }}
+                    {% if form.deployment_notes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.deployment_notes.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'ecommerce:deployment_pipeline_detail' pipeline.pk %}{% else %}{% url 'ecommerce:deployment_pipeline_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Trigger Pipeline{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
