@@ -130,7 +130,15 @@
                 </div>
                 <div>
                     <span class="text-secondary block">Store Status</span>
+                    {% if assignment.storefront.status == 'active' %}
                     <span class="badge badge-green">{{ assignment.storefront.get_status_display }}</span>
+                    {% elif assignment.storefront.status == 'maintenance' %}
+                    <span class="badge badge-amber">{{ assignment.storefront.get_status_display }}</span>
+                    {% elif assignment.storefront.status == 'suspended' or assignment.storefront.status == 'archived' %}
+                    <span class="badge badge-red">{{ assignment.storefront.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge-slate">{{ assignment.storefront.get_status_display }}</span>
+                    {% endif %}
                 </div>
             </div>
         </div>
