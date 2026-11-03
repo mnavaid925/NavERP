@@ -27,9 +27,17 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" action="{% url 'ecommerce:platform_environment_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div class="form-group mb-0 md:col-span-2">
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Search environment name, base URL, region, number..." class="form-input" aria-label="Search platform environments">
+        <form method="get" action="{% url 'ecommerce:platform_environment_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-1">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search name, URL, region, number..." class="form-input" aria-label="Search platform environments">
+            </div>
+            <div class="form-group mb-0">
+                <select name="storefront" class="form-select" aria-label="Filter by storefront">
+                    <option value="">All Storefronts</option>
+                    {% for sf in storefronts %}
+                    <option value="{{ sf.pk }}" {% if storefront_filter == sf.pk|stringformat:"d" %}selected{% endif %}>{{ sf.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="form-group mb-0">
                 <select name="env_type" class="form-select" aria-label="Filter by environment tier">
@@ -39,18 +47,20 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="flex items-center gap-2">
-                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+            <div class="form-group mb-0">
+                <select name="status" class="form-select" aria-label="Filter by status">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="btn btn-primary">
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                {% if search_query or env_type_filter or status_filter %}
+                {% if search_query or env_type_filter or status_filter or storefront_filter %}
                 <a href="{% url 'ecommerce:platform_environment_list' %}" class="btn btn-outline" title="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
@@ -185,14 +195,14 @@
         </div>
         <div class="pagination-links">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if storefront_filter %}&storefront={{ storefront_filter }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 <i data-lucide="chevron-left"></i>
                 <span>Previous</span>
             </a>
             {% endif %}
             <span class="btn btn-outline btn-sm disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if storefront_filter %}&storefront={{ storefront_filter }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 <span>Next</span>
                 <i data-lucide="chevron-right"></i>
             </a>
