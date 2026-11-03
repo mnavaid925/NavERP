@@ -64,8 +64,11 @@ class IntegrationSyncJobForm(TenantUniqueMixin, TenantModelForm):
 
     def clean_max_retries(self):
         val = self.cleaned_data.get("max_retries")
-        if val is not None and val < 0:
-            raise forms.ValidationError("Maximum retries cannot be negative.")
+        if val is not None:
+            if val < 0:
+                raise forms.ValidationError("Maximum retries cannot be negative.")
+            if val > 20:
+                raise forms.ValidationError("Maximum retries cannot exceed 20 attempts.")
         return val
 
     def clean(self):
