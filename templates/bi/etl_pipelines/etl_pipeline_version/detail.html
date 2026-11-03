@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}{{ version.version_number }} ({{ version.pipeline.name }}) — Pipeline Versions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}">{{ pipeline.number }}</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_version_list' %}">Versions</a>
+            <span>/</span>
+            <span>{{ version.version_number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ version.version_number }}</h1>
+            <span class="font-mono text-sm text-muted">({{ version.number }})</span>
+            {% if version.environment == 'production' %}
+                <span class="badge badge-green font-semibold">{{ version.get_environment_display }}</span>
+            {% elif version.environment == 'staging' %}
+                <span class="badge badge-amber font-semibold">{{ version.get_environment_display }}</span>
+            {% else %}
+                <span class="badge badge-slate font-semibold">{{ version.get_environment_display }}</span>
+            {% endif %}
+            {% if version.status == 'published' %}
+                <span class="badge badge-green">{{ version.get_status_display }}</span>
+            {% elif version.status == 'rolled_back' %}
+                <span class="badge badge-red">{{ version.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-slate">{{ version.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">Declarative DAG snapshot for {{ pipeline.name }}</p>
+    </div>
+    <div class="page-actions">
+        <!-- Promotion Action Buttons -->
+        {% if version.environment != 'production' %}
+        <form method="post" action="{% url 'bi:etl_pipeline_version_promote' version.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_environment" value="production">
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote version {{ version.version_number }} to live Production?');">
+                <i data-lucide="upload-cloud"></i>
+                <span>Promote to Production</span>
+            </button>
+        </form>
+        {% endif %}
+        {% if version.environment == 'development' %}
+        <form method="post" action="{% url 'bi:etl_pipeline_version_promote' version.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_environment" value="staging">
+            <button type="submit" class="btn btn-outline" onclick="return confirm('Promote version {{ version.version_number }} to QA / Staging?');">
+                <i data-lucide="check-circle-2"></i>
+                <span>Deploy to Staging</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'bi:etl_pipeline_version_edit' version.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Parent Pipeline</div>
+        <div class="font-medium text-sm text-slate-800 mt-1">
+            <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="text-blue-600 hover:underline">{{ pipeline.name }}</a>
+        </div>
+        <div class="text-xs font-mono text-muted mt-0.5">{{ pipeline.number }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Environment Binding</div>
+        <div class="font-semibold text-sm text-slate-800 mt-1">{{ version.get_environment_display }}</div>
+        <div class="text-xs text-muted mt-0.5">
+            {% if environment_instance %}
+                Instance: {{ environment_instance.name }}
+            {% else %}
+                Default Workspace
+            {% endif %}
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Promoted By</div>
+        <div class="font-medium text-sm text-slate-800 mt-1">
+            {{ promoted_by.get_full_name|default:promoted_by.username|default:"System Engine" }}
+        </div>
+        <div class="text-xs text-muted mt-0.5">
+            {{ version.promoted_at|date:"M d, Y H:i"|default:"Pending Promotion" }}
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Release Status</div>
+        <div class="font-semibold text-sm mt-1">
+            {% if version.status == 'published' %}
+                <span class="text-green-600">Active Published</span>
+            {% elif version.status == 'rolled_back' %}
+                <span class="text-red-600">Rolled Back</span>
+            {% else %}
+                <span class="text-slate-600">{{ version.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-0.5">Created: {{ version.created_at|date:"M d, Y" }}</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Declarative DAG Definition Snapshot -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">DAG Definition Snapshot (JSON)</h2>
+            <span class="badge badge-info text-xs">Immutable Snapshot</span>
+        </div>
+        <div class="card-body">
+            {% if version.dag_definition %}
+            <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed max-h-96">{{ version.dag_definition|pprint }}</pre>
+            {% else %}
+            <p class="text-sm text-muted">No DAG definition payload recorded for this snapshot.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Changelog & Release Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Release Notes &amp; Changelog</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs uppercase font-semibold text-muted mb-1">Changelog Summary</div>
+                <div class="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg border border-slate-200 leading-relaxed whitespace-pre-wrap">
+                    {{ version.changelog|default:"Initial version release. Transformation steps and DAG configuration snapshotted from active pipeline configuration." }}
+                </div>
+            </div>
+
+            {% if version.rollback_source %}
+            <div class="border-t border-slate-100 pt-3">
+                <div class="text-xs uppercase font-semibold text-muted mb-1">Rollback Origin</div>
+                <div class="font-mono text-xs text-slate-700">
+                    Restored from previous version:
+                    <a href="{% url 'bi:etl_pipeline_version_detail' version.rollback_source.pk %}" class="text-blue-600 hover:underline">
+                        {{ version.rollback_source.version_number }} ({{ version.rollback_source.number }})
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="border-t border-slate-100 pt-3 text-xs text-muted space-y-1">
+                <div>Snapshot ID: <span class="font-mono text-slate-700">{{ version.number }}</span></div>
+                <div>Created: <span class="text-slate-700">{{ version.created_at|date:"M d, Y H:i:s" }}</span></div>
+                <div>Last Modified: <span class="text-slate-700">{{ version.updated_at|date:"M d, Y H:i:s" }}</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
