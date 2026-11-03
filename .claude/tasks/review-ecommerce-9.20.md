@@ -65,5 +65,19 @@ Needs Attention (1 Critical, 5 Important, 4 Minor)
 - **[MINOR] M11**: `apps/ecommerce/models/MultiStore/StorefrontCatalogAssignments.py` — Missing index on `(tenant, publish_status)`. Fix: Add index.
 - **[MINOR] M12**: `apps/ecommerce/views/MultiStore/MultiStoreHub.py:31-32` — Redundant joins in hub view querysets. Fix: Omit unneeded `select_related` on unused preview columns.
 
+---
+
+## 5. qa-smoke-tester Findings
+
+### Verdict
+FAIL / ACTION REQUIRED (2 Critical, 1 Important, 1 Minor)
+
+### Findings
+- **[CRITICAL] C4**: `apps/ecommerce/views/MultiStore/*.py` (all 15 mutating POST handlers) — Transposed `write_audit_log` arguments: passed `(request.user, action, obj, changes)` instead of `(request.user, obj, action, changes)`. Crashes with `AttributeError: type object 'str' has no attribute '_meta'` on all POST operations. Fix: Reorder arguments to `write_audit_log(request.user, obj, action, changes)`.
+- **[CRITICAL] C5**: `apps/ecommerce/views/MultiStore/StorefrontCatalogAssignments.py:34` and `DeploymentPipelines.py:34` — Filter `storefront_filter` and `environment_filter` lack `.isdigit()` guard, causing 500 `ValueError` on junk params (corroborates I1). Fix: Guard with `if param and param.isdigit():`.
+- **[IMPORTANT] I12**: `apps/ecommerce/views/MultiStore/StorefrontInstances.py:167-171` — Incomplete status toggle branching in `storefront_toggle_status` (only toggles active <-> maintenance; draft/suspended/archived unhandled). Fix: Explicitly handle or guard toggleable statuses.
+- **[MINOR] M13**: `apps/ecommerce/views/MultiStore/PlatformEnvironments.py:43` — Unused `storefronts` context variable in `platform_environment_list` (corroborates I3/M5).
+
+
 
 
