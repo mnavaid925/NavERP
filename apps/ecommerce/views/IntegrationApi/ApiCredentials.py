@@ -72,7 +72,7 @@ apicredential_list = api_credential_list
 
 @login_required
 def api_credential_detail(request, pk):
-    credential = ecommerce_object(ApiCredential, pk, request)
+    credential = ecommerce_object(request, ApiCredential, pk)
     new_raw_secret = request.session.pop(f"new_secret_{credential.pk}", None)
 
     context = {
@@ -138,7 +138,7 @@ apicredential_create = api_credential_create
 
 @login_required
 def api_credential_edit(request, pk):
-    credential = ecommerce_object(ApiCredential, pk, request)
+    credential = ecommerce_object(request, ApiCredential, pk)
 
     if request.method == "POST":
         form = ApiCredentialForm(request.POST, instance=credential, tenant=request.tenant)
@@ -171,7 +171,7 @@ apicredential_edit = api_credential_edit
 @login_required
 @require_POST
 def api_credential_delete(request, pk):
-    credential = ecommerce_object(ApiCredential, pk, request)
+    credential = ecommerce_object(request, ApiCredential, pk)
     name = credential.name
     write_audit_log(
         request.user,
@@ -192,7 +192,7 @@ apicredential_delete = api_credential_delete
 @login_required
 @require_POST
 def api_credential_revoke(request, pk):
-    credential = ecommerce_object(ApiCredential, pk, request)
+    credential = ecommerce_object(request, ApiCredential, pk)
     credential.status = "revoked"
     credential.revoked_at = timezone.now()
     credential.save(update_fields=["status", "revoked_at"])
