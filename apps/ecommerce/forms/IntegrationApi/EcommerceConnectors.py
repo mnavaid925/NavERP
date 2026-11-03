@@ -37,7 +37,7 @@ class EcommerceConnectorForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input font-mono", "placeholder": "API key or client ID"}
             ),
             "api_secret": forms.PasswordInput(
-                render_value=True,
+                render_value=False,
                 attrs={"class": "form-input font-mono", "placeholder": "••••••••••••••••"},
             ),
             "account_id": forms.TextInput(
@@ -67,6 +67,12 @@ class EcommerceConnectorForm(TenantUniqueMixin, TenantModelForm):
         if not name:
             raise forms.ValidationError("Connector name is required.")
         return name
+
+    def clean_api_secret(self):
+        val = self.cleaned_data.get("api_secret", "").strip()
+        if not val and self.instance and self.instance.pk:
+            return self.instance.api_secret
+        return val
 
     def clean_timeout_seconds(self):
         val = self.cleaned_data.get("timeout_seconds")
