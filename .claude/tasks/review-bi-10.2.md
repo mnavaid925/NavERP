@@ -21,7 +21,7 @@
 
 ## Important Findings
 
-- [ ] **I1**: Unvalidated `target_environment` in `etl_pipeline_version_promote`. `target_env = request.POST.get("target_environment", "production")` does not validate against `EtlPipelineVersion.ENVIRONMENT_CHOICES`. Validate `target_env in dict(EtlPipelineVersion.ENVIRONMENT_CHOICES)`.
+- [x] **I1**: Unvalidated `target_environment` in `etl_pipeline_version_promote`. `target_env = request.POST.get("target_environment", "production")` does not validate against `EtlPipelineVersion.ENVIRONMENT_CHOICES`. Validate `target_env in dict(EtlPipelineVersion.ENVIRONMENT_CHOICES)`.
 - [ ] **I2**: `EtlPipelineVersionForm.save()` Fails to Re-snapshot When Editing Existing Version. When editing an existing version that already has a saved DAG snapshot, clearing `dag_definition_raw` fails to trigger a re-snapshot because `not instance.dag_definition` evaluates to False. Re-snapshot from `instance.pipeline.steps.all()` whenever raw input is empty.
 - [ ] **I3**: Missing Composite Index on `EtlPipelineVersion(tenant, -created_at)`. Model orders by `['-created_at']` with `tenant` filter, requiring in-memory sort. Add `models.Index(fields=["tenant", "-created_at"], name="idx_bpvr_ten_created_desc")` in migration `0005_...`.
 - [ ] **I4**: Multiple Separate Count Queries on Run and Pipeline Lists. In `etl_pipeline_run_list` (3 counts) and `etl_pipeline_list` (2 counts), replace separate `count()` calls with single conditional aggregations using `Count("id", filter=Q(...))`.
