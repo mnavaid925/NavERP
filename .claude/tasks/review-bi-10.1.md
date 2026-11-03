@@ -28,3 +28,19 @@
 
 ## Reviewer 2: Explorer
 
+### Critical
+- *None*
+
+### Important
+- **[IE1] Uncaught ProtectedError on DataSourceConnector deletion**: `apps/bi/views/DataIntegration/DataSourceConnectors.py:142` calls `connector.delete()` directly without catching `ProtectedError`, causing a 500 crash when pipelines reference the connector. Wrap in `try ... except ProtectedError:` with a friendly message and redirect.
+
+### Minor
+- **[ME1] Default db_table naming vs contract underscores**: Models omit `db_table` in Meta, using standard Django naming (`bi_datasourceconnector`). Accept standard Django convention.
+- **[ME2] Display of inbound webhook URL pattern in pipeline detail**: `templates/bi/data_integration/ingestion_pipeline/detail.html:112` displays `POST /api/bi/ingest/<token>/` which is a placeholder. Clarify in help text.
+- **[ME3] Missing 'Back to List' buttons in detail page-actions**: Add explicit back-to-list buttons in page-actions for connector, pipeline, and CDC detail templates.
+
+---
+
+## Reviewer 3: Frontend Reviewer
+
+
