@@ -25,45 +25,45 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="card p-4">
-        <div class="flex items-center justify-between">
-            <span class="text-xs uppercase font-semibold text-muted">Connectors</span>
-            <span class="stat-icon blue"><i data-lucide="database"></i></span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_connectors }}</div>
-        <div class="text-xs text-muted mt-1">
-            <span class="text-green-600 font-semibold">{{ active_connectors }}</span> active
-        </div>
-    </div>
-    <div class="card p-4">
-        <div class="flex items-center justify-between">
-            <span class="text-xs uppercase font-semibold text-muted">Pipelines</span>
-            <span class="stat-icon green"><i data-lucide="workflow"></i></span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_pipelines }}</div>
-        <div class="text-xs text-muted mt-1">
-            <span class="text-green-600 font-semibold">{{ active_pipelines }}</span> active scheduled
+<div class="stat-grid mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="database"></i></div>
+        <div>
+            <div class="stat-label">Connectors</div>
+            <div class="stat-value">{{ total_connectors }}</div>
+            <div class="text-xs text-muted mt-1">
+                <span class="text-green-600 font-semibold">{{ active_connectors }}</span> active
+            </div>
         </div>
     </div>
-    <div class="card p-4">
-        <div class="flex items-center justify-between">
-            <span class="text-xs uppercase font-semibold text-muted">CDC Streams</span>
-            <span class="stat-icon purple"><i data-lucide="refresh-cw"></i></span>
-        </div>
-        <div class="text-2xl font-bold text-slate-800 mt-2">{{ cdc_streams_count }}</div>
-        <div class="text-xs text-muted mt-1">
-            Delta capture enabled
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="workflow"></i></div>
+        <div>
+            <div class="stat-label">Pipelines</div>
+            <div class="stat-value">{{ total_pipelines }}</div>
+            <div class="text-xs text-muted mt-1">
+                <span class="text-green-600 font-semibold">{{ active_pipelines }}</span> active scheduled
+            </div>
         </div>
     </div>
-    <div class="card p-4">
-        <div class="flex items-center justify-between">
-            <span class="text-xs uppercase font-semibold text-muted">Total Ingestion Runs</span>
-            <span class="stat-icon orange"><i data-lucide="activity"></i></span>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="refresh-cw"></i></div>
+        <div>
+            <div class="stat-label">CDC Streams</div>
+            <div class="stat-value">{{ cdc_streams_count }}</div>
+            <div class="text-xs text-muted mt-1">
+                Delta capture enabled
+            </div>
         </div>
-        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_runs }}</div>
-        <div class="text-xs text-muted mt-1">
-            Execution telemetry logged
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+        <div>
+            <div class="stat-label">Total Ingestion Runs</div>
+            <div class="stat-value">{{ total_runs }}</div>
+            <div class="text-xs text-muted mt-1">
+                Execution telemetry logged
+            </div>
         </div>
     </div>
 </div>
