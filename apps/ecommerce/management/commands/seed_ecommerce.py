@@ -4386,14 +4386,6 @@ class Command(BaseCommand):
                 "description": "Secure server-to-server daemon key for back-office integration worker.",
             },
         )
-                "allowed_ips": "198.51.100.0/24",
-                "rate_limit_rpm": 600,
-                "total_requests_count": 850,
-                "last_used_at": timezone.now() - timedelta(minutes=10),
-                "created_by": admin_user,
-                "description": "Secure server-to-server daemon key for back-office integration worker.",
-            },
-        )
 
         # ==========================================
         # 9.20 Multi-Store & Platform Operations
