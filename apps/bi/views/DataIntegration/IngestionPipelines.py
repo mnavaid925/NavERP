@@ -21,7 +21,6 @@ from apps.core.utils import write_audit_log
 @login_required
 def ingestion_pipeline_list(request):
     queryset = bi_scope(IngestionPipeline.objects.all(), request)
-    total_count = queryset.count()
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -59,7 +58,7 @@ def ingestion_pipeline_list(request):
         "status_choices": IngestionPipeline.STATUS_CHOICES,
         "mode_choices": IngestionPipeline.INGESTION_MODE_CHOICES,
         "connectors": connectors,
-        "total_count": total_count,
+        "total_count": pipelines.paginator.count,
     }
     return render(request, "bi/data_integration/ingestion_pipeline/list.html", context)
 
