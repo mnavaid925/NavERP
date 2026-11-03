@@ -1,9 +1,9 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management: rule evaluation engines, composite transaction risk scoring, multi-tier risk decisions [allow, review, challenge, reject], chargeback dispute workflows with reason codes and representment evidence tracking, account security alerts with automated threat mitigation [mfa_required, session_revoked, account_locked], fraud risk hub cockpit, categories, products, variants, fulfillment centers, stock allocations, ATP, backorders, dynamic pricing, coupons, flash sales, competitor monitoring, carts, checkout funnels, orders, order lines, fulfillment routing rules, carrier dispatch tracking, return merchandise authorizations, customer account profiles, address preferences, wishlists, GDPR privacy requests, search synonyms, facet configurations, merchandising rules, search query telemetry, interactive search workbench console, instant autocomplete, and search discovery analytics). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.18), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management, 9.20 Multi-Store & Platform Operations: centralized multi-store channels, localized currencies and domains, catalog pricing overrides, staging/production environments, and blue-green CI/CD deployment pipelines). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.20), or invokes /ecommerce.
 ---
 
-# eCommerce Module (Module 9: 9.1 Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion, 9.4 Shopping Cart & Checkout, 9.5 Order Management System, 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System, 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management)
+# eCommerce Module (Module 9: 9.1 Catalog through 9.20 Multi-Store & Platform Operations)
 
 The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, a simulated PunchOut procurement gateway (cXML/OCI), and an enterprise Fraud & Risk Management engine (9.18) powering heuristic and velocity fraud rule evaluation, composite transaction risk assessment scoring with automated decisions and manual analyst review queues, chargeback and inquiry dispute case management with representment evidence tracking, and account security alert monitoring with automated policy responses. It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
@@ -99,6 +99,11 @@ apps/ecommerce/
 │   │   ├── TransactionRiskAssessments.py # TransactionRiskAssessment model (ETRA-)
 │   │   ├── ChargebackDisputes.py    # ChargebackDispute model (ECBD-)
 │   │   └── AccountSecurityAlerts.py # AccountSecurityAlert model (EASA-)
+│   ├── MultiStore/
+│   │   ├── StorefrontInstances.py   # StorefrontInstance model (ESTR-)
+│   │   ├── StorefrontCatalogAssignments.py # StorefrontCatalogAssignment model (ESCA-)
+│   │   ├── PlatformEnvironments.py  # PlatformEnvironment model (EENV-)
+│   │   └── DeploymentPipelines.py   # DeploymentPipeline model (EDPL-)
 │   └── __init__.py                  # Surgical re-exports of all models
 ├── forms/
 │   ├── _common.py                   # TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -506,6 +511,16 @@ apps/ecommerce/
 | `TransactionRiskAssessment` | `ETRA-` | `order`, `customer_party`, `user`, `total_amount`, `currency_code`, `risk_score`, `risk_tier`, `recommended_action`, `actual_decision`, `analyst_user`, `reviewed_at`, `avs_result_code`, `cvv_result_code`, `ip_address`, `device_fingerprint_id`, `geolocation_country`, `rule_triggers_json`, `notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `auth.User` (`user`, `analyst_user`) | Multi-variable telemetry evaluation, composite risk scoring (0–100), composite index `["tenant", "-created_at"]` |
 | `ChargebackDispute` | `ECBD-` | `order`, `customer_party`, `gateway_dispute_id`, `dispute_amount`, `currency`, `stage`, `reason_category`, `reason_code`, `evidence_submitted_json`, `due_date`, `representment_submitted_at`, `is_liability_shift`, `resolution_notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `accounting.Currency` (`currency`) | Statutory card network dispute lifecycle, evidence submission tracking, composite index `["tenant", "-created_at"]` |
 | `AccountSecurityAlert` | `EASA-` | `party`, `user`, `alert_type`, `severity`, `status`, `automated_action_taken`, `assigned_investigator`, `resolved_by`, `resolved_at`, `ip_address`, `location_info`, `user_agent`, `incident_details`, `resolution_notes` | `core.Party` (`party`), `auth.User` (`user`, `assigned_investigator`, `resolved_by`) | Automated threat mitigation policies (`mfa_required`, `session_revoked`, `account_locked`), incident timeline, composite index `["tenant", "-created_at"]` |
+
+---
+
+### Sub-module 9.20: Multi-Store & Platform Operations
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `StorefrontInstance` | `ESTR-` | `name`, `code`, `store_type`, `brand_name`, `primary_domain`, `custom_domains`, `default_currency`, `supported_currencies`, `default_locale`, `supported_locales`, `root_category`, `default_fulfillment_center`, `theme_identifier`, `status`, `is_default`, `checkout_mode`, `ssl_certificate_status`, `description` | `accounting.Currency` (`default_currency`), `ecommerce.StoreCategory` (`root_category`), `ecommerce.FulfillmentCenter` (`default_fulfillment_center`) | Multi-brand channel isolation, custom domains, regional currency & locale scoping, atomic default store toggle, composite index `["tenant", "-is_default", "name"]` |
+| `StorefrontCatalogAssignment` | `ESCA-` | `storefront`, `product`, `is_visible`, `is_featured`, `custom_title`, `custom_price`, `custom_currency`, `storefront_badge`, `sort_order`, `publish_status` | `StorefrontInstance` (`storefront`), `CatalogProduct` (`product`), `accounting.Currency` (`custom_currency`) | Scoped channel catalog presentation, localized pricing overrides, unique together `["tenant", "storefront", "product"]`, index `["tenant", "publish_status"]` |
+| `PlatformEnvironment` | `EENV-` | `name`, `env_type`, `storefront`, `cluster_region`, `base_url`, `current_active_slot`, `is_sandbox_locked`, `status`, `resource_tier`, `last_health_check_at`, `description` | `StorefrontInstance` (`storefront`) | Runtime environments (production, staging, sandbox, preview), blue-green active slot tracking (`blue`, `green`, `single_slot`), cluster regions |
+| `DeploymentPipeline` | `EDPL-` | `environment`, `release_version`, `git_branch`, `git_commit_sha`, `deployment_strategy`, `target_slot`, `status`, `preview_endpoint_url`, `traffic_percentage`, `migration_executed`, `build_duration_seconds`, `promoted_by`, `promoted_at`, `deployment_notes` | `PlatformEnvironment` (`environment`), `auth.User` (`promoted_by`) | CI/CD release lifecycle, blue/green traffic cutover, automated environment slot switching, audited rollback capability |
 
 ---
 
@@ -975,6 +990,34 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `fraud-risk/alerts/<int:pk>/edit/` | `account_security_alert_edit` | `account_security_alert_edit` | Triage security alert, assign investigator, and update status |
 | `fraud-risk/alerts/<int:pk>/delete/` | `account_security_alert_delete` | `account_security_alert_delete` | Delete account security alert (POST only) |
 
+### 9.20 Multi-Store & Platform Operations Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `multi-store/` | `multi_store_hub` | `multi_store_hub` | Centralized Multi-Store & Platform Operations executive dashboard |
+| `multi-store/storefronts/` | `storefront_instance_list` | `storefront_instance_list` | Storefront instances list with type and status filters |
+| `multi-store/storefronts/create/` | `storefront_instance_create` | `storefront_instance_create` | Create new digital storefront channel |
+| `multi-store/storefronts/<int:pk>/` | `storefront_instance_detail` | `storefront_instance_detail` | Storefront detail with bound environments and catalog products |
+| `multi-store/storefronts/<int:pk>/edit/` | `storefront_instance_edit` | `storefront_instance_edit` | Edit storefront configuration and domain settings |
+| `multi-store/storefronts/<int:pk>/delete/` | `storefront_instance_delete` | `storefront_instance_delete` | Delete storefront channel (POST only) |
+| `multi-store/storefronts/<int:pk>/toggle-status/` | `storefront_toggle_status` | `storefront_toggle_status` | Toggle storefront active / maintenance mode (POST only) |
+| `multi-store/catalog-assignments/` | `storefront_catalog_assignment_list` | `storefront_catalog_assignment_list` | Catalog assignments register with storefront and status filters |
+| `multi-store/catalog-assignments/create/` | `storefront_catalog_assignment_create` | `storefront_catalog_assignment_create` | Assign catalog product to storefront with pricing override |
+| `multi-store/catalog-assignments/<int:pk>/` | `storefront_catalog_assignment_detail` | `storefront_catalog_assignment_detail` | Catalog assignment detail with localized pricing display |
+| `multi-store/catalog-assignments/<int:pk>/edit/` | `storefront_catalog_assignment_edit` | `storefront_catalog_assignment_edit` | Edit assignment pricing, title override, and publish status |
+| `multi-store/catalog-assignments/<int:pk>/delete/` | `storefront_catalog_assignment_delete` | `storefront_catalog_assignment_delete` | Delete catalog assignment (POST only) |
+| `multi-store/environments/` | `platform_environment_list` | `platform_environment_list` | Platform environments list with type, status, and storefront filters |
+| `multi-store/environments/create/` | `platform_environment_create` | `platform_environment_create` | Provision runtime platform environment |
+| `multi-store/environments/<int:pk>/` | `platform_environment_detail` | `platform_environment_detail` | Platform environment detail with recent deployments |
+| `multi-store/environments/<int:pk>/edit/` | `platform_environment_edit` | `platform_environment_edit` | Edit environment configuration and active blue-green slot |
+| `multi-store/environments/<int:pk>/delete/` | `platform_environment_delete` | `platform_environment_delete` | Delete environment (POST only) |
+| `multi-store/deployments/` | `deployment_pipeline_list` | `deployment_pipeline_list` | CI/CD deployment pipelines register with status and strategy filters |
+| `multi-store/deployments/create/` | `deployment_pipeline_create` | `deployment_pipeline_create` | Trigger new release build and deployment pipeline |
+| `multi-store/deployments/<int:pk>/` | `deployment_pipeline_detail` | `deployment_pipeline_detail` | Deployment pipeline detail with blue-green promotion controls |
+| `multi-store/deployments/<int:pk>/edit/` | `deployment_pipeline_edit` | `deployment_pipeline_edit` | Edit deployment release metadata |
+| `multi-store/deployments/<int:pk>/delete/` | `deployment_pipeline_delete` | `deployment_pipeline_delete` | Delete deployment pipeline record (POST only) |
+| `multi-store/deployments/<int:pk>/promote/` | `deployment_promote` | `deployment_promote` | Promote release to 100% active traffic on target slot (POST only) |
+| `multi-store/deployments/<int:pk>/rollback/` | `deployment_rollback` | `deployment_rollback` | Emergency rollback of active release (POST only) |
+
 ---
 
 ## 4. Templates & Design System
@@ -1080,6 +1123,12 @@ Templates are stored under `templates/ecommerce/`:
   - `transaction_risk_assessment/` — `list.html` (with risk score gauges, tier color badges, AVS/CVV signals, action filters), `detail.html` (with telemetry signals, device fingerprint hash, geolocation, rule triggers JSON, analyst notes), `form.html` (risk assessment evaluation inputs).
   - `chargeback_dispute/` — `list.html` (with dispute stage pills, reason codes, due dates, amount counters), `detail.html` (with dispute case dossier, representment evidence, network reason category, resolution notes), `form.html` (chargeback case tracking controls).
   - `account_security_alert/` — `list.html` (with alert severity badges, incident status pills, automated policy response badges), `detail.html` (with origin IP address, geolocation, user agent fingerprint, incident telemetry, investigation findings), `form.html` (security alert triage and mitigation controls).
+- `multi_store/`
+  - `multi_store_hub.html` — Multi-Store & Platform Operations Hub: storefront counters, active runtime environments, cluster status, recent deployment pipelines, and quick-action links.
+  - `storefront_instance/` — `list.html` (with storefront type badges, default store indicators, and status pills), `detail.html` (with bound environments, catalog assignments table, domain routing, and toggle status action), `form.html` (brand, domains, regional currencies/locales, and checkout mode).
+  - `storefront_catalog_assignment/` — `list.html` (with storefront filters, publish status badges, custom price overrides, and badge tags), `detail.html` (with product dossier, pricing breakdown, and visibility switches), `form.html` (storefront and product selection with tenant isolation).
+  - `platform_environment/` — `list.html` (with environment type pills, active blue-green slot badges, cluster region filters, and health indicators), `detail.html` (with base URL, resource tier specs, linked storefront, and deployment history), `form.html` (cluster region, tier, slot, and sandbox lock controls).
+  - `deployment_pipeline/` — `list.html` (with deployment strategy pills, release version tags, target slot badges, build duration, and status indicators), `detail.html` (with commit SHA, git branch, preview endpoint, blue-green promote/rollback actions with escapejs guards, and deployment notes), `form.html` (environment binding, release tagging, strategy, and traffic percentage).
 
 **UI & Badge Rules:**
 - Only use color-named badge classes from `static/css/theme.css`: `badge-green`, `badge-red`, `badge-amber`, `badge-blue`, `badge-slate`.
@@ -1165,6 +1214,10 @@ The command provisions:
 - 4 B2B Quote Line Items with variant SKU bindings, requested quantities, and target vs offered unit prices.
 - 2 B2B Quick Order Requisition Kits (`EBQT-`): Standard Warehouse Restock Kit and Heavy Machinery Monthly Kit with shared company access.
 - 4 B2B Quick Order Items with SKU references and default restock package quantities.
+- 2 Storefront Channels (`ESTR-`): US Flagship (`us-flagship`, retail B2C, USD, default store) and European Boutique (`eu-boutique`, brand boutique, EUR, localized domain).
+- 2 Storefront Catalog Assignments (`ESCA-`): Storefront-specific visibility, featured promotion tags, and localized custom currency overrides.
+- 2 Platform Environments (`EENV-`): Production Cluster (live production, blue slot active, US East region) and Staging Cluster (sandbox environment, green slot active, US West region).
+- 2 CI/CD Deployment Pipelines (`EDPL-`): Automated blue-green release v2.4.0 (promoted active, 100% traffic, migration verified) and preview staging pipeline v2.5.0-rc1.
 - All demo data is scoped to tenant `acme` and `globex`.
 
 ---
@@ -1380,6 +1433,16 @@ LIVE_LINKS["9.18"] = {
     "Risk Assessments": "ecommerce:transaction_risk_assessment_list",
     "Chargeback Disputes": "ecommerce:chargeback_dispute_list",
     "Security Alerts": "ecommerce:account_security_alert_list",
+}
+LIVE_LINKS["9.20"] = {
+    "Multi-Store & Multi-Brand Management": "ecommerce:storefront_instance_list",
+    "Deployment & DevOps (CI/CD)": "ecommerce:deployment_pipeline_list",
+    # Extra live leaves
+    "Multi-Store Operations Hub": "ecommerce:multi_store_hub",
+    "Storefronts": "ecommerce:storefront_instance_list",
+    "Catalog Assignments": "ecommerce:storefront_catalog_assignment_list",
+    "Platform Environments": "ecommerce:platform_environment_list",
+    "CI/CD Pipelines": "ecommerce:deployment_pipeline_list",
 }
 ```
 Appears under the eCommerce section of the primary navigation bar.
