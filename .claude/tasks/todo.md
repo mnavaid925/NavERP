@@ -7,6 +7,181 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 9.20: Multi-Store & Platform Operations (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.20.md` (2026-11-03)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.18.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0036_accountsecurityalert_idx_easa_ten_created_and_more.py`, so **9.20 claims `0037`** (or next available).
+> Plan written from `.claude/tasks/research-ecommerce-9.20.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/MultiStore/`
+> Template folder name: `templates/ecommerce/multi_store/{storefront_instance,storefront_catalog_assignment,platform_environment,deployment_pipeline}/` + `multi_store_hub.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Multi-Store & Platform Operations Spine Integration (L28/L29)**:
+  - All 4 Multi-Store & Platform Operations models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Storefront currencies link to Module 2 authoritative financial spine `accounting.Currency`.
+  - Storefront catalog assignments link to master product catalog `ecommerce.CatalogProduct` (Module 9.1) and root categories `ecommerce.StoreCategory` without duplicating SKU tables or inventory ledgers.
+  - Primary fulfillment centers link to verified fulfillment nodes `ecommerce.FulfillmentCenter` (Module 9.2).
+  - Platform deployment approvals and manual slot cutovers link to `settings.AUTH_USER_MODEL` and write immutable audit logs to `core.AuditLog` via `apps.core.utils.log_action`.
+  - Blue-green environment deployment decisions operate safely with sandbox locks (`is_sandbox_locked`) preventing test environments from executing live payment capture or generating unverified inventory deductions.
+- **Clear Sibling Boundaries (9.1 vs. 9.2 vs. 9.4 vs. 9.9 vs. 9.19 vs. 9.20)**:
+  - 9.1 (`ProductCatalog`): Owns master product definitions, variants, and categories. 9.20 scopes catalog visibility, custom storefront titles, and storefront retail price overrides.
+  - 9.2 (`InventoryStock`): Owns fulfillment centers, backorders, and inventory sync. 9.20 assigns default fulfillment nodes to storefronts.
+  - 9.4 (`CartCheckout`): Owns shopping cart persistence and checkout flows. 9.20 configures store-level checkout mode settings.
+  - 9.9 (`ContentManagement`): Owns CMS pages and hero banners. 9.20 configures storefront themes and root navigation.
+  - 9.19 (`IntegrationApi`): Owns external ERP sync and webhook endpoints. 9.20 manages multi-brand storefront presences, runtime environments, and CI/CD deployment pipelines.
+- **Prefix Collision Sweep**: `ESTR`, `ESCA`, `EENV`, `EDPL` verified 100% collision-free across the entire repository.
+
+---
+
+## 9.20-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO physical cloud provider DNS / Kubernetes daemon dependency in test suite** — Virtual URLs, domains, and cluster regions are tracked in Django ORM models with clean local validation; live automated DNS record manipulation via Route53/Cloudflare APIs is deferred.
+- [ ] **NO duplicate product catalog or category tables** — Storefront catalog scoping uses `StorefrontCatalogAssignment` to map existing `ecommerce.CatalogProduct` records with storefront pricing overrides rather than duplicating products.
+- [ ] **NO duplicate customer identity or financial general ledger tables** — Customer accounts use `CustomerAccountProfile` and `core.Party`; currencies use `accounting.Currency`.
+- [ ] **NO external Docker container builder execution required during unit tests** — Deployment pipelines record commit SHAs, build duration, and target slots; actual container image compilation runs in cloud runners.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/MultiStore/`)
+
+- [ ] **`StorefrontInstance`** [Prefix: `ESTR-`] (`apps/ecommerce/models/MultiStore/StorefrontInstances.py`)
+  - **Purpose**: Authoritative Multi-Store & Multi-Brand Storefront Channel model representing independent storefronts, brand boutiques, B2B wholesale portals, and regional digital presences with custom domains, scoped currencies, and root categories.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `name`: CharField(max_length=255)
+    - `code`: CharField(max_length=50, blank=True)
+    - `store_type`: CharField(max_length=30, choices=[("retail_b2c", "Retail B2C"), ("wholesale_b2b", "Wholesale B2B"), ("hybrid", "Hybrid B2B/B2C"), ("brand_boutique", "Brand Boutique"), ("outlet_clearance", "Outlet / Clearance")], default="retail_b2c")
+    - `brand_name`: CharField(max_length=150, blank=True)
+    - `primary_domain`: CharField(max_length=255)
+    - `custom_domains`: TextField(blank=True, help_text="Comma-separated or newline-separated secondary domains and subdomains")
+    - `default_currency`: ForeignKey(`accounting.Currency`, PROTECT, related_name="storefront_defaults")
+    - `supported_currencies`: CharField(max_length=255, default="USD,EUR,GBP")
+    - `default_locale`: CharField(max_length=10, default="en-US")
+    - `supported_locales`: CharField(max_length=255, default="en-US,es-ES,de-DE,fr-FR")
+    - `root_category`: ForeignKey(`ecommerce.StoreCategory`, SET_NULL, null=True, blank=True, related_name="storefront_roots")
+    - `default_fulfillment_center`: ForeignKey(`ecommerce.FulfillmentCenter`, SET_NULL, null=True, blank=True, related_name="storefront_assignments")
+    - `theme_identifier`: CharField(max_length=100, default="default-slate")
+    - `status`: CharField(max_length=20, choices=[("draft", "Draft / In Design"), ("active", "Active / Online"), ("maintenance", "Maintenance Mode"), ("suspended", "Suspended"), ("archived", "Archived")], default="active")
+    - `is_default`: BooleanField(default=False)
+    - `checkout_mode`: CharField(max_length=25, choices=[("standard_multistep", "Standard Multi-Step"), ("one_page_express", "One-Page Express"), ("headless_api", "Headless API Hand-off")], default="standard_multistep")
+    - `ssl_certificate_status`: CharField(max_length=25, choices=[("active_provisioned", "Active / Auto-Renewing"), ("pending_dns", "Pending DNS Verification"), ("custom_cert", "Custom Certificate Uploaded"), ("expired", "Expired / Error")], default="active_provisioned")
+    - `description`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`StorefrontCatalogAssignment`** [Prefix: `ESCA-`] (`apps/ecommerce/models/MultiStore/StorefrontCatalogAssignments.py`)
+  - **Purpose**: Scoped catalog mapping controlling product assortment, storefront-specific pricing, custom merchandising titles, and storefront feature tags across channels.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `storefront`: ForeignKey(`ecommerce.StorefrontInstance`, CASCADE, related_name="catalog_assignments")
+    - `product`: ForeignKey(`ecommerce.CatalogProduct`, CASCADE, related_name="storefront_assignments")
+    - `is_visible`: BooleanField(default=True)
+    - `is_featured`: BooleanField(default=False)
+    - `custom_title`: CharField(max_length=255, blank=True, help_text="Storefront-specific product title override")
+    - `custom_price`: DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, help_text="Storefront-specific retail price override")
+    - `custom_currency`: ForeignKey(`accounting.Currency`, SET_NULL, null=True, blank=True, related_name="storefront_custom_prices")
+    - `storefront_badge`: CharField(max_length=50, blank=True, help_text="Custom badge text, e.g. 'Online Exclusive', 'Store Special'")
+    - `sort_order`: IntegerField(default=0)
+    - `publish_status`: CharField(max_length=20, choices=[("published", "Published / Live"), ("hidden", "Hidden from Catalog"), ("coming_soon", "Coming Soon"), ("discontinued", "Discontinued in this Store")], default="published")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+
+- [ ] **`PlatformEnvironment`** [Prefix: `EENV-`] (`apps/ecommerce/models/MultiStore/PlatformEnvironments.py`)
+  - **Purpose**: Infrastructure instance & runtime tier manager modeling isolated operational tiers (Production, Staging, QA Sandbox, Disaster Recovery) with blue-green active slots and test isolation safeguards.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `name`: CharField(max_length=255)
+    - `env_type`: CharField(max_length=30, choices=[("production", "Production Live"), ("staging", "Staging / Pre-Production"), ("sandbox", "Developer / QA Sandbox"), ("preview", "Feature Branch Preview"), ("disaster_recovery", "Disaster Recovery")], default="sandbox")
+    - `storefront`: ForeignKey(`ecommerce.StorefrontInstance`, SET_NULL, null=True, blank=True, related_name="environments")
+    - `cluster_region`: CharField(max_length=50, choices=[("us-east-1", "US East (N. Virginia)"), ("us-west-2", "US West (Oregon)"), ("eu-central-1", "Europe (Frankfurt)"), ("eu-west-1", "Europe (Ireland)"), ("ap-southeast-1", "Asia Pacific (Singapore)"), ("local_cluster", "Local / On-Premise Cluster")], default="us-east-1")
+    - `base_url`: URLField(help_text="Canonical web address or preview URL of the environment")
+    - `current_active_slot`: CharField(max_length=20, choices=[("blue", "Blue Slot (Active Live)"), ("green", "Green Slot (Active Live)"), ("single_slot", "Standard Single Slot")], default="single_slot")
+    - `is_sandbox_locked`: BooleanField(default=False, help_text="Locks environment to prevent live credit card charges, real outbound emails, or inventory decrements")
+    - `status`: CharField(max_length=25, choices=[("healthy", "Healthy / Online"), ("deploying", "Deployment In Progress"), ("maintenance", "Maintenance Window"), ("degraded", "Degraded Performance"), ("decommissioned", "Decommissioned")], default="healthy")
+    - `resource_tier`: CharField(max_length=30, choices=[("starter", "Starter (Shared Container)"), ("standard", "Standard Production"), ("high_performance", "High Performance (Multi-Node)"), ("enterprise_dedicated", "Enterprise Dedicated HA")], default="standard")
+    - `last_health_check_at`: DateTimeField(null=True, blank=True)
+    - `description`: TextField(blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_health_check_at`
+
+- [ ] **`DeploymentPipeline`** [Prefix: `EDPL-`] (`apps/ecommerce/models/MultiStore/DeploymentPipelines.py`)
+  - **Purpose**: CI/CD release pipeline, build artifact, blue-green deployment gate, and rollback operation record tracking release versions, commit SHAs, validation test outcomes, and traffic routing.
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `environment`: ForeignKey(`ecommerce.PlatformEnvironment`, CASCADE, related_name="deployment_pipelines")
+    - `release_version`: CharField(max_length=50, help_text="Release tag or semantic version, e.g. v2.4.0")
+    - `git_branch`: CharField(max_length=100, default="main")
+    - `git_commit_sha`: CharField(max_length=40, help_text="40-character Git commit hash")
+    - `deployment_strategy`: CharField(max_length=30, choices=[("blue_green", "Blue-Green Zero Downtime"), ("canary_shift", "Canary Traffic Shift"), ("rolling_update", "Rolling Update"), ("direct_recreate", "Direct Recreate / In-Place"), ("dry_run", "Dry Run / Schema Validation Only")], default="blue_green")
+    - `target_slot`: CharField(max_length=20, choices=[("blue", "Blue Slot"), ("green", "Green Slot"), ("primary", "Primary Single Slot")], default="green")
+    - `status`: CharField(max_length=30, choices=[("pending", "Pending Build"), ("building", "Building & Compiling"), ("staging_preview", "Staging Preview Ready"), ("awaiting_approval", "Awaiting Production Approval"), ("promoted_active", "Promoted / Active Live"), ("rolled_back", "Rolled Back"), ("failed", "Deployment Failed")], default="pending")
+    - `preview_endpoint_url`: URLField(blank=True, help_text="URL to test and validate release before promoting traffic")
+    - `traffic_percentage`: IntegerField(default=0, help_text="Percentage of live visitor traffic routed to this release (0 to 100%)")
+    - `migration_executed`: BooleanField(default=False, help_text="Indicates whether database schema migrations were applied")
+    - `build_duration_seconds`: IntegerField(null=True, blank=True)
+    - `deployment_notes`: TextField(blank=True)
+    - `promoted_by`: ForeignKey(`settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="promoted_deployments")
+    - `promoted_at`: DateTimeField(null=True, blank=True)
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `promoted_at`, `promoted_by`
+
+---
+
+## Backend (`apps/ecommerce/{models,forms,views,urls}/MultiStore/`)
+
+- [ ] `apps/ecommerce/models/MultiStore/__init__.py`
+- [ ] `apps/ecommerce/models/MultiStore/StorefrontInstances.py`
+- [ ] `apps/ecommerce/models/MultiStore/StorefrontCatalogAssignments.py`
+- [ ] `apps/ecommerce/models/MultiStore/PlatformEnvironments.py`
+- [ ] `apps/ecommerce/models/MultiStore/DeploymentPipelines.py`
+- [ ] `apps/ecommerce/forms/MultiStore/__init__.py`
+- [ ] `apps/ecommerce/forms/MultiStore/StorefrontInstances.py`
+- [ ] `apps/ecommerce/forms/MultiStore/StorefrontCatalogAssignments.py`
+- [ ] `apps/ecommerce/forms/MultiStore/PlatformEnvironments.py`
+- [ ] `apps/ecommerce/forms/MultiStore/DeploymentPipelines.py`
+- [ ] `apps/ecommerce/views/MultiStore/__init__.py`
+- [ ] `apps/ecommerce/views/MultiStore/StorefrontInstances.py`
+- [ ] `apps/ecommerce/views/MultiStore/StorefrontCatalogAssignments.py`
+- [ ] `apps/ecommerce/views/MultiStore/PlatformEnvironments.py`
+- [ ] `apps/ecommerce/views/MultiStore/DeploymentPipelines.py`
+- [ ] `apps/ecommerce/views/MultiStore/MultiStoreHub.py` (Dashboard showing storefront channels, environments, and CI/CD pipelines)
+- [ ] `apps/ecommerce/urls/MultiStore/__init__.py`
+- [ ] `apps/ecommerce/urls/MultiStore/StorefrontInstances.py`
+- [ ] `apps/ecommerce/urls/MultiStore/StorefrontCatalogAssignments.py`
+- [ ] `apps/ecommerce/urls/MultiStore/PlatformEnvironments.py`
+- [ ] `apps/ecommerce/urls/MultiStore/DeploymentPipelines.py`
+
+## Integration & Re-exports
+- [ ] Re-export all 4 models in `apps/ecommerce/models/__init__.py`
+- [ ] Re-export all forms in `apps/ecommerce/forms/__init__.py`
+- [ ] Re-export all views in `apps/ecommerce/views/__init__.py`
+- [ ] Wire URL routes in `apps/ecommerce/urls/__init__.py`
+- [ ] Register all 4 models in `apps/ecommerce/admin.py`
+- [ ] Add `LIVE_LINKS["9.20"]` entry in `apps/core/navigation.py`
+- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with multi-store demo records
+
+## Templates (`templates/ecommerce/multi_store/`)
+- [ ] `templates/ecommerce/multi_store/multi_store_hub.html`
+- [ ] `templates/ecommerce/multi_store/storefront_instance/list.html`
+- [ ] `templates/ecommerce/multi_store/storefront_instance/detail.html`
+- [ ] `templates/ecommerce/multi_store/storefront_instance/form.html`
+- [ ] `templates/ecommerce/multi_store/storefront_catalog_assignment/list.html`
+- [ ] `templates/ecommerce/multi_store/storefront_catalog_assignment/detail.html`
+- [ ] `templates/ecommerce/multi_store/storefront_catalog_assignment/form.html`
+- [ ] `templates/ecommerce/multi_store/platform_environment/list.html`
+- [ ] `templates/ecommerce/multi_store/platform_environment/detail.html`
+- [ ] `templates/ecommerce/multi_store/platform_environment/form.html`
+- [ ] `templates/ecommerce/multi_store/deployment_pipeline/list.html`
+- [ ] `templates/ecommerce/multi_store/deployment_pipeline/detail.html`
+- [ ] `templates/ecommerce/multi_store/deployment_pipeline/form.html`
+
+## Verification & Close-out
+- [ ] Generate incremental migration `0037` and run `migrate`
+- [ ] Run `seed_ecommerce` twice to prove idempotency
+- [ ] Run `manage.py check` to verify clean system checks
+- [ ] Execute smoke test (`temp/smoke_ecommerce_9_20.py`) confirming HTTP 200/302, IDOR 404, no comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-ecommerce-9.20.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: models, forms, views, security
+- [ ] Update `SKILL.md` and `README.md`
+
+---
 
 # Sub-module 9.19: Integration & API Ecosystem (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.19.md` (2026-11-03)
 
