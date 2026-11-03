@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Release {{ pipeline.release_version }} — Deployment Pipeline — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:deployment_pipeline_list' %}">Deployments</a>
+            <span>/</span>
+            <span>{{ pipeline.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ pipeline.release_version }}</h1>
+            {% if pipeline.status == 'promoted_active' %}
+            <span class="badge badge-green">{{ pipeline.get_status_display }}</span>
+            {% elif pipeline.status == 'awaiting_approval' or pipeline.status == 'staging_preview' %}
+            <span class="badge badge-amber">{{ pipeline.get_status_display }}</span>
+            {% elif pipeline.status == 'failed' or pipeline.status == 'rolled_back' %}
+            <span class="badge badge-red">{{ pipeline.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-info">{{ pipeline.get_status_display }}</span>
+            {% endif %}
+
+            {% if pipeline.target_slot == 'green' %}
+            <span class="badge badge-green">Target: Green Slot</span>
+            {% elif pipeline.target_slot == 'blue' %}
+            <span class="badge badge-info">Target: Blue Slot</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm font-mono mt-0.5">{{ pipeline.number }} &bull; Target: {{ pipeline.environment.name }} &bull; Branch: {{ pipeline.git_branch }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:deployment_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Deployments</span>
+        </a>
+
+        {% if pipeline.status != 'promoted_active' and pipeline.status != 'rolled_back' and pipeline.status != 'failed' %}
+        <form method="post" action="{% url 'ecommerce:deployment_promote' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote {{ pipeline.release_version }} to 100% active live traffic on {{ pipeline.environment.name }}?');">
+                <i data-lucide="check-circle"></i>
+                <span>Promote to Active Live</span>
+            </button>
+        </form>
+        {% endif %}
+
+        {% if pipeline.status == 'promoted_active' %}
+        <form method="post" action="{% url 'ecommerce:deployment_rollback' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Initiate emergency rollback of release {{ pipeline.release_version }}?');">
+                <i data-lucide="rotate-ccw"></i>
+                <span>Rollback Release</span>
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'ecommerce:deployment_pipeline_edit' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+
+        <form method="post" action="{% url 'ecommerce:deployment_pipeline_delete' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Delete deployment pipeline record \'{{ pipeline.release_version|escapejs }}\'?');">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Build Specification &amp; CI/CD Artifacts</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-secondary block">Release Tag / Version</span>
+                        <span class="font-mono font-bold text-base text-primary">{{ pipeline.release_version }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Target Platform Environment</span>
+                        <a href="{% url 'ecommerce:platform_environment_detail' pipeline.environment.pk %}" class="font-medium text-primary hover:underline">
+                            {{ pipeline.environment.name }}
+                        </a>
+                        <span class="block text-xs font-mono text-muted">{{ pipeline.environment.get_env_type_display }} &bull; {{ pipeline.environment.get_cluster_region_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Git Branch</span>
+                        <span class="font-mono font-medium">{{ pipeline.git_branch }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Git Commit SHA</span>
+                        <span class="font-mono text-xs bg-slate-100 p-1 rounded font-semibold">{{ pipeline.git_commit_sha }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Deployment Strategy</span>
+                        <span class="badge badge-slate">{{ pipeline.get_deployment_strategy_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Target Blue-Green Slot</span>
+                        <span class="badge badge-info">{{ pipeline.get_target_slot_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Live Routed Traffic</span>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="font-mono font-bold text-lg">{{ pipeline.traffic_percentage }}%</span>
+                            {% if pipeline.traffic_percentage > 0 %}
+                            <span class="badge badge-green text-xs">Serving Live Users</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Standby / Dry Run</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Database Migrations Applied</span>
+                        {% if pipeline.migration_executed %}
+                        <span class="badge badge-info">Schema Migrations Executed</span>
+                        {% else %}
+                        <span class="badge badge-slate">No Schema Changes</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if pipeline.preview_endpoint_url %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-secondary block text-xs font-semibold uppercase mb-1">Pre-Promotion Preview Endpoint</span>
+                    <a href="{{ pipeline.preview_endpoint_url }}" target="_blank" rel="noopener" class="font-mono text-sm text-primary bg-slate-50 p-2.5 rounded border border-slate-200 block hover:underline truncate">
+                        {{ pipeline.preview_endpoint_url }}
+                    </a>
+                </div>
+                {% endif %}
+
+                {% if pipeline.deployment_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-secondary block text-xs font-semibold uppercase mb-1">Deployment Notes &amp; Release Changelog</span>
+                    <p class="text-sm text-secondary bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-wrap">{{ pipeline.deployment_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Promotion Decision Gate</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-secondary block">Current Lifecycle Status</span>
+                    {% if pipeline.status == 'promoted_active' %}
+                    <span class="badge badge-green font-medium">Promoted to Active Live</span>
+                    {% elif pipeline.status == 'rolled_back' %}
+                    <span class="badge badge-red font-medium">Rolled Back</span>
+                    {% else %}
+                    <span class="badge badge-amber font-medium">{{ pipeline.get_status_display }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-secondary block">Promoted By</span>
+                    {% if pipeline.promoted_by %}
+                    <span class="font-medium">{{ pipeline.promoted_by.get_full_name|default:pipeline.promoted_by.username }}</span>
+                    {% else %}
+                    <span class="text-muted text-xs">Pending production promotion</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-secondary block">Promoted At Timestamp</span>
+                    {% if pipeline.promoted_at %}
+                    <span class="font-mono text-xs">{{ pipeline.promoted_at|date:"Y-m-d H:i:s" }}</span>
+                    {% else %}
+                    <span class="text-muted text-xs">—</span>
+                    {% endif %}
+                </div>
+                {% if pipeline.build_duration_seconds %}
+                <div>
+                    <span class="text-secondary block">Build &amp; Compile Duration</span>
+                    <span class="font-mono">{{ pipeline.build_duration_seconds }} seconds</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Pipeline Audit Log</h3>
+            </div>
+            <div class="card-body text-xs space-y-2 text-secondary">
+                <div class="flex justify-between">
+                    <span>Record Number:</span>
+                    <span class="font-mono text-slate-800">{{ pipeline.number }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Created At:</span>
+                    <span>{{ pipeline.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Last Updated:</span>
+                    <span>{{ pipeline.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
