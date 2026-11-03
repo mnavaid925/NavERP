@@ -15,7 +15,9 @@ from apps.ecommerce.views._common import ecommerce_object, ecommerce_scope
 @login_required
 def storefront_catalog_assignment_list(request):
     queryset = ecommerce_scope(
-        StorefrontCatalogAssignment.objects.select_related("storefront", "product", "custom_currency"),
+        StorefrontCatalogAssignment.objects.select_related(
+            "storefront", "storefront__default_currency", "product", "product__item", "custom_currency"
+        ).prefetch_related("product__variants"),
         request,
     )
 
@@ -63,7 +65,8 @@ def storefront_catalog_assignment_detail(request, pk):
         request,
         StorefrontCatalogAssignment,
         pk=pk,
-        select_related=("storefront", "product", "custom_currency"),
+        select_related=("storefront", "storefront__default_currency", "product", "product__item", "custom_currency"),
+        prefetch_related=("product__variants",),
     )
     context = {
         "assignment": assignment,
