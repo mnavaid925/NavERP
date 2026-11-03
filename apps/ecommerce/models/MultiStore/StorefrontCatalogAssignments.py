@@ -52,6 +52,7 @@ class StorefrontCatalogAssignment(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "storefront", "publish_status"], name="idx_esca_ten_store_pub"),
             models.Index(fields=["tenant", "is_featured"], name="idx_esca_ten_feat"),
+            models.Index(fields=["tenant", "publish_status"], name="idx_esca_ten_pubstat"),
         ]
 
     def __str__(self):
