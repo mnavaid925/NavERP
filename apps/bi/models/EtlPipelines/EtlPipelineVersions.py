@@ -77,6 +77,7 @@ class EtlPipelineVersion(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bpvr_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bpvr_ten_created_desc"),
             models.Index(fields=["tenant", "pipeline", "environment"], name="idx_bpvr_ten_pipe_env"),
             models.Index(fields=["tenant", "status"], name="idx_bpvr_ten_stat"),
         ]
