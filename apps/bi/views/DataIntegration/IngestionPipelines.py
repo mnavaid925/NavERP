@@ -47,7 +47,7 @@ def ingestion_pipeline_list(request):
     page_number = request.GET.get("page")
     pipelines = paginator.get_page(page_number)
 
-    connectors = bi_scope(DataSourceConnector.objects.all(), request).order_by("name")
+    connectors = bi_scope(DataSourceConnector.objects.all(), request).only("id", "name").order_by("name")
 
     context = {
         "pipelines": pipelines,
