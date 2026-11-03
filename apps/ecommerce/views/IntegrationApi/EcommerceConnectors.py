@@ -137,7 +137,7 @@ ecommerceconnector_list = ecommerce_connector_list
 
 @login_required
 def ecommerce_connector_detail(request, pk):
-    connector = ecommerce_object(EcommerceConnector, pk, request)
+    connector = ecommerce_object(request, EcommerceConnector, pk)
     recent_jobs = connector.sync_jobs.all().order_by("-created_at")[:10]
 
     context = {
@@ -190,7 +190,7 @@ ecommerceconnector_create = ecommerce_connector_create
 
 @login_required
 def ecommerce_connector_edit(request, pk):
-    connector = ecommerce_object(EcommerceConnector, pk, request)
+    connector = ecommerce_object(request, EcommerceConnector, pk)
 
     if request.method == "POST":
         form = EcommerceConnectorForm(request.POST, instance=connector, tenant=request.tenant)
@@ -223,7 +223,7 @@ ecommerceconnector_edit = ecommerce_connector_edit
 @login_required
 @require_POST
 def ecommerce_connector_delete(request, pk):
-    connector = ecommerce_object(EcommerceConnector, pk, request)
+    connector = ecommerce_object(request, EcommerceConnector, pk)
     name = connector.name
     write_audit_log(
         request.user,
@@ -244,7 +244,7 @@ ecommerceconnector_delete = ecommerce_connector_delete
 @login_required
 @require_POST
 def ecommerce_connector_test_connection(request, pk):
-    connector = ecommerce_object(EcommerceConnector, pk, request)
+    connector = ecommerce_object(request, EcommerceConnector, pk)
     connector.health_status = "healthy"
     connector.last_health_check_at = timezone.now()
     connector.last_error_message = ""
