@@ -30,4 +30,4 @@ class StorefrontCatalogAssignmentForm(TenantUniqueMixin, TenantModelForm):
         if tenant:
             self.fields["storefront"].queryset = StorefrontInstance.objects.filter(tenant=tenant)
             self.fields["product"].queryset = CatalogProduct.objects.filter(tenant=tenant)
-            self.fields["custom_currency"].queryset = Currency.objects.filter(tenant=tenant)
+        self.fields["custom_currency"].queryset = Currency.objects.filter(is_active=True)
