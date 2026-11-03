@@ -135,7 +135,7 @@
                             <a href="{% url 'bi:etl_pipeline_version_edit' ver.pk %}" class="btn btn-icon btn-outline" title="Edit version" aria-label="Edit version">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            <form method="post" action="{% url 'bi:etl_pipeline_version_delete' ver.pk %}" class="inline" onsubmit="return confirm('Delete Version {{ ver.version_number }}?');">
+                            <form method="post" action="{% url 'bi:etl_pipeline_version_delete' ver.pk %}" class="inline" onsubmit="return confirm('Delete Version {{ ver.version_number|escapejs }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-danger" title="Delete version" aria-label="Delete version">
                                     <i data-lucide="trash-2"></i>
