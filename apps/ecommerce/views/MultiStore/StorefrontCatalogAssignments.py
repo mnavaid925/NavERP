@@ -40,7 +40,7 @@ def storefront_catalog_assignment_list(request):
         queryset = queryset.filter(publish_status=publish_status_filter)
 
     paginator = Paginator(queryset, 15)
-    page_number = request.GET.get("page")
+    page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
     storefronts = ecommerce_scope(StorefrontInstance.objects.all(), request)
