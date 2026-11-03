@@ -17,7 +17,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def etl_pipeline_version_list(request):
-    queryset = bi_scope(EtlPipelineVersion.objects.all(), request)
+    queryset = bi_scope(EtlPipelineVersion.objects.all(), request).defer("dag_definition")
 
     q = request.GET.get("q", "").strip()
     if q:
