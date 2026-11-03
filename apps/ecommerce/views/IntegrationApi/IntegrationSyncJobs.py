@@ -96,7 +96,12 @@ integrationsyncjob_list = integration_sync_job_list
 
 @login_required
 def integration_sync_job_detail(request, pk):
-    sync_job = ecommerce_object(request, IntegrationSyncJob, pk)
+    sync_job = ecommerce_object(
+        request,
+        IntegrationSyncJob,
+        pk,
+        select_related=("connector", "triggered_by", "parent_job"),
+    )
     child_retries = sync_job.child_retries.all().order_by("-created_at")
 
     context = {
