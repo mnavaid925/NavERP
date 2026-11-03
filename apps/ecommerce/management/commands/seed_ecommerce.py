@@ -82,6 +82,10 @@ from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
 from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
 from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
 from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
+from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceConnector
+from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
+from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
+from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -4116,6 +4120,269 @@ class Command(BaseCommand):
                 "investigation_notes": "",
             },
         )
+
+        # -------------------------------------------------------------------
+        # 21. (9.19) Integration & API Ecosystem
+        # -------------------------------------------------------------------
+        conn_netsuite, _ = EcommerceConnector.objects.get_or_create(
+            tenant=tenant,
+            name="Oracle NetSuite ERP Production",
+            defaults={
+                "category": "erp",
+                "provider": "netsuite",
+                "auth_type": "oauth2",
+                "status": "active",
+                "base_url": "https://123456.suitetalk.api.netsuite.com/services/rest/record/v1",
+                "api_version": "2024.1",
+                "account_id": "ACCT-NETSUITE-PROD-01",
+                "is_sandbox": False,
+                "timeout_seconds": 45,
+                "rate_limit_per_minute": 240,
+                "health_status": "healthy",
+                "last_health_check_at": timezone.now(),
+                "description": "Enterprise NetSuite ERP bidirectional sync for order-to-cash and inventory.",
+            },
+        )
+
+        conn_stripe, _ = EcommerceConnector.objects.get_or_create(
+            tenant=tenant,
+            name="Stripe Global Payment Gateway",
+            defaults={
+                "category": "payment",
+                "provider": "stripe",
+                "auth_type": "bearer_token",
+                "status": "active",
+                "base_url": "https://api.stripe.com/v1",
+                "api_version": "2023-10-16",
+                "account_id": "acct_1NvDemoLiveStripe99",
+                "is_sandbox": False,
+                "timeout_seconds": 30,
+                "rate_limit_per_minute": 600,
+                "health_status": "healthy",
+                "last_health_check_at": timezone.now(),
+                "description": "Primary card and digital wallet payment processor with 3D Secure orchestration.",
+            },
+        )
+
+        conn_fedex, _ = EcommerceConnector.objects.get_or_create(
+            tenant=tenant,
+            name="FedEx Web Services Gateway",
+            defaults={
+                "category": "shipping",
+                "provider": "fedex",
+                "auth_type": "oauth2",
+                "status": "active",
+                "base_url": "https://apis.fedex.com/rate/v1/rates/quotes",
+                "api_version": "v1",
+                "account_id": "FEDEX-ACCT-88991122",
+                "is_sandbox": True,
+                "timeout_seconds": 25,
+                "rate_limit_per_minute": 150,
+                "health_status": "healthy",
+                "last_health_check_at": timezone.now(),
+                "description": "Real-time carrier rate shopping and tracking event integration.",
+            },
+        )
+
+        conn_klaviyo, _ = EcommerceConnector.objects.get_or_create(
+            tenant=tenant,
+            name="Klaviyo Marketing Cloud",
+            defaults={
+                "category": "marketing",
+                "provider": "klaviyo",
+                "auth_type": "api_key",
+                "status": "active",
+                "base_url": "https://a.klaviyo.com/api",
+                "api_version": "2024-02-15",
+                "account_id": "KLAV-STORE-DEMO",
+                "is_sandbox": False,
+                "timeout_seconds": 30,
+                "rate_limit_per_minute": 300,
+                "health_status": "healthy",
+                "last_health_check_at": timezone.now(),
+                "description": "Customer behavioral profiles, abandoned cart flows, and email segmentation.",
+            },
+        )
+
+        # Sync Jobs
+        IntegrationSyncJob.objects.get_or_create(
+            tenant=tenant,
+            connector=conn_netsuite,
+            sync_entity="order_to_cash",
+            batch_id="batch-seed-o2c-001",
+            defaults={
+                "direction": "outbound",
+                "status": "completed",
+                "trigger_type": "scheduled",
+                "records_total": 15,
+                "records_processed": 15,
+                "records_succeeded": 15,
+                "records_failed": 0,
+                "started_at": timezone.now() - timedelta(minutes=45),
+                "finished_at": timezone.now() - timedelta(minutes=43),
+                "duration_seconds": Decimal("1.75"),
+                "payload_preview": '{"entity": "SalesOrder", "count": 15, "destination": "NetSuite"}',
+                "triggered_by": admin_user,
+            },
+        )
+
+        IntegrationSyncJob.objects.get_or_create(
+            tenant=tenant,
+            connector=conn_netsuite,
+            sync_entity="inventory_levels",
+            batch_id="batch-seed-inv-002",
+            defaults={
+                "direction": "inbound",
+                "status": "completed",
+                "trigger_type": "scheduled",
+                "records_total": 120,
+                "records_processed": 120,
+                "records_succeeded": 120,
+                "records_failed": 0,
+                "started_at": timezone.now() - timedelta(hours=2),
+                "finished_at": timezone.now() - timedelta(hours=2) + timedelta(seconds=14),
+                "duration_seconds": Decimal("14.20"),
+                "payload_preview": '{"action": "inventory_balance_poll", "locations": ["WH-MAIN", "WH-EAST"]}',
+                "triggered_by": admin_user,
+            },
+        )
+
+        IntegrationSyncJob.objects.get_or_create(
+            tenant=tenant,
+            connector=conn_fedex,
+            sync_entity="shipment_tracking",
+            batch_id="batch-seed-shp-003",
+            defaults={
+                "direction": "inbound",
+                "status": "completed",
+                "trigger_type": "event_driven",
+                "records_total": 8,
+                "records_processed": 8,
+                "records_succeeded": 8,
+                "records_failed": 0,
+                "started_at": timezone.now() - timedelta(hours=5),
+                "finished_at": timezone.now() - timedelta(hours=5) + timedelta(seconds=2),
+                "duration_seconds": Decimal("2.10"),
+                "payload_preview": '{"carrier": "fedex", "tracking_check": 8}',
+                "triggered_by": admin_user,
+            },
+        )
+
+        IntegrationSyncJob.objects.get_or_create(
+            tenant=tenant,
+            connector=conn_klaviyo,
+            sync_entity="marketing_events",
+            batch_id="batch-seed-mkt-004",
+            defaults={
+                "direction": "outbound",
+                "status": "completed",
+                "trigger_type": "webhook",
+                "records_total": 50,
+                "records_processed": 50,
+                "records_succeeded": 50,
+                "records_failed": 0,
+                "started_at": timezone.now() - timedelta(hours=8),
+                "finished_at": timezone.now() - timedelta(hours=8) + timedelta(seconds=3),
+                "duration_seconds": Decimal("3.45"),
+                "payload_preview": '{"sync": "placed_order_events", "subscribers": 50}',
+                "triggered_by": admin_user,
+            },
+        )
+
+        # Webhook Subscriptions
+        WebhookSubscription.objects.get_or_create(
+            tenant=tenant,
+            name="External OMS Order Intake Hook",
+            target_url="https://webhook.site/demo-oms/orders/created",
+            defaults={
+                "event_topic": "order.created",
+                "status": "active",
+                "secret_key": "whsec_demo_signature_secret_key_8899",
+                "payload_format": "json",
+                "custom_headers": '{"X-NavERP-Integration": "OMS-Production"}',
+                "total_delivered_count": 24,
+                "last_delivery_at": timezone.now() - timedelta(minutes=15),
+                "last_status_code": 200,
+                "is_verify_ssl": True,
+                "description": "Real-time webhook notifying downstream fulfillment hub upon order creation.",
+            },
+        )
+
+        WebhookSubscription.objects.get_or_create(
+            tenant=tenant,
+            name="Finance Payment Capture Notification",
+            target_url="https://webhook.site/demo-finance/payments/captured",
+            defaults={
+                "event_topic": "order.paid",
+                "status": "active",
+                "secret_key": "whsec_demo_finance_secret_key_7711",
+                "payload_format": "json",
+                "custom_headers": '{"X-NavERP-Domain": "Payments"}',
+                "total_delivered_count": 18,
+                "last_delivery_at": timezone.now() - timedelta(minutes=30),
+                "last_status_code": 200,
+                "is_verify_ssl": True,
+                "description": "Triggered when checkout transactions successfully capture payment.",
+            },
+        )
+
+        WebhookSubscription.objects.get_or_create(
+            tenant=tenant,
+            name="Warehouse Low Stock Notification",
+            target_url="https://webhook.site/demo-warehouse/alerts/low-stock",
+            defaults={
+                "event_topic": "inventory.low_stock",
+                "status": "active",
+                "secret_key": "whsec_demo_inv_secret_key_6622",
+                "payload_format": "json",
+                "custom_headers": '{"X-Priority": "High"}',
+                "total_delivered_count": 5,
+                "last_delivery_at": timezone.now() - timedelta(hours=3),
+                "last_status_code": 200,
+                "is_verify_ssl": True,
+                "description": "Alerts operations team when variant stock drops below threshold.",
+            },
+        )
+
+        # API Credentials
+        ApiCredential.objects.get_or_create(
+            tenant=tenant,
+            client_id="nep_pub_nextjs_demo_storefront",
+            defaults={
+                "name": "Next.js Public Web Storefront App",
+                "tier": "storefront_public",
+                "status": "active",
+                "secret_prefix": "nep_sec_publ...",
+                "scopes": "read_catalog,read_orders,write_orders",
+                "allowed_origins": "https://mystore.example.com, http://localhost:3000",
+                "allowed_ips": "",
+                "rate_limit_rpm": 300,
+                "total_requests_count": 1420,
+                "last_used_at": timezone.now() - timedelta(minutes=2),
+                "created_by": admin_user,
+                "description": "Headless JAMstack React/Next.js consumer storefront client.",
+            },
+        )
+
+        ApiCredential.objects.get_or_create(
+            tenant=tenant,
+            client_id="nep_live_admin_netsuite_daemon",
+            defaults={
+                "name": "NetSuite Sync Server Daemon Key",
+                "tier": "admin_server",
+                "status": "active",
+                "secret_prefix": "nep_sec_srvd...",
+                "scopes": "admin_full",
+                "allowed_origins": "*",
+                "allowed_ips": "198.51.100.0/24",
+                "rate_limit_rpm": 600,
+                "total_requests_count": 850,
+                "last_used_at": timezone.now() - timedelta(minutes=10),
+                "created_by": admin_user,
+                "description": "Secure server-to-server daemon key for back-office integration worker.",
+            },
+        )
+
 
 
 
