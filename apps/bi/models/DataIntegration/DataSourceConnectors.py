@@ -84,6 +84,7 @@ class DataSourceConnector(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bdsc_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bdsc_ten_created"),
             models.Index(fields=["tenant", "status", "connector_type"], name="idx_bdsc_ten_stat_type"),
             models.Index(fields=["tenant", "name"], name="idx_bdsc_ten_name"),
         ]
