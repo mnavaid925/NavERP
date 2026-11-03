@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}{{ storefront.name }} — Storefront Channel — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:storefront_instance_list' %}">Storefronts</a>
+            <span>/</span>
+            <span>{{ storefront.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ storefront.name }}</h1>
+            {% if storefront.is_default %}
+            <span class="badge badge-info">Default Store</span>
+            {% endif %}
+            {% if storefront.status == 'active' %}
+            <span class="badge badge-green">{{ storefront.get_status_display }}</span>
+            {% elif storefront.status == 'maintenance' %}
+            <span class="badge badge-amber">{{ storefront.get_status_display }}</span>
+            {% elif storefront.status == 'suspended' or storefront.status == 'archived' %}
+            <span class="badge badge-red">{{ storefront.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ storefront.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm font-mono mt-0.5">{{ storefront.number }} &bull; {{ storefront.primary_domain }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:storefront_instance_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Storefronts</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:storefront_toggle_status' storefront.pk %}" class="inline">
+            {% csrf_token %}
+            {% if storefront.status == 'active' %}
+            <button type="submit" class="btn btn-outline" title="Switch to Maintenance Mode">
+                <i data-lucide="power"></i>
+                <span>Set Maintenance</span>
+            </button>
+            {% else %}
+            <button type="submit" class="btn btn-outline" title="Set Online / Active">
+                <i data-lucide="play-circle"></i>
+                <span>Set Active</span>
+            </button>
+            {% endif %}
+        </form>
+        <a href="{% url 'ecommerce:storefront_instance_edit' storefront.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Storefront</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:storefront_instance_delete' storefront.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete storefront \'{{ storefront.name|escapejs }}\'?');">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Channel Configuration &amp; Branding</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-secondary block">Storefront Name</span>
+                        <span class="font-medium text-base">{{ storefront.name }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Internal Code / Slug</span>
+                        <span class="font-mono font-medium">{{ storefront.code|default:"—" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Storefront Channel Type</span>
+                        <span class="badge badge-slate">{{ storefront.get_store_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Brand Portfolio</span>
+                        <span class="font-medium">{{ storefront.brand_name|default:"Primary Brand" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Primary Production Domain</span>
+                        <span class="font-mono font-medium">{{ storefront.primary_domain }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">SSL Certificate Status</span>
+                        {% if storefront.ssl_certificate_status == 'active_provisioned' %}
+                        <span class="badge badge-green">{{ storefront.get_ssl_certificate_status_display }}</span>
+                        {% elif storefront.ssl_certificate_status == 'expired' %}
+                        <span class="badge badge-red">{{ storefront.get_ssl_certificate_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ storefront.get_ssl_certificate_status_display }}</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Checkout Experience</span>
+                        <span class="badge badge-info">{{ storefront.get_checkout_mode_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Active Theme</span>
+                        <span class="font-mono">{{ storefront.theme_identifier }}</span>
+                    </div>
+                </div>
+
+                {% if storefront.custom_domains %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-secondary block text-xs font-semibold uppercase mb-1">Secondary Domains &amp; Subdomains</span>
+                    <p class="font-mono text-sm bg-slate-50 p-2.5 rounded border border-slate-200">{{ storefront.custom_domains }}</p>
+                </div>
+                {% endif %}
+
+                {% if storefront.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-secondary block text-xs font-semibold uppercase mb-1">Channel Overview &amp; Notes</span>
+                    <p class="text-sm text-secondary">{{ storefront.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Catalog Assignments ({{ catalog_assignments|length }})</h3>
+                <a href="{% url 'ecommerce:storefront_catalog_assignment_create' %}?storefront={{ storefront.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Assign Product</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Visibility</th>
+                            <th>Custom Price</th>
+                            <th>Badge</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ca in catalog_assignments %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'ecommerce:storefront_catalog_assignment_detail' ca.pk %}" class="font-medium hover:text-primary">
+                                    {{ ca.custom_title|default:ca.product.name }}
+                                </a>
+                                <span class="block text-xs font-mono text-muted">{{ ca.product.sku }}</span>
+                            </td>
+                            <td>
+                                {% if ca.is_visible %}
+                                <span class="badge badge-green">Visible</span>
+                                {% else %}
+                                <span class="badge badge-slate">Hidden</span>
+                                {% endif %}
+                                {% if ca.is_featured %}
+                                <span class="badge badge-amber text-xs ml-1">Featured</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ca.custom_price %}
+                                <span class="font-mono font-medium">{{ ca.custom_price }} {{ ca.custom_currency.code|default:storefront.default_currency.code }}</span>
+                                {% else %}
+                                <span class="text-muted text-xs">Default Base Price</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if ca.storefront_badge %}
+                                <span class="badge badge-info text-xs">{{ ca.storefront_badge }}</span>
+                                {% else %}
+                                <span class="text-muted text-xs">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-slate text-xs">{{ ca.get_publish_status_display }}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted text-sm">
+                                No custom catalog product assignments configured for this storefront. All base catalog products are visible by default.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Localization &amp; Currency</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-secondary block">Base Accounting Currency</span>
+                    <span class="font-medium text-base text-primary">{{ storefront.default_currency.code }} ({{ storefront.default_currency.symbol }})</span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Supported Currencies</span>
+                    <span class="font-mono">{{ storefront.supported_currencies }}</span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Default Locale</span>
+                    <span class="font-mono">{{ storefront.default_locale }}</span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Supported Locales</span>
+                    <span class="font-mono">{{ storefront.supported_locales }}</span>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-secondary block">Root Navigation Category</span>
+                    {% if storefront.root_category %}
+                    <span class="font-medium">{{ storefront.root_category.name }}</span>
+                    {% else %}
+                    <span class="text-muted">Global Store Categories</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-secondary block">Default Fulfillment Node</span>
+                    {% if storefront.default_fulfillment_center %}
+                    <span class="font-medium">{{ storefront.default_fulfillment_center.name }} ({{ storefront.default_fulfillment_center.code }})</span>
+                    {% else %}
+                    <span class="text-muted">Dynamic Routing</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Bound Environments</h3>
+                <a href="{% url 'ecommerce:platform_environment_create' %}?storefront={{ storefront.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                </a>
+            </div>
+            <div class="card-body space-y-3">
+                {% for env in environments %}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded flex justify-between items-center">
+                    <div>
+                        <a href="{% url 'ecommerce:platform_environment_detail' env.pk %}" class="font-medium text-sm hover:text-primary">
+                            {{ env.name }}
+                        </a>
+                        <span class="block text-xs font-mono text-muted">{{ env.get_env_type_display }} &bull; {{ env.get_current_active_slot_display }}</span>
+                    </div>
+                    {% if env.status == 'healthy' %}
+                    <span class="badge badge-green text-xs">{{ env.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge-amber text-xs">{{ env.get_status_display }}</span>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <p class="text-sm text-muted">No isolated platform runtime environments bound to this storefront yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Metadata</h3>
+            </div>
+            <div class="card-body text-xs space-y-2 text-secondary">
+                <div class="flex justify-between">
+                    <span>Record Number:</span>
+                    <span class="font-mono text-slate-800">{{ storefront.number }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Created At:</span>
+                    <span>{{ storefront.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Last Updated:</span>
+                    <span>{{ storefront.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
