@@ -15,7 +15,7 @@
             <span>{% if is_edit %}Edit {{ config.number }}{% else %}New CDC Config{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit CDC Configuration: {{ config.number }}{% else %}New CDC Stream Configuration{% endif %}</h1>
-        <p class="text-secondary text-sm">Define Change Data Capture capture method, cursor tracking field, and schema drift policies</p>
+        <p class="text-muted text-sm">Define Change Data Capture capture method, cursor tracking field, and schema drift policies</p>
     </div>
     <div class="page-actions">
         <a href="{% if is_edit %}{% url 'bi:cdc_sync_config_detail' config.pk %}{% else %}{% url 'bi:cdc_sync_config_list' %}{% endif %}" class="btn btn-outline">
@@ -51,7 +51,7 @@
                     <div class="form-group">
                         <label class="form-label" for="{{ form.pipeline.id_for_label }}">Ingestion Pipeline <span class="text-danger">*</span></label>
                         {{ form.pipeline }}
-                        <p class="text-xs text-secondary mt-1">Select the target pipeline for this CDC delta engine.</p>
+                        <p class="text-xs text-muted mt-1">Select the target pipeline for this CDC delta engine.</p>
                         {% if form.pipeline.errors %}<div class="form-error">{{ form.pipeline.errors.0 }}</div>{% endif %}
                     </div>
 
@@ -73,14 +73,14 @@
                         <div class="form-group">
                             <label class="form-label" for="{{ form.primary_key_fields.id_for_label }}">Primary Key Column(s) <span class="text-danger">*</span></label>
                             {{ form.primary_key_fields }}
-                            <p class="text-xs text-secondary mt-1">Comma-separated unique key column(s) for deduplication (e.g. <code>id</code> or <code>order_id</code>).</p>
+                            <p class="text-xs text-muted mt-1">Comma-separated unique key column(s) for deduplication (e.g. <code>id</code> or <code>order_id</code>).</p>
                             {% if form.primary_key_fields.errors %}<div class="form-error">{{ form.primary_key_fields.errors.0 }}</div>{% endif %}
                         </div>
 
                         <div class="form-group">
                             <label class="form-label" for="{{ form.cursor_field.id_for_label }}">Cursor Tracking Field</label>
                             {{ form.cursor_field }}
-                            <p class="text-xs text-secondary mt-1">Timestamp or incrementing ID column (e.g. <code>updated_at</code> or <code>lsn</code>).</p>
+                            <p class="text-xs text-muted mt-1">Timestamp or incrementing ID column (e.g. <code>updated_at</code> or <code>lsn</code>).</p>
                             {% if form.cursor_field.errors %}<div class="form-error">{{ form.cursor_field.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
@@ -88,7 +88,7 @@
                     <div class="form-group">
                         <label class="form-label" for="{{ form.schema_drift_policy.id_for_label }}">Schema Drift Policy <span class="text-danger">*</span></label>
                         {{ form.schema_drift_policy }}
-                        <p class="text-xs text-secondary mt-1">Determines how pipeline handles unexpected upstream schema modifications.</p>
+                        <p class="text-xs text-muted mt-1">Determines how pipeline handles unexpected upstream schema modifications.</p>
                         {% if form.schema_drift_policy.errors %}<div class="form-error">{{ form.schema_drift_policy.errors.0 }}</div>{% endif %}
                     </div>
 
@@ -102,7 +102,7 @@
                         <div class="form-group mb-0">
                             <label class="form-label" for="{{ form.soft_delete_field.id_for_label }}">Soft-Delete Column Name</label>
                             {{ form.soft_delete_field }}
-                            <p class="text-xs text-secondary mt-1">Field indicating row deletion (e.g. <code>is_deleted</code> or <code>deleted_at</code>).</p>
+                            <p class="text-xs text-muted mt-1">Field indicating row deletion (e.g. <code>is_deleted</code> or <code>deleted_at</code>).</p>
                             {% if form.soft_delete_field.errors %}<div class="form-error">{{ form.soft_delete_field.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
