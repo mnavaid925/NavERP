@@ -48,8 +48,8 @@ def test_dataintegration_connector_form_reject_foreign_credential(tenant_a, tena
     from apps.core.models.Integration import ApiCredential
     foreign_cred = ApiCredential.objects.create(
         tenant=tenant_b,
-        name="Foreign Cred",
-        key_prefix="ak_for",
+        label="Foreign Cred",
+        prefix="nvr_for",
         key_hash="hash123",
     )
     data = {
