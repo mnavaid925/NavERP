@@ -157,11 +157,13 @@
                 <div>
                     <span class="text-secondary block">Current Lifecycle Status</span>
                     {% if pipeline.status == 'promoted_active' %}
-                    <span class="badge badge-green font-medium">Promoted to Active Live</span>
-                    {% elif pipeline.status == 'rolled_back' %}
-                    <span class="badge badge-red font-medium">Rolled Back</span>
-                    {% else %}
+                    <span class="badge badge-green font-medium">{{ pipeline.get_status_display }}</span>
+                    {% elif pipeline.status == 'awaiting_approval' or pipeline.status == 'staging_preview' %}
                     <span class="badge badge-amber font-medium">{{ pipeline.get_status_display }}</span>
+                    {% elif pipeline.status == 'failed' or pipeline.status == 'rolled_back' %}
+                    <span class="badge badge-red font-medium">{{ pipeline.get_status_display }}</span>
+                    {% else %}
+                    <span class="badge badge-info font-medium">{{ pipeline.get_status_display }}</span>
                     {% endif %}
                 </div>
                 <div>
