@@ -158,6 +158,13 @@ def deployment_pipeline_delete(request, pk):
 @require_POST
 def deployment_promote(request, pk):
     pipeline = ecommerce_object(request, DeploymentPipeline, pk=pk, select_related=("environment",))
+    if pipeline.status == "promoted_active":
+        messages.warning(request, f"Release '{pipeline.release_version}' is already active.")
+        return redirect("ecommerce:deployment_pipeline_detail", pk=pipeline.pk)
+    if pipeline.status in ["failed", "rolled_back"]:
+        messages.error(request, f"Cannot promote release '{pipeline.release_version}' because it is in '{pipeline.get_status_display()}' state.")
+        return redirect("ecommerce:deployment_pipeline_detail", pk=pipeline.pk)
+
     with transaction.atomic():
         pipeline.status = "promoted_active"
         pipeline.traffic_percentage = 100
@@ -185,6 +192,10 @@ def deployment_promote(request, pk):
 @require_POST
 def deployment_rollback(request, pk):
     pipeline = ecommerce_object(request, DeploymentPipeline, pk=pk, select_related=("environment",))
+    if pipeline.status != "promoted_active":
+        messages.error(request, f"Cannot roll back release '{pipeline.release_version}' because it is not currently promoted/active.")
+        return redirect("ecommerce:deployment_pipeline_detail", pk=pipeline.pk)
+
     pipeline.status = "rolled_back"
     pipeline.traffic_percentage = 0
     pipeline.save()
