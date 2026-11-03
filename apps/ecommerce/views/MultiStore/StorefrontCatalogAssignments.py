@@ -78,8 +78,8 @@ def storefront_catalog_assignment_detail(request, pk):
 def storefront_catalog_assignment_create(request):
     initial = {}
     storefront_id = request.GET.get("storefront")
-    if storefront_id:
-        initial["storefront"] = storefront_id
+    if storefront_id and storefront_id.isdigit():
+        initial["storefront"] = int(storefront_id)
 
     if request.method == "POST":
         form = StorefrontCatalogAssignmentForm(request.POST, tenant=request.tenant)
