@@ -20,6 +20,7 @@
         <p class="text-muted text-sm">CDC Config Code: <span class="font-mono">{{ config.number }}</span> &bull; Target Table: <span class="font-mono text-brand font-semibold">{{ config.pipeline.target_staging_table }}</span></p>
     </div>
     <div class="page-actions">
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'bi:cdc_sync_config_reset_cursor' config.pk %}" onsubmit="return confirm('Reset high-water mark cursor? The next sync will re-evaluate all delta records.');" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline" title="Reset high-water mark cursor offset">
@@ -27,6 +28,7 @@
                 <span>Reset Cursor</span>
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'bi:cdc_sync_config_edit' config.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit</span>
@@ -131,6 +133,7 @@
                 </div>
             </div>
 
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <div class="mt-6 pt-4 border-t border-slate-100">
                 <form method="post" action="{% url 'bi:cdc_sync_config_delete' config.pk %}" onsubmit="return confirm('Permanently remove this CDC configuration?');">
                     {% csrf_token %}
@@ -140,6 +143,7 @@
                     </button>
                 </form>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
