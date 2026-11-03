@@ -21,7 +21,7 @@ class IngestionPipelineAdmin(admin.ModelAdmin):
     list_display = ("number", "name", "connector", "ingestion_mode", "target_staging_table", "status", "tenant")
     list_filter = ("status", "ingestion_mode", "schedule_cadence", "file_format", "tenant")
     search_fields = ("number", "name", "source_entity", "target_staging_table")
-    readonly_fields = ("number", "webhook_token", "created_at", "updated_at", "last_run_at")
+    readonly_fields = ("number", "webhook_token", "webhook_secret", "created_at", "updated_at", "last_run_at")
 
 
 @admin.register(CdcSyncConfig)
