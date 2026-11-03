@@ -131,12 +131,14 @@
                             <a href="{% url 'bi:data_source_connector_edit' connector.pk %}" class="btn btn-icon btn-outline" title="Edit connector">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:data_source_connector_delete' connector.pk %}" onsubmit="return confirm('Delete this connector?');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete connector">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
