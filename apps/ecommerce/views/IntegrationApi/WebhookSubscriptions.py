@@ -44,6 +44,7 @@ def webhook_subscription_list(request):
     broken_count = stats["broken_count"]
 
     paginator = Paginator(qs, 15)
+    paginator._count = total_count
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
