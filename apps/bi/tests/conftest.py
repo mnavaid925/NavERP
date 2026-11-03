@@ -25,6 +25,16 @@ def admin_user_b(db, tenant_b):
 
 
 @pytest.fixture
+def auth_client(client_a):
+    return client_a
+
+
+@pytest.fixture
+def anon_client(client):
+    return client
+
+
+@pytest.fixture
 def bi_connector(db, tenant_a, admin_user):
     return DataSourceConnector.objects.create(
         tenant=tenant_a,
