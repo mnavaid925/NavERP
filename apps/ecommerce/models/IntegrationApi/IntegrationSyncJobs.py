@@ -157,6 +157,7 @@ class IntegrationSyncJob(TenantNumbered):
             models.Index(fields=["tenant", "connector"], name="idx_esyj_ten_conn"),
             models.Index(fields=["tenant", "sync_entity"], name="idx_esyj_ten_entity"),
             models.Index(fields=["tenant", "started_at"], name="idx_esyj_ten_started"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_esyj_ten_created"),
         ]
 
     def __str__(self):
