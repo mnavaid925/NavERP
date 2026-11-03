@@ -18,7 +18,6 @@ from apps.core.utils import write_audit_log
 @login_required
 def data_source_connector_list(request):
     queryset = bi_scope(DataSourceConnector.objects.all(), request)
-    total_count = queryset.count()
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -48,7 +47,7 @@ def data_source_connector_list(request):
         "connector_type": connector_type,
         "status_choices": DataSourceConnector.STATUS_CHOICES,
         "type_choices": DataSourceConnector.CONNECTOR_TYPE_CHOICES,
-        "total_count": total_count,
+        "total_count": connectors.paginator.count,
     }
     return render(request, "bi/data_integration/data_source_connector/list.html", context)
 
