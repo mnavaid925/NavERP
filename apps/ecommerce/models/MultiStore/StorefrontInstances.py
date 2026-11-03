@@ -73,6 +73,7 @@ class StorefrontInstance(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status", "store_type"], name="idx_estr_ten_stat_type"),
             models.Index(fields=["tenant", "primary_domain"], name="idx_estr_ten_domain"),
+            models.Index(fields=["tenant", "-is_default", "name"], name="idx_estr_ten_def_name"),
         ]
 
     def __str__(self):
