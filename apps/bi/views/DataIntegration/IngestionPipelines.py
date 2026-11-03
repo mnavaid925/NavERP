@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -147,26 +148,27 @@ def ingestion_pipeline_trigger(request, pk):
     pipeline = bi_object(request, IngestionPipeline, pk)
     now = timezone.now()
 
-    run = IngestionRun.objects.create(
-        tenant=request.tenant,
-        pipeline=pipeline,
-        trigger_type="manual",
-        status="completed",
-        started_at=now,
-        ended_at=now,
-        duration_seconds=Decimal("1.85"),
-        records_extracted=120,
-        records_inserted=118,
-        records_updated=0,
-        records_rejected=2,
-        bytes_transferred=34800,
-        committed_cursor=now.isoformat(),
-        log_summary=f"Manual execution triggered by {request.user.username}. Ingested 118 records into {pipeline.target_staging_table}.",
-    )
+    with transaction.atomic():
+        run = IngestionRun.objects.create(
+            tenant=request.tenant,
+            pipeline=pipeline,
+            trigger_type="manual",
+            status="completed",
+            started_at=now,
+            ended_at=now,
+            duration_seconds=Decimal("1.85"),
+            records_extracted=120,
+            records_inserted=118,
+            records_updated=0,
+            records_rejected=2,
+            bytes_transferred=34800,
+            committed_cursor=now.isoformat(),
+            log_summary=f"Manual execution triggered by {request.user.username}. Ingested 118 records into {pipeline.target_staging_table}.",
+        )
 
-    pipeline.last_run_at = now
-    pipeline.save(update_fields=["last_run_at", "updated_at"])
+        pipeline.last_run_at = now
+        pipeline.save(update_fields=["last_run_at", "updated_at"])
 
-    write_audit_log(request.user, pipeline, "trigger", changes={"run_number": run.number}, tenant=request.tenant)
+        write_audit_log(request.user, pipeline, "trigger", changes={"run_number": run.number}, tenant=request.tenant)
     messages.success(request, f"Pipeline {pipeline.number} executed successfully. Run {run.number} recorded.")
     return redirect("bi:ingestion_run_detail", pk=run.pk)
