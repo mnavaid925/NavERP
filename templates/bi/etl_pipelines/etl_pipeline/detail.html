@@ -81,7 +81,7 @@
     </div>
     <div class="card p-4">
         <div class="text-xs uppercase font-semibold text-muted tracking-wider">SLA Bound &amp; Alerts</div>
-        <div class="text-sm font-semibold text-slate-800 mt-1">{{ pipeline.sla_timeout_seconds }}s ({{ pipeline.sla_timeout_seconds|floatformat:0 }} sec)</div>
+        <div class="text-sm font-semibold text-slate-800 mt-1">{{ pipeline.sla_timeout_seconds }}s</div>
         <div class="text-xs text-muted mt-0.5">Alerts: {% if pipeline.alert_on_sla_miss %}<span class="text-green-600 font-semibold">Enabled</span>{% else %}<span class="text-muted">Disabled</span>{% endif %}</div>
     </div>
 </div>
