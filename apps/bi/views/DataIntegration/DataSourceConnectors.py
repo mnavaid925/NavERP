@@ -61,18 +61,22 @@ def data_source_connector_detail(request, pk):
         pk,
         select_related=("credential", "created_by"),
     )
-    pipelines = connector.pipelines.all().order_by("-created_at")
-    runs = (
+    pipelines = list(connector.pipelines.all().order_by("-created_at"))
+    runs_qs = (
         bi_scope(IngestionRun.objects.all(), request)
         .filter(pipeline__connector=connector)
         .select_related("pipeline")
-        .order_by("-started_at")[:15]
+        .order_by("-started_at")
     )
+    runs_count = runs_qs.count()
+    runs = list(runs_qs[:15])
 
     context = {
         "connector": connector,
         "pipelines": pipelines,
+        "pipelines_count": len(pipelines),
         "runs": runs,
+        "runs_count": runs_count,
     }
     return render(request, "bi/data_integration/data_source_connector/detail.html", context)
 
