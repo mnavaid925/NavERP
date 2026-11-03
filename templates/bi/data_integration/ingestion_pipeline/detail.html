@@ -185,6 +185,7 @@
             </div>
             {% endif %}
 
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <div class="mt-6 pt-4 border-t border-slate-100">
                 <form method="post" action="{% url 'bi:ingestion_pipeline_delete' pipeline.pk %}" onsubmit="return confirm('Permanently delete this ingestion pipeline? All run history will be removed.');">
                     {% csrf_token %}
@@ -194,6 +195,7 @@
                     </button>
                 </form>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
