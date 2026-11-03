@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block title %}Storefronts &amp; Multi-Brand Channels — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <span>Storefronts</span>
+        </div>
+        <h1 class="page-title">Storefronts &amp; Multi-Brand Channels</h1>
+        <p class="text-secondary text-sm">Manage multiple digital storefronts, brands, domains, and localized settings from a single unified back-office</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:multi_store_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Operations Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:storefront_instance_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Storefront</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:storefront_instance_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search name, code, brand, domain, number..." class="form-input" aria-label="Search storefronts">
+            </div>
+            <div class="form-group mb-0">
+                <select name="store_type" class="form-select" aria-label="Filter by store type">
+                    <option value="">All Store Types</option>
+                    {% for val, label in store_type_choices %}
+                    <option value="{{ val }}" {% if store_type_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or store_type_filter or status_filter %}
+                <a href="{% url 'ecommerce:storefront_instance_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number &amp; Code</th>
+                    <th>Storefront Name</th>
+                    <th>Type &amp; Brand</th>
+                    <th>Primary Domain</th>
+                    <th>Default Currency</th>
+                    <th>Root Category</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for store in storefront_instances %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:storefront_instance_detail' store.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ store.number }}
+                        </a>
+                        {% if store.is_default %}
+                        <span class="badge badge-info text-xs ml-1">Default</span>
+                        {% endif %}
+                        {% if store.code %}
+                        <span class="block text-xs font-mono text-muted">{{ store.code }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'ecommerce:storefront_instance_detail' store.pk %}" class="font-medium hover:text-primary">
+                            {{ store.name }}
+                        </a>
+                        {% if store.description %}
+                        <span class="block text-xs text-muted truncate max-w-xs">{{ store.description }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ store.get_store_type_display }}</span>
+                        {% if store.brand_name %}
+                        <span class="block text-xs text-muted mt-0.5">{{ store.brand_name }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">{{ store.primary_domain }}</span>
+                        {% if store.ssl_certificate_status == 'active_provisioned' %}
+                        <span class="badge badge-green text-xs ml-1">SSL</span>
+                        {% elif store.ssl_certificate_status == 'expired' %}
+                        <span class="badge badge-red text-xs ml-1">SSL Expired</span>
+                        {% else %}
+                        <span class="badge badge-amber text-xs ml-1">SSL Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-medium">{{ store.default_currency.code }}</span>
+                        <span class="block text-xs text-muted">{{ store.default_locale }}</span>
+                    </td>
+                    <td>
+                        {% if store.root_category %}
+                        <span class="text-sm">{{ store.root_category.name }}</span>
+                        {% else %}
+                        <span class="text-muted text-xs">All Categories</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if store.status == 'active' %}
+                        <span class="badge badge-green">{{ store.get_status_display }}</span>
+                        {% elif store.status == 'maintenance' %}
+                        <span class="badge badge-amber">{{ store.get_status_display }}</span>
+                        {% elif store.status == 'suspended' or store.status == 'archived' %}
+                        <span class="badge badge-red">{{ store.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ store.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:storefront_instance_detail' store.pk %}" class="btn btn-icon btn-outline" title="View Storefront">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:storefront_instance_edit' store.pk %}" class="btn btn-icon btn-outline" title="Edit Storefront">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:storefront_instance_delete' store.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Storefront" onclick="return confirm('Are you sure you want to delete storefront \'{{ store.name|escapejs }}\'?');">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="store" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Storefronts Found</div>
+                            <div class="empty-state-text">No storefront channels match your current search or filter criteria.</div>
+                            <a href="{% url 'ecommerce:storefront_instance_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Storefront</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} storefronts
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if store_type_filter %}&store_type={{ store_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if store_type_filter %}&store_type={{ store_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
