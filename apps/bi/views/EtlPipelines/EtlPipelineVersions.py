@@ -184,6 +184,9 @@ def etl_pipeline_version_delete(request, pk):
 def etl_pipeline_version_promote(request, pk):
     version = bi_object(request, EtlPipelineVersion, pk, select_related=("pipeline",))
     target_env = request.POST.get("target_environment", "production")
+    if target_env not in dict(EtlPipelineVersion.ENVIRONMENT_CHOICES):
+        messages.error(request, f"Invalid target environment: {target_env}")
+        return redirect("bi:etl_pipeline_version_detail", pk=version.pk)
 
     with transaction.atomic():
         version.environment = target_env
