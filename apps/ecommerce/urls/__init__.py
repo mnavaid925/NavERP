@@ -17,6 +17,7 @@ from apps.ecommerce.urls.MobileCommerce import urlpatterns as _mobilecommerce_ur
 from apps.ecommerce.urls.B2bWholesale import urlpatterns as _b2bwholesale_urls
 from apps.ecommerce.urls.FraudRisk import urlpatterns as _fraudrisk_urls
 from apps.ecommerce.urls.IntegrationApi import urlpatterns as _integrationapi_urls
+from apps.ecommerce.urls.MultiStore import urlpatterns as _multistore_urls
 
 app_name = "ecommerce"
 
@@ -40,6 +41,7 @@ urlpatterns = (
     + list(_b2bwholesale_urls)
     + list(_fraudrisk_urls)
     + list(_integrationapi_urls)
+    + list(_multistore_urls)
 )
 
 
