@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit API Key {{ credential.number }}{% else %}Generate API Key{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:apicredential_list' %}">API Credentials</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ credential.number }}{% else %}Generate{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit API Key: {{ credential.name }}{% else %}Provision New API Credential{% endif %}</h1>
+        <p class="text-secondary text-sm">Issue public headless storefront access tokens or private server-to-server credentials</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:apicredential_detail' credential.pk %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% else %}
+        <a href="{% url 'ecommerce:apicredential_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Client Identity &amp; Authorization Tier</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label font-medium" for="{{ form.name.id_for_label }}">
+                        Application / Client Name <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">e.g. Next.js Mobile Storefront, ERP NetSuite Connector, BI Data Pipeline</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                        Status <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label font-medium" for="{{ form.tier.id_for_label }}">
+                        Access Authorization Tier <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.tier }}
+                    {% if form.tier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.tier.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.rate_limit_rpm.id_for_label }}">
+                        Rate Limit Throttle (RPM)
+                    </label>
+                    {{ form.rate_limit_rpm }}
+                    {% if form.rate_limit_rpm.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.rate_limit_rpm.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group pt-2">
+                <label class="form-label font-medium" for="{{ form.scopes.id_for_label }}">
+                    Permission Scopes (comma-separated)
+                </label>
+                {{ form.scopes }}
+                {% if form.scopes.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.scopes.errors }}</div>{% endif %}
+                <span class="text-xs text-muted">Available scopes: read_catalog, read_orders, write_orders, read_inventory, write_inventory, read_customers, write_customers, admin_full</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Security Boundaries &amp; Lifecycle Expiry</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.allowed_origins.id_for_label }}">
+                        CORS Allowed Web Origins
+                    </label>
+                    {{ form.allowed_origins }}
+                    {% if form.allowed_origins.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.allowed_origins.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Web URLs permitted in Origin header. Set * for public storefronts.</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.allowed_ips.id_for_label }}">
+                        IP CIDR Whitelist Restrictions
+                    </label>
+                    {{ form.allowed_ips }}
+                    {% if form.allowed_ips.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.allowed_ips.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">One CIDR / IP address per line. Leave blank for unrestricted.</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.expires_at.id_for_label }}">
+                        Expiration Date &amp; Time
+                    </label>
+                    {{ form.expires_at }}
+                    {% if form.expires_at.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.expires_at.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Optional. Key will reject calls after this date.</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.description.id_for_label }}">
+                        Notes &amp; Description
+                    </label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="key"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Generate Key &amp; Token{% endif %}</span>
+        </button>
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:apicredential_detail' credential.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+        <a href="{% url 'ecommerce:apicredential_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
