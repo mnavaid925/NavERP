@@ -59,7 +59,7 @@ def integration_sync_job_list(request):
     failed_count = stats["failed_count"]
     completed_count = stats["completed_count"]
 
-    connectors = ecommerce_scope(EcommerceConnector.objects.all(), request).order_by("name")
+    connectors = ecommerce_scope(EcommerceConnector.objects.all(), request).only("id", "name").order_by("name")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page", 1)
