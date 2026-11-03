@@ -126,6 +126,7 @@ def cdc_sync_config_delete(request, pk):
 
 @require_POST
 @login_required
+@tenant_admin_required
 def cdc_sync_config_reset_cursor(request, pk):
     config = bi_object(request, CdcSyncConfig, pk)
     old_cursor = config.last_cursor_value
