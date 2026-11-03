@@ -49,7 +49,7 @@ class TransformationStepForm(TenantUniqueMixin, forms.ModelForm):
         self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant)
+            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant).only("id", "name", "number")
             self.fields["mapping_template"].queryset = MappingTemplate.objects.filter(tenant=self.tenant)
         if self.instance and self.instance.pk:
             if self.instance.upstream_step_ids:
