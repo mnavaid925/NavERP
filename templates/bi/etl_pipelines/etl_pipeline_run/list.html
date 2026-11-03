@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline Runs &amp; Telemetry — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <span>Execution Runs</span>
+        </div>
+        <h1 class="page-title">Pipeline Execution Runs &amp; Telemetry</h1>
+        <p class="text-muted text-sm">Execution metrics, throughput volumes, step progress, and SLA compliance monitoring</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Pipelines</span>
+        </a>
+    </div>
+</div>
+
+<!-- Run KPI Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Executions</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="activity"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Successful Runs</div>
+                <div class="text-2xl font-bold mt-1 text-green-600">{{ success_count }}</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="check-circle-2"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Failed / Timed Out</div>
+                <div class="text-2xl font-bold mt-1 text-red-600">{{ failed_count }}</div>
+            </div>
+            <div class="stat-icon red">
+                <i data-lucide="alert-octagon"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:etl_pipeline_run_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search run number, pipeline name..." class="form-input" aria-label="Search execution runs">
+            </div>
+            <div class="form-group mb-0">
+                <select name="pipeline_id" class="form-select" aria-label="Filter by pipeline">
+                    <option value="">All Pipelines</option>
+                    {% for p in pipelines %}
+                    <option value="{{ p.pk }}" {% if pipeline_filter == p.pk|stringformat:"d" or request.GET.pipeline_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }} ({{ p.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="trigger_type" class="form-select" aria-label="Filter by trigger type">
+                    <option value="">All Trigger Types</option>
+                    {% for val, label in trigger_type_choices %}
+                    <option value="{{ val }}" {% if trigger_filter == val or request.GET.trigger_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" title="Filter runs">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or status_filter or trigger_filter or pipeline_filter %}
+                <a href="{% url 'bi:etl_pipeline_run_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run Number</th>
+                    <th>Pipeline</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Started At</th>
+                    <th>Duration</th>
+                    <th>Throughput (In / Out / Rej)</th>
+                    <th>SLA Adherence</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-sm font-semibold text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_run_detail' run.pk %}" class="hover:text-blue-600">{{ run.number }}</a>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_detail' run.pipeline.pk %}" class="hover:text-blue-600">{{ run.pipeline.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ run.pipeline.number }}</div>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ run.get_trigger_type_display }}</span>
+                        {% if run.is_backfill %}
+                        <span class="badge badge-amber text-xs ml-1">Backfill</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                            <span class="badge badge-green">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'running' %}
+                            <span class="badge badge-info">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'failed' or run.status == 'timed_out' %}
+                            <span class="badge badge-red">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'warning' %}
+                            <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ run.started_at|date:"M d, Y H:i:s" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-slate-700">{{ run.duration_seconds }}s</span>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-700">
+                            <span class="text-blue-600 font-semibold">{{ run.records_in }}</span> in /
+                            <span class="text-green-600 font-semibold">{{ run.records_out }}</span> out /
+                            <span class="text-red-500 font-semibold">{{ run.records_rejected }}</span> rej
+                        </div>
+                    </td>
+                    <td>
+                        {% if run.sla_missed %}
+                            <span class="badge badge-red text-xs">SLA Breached</span>
+                        {% else %}
+                            <span class="badge badge-green text-xs">Within SLA</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <a href="{% url 'bi:etl_pipeline_run_detail' run.pk %}" class="btn btn-icon btn-outline" title="View run details" aria-label="View run details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="activity" class="empty-icon text-muted mx-auto"></i>
+                            <h3 class="empty-title">No execution runs recorded</h3>
+                            <p class="empty-description">Execution runs are captured automatically when pipelines are triggered on schedule, via event, or manually.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-outline">
+                                    <i data-lucide="git-branch"></i>
+                                    <span>Browse Pipelines</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} runs
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if trigger_filter %}&trigger_type={{ trigger_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Previous page" aria-label="Previous page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="text-sm px-2 text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if trigger_filter %}&trigger_type={{ trigger_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Next page" aria-label="Next page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
