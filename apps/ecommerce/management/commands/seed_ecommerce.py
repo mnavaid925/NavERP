@@ -4390,9 +4390,7 @@ class Command(BaseCommand):
         # ==========================================
         # 9.20 Multi-Store & Platform Operations
         # ==========================================
-        default_curr = Currency.objects.filter(tenant=tenant).first()
-        if not default_curr:
-            default_curr = Currency.objects.filter(code="USD").first()
+        default_curr = Currency.objects.filter(code="USD").first() or Currency.objects.first()
 
         root_cat = StoreCategory.objects.filter(tenant=tenant).first()
         fc = FulfillmentCenter.objects.filter(tenant=tenant).first()
