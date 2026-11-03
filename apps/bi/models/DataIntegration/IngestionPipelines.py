@@ -118,6 +118,7 @@ class IngestionPipeline(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bing_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bing_ten_created"),
             models.Index(fields=["tenant", "status", "ingestion_mode"], name="idx_bing_ten_stat_mode"),
             models.Index(fields=["tenant", "connector"], name="idx_bing_ten_connector"),
         ]
