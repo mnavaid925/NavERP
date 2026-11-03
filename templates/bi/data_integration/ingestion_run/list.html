@@ -131,12 +131,14 @@
                             <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="btn btn-icon btn-outline" title="View run log">
                                 <i data-lucide="eye"></i>
                             </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:ingestion_run_delete' run.pk %}" onsubmit="return confirm('Delete this execution run record?');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete run">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
