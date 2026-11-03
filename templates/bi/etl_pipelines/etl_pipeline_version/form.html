@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Version: {{ version.version_number }}{% else %}New Pipeline Version Snapshot{% endif %} — NavERP BI
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_version_list' %}">Versions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ version.version_number }}{% else %}New Version{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Pipeline Version: {{ version.version_number }}{% else %}New Pipeline Version Snapshot{% endif %}</h1>
+        <p class="text-muted text-sm">Create a declarative snapshot of pipeline transformations for environment deployment</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:etl_pipeline_version_detail' version.pk %}{% else %}{% url 'bi:etl_pipeline_version_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-semibold flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Please correct the errors below:</span>
+                    </div>
+                    <ul class="mt-2 list-disc list-inside space-y-1">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>{{ field|capfirst }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.pipeline.id_for_label }}">Target ETL Pipeline <span class="text-danger">*</span></label>
+                            {{ form.pipeline }}
+                            {% if form.pipeline.errors %}<div class="form-error">{{ form.pipeline.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.version_number.id_for_label }}">Version Tag / Semantic Number <span class="text-danger">*</span></label>
+                            {{ form.version_number }}
+                            {% if form.version_number.errors %}<div class="form-error">{{ form.version_number.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">e.g. <code>v1.0.0</code> or <code>v2.1.0-hotfix</code></p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.environment.id_for_label }}">Target Environment <span class="text-danger">*</span></label>
+                            {{ form.environment }}
+                            {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.environment_instance.id_for_label }}">Sandbox / Environment Instance</label>
+                            {{ form.environment_instance }}
+                            {% if form.environment_instance.errors %}<div class="form-error">{{ form.environment_instance.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.status.id_for_label }}">Version Lifecycle Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.changelog.id_for_label }}">Release Changelog &amp; Schema Notes</label>
+                        {{ form.changelog }}
+                        {% if form.changelog.errors %}<div class="form-error">{{ form.changelog.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="border-t border-slate-200 pt-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.dag_definition_raw.id_for_label }}">DAG Definition Snapshot Payload (JSON)</label>
+                            {{ form.dag_definition_raw }}
+                            {% if form.dag_definition_raw.errors %}<div class="form-error">{{ form.dag_definition_raw.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Leave empty to automatically compile and serialize the pipeline's current transformation steps.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'bi:etl_pipeline_version_detail' version.pk %}{% else %}{% url 'bi:etl_pipeline_version_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Version Snapshot{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
