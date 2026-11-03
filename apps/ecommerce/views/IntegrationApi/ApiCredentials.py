@@ -73,7 +73,7 @@ apicredential_list = api_credential_list
 
 @login_required
 def api_credential_detail(request, pk):
-    credential = ecommerce_object(request, ApiCredential, pk)
+    credential = ecommerce_object(request, ApiCredential, pk, select_related=("created_by",))
     new_raw_secret = request.session.pop(f"new_secret_{credential.pk}", None)
 
     context = {
