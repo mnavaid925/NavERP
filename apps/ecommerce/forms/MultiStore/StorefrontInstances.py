@@ -38,8 +38,8 @@ class StorefrontInstanceForm(TenantUniqueMixin, TenantModelForm):
         if tenant:
             self.fields["root_category"].queryset = StoreCategory.objects.filter(tenant=tenant)
             self.fields["default_fulfillment_center"].queryset = FulfillmentCenter.objects.filter(tenant=tenant)
-            self.fields["default_currency"].queryset = Currency.objects.filter(tenant=tenant)
-            self.fields["default_currency"].empty_label = None
+        self.fields["default_currency"].queryset = Currency.objects.filter(is_active=True)
+        self.fields["default_currency"].empty_label = None
 
     def clean_primary_domain(self):
         domain = self.cleaned_data.get("primary_domain", "").strip().lower()
