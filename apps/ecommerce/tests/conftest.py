@@ -4511,13 +4511,13 @@ def ecom_storefront_b(tenant_b):
 
 
 @pytest.fixture
-def ecom_catalog_assignment_a(tenant_a, ecom_storefront_a, ecom_catalog_product_a):
-    return _multistore_catalog_assignment(tenant_a, ecom_storefront_a, ecom_catalog_product_a)
+def ecom_catalog_assignment_a(tenant_a, ecom_storefront_a, ecom_product_a):
+    return _multistore_catalog_assignment(tenant_a, ecom_storefront_a, ecom_product_a)
 
 
 @pytest.fixture
-def ecom_catalog_assignment_b(tenant_b, ecom_storefront_b, ecom_catalog_product_b):
-    return _multistore_catalog_assignment(tenant_b, ecom_storefront_b, ecom_catalog_product_b)
+def ecom_catalog_assignment_b(tenant_b, ecom_storefront_b, ecom_product_b):
+    return _multistore_catalog_assignment(tenant_b, ecom_storefront_b, ecom_product_b)
 
 
 @pytest.fixture
