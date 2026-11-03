@@ -31,7 +31,7 @@
 - [x] **I11**: `apps/bi/views/DataIntegration/*.py` — **Redundant unfiltered count before pagination**: List views run `queryset.count()` before parsing filter params. Fix: Pass `page_obj.paginator.count` instead. Fixed in `2e4c7d0d`, `bddc92f9`, `d63eda4b`, `b347059f`.
 - [x] **I12**: `apps/bi/views/DataIntegration/CdcSyncConfigs.py:146` — **Missing @tenant_admin_required gate on reset cursor**: High-impact CDC stream reset requires privileged admin role. Fix: Add `@tenant_admin_required`. Fixed in `f1916edc`.
 - [x] **I13**: `apps/bi/forms/DataIntegration/DataSourceConnectors.py:15` — **Insecure credential prompt in JSON help text**: Help text suggests entering credentials into cleartext JSONField. Fix: Direct users to `core.ApiCredential` dropdown. Fixed in `b13a70f8`.
-- [ ] **I14**: `templates/bi/data_integration/**/*.html` — **Missing tenant-admin UI checks on destructive buttons (Lesson L27 converse)**: Delete and reset buttons rendered for non-admins lead to 403. Fix: Wrap in `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+- [x] **I14**: `templates/bi/data_integration/**/*.html` — **Missing tenant-admin UI checks on destructive buttons (Lesson L27 converse)**: Delete and reset buttons rendered for non-admins lead to 403. Fix: Wrap in `{% if request.user.is_superuser or request.user.is_tenant_admin %}`. Fixed in `f6cc61e0`, `a52bdb9d`, `4bc844e5`, `0d299551`, `6274f88b`, `bbc70f64`, `677e28da`, `36eaa539`.
 
 ### Minor
 
