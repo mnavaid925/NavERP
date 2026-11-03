@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Ingestion Execution Runs — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <span>Execution Runs</span>
+        </div>
+        <h1 class="page-title">Ingestion Execution Runs</h1>
+        <p class="text-secondary text-sm">Execution telemetry, throughput metrics, duration benchmarks, and error diagnostics</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_integration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Integration Hub</span>
+        </a>
+        <a href="{% url 'bi:ingestion_pipeline_list' %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Run Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:ingestion_run_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search run #, pipeline, staging table, error..." class="form-input" aria-label="Search runs">
+            </div>
+            <div class="form-group mb-0">
+                <select name="pipeline_id" class="form-select" aria-label="Filter by pipeline">
+                    <option value="">All Pipelines</option>
+                    {% for pipe in pipelines %}
+                    <option value="{{ pipe.pk }}" {% if pipeline_id == pipe.pk|stringformat:"d" or request.GET.pipeline_id == pipe.pk|stringformat:"d" %}selected{% endif %}>{{ pipe.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="trigger_type" class="form-select" aria-label="Filter by trigger">
+                    <option value="">All Triggers</option>
+                    {% for val, label in trigger_choices %}
+                    <option value="{{ val }}" {% if trigger_type == val or request.GET.trigger_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or status or trigger_type or pipeline_id %}
+                <a href="{% url 'bi:ingestion_run_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run #</th>
+                    <th>Pipeline &amp; Target</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Extracted / Inserted / Rejected</th>
+                    <th>Bytes</th>
+                    <th>Started</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                            {{ run.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:ingestion_pipeline_detail' run.pipeline.pk %}" class="font-semibold text-slate-800 hover:underline">
+                            {{ run.pipeline.name }}
+                        </a>
+                        <div class="text-xs text-muted font-mono">{{ run.pipeline.target_staging_table }}</div>
+                    </td>
+                    <td><span class="badge badge-slate">{{ run.get_trigger_type_display }}</span></td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                        <span class="badge badge-green">Completed</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% elif run.status == 'running' %}
+                        <span class="badge badge-info">Running</span>
+                        {% elif run.status == 'warning' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="font-mono text-xs">
+                        <span class="text-slate-800">{{ run.records_extracted }}</span> /
+                        <span class="text-green-600 font-semibold">{{ run.records_inserted }}</span> /
+                        <span class="text-red-500">{{ run.records_rejected }}</span>
+                    </td>
+                    <td class="font-mono text-xs text-secondary">{{ run.bytes_transferred }} B</td>
+                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i:s" }}</td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <form method="post" action="{% url 'bi:ingestion_run_retry' run.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-primary" title="Retry this run">
+                                    <i data-lucide="rotate-cw"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="btn btn-icon btn-outline" title="View run log">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:ingestion_run_delete' run.pk %}" onsubmit="return confirm('Delete this execution run record?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete run">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="activity" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-800">No execution runs logged</h3>
+                            <p class="text-sm text-secondary mt-1">Execute an ingestion pipeline manually or wait for scheduled triggers to see telemetry.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:ingestion_pipeline_list' %}" class="btn btn-primary">
+                                    <i data-lucide="workflow"></i>
+                                    <span>View Pipelines</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if runs.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-secondary">
+            Showing {{ runs.start_index }} to {{ runs.end_index }} of {{ total_count }} execution runs
+        </div>
+        <div class="flex gap-1">
+            {% if runs.has_previous %}
+            <a href="?page={{ runs.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if trigger_type %}&trigger_type={{ trigger_type }}{% endif %}{% if pipeline_id %}&pipeline_id={{ pipeline_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline active font-semibold">{{ runs.number }} / {{ runs.paginator.num_pages }}</span>
+            {% if runs.has_next %}
+            <a href="?page={{ runs.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if trigger_type %}&trigger_type={{ trigger_type }}{% endif %}{% if pipeline_id %}&pipeline_id={{ pipeline_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
