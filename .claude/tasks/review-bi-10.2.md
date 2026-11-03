@@ -42,7 +42,7 @@
 - [x] **M4**: ModelForm Dropdown Field Optimization. Add `.only("id", "name", "number")` to form dropdown querysets for `pipeline`.
 - [x] **M5**: Delete Actions Rendered for Non-Tenant Admins in UI Templates. Wrap delete forms with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 - [x] **M6**: Delete Icon Button Styling Consistency. Use `btn-icon btn-outline text-danger` for consistent ghost action buttons.
-- [ ] **M7**: Breadcrumb Separator Class. Add `class="sep"` to breadcrumb separators.
+- [x] **M7**: Breadcrumb Separator Class. Add `class="sep"` to breadcrumb separators.
 - [ ] **M8**: Missing `list_select_related` in Django Admin for `TransformationStepAdmin`, `EtlPipelineVersionAdmin`, and `EtlPipelineRunAdmin`.
 - [ ] **M9**: Semantic Version Duplicate Validation. Check in `EtlPipelineVersionForm.clean()` that `version_number` is not already used on the same pipeline in this tenant.
 - [ ] **M10**: Active Production Version Deletion Block. In `etl_pipeline_version_delete`, prevent deleting active production version without prior deprecation/reassignment.
