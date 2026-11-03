@@ -107,4 +107,4 @@ class EtlPipelineRun(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.pipeline.name} ({self.get_status_display()} [{self.started_at.strftime('%Y-%m-%d %H:%M')}])"
+        return f"{self.number} ({self.get_status_display()})"
