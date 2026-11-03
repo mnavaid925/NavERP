@@ -8,3 +8,91 @@
 - **Status:** In-Progress
 
 ---
+
+## Pass 1: Code Reviewer (`code-reviewer`)
+
+### Executive Summary
+The implementation of Sub-module 9.19 (*Integration & API Ecosystem*) provides a cohesive architectural foundation for external ERP synchronization, payment gateway connectors, logistics carrier rate/tracking integration, marketing tool connectivity, outbound HMAC-signed webhooks, and headless storefront API credentials. Multi-tenant isolation using `TenantNumbered` and `ecommerce_scope` is strictly observed, cross-tenant IDOR protection is enforced across all 16 endpoints via `ecommerce_object`, CSRF tokens are present on all state mutations, URL namespace routing aligns with `LIVE_LINKS`, and the seeder is fully idempotent.
+
+A few notable items require attention regarding AuditLog action lengths, template string-splitting logic, filter dropdown omissions, and pagination parameter retention.
+
+### Critical Findings
+*None identified that cause unhandled exceptions or cross-tenant data leaks.*
+
+### Important Findings
+
+#### 1. AuditLog Action Verb Exceeds `varchar(10)` Constraint
+- **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
+- **Problem:** In `ecommerce_connector_test_connection`, `write_audit_log` is called with `action="test_connection"`. The `core.AuditLog.action` field is `CharField(max_length=10)`. Because the verb is 15 characters, `write_audit_log` emits an error log (`"AuditLog.action is varchar(10) but 'test_connection' is 15 characters; storing it clamped to 'test_conne'"`) and truncates the verb.
+- **Remediation:** Pass a verb within the 10-character limit (e.g. `action="test"` or `action="ping"`) and record the descriptive action inside the `changes` dictionary:
+  ```python
+  write_audit_log(
+      request.user,
+      connector,
+      "test",
+      changes={"action_type": "test_connection", "health_status": "healthy"},
+      tenant=request.tenant,
+  )
+  ```
+
+#### 2. Comma-Separated Scope Splitting Fails in Template
+- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 113)
+- **Problem:** The template uses `{% for scope in credential.scopes.split %}` to display permission badges. In Python/Django template resolution, `str.split` without arguments invokes `str.split(sep=None)`, which splits on **whitespace**, not commas. Because `scopes` is defined as comma-separated (e.g. `"read_catalog,read_orders,write_orders"`), all scopes are rendered as a single un-tokenized badge string rather than individual badges.
+- **Remediation:** Add a helper property on the `ApiCredential` model:
+  ```python
+  @property
+  def scopes_list(self):
+      return [s.strip() for s in self.scopes.split(",") if s.strip()]
+  ```
+  And update the template to iterate over `credential.scopes_list`:
+  ```html
+  {% for scope in credential.scopes_list %}
+  <span class="badge badge-info font-mono text-xs">{{ scope }}</span>
+  {% endfor %}
+  ```
+
+#### 3. Connector List View: Missing Provider Dropdown and Pagination Param Loss
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 100–103)
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–224)
+- **Problem:** 
+  1. The view parses `provider_filter = request.GET.get("provider", "").strip()` and passes `provider_choices` and `provider_filter` to the context, but the template filter form completely lacks a `<select name="provider">` dropdown.
+  2. The pagination controls do not preserve `provider_filter`. Navigating between pages when filtered by `?provider=stripe` loses the filter parameter.
+- **Remediation:** Add the provider dropdown in `templates/ecommerce/integration_api/ecommerce_connector/list.html` and append `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}` to pagination controls.
+
+#### 4. Sync Job List View: Missing Direction and Trigger Dropdowns and Pagination Param Loss
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 39–46)
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–227)
+- **Problem:**
+  1. The view filters by `direction` and `trigger_type` and provides `direction_choices` and `trigger_choices` to the context, but the filter form only renders selects for `status`, `entity`, and `connector`.
+  2. Pagination links do not preserve `direction_filter` or `trigger_filter`.
+- **Remediation:** Add selects for `direction` and `trigger` in the filter bar and append `{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}` to pagination controls.
+
+#### 5. Webhook Target URL SSRF Surface
+- **File:** `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 67–73)
+- **Problem:** `clean_target_url` only checks `url.startswith("https://") or url.startswith("http://")`. It does not restrict localhost (`127.0.0.1`, `::1`), cloud instance metadata services (`169.254.169.254`), or private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). In multi-tenant SaaS environments, this creates an SSRF vector if outbound dispatchers query arbitrary internal network addresses.
+- **Remediation:** In `clean_target_url`, parse the hostname with `urllib.parse.urlparse` and validate that it does not resolve to loopback, link-local, or private IP ranges.
+
+### Minor Findings
+
+#### 6. Undefined CSS Class `.badge-purple`
+- **Files:**
+  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
+  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
+- **Problem:** `<span class="badge badge-purple">Admin Private</span>` is used, but `.badge-purple` is not declared in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist). The badge appears without custom background or text styling.
+- **Remediation:** Use `.badge-info` / `.badge-slate` or add `.badge-purple` to `static/css/theme.css`.
+
+#### 7. Missing `issued_to_party` FK on `ApiCredential`
+- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
+- **Problem:** The Phase 2 build plan (`todo.md` L198, L307) specified linking `ApiCredential` to `core.Party` (`issued_to_party`) for B2B wholesale buyers, third-party developers, and external partners. The model omitted this field.
+- **Remediation:** In a future migration or enhancement, add `issued_to_party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="ecommerce_api_credentials")` to deepen Module 0 spine integration.
+
+#### 8. Third-Party Secret Storage at Rest
+- **Files:**
+  - `apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py` (Lines 101–106)
+  - `apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py` (Lines 55–60)
+- **Problem:** `EcommerceConnector.api_secret` and `WebhookSubscription.secret_key` are persisted in cleartext `CharField`s in the database. `ApiCredential` hashes inbound keys with SHA-256, but outbound third-party credentials remain unencrypted at rest.
+- **Remediation:** Note as a security hardening item for production deployment to use symmetric envelope encryption (e.g. Fernet / KMS) for external client secrets.
+
+---
