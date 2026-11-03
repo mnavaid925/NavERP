@@ -254,8 +254,8 @@ def ecommerce_connector_test_connection(request, pk):
     write_audit_log(
         request.user,
         connector,
-        "test_connection",
-        changes={"health_status": "healthy"},
+        "test",
+        changes={"action_type": "test_connection", "health_status": "healthy"},
         tenant=request.tenant,
     )
     messages.success(request, f"Health check passed for '{connector.name}'. Connection active.")
