@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Catalog Assignment {{ assignment.number }} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:storefront_catalog_assignment_list' %}">Catalog Assignments</a>
+            <span>/</span>
+            <span>{{ assignment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ assignment.product.name }} &rarr; {{ assignment.storefront.name }}</h1>
+            {% if assignment.publish_status == 'published' %}
+            <span class="badge badge-green">{{ assignment.get_publish_status_display }}</span>
+            {% elif assignment.publish_status == 'coming_soon' %}
+            <span class="badge badge-info">{{ assignment.get_publish_status_display }}</span>
+            {% elif assignment.publish_status == 'hidden' %}
+            <span class="badge badge-slate">{{ assignment.get_publish_status_display }}</span>
+            {% else %}
+            <span class="badge badge-muted">{{ assignment.get_publish_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm font-mono mt-0.5">{{ assignment.number }} &bull; SKU: {{ assignment.product.sku }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:storefront_catalog_assignment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Assignments</span>
+        </a>
+        <a href="{% url 'ecommerce:storefront_catalog_assignment_edit' assignment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Assignment</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:storefront_catalog_assignment_delete' assignment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to remove this catalog assignment?');">
+                <i data-lucide="trash-2"></i>
+                <span>Remove</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Storefront Scoping &amp; Merchandising</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-secondary block">Assigned Storefront Channel</span>
+                        <a href="{% url 'ecommerce:storefront_instance_detail' assignment.storefront.pk %}" class="font-medium text-primary hover:underline">
+                            {{ assignment.storefront.name }}
+                        </a>
+                        <span class="block text-xs font-mono text-muted">{{ assignment.storefront.number }} &bull; {{ assignment.storefront.primary_domain }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Master Catalog Product</span>
+                        <span class="font-medium">{{ assignment.product.name }}</span>
+                        <span class="block text-xs font-mono text-muted">SKU: {{ assignment.product.sku }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Custom Storefront Title Override</span>
+                        {% if assignment.custom_title %}
+                        <span class="font-medium text-base">{{ assignment.custom_title }}</span>
+                        {% else %}
+                        <span class="text-muted text-sm">None (using master product title)</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Storefront Merchandising Badge</span>
+                        {% if assignment.storefront_badge %}
+                        <span class="badge badge-info">{{ assignment.storefront_badge }}</span>
+                        {% else %}
+                        <span class="text-muted text-sm">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Catalog Visibility</span>
+                        {% if assignment.is_visible %}
+                        <span class="badge badge-green">Visible in Catalog</span>
+                        {% else %}
+                        <span class="badge badge-slate">Hidden from Search &amp; Navigation</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Featured Highlight</span>
+                        {% if assignment.is_featured %}
+                        <span class="badge badge-amber">Featured on Storefront</span>
+                        {% else %}
+                        <span class="text-muted text-sm">Standard Listing</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Storefront-Specific Price Override</span>
+                        {% if assignment.custom_price %}
+                        <span class="font-mono font-semibold text-lg text-primary">{{ assignment.custom_price }} {{ assignment.custom_currency.code|default:assignment.storefront.default_currency.code }}</span>
+                        {% else %}
+                        <span class="text-muted text-sm">Using standard catalog price</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Merchandising Sort Order</span>
+                        <span class="font-mono">{{ assignment.sort_order }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Channel Details</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-secondary block">Channel Type</span>
+                    <span class="badge badge-slate">{{ assignment.storefront.get_store_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Store Currency</span>
+                    <span class="font-mono">{{ assignment.storefront.default_currency.code }}</span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Store Status</span>
+                    <span class="badge badge-green">{{ assignment.storefront.get_status_display }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Assignment Metadata</h3>
+            </div>
+            <div class="card-body text-xs space-y-2 text-secondary">
+                <div class="flex justify-between">
+                    <span>Record Number:</span>
+                    <span class="font-mono text-slate-800">{{ assignment.number }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Created At:</span>
+                    <span>{{ assignment.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Last Updated:</span>
+                    <span>{{ assignment.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
