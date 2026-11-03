@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Connector {{ connector.number }}{% else %}New Connector{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:ecommerceconnector_list' %}">Connectors</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ connector.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Connector: {{ connector.name }}{% else %}Configure New Integration Connector{% endif %}</h1>
+        <p class="text-secondary text-sm">Register an external API adapter for ERP sync, payment gateway, logistics carrier, or marketing tool</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:ecommerceconnector_detail' connector.pk %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% else %}
+        <a href="{% url 'ecommerce:ecommerceconnector_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">General Connector Information</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.name.id_for_label }}">
+                        Connector Name <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.category.id_for_label }}">
+                        Integration Category <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.provider.id_for_label }}">
+                        Provider Adapter <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.provider }}
+                    {% if form.provider.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.provider.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                        Operational Status <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="flex items-center gap-2 cursor-pointer pt-2">
+                    {{ form.is_sandbox }}
+                    <span class="text-sm font-medium text-slate-800">Sandbox / Test Environment (Mock transactions, test credentials)</span>
+                </label>
+                {% if form.is_sandbox.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.is_sandbox.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Endpoint &amp; Authentication Protocol</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label font-medium" for="{{ form.base_url.id_for_label }}">
+                        Base API Endpoint URL
+                    </label>
+                    {{ form.base_url }}
+                    {% if form.base_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.base_url.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">e.g. https://api.stripe.com/v1 or https://123456.suitetalk.api.netsuite.com</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.api_version.id_for_label }}">
+                        Target API Version
+                    </label>
+                    {{ form.api_version }}
+                    {% if form.api_version.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.api_version.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.auth_type.id_for_label }}">
+                        Authentication Type <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.auth_type }}
+                    {% if form.auth_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.auth_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.account_id.id_for_label }}">
+                        External Merchant / Account ID
+                    </label>
+                    {{ form.account_id }}
+                    {% if form.account_id.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.account_id.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.api_key.id_for_label }}">
+                        Public API Key / Client ID
+                    </label>
+                    {{ form.api_key }}
+                    {% if form.api_key.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.api_key.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.api_secret.id_for_label }}">
+                        Secret Key / Token / Password
+                    </label>
+                    {{ form.api_secret }}
+                    {% if form.api_secret.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.api_secret.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Resilience &amp; Throttling Limits</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.timeout_seconds.id_for_label }}">
+                        HTTP Request Timeout (seconds)
+                    </label>
+                    {{ form.timeout_seconds }}
+                    {% if form.timeout_seconds.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.timeout_seconds.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.rate_limit_per_minute.id_for_label }}">
+                        Rate Limit Throttle (requests / minute)
+                    </label>
+                    {{ form.rate_limit_per_minute }}
+                    {% if form.rate_limit_per_minute.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.rate_limit_per_minute.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.description.id_for_label }}">
+                    Description &amp; Notes
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Connector{% endif %}</span>
+        </button>
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:ecommerceconnector_detail' connector.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+        <a href="{% url 'ecommerce:ecommerceconnector_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
