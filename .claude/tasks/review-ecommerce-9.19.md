@@ -164,3 +164,63 @@ Package structure strictly follows NavERP's modular layout with single-responsib
 - **Remediation:** Add `reject_foreign` in `clean()` for parity with other eCommerce forms.
 
 ---
+
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Executive Summary
+The templates for the eCommerce Integration & API sub-module (9.19) are well-architected, featuring clean Tailwick design system integration, complete CSRF token protection on all POST forms, robust None-safety fallbacks, and comprehensive empty-state illustrations across all entities.
+
+However, several frontend and template issues were detected across Design System alignment, filter/pagination retention, template tag string evaluation, and icon accessibility.
+
+### Critical Findings
+*None. No crashes, template syntax errors, or missing CSRF tokens detected.*
+
+### Important Findings
+
+#### 1. Undefined CSS Class `badge-purple` (Design System / `theme.css` Alignment)
+- **Files:**
+  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
+  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
+- **Problem:** `static/css/theme.css` only defines color-named classes for badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`. The class `badge-purple` is rogue/undefined. The badge renders without background and text styling.
+- **Remediation:** Replace `badge-purple` with an approved class, such as `badge-info` (the brand/indigo info color) or `badge-slate`.
+
+#### 2. Missing Filter Dropdown in Connector List UI
+- **File:** `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–93)
+- **Problem:** The view `ecommerce_connector_list` filters on `provider` (`request.GET.get("provider")`) and passes `provider_choices` and `provider_filter` in context. The template checks `provider_filter` in line 86, but the filter `<form>` lacks a `<select name="provider">` dropdown.
+- **Remediation:** Add a `<select name="provider">` dropdown to the filter form.
+
+#### 3. Missing Direction & Trigger Filter Dropdowns in Sync Job List UI
+- **File:** `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–101)
+- **Problem:** The view `integration_sync_job_list` handles `direction` and `trigger` GET parameters and passes `direction_choices` and `trigger_choices` in context, but the filter `<form>` omits both `<select name="direction">` and `<select name="trigger">` dropdowns.
+- **Remediation:** Add `<select name="direction">` and `<select name="trigger">` dropdowns to the filter bar in `integration_sync_job/list.html`.
+
+#### 4. Active Filters Dropped During Pagination Navigation
+- **Files:**
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 218–228) - Missing `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}`
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 221–231) - Missing `{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}`
+- **Problem:** Active query parameters (`provider`, `direction`, `trigger`) are omitted from pagination links and silently discarded on page change.
+- **Remediation:** Append active filter parameters to all previous and next pagination URLs.
+
+#### 5. String `.split` Logic Bug on Comma-Separated Permission Scopes
+- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Lines 112–117)
+- **Problem:** `credential.scopes.split` without arguments executes whitespace splitting rather than comma splitting, causing comma-separated scopes (`"read_catalog,read_orders"`) to render as a single un-tokenized badge.
+- **Remediation:** Add `@property def scopes_list(self): return [s.strip() for s in self.scopes.split(",") if s.strip()]` on `ApiCredential` and loop over `credential.scopes_list`.
+
+### Minor Findings
+
+#### 6. Icon-Only Action Buttons Lack `aria-label` Attributes
+- **Files:**
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 171–189)
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 174–192)
+  - `templates/ecommerce/integration_api/webhook_subscription/list.html` (Lines 159–177)
+  - `templates/ecommerce/integration_api/api_credential/list.html` (Lines 163–183)
+- **Problem:** Action buttons containing only Lucide icons have `title="..."` attributes but lack explicit `aria-label="..."` for screen reader accessibility.
+- **Remediation:** Add matching `aria-label` attributes to icon-only action links and buttons.
+
+#### 7. Clipboard Copy Interaction Fallback
+- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 71)
+- **Problem:** The raw secret key copy button executes inline JS `onclick="navigator.clipboard.writeText(...)"` without fallback in non-secure or permissions-restricted contexts.
+- **Remediation:** Add a safe fallback check or Promise error handler for clipboard API calls.
+
+---
