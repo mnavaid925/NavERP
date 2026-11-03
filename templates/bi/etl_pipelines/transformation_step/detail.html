@@ -37,6 +37,15 @@
             <i data-lucide="pencil"></i>
             <span>Edit</span>
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'bi:transformation_step_delete' step.pk %}" class="inline" onsubmit="return confirm('Permanently delete Transformation Step {{ step.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
         <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="btn btn-outline">
             <i data-lucide="arrow-left"></i>
             <span>Back to Pipeline</span>
