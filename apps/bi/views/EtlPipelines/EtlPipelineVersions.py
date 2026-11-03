@@ -175,6 +175,9 @@ def etl_pipeline_version_delete(request, pk):
         )
         version.delete()
     messages.success(request, f"Pipeline Version {version_number} deleted successfully.")
+    next_param = request.GET.get("next") or request.POST.get("next")
+    if next_param == "list":
+        return redirect("bi:etl_pipeline_version_list")
     return redirect("bi:etl_pipeline_detail", pk=pipeline_pk)
 
 
