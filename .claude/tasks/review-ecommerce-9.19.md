@@ -2,29 +2,50 @@
 
 - **Sub-module:** 9.19 Integration & API Ecosystem
 - **Module:** 9 eCommerce Management System (`ecommerce`)
-- **Review Range:** `636b2d8cf7801d9533df988cb907c334b25ed034...77cd83c05744fde39695c40ea26de4daaf628e42`
+- **Review Range:** `636b2d8cf7801d9533df988cb907c334b25ed034...53dd659d`
 - **Date:** 2026-11-03
-- **Phase:** 4 Review (6 Reviewers Serial)
-- **Status:** In-Progress
+- **Phase:** 4 Review (All 6 Reviewers Completed & Deduplicated)
+- **Status:** Consolidated — Ready for Phase 5 (`code-fixer`)
 
 ---
 
-## Pass 1: Code Reviewer (`code-reviewer`)
+## Consolidated Action Register (Prioritized: Critical → Important → Minor)
 
-### Executive Summary
-The implementation of Sub-module 9.19 (*Integration & API Ecosystem*) provides a cohesive architectural foundation for external ERP synchronization, payment gateway connectors, logistics carrier rate/tracking integration, marketing tool connectivity, outbound HMAC-signed webhooks, and headless storefront API credentials. Multi-tenant isolation using `TenantNumbered` and `ecommerce_scope` is strictly observed, cross-tenant IDOR protection is enforced across all 16 endpoints via `ecommerce_object`, CSRF tokens are present on all state mutations, URL namespace routing aligns with `LIVE_LINKS`, and the seeder is fully idempotent.
+### Critical Findings (Must Fix First)
 
-A few notable items require attention regarding AuditLog action lengths, template string-splitting logic, filter dropdown omissions, and pagination parameter retention.
+#### [ ] C1: Plaintext Secret Exposure in HTML DOM via `forms.PasswordInput(render_value=True)`
+- **Files:**
+  - `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py` (Lines 39–42)
+  - `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 39–45)
+- **Severity:** Critical (CWE-312 / Secret Leakage)
+- **Problem:** Both forms specify `PasswordInput(render_value=True)`, injecting third-party API secrets and webhook HMAC signing keys in cleartext into the HTML DOM and source code on edit views.
+- **Remediation:**
+  1. Change `render_value=True` to `render_value=False` (the default) on both widgets.
+  2. Implement `clean_api_secret` in `EcommerceConnectorForm` and update `clean_secret_key` in `WebhookSubscriptionForm` to preserve the existing database secret if submitted blank on edit.
+- **Status:** `[ ] open`
 
-### Critical Findings
-*None identified that cause unhandled exceptions or cross-tenant data leaks.*
+#### [ ] C2: Missing `@tenant_admin_required` Gate on Privileged Key & Connector Mutations
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/ApiCredentials.py` (Lines 89, 139, 171, 192)
+  - `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 154, 191, 223, 244)
+  - `apps/ecommerce/views/IntegrationApi/WebhookSubscriptions.py` (Lines 85, 121, 153, 174)
+- **Severity:** Critical (CWE-285 / Privilege Escalation, Lesson L27)
+- **Problem:** All create, edit, delete, test, and revoke endpoints across API Credentials, Connectors, and Webhooks are decorated only with `@login_required`. Any authenticated tenant member can issue full admin server API keys, revoke production credentials, or alter gateway connections.
+- **Remediation:** Import `tenant_admin_required` from `apps.core.decorators` and apply to all mutation views:
+  - `api_credential_create`, `api_credential_edit`, `api_credential_delete`, `api_credential_revoke`
+  - `ecommerce_connector_create`, `ecommerce_connector_edit`, `ecommerce_connector_delete`, `ecommerce_connector_test_connection`
+  - `webhook_subscription_create`, `webhook_subscription_edit`, `webhook_subscription_delete`, `webhook_subscription_ping`
+- **Status:** `[ ] open`
+
+---
 
 ### Important Findings
 
-#### 1. AuditLog Action Verb Exceeds `varchar(10)` Constraint
+#### [ ] I1: AuditLog Action Verb Exceeds `varchar(10)` Constraint
 - **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
-- **Problem:** In `ecommerce_connector_test_connection`, `write_audit_log` is called with `action="test_connection"`. The `core.AuditLog.action` field is `CharField(max_length=10)`. Because the verb is 15 characters, `write_audit_log` emits an error log (`"AuditLog.action is varchar(10) but 'test_connection' is 15 characters; storing it clamped to 'test_conne'"`) and truncates the verb.
-- **Remediation:** Pass a verb within the 10-character limit (e.g. `action="test"` or `action="ping"`) and record the descriptive action inside the `changes` dictionary:
+- **Severity:** Important (Runtime Warning / Data Truncation)
+- **Problem:** `action="test_connection"` is 15 characters, exceeding `AuditLog.action` (`varchar(10)`). The helper emits an error log and truncates the verb to `"test_conne"`.
+- **Remediation:** Change to `action="test"` and put `"action_type": "test_connection"` in `changes`:
   ```python
   write_audit_log(
       request.user,
@@ -34,296 +55,162 @@ A few notable items require attention regarding AuditLog action lengths, templat
       tenant=request.tenant,
   )
   ```
+- **Status:** `[ ] open`
 
-#### 2. Comma-Separated Scope Splitting Fails in Template
-- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 113)
-- **Problem:** The template uses `{% for scope in credential.scopes.split %}` to display permission badges. In Python/Django template resolution, `str.split` without arguments invokes `str.split(sep=None)`, which splits on **whitespace**, not commas. Because `scopes` is defined as comma-separated (e.g. `"read_catalog,read_orders,write_orders"`), all scopes are rendered as a single un-tokenized badge string rather than individual badges.
-- **Remediation:** Add a helper property on the `ApiCredential` model:
-  ```python
-  @property
-  def scopes_list(self):
-      return [s.strip() for s in self.scopes.split(",") if s.strip()]
-  ```
-  And update the template to iterate over `credential.scopes_list`:
-  ```html
-  {% for scope in credential.scopes_list %}
-  <span class="badge badge-info font-mono text-xs">{{ scope }}</span>
-  {% endfor %}
-  ```
-
-#### 3. Connector List View: Missing Provider Dropdown and Pagination Param Loss
+#### [ ] I2: Comma-Separated Scope Splitting Fails in Template
 - **Files:**
-  - `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 100–103)
-  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–224)
-- **Problem:** 
-  1. The view parses `provider_filter = request.GET.get("provider", "").strip()` and passes `provider_choices` and `provider_filter` to the context, but the template filter form completely lacks a `<select name="provider">` dropdown.
-  2. The pagination controls do not preserve `provider_filter`. Navigating between pages when filtered by `?provider=stripe` loses the filter parameter.
-- **Remediation:** Add the provider dropdown in `templates/ecommerce/integration_api/ecommerce_connector/list.html` and append `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}` to pagination controls.
+  - `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
+  - `templates/ecommerce/integration_api/api_credential/detail.html` (Lines 112–115)
+- **Severity:** Important (Template Rendering Defect)
+- **Problem:** `credential.scopes.split` defaults to whitespace splitting rather than comma splitting, rendering comma-separated scopes as one monolithic badge.
+- **Remediation:** Add `@property def scopes_list(self): return [s.strip() for s in (self.scopes or "").split(",") if s.strip()]` on `ApiCredential` and iterate over `credential.scopes_list` in template.
+- **Status:** `[ ] open`
 
-#### 4. Sync Job List View: Missing Direction and Trigger Dropdowns and Pagination Param Loss
-- **Files:**
-  - `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 39–46)
-  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–227)
-- **Problem:**
-  1. The view filters by `direction` and `trigger_type` and provides `direction_choices` and `trigger_choices` to the context, but the filter form only renders selects for `status`, `entity`, and `connector`.
-  2. Pagination links do not preserve `direction_filter` or `trigger_filter`.
-- **Remediation:** Add selects for `direction` and `trigger` in the filter bar and append `{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}` to pagination controls.
-
-#### 5. Webhook Target URL SSRF Surface
-- **File:** `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 67–73)
-- **Problem:** `clean_target_url` only checks `url.startswith("https://") or url.startswith("http://")`. It does not restrict localhost (`127.0.0.1`, `::1`), cloud instance metadata services (`169.254.169.254`), or private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). In multi-tenant SaaS environments, this creates an SSRF vector if outbound dispatchers query arbitrary internal network addresses.
-- **Remediation:** In `clean_target_url`, parse the hostname with `urllib.parse.urlparse` and validate that it does not resolve to loopback, link-local, or private IP ranges.
-
-### Minor Findings
-
-#### 6. Undefined CSS Class `.badge-purple`
-- **Files:**
-  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
-  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
-- **Problem:** `<span class="badge badge-purple">Admin Private</span>` is used, but `.badge-purple` is not declared in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist). The badge appears without custom background or text styling.
-- **Remediation:** Use `.badge-info` / `.badge-slate` or add `.badge-purple` to `static/css/theme.css`.
-
-#### 7. Missing `issued_to_party` FK on `ApiCredential`
-- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
-- **Problem:** The Phase 2 build plan (`todo.md` L198, L307) specified linking `ApiCredential` to `core.Party` (`issued_to_party`) for B2B wholesale buyers, third-party developers, and external partners. The model omitted this field.
-- **Remediation:** In a future migration or enhancement, add `issued_to_party = models.ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="ecommerce_api_credentials")` to deepen Module 0 spine integration.
-
-#### 8. Third-Party Secret Storage at Rest
-- **Files:**
-  - `apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py` (Lines 101–106)
-  - `apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py` (Lines 55–60)
-- **Problem:** `EcommerceConnector.api_secret` and `WebhookSubscription.secret_key` are persisted in cleartext `CharField`s in the database. `ApiCredential` hashes inbound keys with SHA-256, but outbound third-party credentials remain unencrypted at rest.
-- **Remediation:** Note as a security hardening item for production deployment to use symmetric envelope encryption (e.g. Fernet / KMS) for external client secrets.
-
----
-
-
-## Pass 2: Explorer Reviewer (`explorer`)
-
-### Executive Summary
-Sub-module 9.19 (*Integration & API Ecosystem*) demonstrates exemplary adherence to NavERP's architecture and coding standards. The four entities (`EcommerceConnector`, `IntegrationSyncJob`, `WebhookSubscription`, and `ApiCredential`) strictly isolate tenants via `TenantNumbered`, enforce tenant query scoping through `ecommerce_scope`, protect against cross-tenant IDOR across all mutation and detail views via `ecommerce_object`, and wire every state mutation to CSRF-protected `@require_POST` handlers with audit logging.
-
-Package structure strictly follows NavERP's modular layout with single-responsibility files under `apps/ecommerce/{models,forms,views,urls}/IntegrationApi/` and clean re-exports in package `__init__.py`. All 5 `NavERP.md` feature bullets are accurately wired in `apps/core/navigation.py` under `LIVE_LINKS["9.19"]`, and all 13 template files resolve URLs without dead links. Admin registration is fully implemented, and the seeder is idempotent across multiple tenants.
-
-### Critical Findings
-*None.*
-
-### Important Findings
-
-#### 1. Comma-Separated Scope Splitting Fails in Template
-- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Lines 112–115)
-- **Problem:** The template uses `{% for scope in credential.scopes.split %}` to iterate over permission badges. In Python/Django template resolution, `str.split` without arguments defaults to splitting on whitespace (`sep=None`), not commas. Because `scopes` is stored comma-separated (e.g. `"read_catalog,read_orders,write_orders"`), it renders as a single monolithic badge rather than individual scope badges.
-- **Remediation:** Define a property on `ApiCredential`:
-  ```python
-  @property
-  def scopes_list(self):
-      return [s.strip() for s in self.scopes.split(",") if s.strip()]
-  ```
-  And update `api_credential/detail.html` to iterate over `{% for scope in credential.scopes_list %}`.
-
-#### 2. Connector List View: Missing Provider Dropdown and Pagination Parameter Loss
-- **Files:**
-  - `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 100–103)
-  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–224)
-- **Problem:**
-  1. The view filters on `provider_filter = request.GET.get("provider", "").strip()` and supplies `provider_choices` and `provider_filter` to the context, but the template filter bar does not include a `<select name="provider">` dropdown.
-  2. The pagination controls do not append `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}`, dropping the provider filter when paginating.
-- **Remediation:** Add the provider filter dropdown to `ecommerce_connector/list.html` and append the parameter to pagination links.
-
-#### 3. Sync Job List View: Missing Direction and Trigger Dropdowns and Pagination Parameter Loss
-- **Files:**
-  - `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 39–46)
-  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–227)
-- **Problem:**
-  1. The view parses `direction_filter` and `trigger_filter` and passes `direction_choices` and `trigger_choices` to context, but the template form only renders `status`, `entity`, and `connector` selects.
-  2. Pagination controls omit `direction_filter` and `trigger_filter`, losing those filters across pages.
-- **Remediation:** Add the `direction` and `trigger` selects to the filter bar and preserve them in pagination links.
-
-#### 4. AuditLog Action Verb Exceeds `varchar(10)`
-- **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
-- **Problem:** In `ecommerce_connector_test_connection`, `write_audit_log` is called with `action="test_connection"`. The `core.AuditLog.action` column is `CharField(max_length=10)`, causing `write_audit_log` to truncate the action to `"test_conne"` with a warning log.
-- **Remediation:** Pass `action="test"` or `action="ping"` (under 10 chars) and record `"action_type": "test_connection"` inside the `changes` dictionary.
-
-### Minor Findings
-
-#### 5. Redundant Index on `ApiCredential.client_id`
-- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py` (Lines 40–43, 120)
-- **Problem:** `client_id` is defined with `unique=True`, which already creates a unique b-tree index in the database. `Meta.indexes` specifies a second index `models.Index(fields=["client_id"], name="idx_eapc_client_id")`, creating duplicate indexing overhead.
-- **Remediation:** Remove `idx_eapc_client_id` from `Meta.indexes` in future schema maintenance.
-
-#### 6. Undefined CSS Class `.badge-purple`
-- **Files:**
-  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
-  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
-- **Problem:** `<span class="badge badge-purple">Admin Private</span>` is used, but `.badge-purple` is not declared in `static/css/theme.css`, causing the badge to render without styling.
-- **Remediation:** Use `.badge-info` / `.badge-slate` or define `.badge-purple` in `static/css/theme.css`.
-
-#### 7. Defense-in-Depth Form Foreign Key Validation
-- **File:** `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py` (Lines 58–64)
-- **Observation:** While `__init__` scopes `self.fields["connector"].queryset` to `self.tenant` (blocking cross-tenant values during standard form validation), adding `clean()` with `reject_foreign(self, self.cleaned_data, ["connector"])` provides defense-in-depth against tampered POST payloads.
-- **Remediation:** Add `reject_foreign` in `clean()` for parity with other eCommerce forms.
-
----
-
-
-## Pass 3: Frontend Reviewer (`frontend-reviewer`)
-
-### Executive Summary
-The templates for the eCommerce Integration & API sub-module (9.19) are well-architected, featuring clean Tailwick design system integration, complete CSRF token protection on all POST forms, robust None-safety fallbacks, and comprehensive empty-state illustrations across all entities.
-
-However, several frontend and template issues were detected across Design System alignment, filter/pagination retention, template tag string evaluation, and icon accessibility.
-
-### Critical Findings
-*None. No crashes, template syntax errors, or missing CSRF tokens detected.*
-
-### Important Findings
-
-#### 1. Undefined CSS Class `badge-purple` (Design System / `theme.css` Alignment)
-- **Files:**
-  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
-  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
-- **Problem:** `static/css/theme.css` only defines color-named classes for badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`. The class `badge-purple` is rogue/undefined. The badge renders without background and text styling.
-- **Remediation:** Replace `badge-purple` with an approved class, such as `badge-info` (the brand/indigo info color) or `badge-slate`.
-
-#### 2. Missing Filter Dropdown in Connector List UI
-- **File:** `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–93)
-- **Problem:** The view `ecommerce_connector_list` filters on `provider` (`request.GET.get("provider")`) and passes `provider_choices` and `provider_filter` in context. The template checks `provider_filter` in line 86, but the filter `<form>` lacks a `<select name="provider">` dropdown.
-- **Remediation:** Add a `<select name="provider">` dropdown to the filter form.
-
-#### 3. Missing Direction & Trigger Filter Dropdowns in Sync Job List UI
-- **File:** `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–101)
-- **Problem:** The view `integration_sync_job_list` handles `direction` and `trigger` GET parameters and passes `direction_choices` and `trigger_choices` in context, but the filter `<form>` omits both `<select name="direction">` and `<select name="trigger">` dropdowns.
-- **Remediation:** Add `<select name="direction">` and `<select name="trigger">` dropdowns to the filter bar in `integration_sync_job/list.html`.
-
-#### 4. Active Filters Dropped During Pagination Navigation
-- **Files:**
-  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 218–228) - Missing `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}`
-  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 221–231) - Missing `{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}`
-- **Problem:** Active query parameters (`provider`, `direction`, `trigger`) are omitted from pagination links and silently discarded on page change.
-- **Remediation:** Append active filter parameters to all previous and next pagination URLs.
-
-#### 5. String `.split` Logic Bug on Comma-Separated Permission Scopes
-- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Lines 112–117)
-- **Problem:** `credential.scopes.split` without arguments executes whitespace splitting rather than comma splitting, causing comma-separated scopes (`"read_catalog,read_orders"`) to render as a single un-tokenized badge.
-- **Remediation:** Add `@property def scopes_list(self): return [s.strip() for s in self.scopes.split(",") if s.strip()]` on `ApiCredential` and loop over `credential.scopes_list`.
-
-### Minor Findings
-
-#### 6. Icon-Only Action Buttons Lack `aria-label` Attributes
-- **Files:**
-  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 171–189)
-  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 174–192)
-  - `templates/ecommerce/integration_api/webhook_subscription/list.html` (Lines 159–177)
-  - `templates/ecommerce/integration_api/api_credential/list.html` (Lines 163–183)
-- **Problem:** Action buttons containing only Lucide icons have `title="..."` attributes but lack explicit `aria-label="..."` for screen reader accessibility.
-- **Remediation:** Add matching `aria-label` attributes to icon-only action links and buttons.
-
-#### 7. Clipboard Copy Interaction Fallback
-- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 71)
-- **Problem:** The raw secret key copy button executes inline JS `onclick="navigator.clipboard.writeText(...)"` without fallback in non-secure or permissions-restricted contexts.
-- **Remediation:** Add a safe fallback check or Promise error handler for clipboard API calls.
-
----
-
-
-## Pass 4: Performance Reviewer (`performance-reviewer`)
-
-### Executive Summary
-Sub-module 9.19 (*Integration & API Ecosystem*) exhibits a solid foundation for high-performance ORM usage, tenant query scoping, and database-level aggregation:
-1. `integration_sync_job_list` correctly includes `.select_related("connector")`, preventing 15 N+1 queries per page.
-2. `integration_api_hub` correctly includes `.select_related("connector")[:5]` on recent jobs.
-3. `ecommerce_connector_detail` correctly bounds `recent_jobs` at the SQL level via `[:10]`.
-4. High-level KPIs across the Integration Hub and all 4 list views are computed via single SQL `.aggregate(Count("id"), ...)` calls rather than loading model instances into memory.
-5. Atomic field updates use Django `F()` expressions and explicit `update_fields` to prevent race conditions and redundant column rewrites.
-
-Opportunities exist around `select_related` on detail views, composite indexes, redundant indexes, and paginator count reuse.
-
-### Critical Findings
-*None identified.*
-
-### Important Findings
-
-#### 1. Missing `select_related` on Foreign Keys in `integration_sync_job_detail`
-- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 98–106)
-- **Problem:** `sync_job = ecommerce_object(request, IntegrationSyncJob, pk)` does not pass `select_related`. In `integration_sync_job/detail.html`, `sync_job.connector.name`, `sync_job.triggered_by.get_full_name`, and `sync_job.parent_job.number` are accessed, triggering up to 3 deferred database queries.
-- **Remediation:** Pass `select_related=("connector", "triggered_by", "parent_job")` to `ecommerce_object`.
-
-#### 2. Missing `select_related` on `created_by` in `api_credential_detail`
-- **File:** `apps/ecommerce/views/IntegrationApi/ApiCredentials.py` (Lines 74–82)
-- **Problem:** The detail template displays `credential.created_by.get_full_name`. Calling `ecommerce_object` without `select_related` causes an extra deferred query to `auth_user`.
-- **Remediation:** Update view to pass `select_related=("created_by",)`.
-
-#### 3. Missing Composite Index on `(tenant, -created_at)` for `IntegrationSyncJob`
-- **File:** `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py` (Lines 146–160)
-- **Problem:** Queries in `integration_sync_job_list`, `integration_api_hub` (`recent_jobs`), and `ecommerce_connector_detail` (`recent_jobs`) filter by `tenant` and order by `-created_at`. Without `(tenant, -created_at)`, PostgreSQL and MySQL cannot perform a reverse index scan and must perform filesort over large sync job tables.
-- **Remediation:** Add `models.Index(fields=["tenant", "-created_at"], name="idx_esyj_ten_created")` to `Meta.indexes`.
-
-#### 4. Redundant B-Tree Index on `ApiCredential.client_id`
-- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py` (Lines 40–43, 117–121)
-- **Problem:** Line 41 defines `client_id` with `unique=True`, which already creates a unique B-tree index. Line 120 explicitly adds `models.Index(fields=["client_id"], name="idx_eapc_client_id")` in `Meta.indexes`, creating duplicate index overhead.
-- **Remediation:** Remove `models.Index(fields=["client_id"], name="idx_eapc_client_id")` from `Meta.indexes`.
-
-### Minor Findings
-
-#### 5. Unbounded Query Evaluation on `child_retries` in `integration_sync_job_detail`
-- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 100)
-- **Problem:** `child_retries = sync_job.child_retries.all().order_by("-created_at")` does not apply a slice.
-- **Remediation:** Limit retry history to `[:20]`.
-
-#### 6. Redundant `COUNT(*)` Query Execution Across All List Views
-- **Files:** `apps/ecommerce/views/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
-- **Problem:** Each list view runs `stats = qs.aggregate(total_count=Count("id"), ...)`, then `Paginator` executes an additional `SELECT COUNT(*)` query.
-- **Remediation:** Pre-seed `paginator._count = total_count`.
-
-#### 7. Over-Fetching on `connectors` Dropdown Queryset
-- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 62)
-- **Problem:** Filter dropdown loads full instances with large text fields and secret credentials.
-- **Remediation:** Use `.only("id", "name")`.
-
----
-
-
-## Pass 5: QA Smoke Tester (`qa-smoke-tester` — Runtime Report Mode)
-
-### Executive Summary
-A comprehensive runtime verification suite was executed across all 17 endpoints and 25 view actions of Sub-module 9.19 (*Integration & API Ecosystem*). The execution verified GET rendering, POST state mutations, filter handling, junk parameter resilience, pagination boundaries, comment leak absence, and cross-tenant IDOR isolation using real seeded data.
-
-- **Zero HTTP 500 Server Crashes:** All 17 endpoints rendered cleanly without unhandled exceptions.
-- **Strict Multi-Tenant Isolation:** Cross-tenant IDOR access (GET detail/edit and POST delete/actions) strictly returned **404 Not Found** across all 20 tested vectors (both `admin_globex` -> Acme and `admin_acme` -> Globex).
-- **Template Hygiene:** Zero comment leaks (`{#` or `{% comment`) and zero unescaped template tags across all 13 rendered HTML templates.
-- **CSRF Protection:** All mutating HTML forms and inline action buttons contain valid CSRF middleware tokens.
-
-### Critical Findings
-*None. All endpoints are fully operational, tenant-isolated, CSRF-protected, and crash-free.*
-
-### Important Findings
-
-#### 1. AuditLog Action Length Exceeds Column Width and Emits Error Log
-- **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
-- **Problem:** When executing `POST /ecommerce/integration-api/connectors/<pk>/test-connection/`, `write_audit_log` is called with `action="test_connection"`. The underlying `AuditLog.action` column is `CharField(max_length=10)`. Runtime emits an `ERROR` log and clamps the verb to `'test_conne'`.
-- **Remediation:** Pass `action="test"` or `action="ping"` (under 10 chars) and record `"action_type": "test_connection"` inside the `changes` dictionary.
-
-#### 2. Comma-Separated Scope String Fails to Split into Individual Badges
-- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Line 112)
-- **Problem:** `credential.scopes.split` invokes `str.split(sep=None)` with whitespace delimiter, yielding a 1-item list: `['read_catalog,read_orders,write_orders']`, rendering 1 monolithic badge instead of separate badges.
-- **Remediation:** Add helper property `@property def scopes_list(self): return [s.strip() for s in (self.scopes or "").split(",") if s.strip()]` on `ApiCredential` and iterate over `credential.scopes_list` in template.
-
-#### 3. Missing Filter Controls and Active Filter Parameter Loss During Pagination
+#### [ ] I3: Connector List View: Missing Provider Dropdown and Pagination Parameter Loss
 - **Files:**
   - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–228)
+- **Severity:** Important (Filter Feature Omission & State Loss)
+- **Problem:** The view supports filtering by `provider`, but the template filter `<form>` lacks `<select name="provider">`. Pagination links drop active `provider_filter`.
+- **Remediation:** Add `<select name="provider">` in the filter bar and append `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}` to pagination controls.
+- **Status:** `[ ] open`
+
+#### [ ] I4: Sync Job List View: Missing Direction and Trigger Dropdowns and Pagination Parameter Loss
+- **Files:**
   - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–231)
-- **Problem:**
-  1. `ecommerce_connector_list` parses `provider` from GET and passes `provider_choices` / `provider_filter`, but the filter `<form>` lacks `<select name="provider">`. In pagination links, `&provider=...` is omitted.
-  2. `integration_sync_job_list` parses `direction` and `trigger` from GET and passes `direction_choices` / `trigger_choices`, but the filter `<form>` lacks dropdowns for either. Pagination links drop `&direction=...` and `&trigger=...`.
-- **Remediation:** Add `<select name="provider">` to `ecommerce_connector/list.html`, add `<select name="direction">` and `<select name="trigger">` to `integration_sync_job/list.html`, and append parameters to pagination controls.
+- **Severity:** Important (Filter Feature Omission & State Loss)
+- **Problem:** The view filters by `direction` and `trigger_type`, but the template filter `<form>` lacks dropdowns for either. Pagination links drop active `direction_filter` and `trigger_filter`.
+- **Remediation:** Add `<select name="direction">` and `<select name="trigger">` dropdowns to the filter bar and preserve them in pagination links.
+- **Status:** `[ ] open`
+
+#### [ ] I5: Server-Side Request Forgery (SSRF) Surface in Webhook and Connector URLs
+- **Files:**
+  - `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 67–73)
+  - `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py`
+- **Severity:** Important (CWE-918 / SSRF Vector)
+- **Problem:** `clean_target_url` only checks `http://` / `https://` without restricting loopback (`127.0.0.1`, `::1`), metadata (`169.254.169.254`), or private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`). `EcommerceConnectorForm` lacks `clean_base_url`.
+- **Remediation:** Implement defensive URL validation using `urllib.parse.urlparse` and `ipaddress.ip_address` to block localhost, metadata, and private IP ranges in both forms.
+- **Status:** `[ ] open`
+
+#### [ ] I6: Revocation Lifecycle Bypass and Tier Escalation in `ApiCredentialForm`
+- **File:** `apps/ecommerce/forms/IntegrationApi/ApiCredentials.py` (Lines 8–31)
+- **Severity:** Important (CWE-642 / State Manipulation)
+- **Problem:** `status` can be changed from `"revoked"` back to `"active"` on edit, bypassing revocation. `tier` can be edited on existing instances, elevating storefront public keys to admin server keys.
+- **Remediation:** In `clean_status`, forbid un-revoking a `"revoked"` credential. On edit (`if self.instance and self.instance.pk`), make `tier` disabled/read-only.
+- **Status:** `[ ] open`
+
+#### [ ] I7: Inadvertent Overwriting/Regeneration of Webhook Secret Keys
+- **File:** `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 86–90)
+- **Severity:** Important (Business Logic Invalidation)
+- **Problem:** `clean_secret_key` generates a new random key whenever the field is empty, wiping out the existing HMAC secret on edit.
+- **Remediation:** Preserve `self.instance.secret_key` when left blank on edit:
+  ```python
+  def clean_secret_key(self):
+      val = self.cleaned_data.get("secret_key", "").strip()
+      if not val:
+          if self.instance and self.instance.pk and self.instance.secret_key:
+              return self.instance.secret_key
+          val = f"whsec_{secrets.token_hex(24)}"
+      return val
+  ```
+- **Status:** `[ ] open`
+
+#### [ ] I8: Missing `select_related` on Foreign Keys in Detail Views
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 98–106)
+  - `apps/ecommerce/views/IntegrationApi/ApiCredentials.py` (Lines 74–82)
+- **Severity:** Important (N+1 / Deferred Query Overhead)
+- **Problem:** `integration_sync_job_detail` triggers deferred queries for `connector`, `triggered_by`, and `parent_job`. `api_credential_detail` triggers a deferred query for `created_by`.
+- **Remediation:** Pass `select_related=("connector", "triggered_by", "parent_job")` and `select_related=("created_by",)` to `ecommerce_object`.
+- **Status:** `[ ] open`
+
+#### [ ] I9: Missing Composite Index on `(tenant, -created_at)` for `IntegrationSyncJob`
+- **File:** `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py` (Lines 146–160)
+- **Severity:** Important (Database Query Performance)
+- **Problem:** Sync job lists and hub queries filter by `tenant` and order by `-created_at`. Without `(tenant, -created_at)`, PostgreSQL and MySQL cannot perform a reverse index scan and must filesort large job tables.
+- **Remediation:** Add `models.Index(fields=["tenant", "-created_at"], name="idx_esyj_ten_created")` to `IntegrationSyncJob.Meta.indexes`.
+- **Status:** `[ ] open`
+
+---
 
 ### Minor Findings
 
-#### 4. Undefined Theme Badge Class `.badge-purple`
+#### [ ] M1: Undefined Theme Badge Class `.badge-purple`
 - **Files:**
   - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
   - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
-- **Problem:** `<span class="badge badge-purple">Admin Private</span>` renders without theme color styling because `.badge-purple` is not declared in `static/css/theme.css`.
-- **Remediation:** Change to `badge-info` (primary indigo accent) or `badge-slate`.
+- **Problem:** `.badge-purple` is not declared in `static/css/theme.css`.
+- **Remediation:** Replace with `.badge-info` (primary indigo accent) or `.badge-slate`.
+- **Status:** `[ ] open`
+
+#### [ ] M2: Redundant B-Tree Index on `ApiCredential.client_id`
+- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py` (Lines 117–121)
+- **Problem:** `client_id` has `unique=True`. `models.Index(fields=["client_id"], name="idx_eapc_client_id")` creates a duplicate index.
+- **Remediation:** Remove `idx_eapc_client_id` from `Meta.indexes`.
+- **Status:** `[ ] open`
+
+#### [ ] M3: Defense-in-Depth Form Foreign Key Validation with `reject_foreign`
+- **File:** `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py` (Lines 58–64)
+- **Problem:** `IntegrationSyncJobForm` lacks `reject_foreign` in `clean()` for parity with standard NavERP form hardening.
+- **Remediation:** Add `reject_foreign(self, self.cleaned_data, ["connector"])` in `clean()`.
+- **Status:** `[ ] open`
+
+#### [ ] M4: Unbounded Query Evaluation on `child_retries` in `integration_sync_job_detail`
+- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 100)
+- **Problem:** `sync_job.child_retries.all().order_by("-created_at")` is un-sliced.
+- **Remediation:** Limit retry history to `[:20]`.
+- **Status:** `[ ] open`
+
+#### [ ] M5: Over-Fetching on `connectors` Dropdown Queryset
+- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 62)
+- **Problem:** Filter dropdown loads full instances with large text fields.
+- **Remediation:** Use `.only("id", "name")`.
+- **Status:** `[ ] open`
+
+#### [ ] M6: Redundant `COUNT(*)` Query Execution Across All List Views
+- **Files:** `apps/ecommerce/views/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+- **Problem:** `Paginator` recalculates `count` dynamically even though `.aggregate(total_count=...)` already ran.
+- **Remediation:** Pre-seed `paginator._count = total_count`.
+- **Status:** `[ ] open`
+
+#### [ ] M7: Missing Upper Bound on Timeout and Retries (DoS Hardening)
+- **Files:**
+  - `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py`
+  - `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py`
+- **Problem:** `timeout_seconds` and `max_retries` allow arbitrarily high integers.
+- **Remediation:** Enforce reasonable max limits (timeout max 300s, retries max 20).
+- **Status:** `[ ] open`
+
+#### [ ] M8: Unrestricted Custom Request Headers & CRLF Injection Risk in `WebhookSubscription`
+- **File:** `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py` (Lines 75–84)
+- **Problem:** `clean_custom_headers` does not check for newline characters (`\r`, `\n`) or restrict hop-by-hop headers.
+- **Remediation:** Validate that header keys and values are strings without newlines and block hop-by-hop headers.
+- **Status:** `[ ] open`
+
+#### [ ] M9: Icon-Only Action Buttons Screen Reader Accessibility
+- **Files:**
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html`
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html`
+  - `templates/ecommerce/integration_api/webhook_subscription/list.html`
+  - `templates/ecommerce/integration_api/api_credential/list.html`
+- **Problem:** Icon-only action links have `title` but lack `aria-label`.
+- **Remediation:** Add matching `aria-label` attributes to icon-only action links.
+- **Status:** `[ ] open`
+
+#### [~] M10: Third-Party Secret Storage Encryption at Rest (Deferred)
+- **Reason:** Architectural hardening recommendation for production deployment; tracked in gaps file (`gaps-ecommerce-9.19.md`).
+- **Status:** `[~] skipped — deferred to production security hardening / envelope encryption pass`
+
+#### [~] M11: Missing `issued_to_party` FK on `ApiCredential` (Deferred)
+- **Reason:** Module 0 spine integration enhancement; tracked in gaps file (`gaps-ecommerce-9.19.md`).
+- **Status:** `[~] skipped — deferred to core party B2B wholesale expansion`
 
 ---
+
+## Review Passes Summary Log
+
+- **Pass 1 (Code Reviewer):** Analyzed models, forms, views, URLs, admin, navigation, seeder. Reported AuditLog length, scope splitting, filter omissions, SSRF, badge class.
+- **Pass 2 (Explorer Reviewer):** Verified architecture, packaging, live link routes, multi-tenancy contracts. Identified redundant index on client_id, confirmed scope split and filter omissions.
+- **Pass 3 (Frontend Reviewer):** Audited 13 templates for design-system compliance, comment leaks, None-safety, CSRF coverage. Flagged undefined `.badge-purple`, missing filter dropdowns, and pagination filter loss.
+- **Pass 4 (Performance Reviewer):** Analyzed ORM queries, N+1 patterns, indexes, and database aggregation. Found missing `select_related` on detail views, missing composite index on sync jobs, and duplicate index on client_id.
+- **Pass 5 (QA Smoke Tester):** Swept all 17 endpoints and 25 view actions runtime via test client. Zero 500s, 100% IDOR isolation (404), confirmed AuditLog runtime error log and template scope split bug.
+- **Pass 6 (Security Reviewer):** Audited multi-tenancy, auth decorators, CSRF, secrets, SSRF, mass assignment. Found critical DOM secret leak (`render_value=True`), missing `@tenant_admin_required`, SSRF vectors, and credential lifecycle bypass.
