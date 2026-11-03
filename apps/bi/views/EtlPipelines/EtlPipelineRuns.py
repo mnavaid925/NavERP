@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 
 from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
@@ -58,9 +58,14 @@ def etl_pipeline_run_list(request):
         )
 
     base_scope = bi_scope(EtlPipelineRun.objects.all(), request)
-    total_count = base_scope.count()
-    success_count = base_scope.filter(status="completed").count()
-    failed_count = base_scope.filter(status__in=["failed", "timed_out"]).count()
+    counts = base_scope.aggregate(
+        total_count=Count("id"),
+        success_count=Count("id", filter=Q(status="completed")),
+        failed_count=Count("id", filter=Q(status__in=["failed", "timed_out"])),
+    )
+    total_count = counts["total_count"]
+    success_count = counts["success_count"]
+    failed_count = counts["failed_count"]
 
     paginator = Paginator(
         queryset.select_related("pipeline", "version"),
