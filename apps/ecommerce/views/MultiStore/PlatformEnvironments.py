@@ -89,8 +89,8 @@ def platform_environment_create(request):
             environment.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 environment,
+                "CREATE",
                 f"Created platform environment '{environment.name}' ({environment.number}) for {environment.get_env_type_display()}"
             )
             messages.success(request, f"Environment '{environment.name}' created successfully.")
@@ -115,8 +115,8 @@ def platform_environment_edit(request, pk):
             environment = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 environment,
+                "UPDATE",
                 f"Updated platform environment '{environment.name}' ({environment.number})"
             )
             messages.success(request, f"Environment '{environment.name}' updated successfully.")
@@ -141,9 +141,10 @@ def platform_environment_delete(request, pk):
     environment.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         None,
-        f"Deleted platform environment '{name}' ({num})"
+        "DELETE",
+        f"Deleted platform environment '{name}' ({num})",
+        tenant=request.tenant,
     )
     messages.success(request, f"Environment '{name}' was deleted.")
     return redirect("ecommerce:platform_environment_list")
