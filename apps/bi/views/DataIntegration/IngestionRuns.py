@@ -83,14 +83,8 @@ def ingestion_run_detail(request, pk):
 def ingestion_run_delete(request, pk):
     run = bi_object(request, IngestionRun, pk)
     number = run.number
+    write_audit_log(request.user, run, "delete", tenant=request.tenant)
     run.delete()
-    write_audit_log(
-        request,
-        action="delete",
-        model_name="IngestionRun",
-        object_id=pk,
-        description=f"Deleted Ingestion Run {number}",
-    )
     messages.success(request, f"Ingestion Run {number} deleted successfully.")
     return redirect("bi:ingestion_run_list")
 
@@ -122,12 +116,6 @@ def ingestion_run_retry(request, pk):
     pipeline.last_run_at = now
     pipeline.save(update_fields=["last_run_at", "updated_at"])
 
-    write_audit_log(
-        request,
-        action="retry_run",
-        model_name="IngestionRun",
-        object_id=new_run.pk,
-        description=f"Retried run {original_run.number} -> generated {new_run.number}",
-    )
+    write_audit_log(request.user, new_run, "retry", changes={"original_run": original_run.number}, tenant=request.tenant)
     messages.success(request, f"Retry executed successfully. New run {new_run.number} completed.")
     return redirect("bi:ingestion_run_detail", pk=new_run.pk)
