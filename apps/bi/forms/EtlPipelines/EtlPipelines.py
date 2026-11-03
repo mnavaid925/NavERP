@@ -92,6 +92,10 @@ class EtlPipelineForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["source_ingestion_pipeline", "alert_rule"])
+        trigger_type = cleaned.get("trigger_type")
+        cron_expr = cleaned.get("cron_expression", "").strip() if cleaned.get("cron_expression") else ""
+        if trigger_type == "scheduled_cron" and not cron_expr:
+            self.add_error("cron_expression", "Cron expression is required when trigger type is scheduled cron.")
         return cleaned
 
     def save(self, commit=True):
