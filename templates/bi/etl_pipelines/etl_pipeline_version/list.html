@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Pipeline Versions &amp; Promotion — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <span>Version Control &amp; CI/CD</span>
+        </div>
+        <h1 class="page-title">Pipeline Versions &amp; Promotion</h1>
+        <p class="text-muted text-sm">Declarative DAG version control, multi-environment deployments (Dev/Staging/Prod), and rollbacks</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Pipelines</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_version_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Version Snapshot</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:etl_pipeline_version_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search version, pipeline name, changelog..." class="form-input" aria-label="Search pipeline versions">
+            </div>
+            <div class="form-group mb-0">
+                <select name="pipeline_id" class="form-select" aria-label="Filter by pipeline">
+                    <option value="">All Pipelines</option>
+                    {% for p in pipelines %}
+                    <option value="{{ p.pk }}" {% if pipeline_filter == p.pk|stringformat:"d" or request.GET.pipeline_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }} ({{ p.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="environment" class="form-select" aria-label="Filter by environment">
+                    <option value="">All Environments</option>
+                    {% for val, label in environment_choices %}
+                    <option value="{{ val }}" {% if environment_filter == val or request.GET.environment == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" title="Filter versions">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or environment_filter or status_filter or pipeline_filter %}
+                <a href="{% url 'bi:etl_pipeline_version_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline</th>
+                    <th>Version</th>
+                    <th>Target Environment</th>
+                    <th>Status</th>
+                    <th>Promoted By</th>
+                    <th>Promoted At</th>
+                    <th>Changelog</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in versions %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_detail' ver.pipeline.pk %}" class="hover:text-blue-600">{{ ver.pipeline.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ ver.pipeline.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-sm font-bold text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_version_detail' ver.pk %}" class="hover:text-blue-600">{{ ver.version_number }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ ver.number }}</div>
+                    </td>
+                    <td>
+                        {% if ver.environment == 'production' %}
+                            <span class="badge badge-green font-semibold">{{ ver.get_environment_display }}</span>
+                        {% elif ver.environment == 'staging' %}
+                            <span class="badge badge-amber font-semibold">{{ ver.get_environment_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate font-semibold">{{ ver.get_environment_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.status == 'published' %}
+                            <span class="badge badge-green">{{ ver.get_status_display }}</span>
+                        {% elif ver.status == 'rolled_back' %}
+                            <span class="badge badge-red">{{ ver.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ ver.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ ver.promoted_by.get_full_name|default:ver.promoted_by.username|default:"System" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ ver.promoted_at|date:"M d, Y H:i"|default:"Not Promoted" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600 truncate max-w-xs block">{{ ver.changelog|default:"Initial version release" }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:etl_pipeline_version_detail' ver.pk %}" class="btn btn-icon btn-outline" title="View version" aria-label="View version">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:etl_pipeline_version_edit' ver.pk %}" class="btn btn-icon btn-outline" title="Edit version" aria-label="Edit version">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:etl_pipeline_version_delete' ver.pk %}" class="inline" onsubmit="return confirm('Delete Version {{ ver.version_number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete version" aria-label="Delete version">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-commit" class="empty-icon text-muted mx-auto"></i>
+                            <h3 class="empty-title">No pipeline versions found</h3>
+                            <p class="empty-description">Create version snapshots to safely promote transformation DAGs across Dev, Staging, and Production.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:etl_pipeline_version_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Version Snapshot</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} versions
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if environment_filter %}&environment={{ environment_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Previous page" aria-label="Previous page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="text-sm px-2 text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if environment_filter %}&environment={{ environment_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Next page" aria-label="Next page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
