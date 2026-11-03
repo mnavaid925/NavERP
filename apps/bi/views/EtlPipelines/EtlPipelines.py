@@ -110,7 +110,7 @@ def etl_pipeline_detail(request, pk):
     )
     steps = pipeline.steps.all().order_by("sequence")
     versions = pipeline.versions.all().select_related("environment_instance", "promoted_by").order_by("-created_at")[:10]
-    recent_runs = pipeline.runs.all().order_by("-started_at")[:10]
+    recent_runs = pipeline.runs.all().defer("execution_log", "step_progress").order_by("-started_at")[:10]
 
     context = {
         "pipeline": pipeline,
