@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}ETL &amp; Data Pipelines — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <span>ETL &amp; Data Pipelines</span>
+        </div>
+        <h1 class="page-title">ETL &amp; Data Pipelines</h1>
+        <p class="text-muted text-sm">Visual analytical DAG pipelines, multi-step transformations, and warehouse loaders</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:transformation_step_list' %}" class="btn btn-outline">
+            <i data-lucide="layers"></i>
+            <span>Transform Library</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_run_list' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>Execution Runs</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New ETL Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Pipelines</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="git-branch"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Active Pipelines</div>
+                <div class="text-2xl font-bold mt-1 text-green-600">{{ active_count }}</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="check-circle-2"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Active Runs</div>
+                <div class="text-2xl font-bold mt-1 text-purple-600">{{ running_count }}</div>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="play-circle"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:etl_pipeline_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search pipeline, source staging, target table..." class="form-input" aria-label="Search pipelines">
+            </div>
+            <div class="form-group mb-0">
+                <select name="target_layer" class="form-select" aria-label="Filter by target layer">
+                    <option value="">All Target Layers</option>
+                    {% for val, label in target_layer_choices %}
+                    <option value="{{ val }}" {% if target_layer_filter == val or request.GET.target_layer == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="trigger_type" class="form-select" aria-label="Filter by trigger type">
+                    <option value="">All Trigger Types</option>
+                    {% for val, label in trigger_type_choices %}
+                    <option value="{{ val }}" {% if trigger_filter == val or request.GET.trigger_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" title="Filter pipelines">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or status_filter or trigger_filter or target_layer_filter %}
+                <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline</th>
+                    <th>Source Staging</th>
+                    <th>Target Warehouse Table</th>
+                    <th>Layer</th>
+                    <th>Trigger &amp; Cadence</th>
+                    <th>Status</th>
+                    <th>Last Run</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in pipelines %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_detail' p.pk %}" class="hover:text-blue-600">{{ p.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ p.number }}</div>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                            {% if p.source_ingestion_pipeline %}
+                                {{ p.source_ingestion_pipeline.target_staging_table }}
+                            {% elif p.source_staging_table %}
+                                {{ p.source_staging_table }}
+                            {% else %}
+                                <span class="text-muted">Not Bound</span>
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-semibold">{{ p.target_table }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs">{{ p.get_target_layer_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-700">{{ p.get_trigger_type_display }}</div>
+                        {% if p.cron_expression %}
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ p.cron_expression }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.status == 'active' %}
+                            <span class="badge badge-green">{{ p.get_status_display }}</span>
+                        {% elif p.status == 'draft' %}
+                            <span class="badge badge-amber">{{ p.get_status_display }}</span>
+                        {% elif p.status == 'paused' %}
+                            <span class="badge badge-muted">{{ p.get_status_display }}</span>
+                        {% elif p.status == 'error' %}
+                            <span class="badge badge-red">{{ p.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ p.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if p.last_run_at %}
+                            <span class="text-xs text-slate-600">{{ p.last_run_at|date:"M d, Y H:i" }}</span>
+                        {% else %}
+                            <span class="text-xs text-muted">Never Run</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:etl_pipeline_canvas' p.pk %}" class="btn btn-icon btn-outline text-purple-600 hover:text-purple-700" title="Visual Pipeline Builder" aria-label="Visual Pipeline Builder">
+                                <i data-lucide="git-merge"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:etl_pipeline_trigger' p.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-green-600 hover:text-green-700" title="Trigger Run" aria-label="Trigger Run">
+                                    <i data-lucide="play"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:etl_pipeline_detail' p.pk %}" class="btn btn-icon btn-outline" title="View details" aria-label="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:etl_pipeline_edit' p.pk %}" class="btn btn-icon btn-outline" title="Edit pipeline" aria-label="Edit pipeline">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:etl_pipeline_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete ETL Pipeline {{ p.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete pipeline" aria-label="Delete pipeline">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="git-branch" class="empty-icon text-muted mx-auto"></i>
+                            <h3 class="empty-title">No ETL pipelines found</h3>
+                            <p class="empty-description">Create an ETL pipeline to transform staged data and load warehouse fact and dimension tables.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:etl_pipeline_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Pipeline</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} pipelines
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if trigger_filter %}&trigger_type={{ trigger_filter }}{% endif %}{% if target_layer_filter %}&target_layer={{ target_layer_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Previous page" aria-label="Previous page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="text-sm px-2 text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if trigger_filter %}&trigger_type={{ trigger_filter }}{% endif %}{% if target_layer_filter %}&target_layer={{ target_layer_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Next page" aria-label="Next page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
