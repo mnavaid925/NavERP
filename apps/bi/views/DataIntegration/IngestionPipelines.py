@@ -40,8 +40,8 @@ def ingestion_pipeline_list(request):
         queryset = queryset.filter(ingestion_mode=ingestion_mode)
 
     connector_id = request.GET.get("connector_id", "").strip()
-    if connector_id:
-        queryset = queryset.filter(connector_id=connector_id)
+    if connector_id and connector_id.isdigit():
+        queryset = queryset.filter(connector_id=int(connector_id))
 
     paginator = Paginator(queryset.select_related("connector", "rate_limit_policy", "mapping_template"), 20)
     page_number = request.GET.get("page")
