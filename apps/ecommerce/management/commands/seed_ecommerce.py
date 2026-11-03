@@ -86,6 +86,10 @@ from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceCo
 from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
 from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
 from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
+from apps.ecommerce.models.MultiStore.StorefrontInstances import StorefrontInstance
+from apps.ecommerce.models.MultiStore.StorefrontCatalogAssignments import StorefrontCatalogAssignment
+from apps.ecommerce.models.MultiStore.PlatformEnvironments import PlatformEnvironment
+from apps.ecommerce.models.MultiStore.DeploymentPipelines import DeploymentPipeline
 from apps.scm.models.InventoryManagement.Items import Item
 from apps.scm.models.InventoryManagement.Locations import Location
 
@@ -4380,6 +4384,172 @@ class Command(BaseCommand):
                 "last_used_at": timezone.now() - timedelta(minutes=10),
                 "created_by": admin_user,
                 "description": "Secure server-to-server daemon key for back-office integration worker.",
+            },
+        )
+
+        # ==========================================
+        # 9.20 Multi-Store & Platform Operations
+        # ==========================================
+        default_curr = Currency.objects.filter(tenant=tenant).first()
+        if not default_curr:
+            default_curr = Currency.objects.filter(code="USD").first()
+
+        root_cat = StoreCategory.objects.filter(tenant=tenant).first()
+        fc = FulfillmentCenter.objects.filter(tenant=tenant).first()
+
+        store_retail, _ = StorefrontInstance.objects.get_or_create(
+            tenant=tenant,
+            code=f"{tenant.subdomain}-retail",
+            defaults={
+                "name": f"{tenant.name} Flagship Retail",
+                "store_type": "retail_b2c",
+                "brand_name": f"{tenant.name} Direct",
+                "primary_domain": f"shop.{tenant.subdomain}.example.com",
+                "custom_domains": f"us.{tenant.subdomain}.example.com, eu.{tenant.subdomain}.example.com",
+                "default_currency": default_curr,
+                "supported_currencies": "USD,EUR,GBP",
+                "default_locale": "en-US",
+                "supported_locales": "en-US,es-ES,de-DE,fr-FR",
+                "root_category": root_cat,
+                "default_fulfillment_center": fc,
+                "theme_identifier": "theme-slate-modern",
+                "status": "active",
+                "is_default": True,
+                "checkout_mode": "standard_multistep",
+                "ssl_certificate_status": "active_provisioned",
+                "description": f"Primary consumer eCommerce storefront for {tenant.name}.",
+            },
+        )
+
+        store_b2b, _ = StorefrontInstance.objects.get_or_create(
+            tenant=tenant,
+            code=f"{tenant.subdomain}-wholesale",
+            defaults={
+                "name": f"{tenant.name} B2B Wholesale Portal",
+                "store_type": "wholesale_b2b",
+                "brand_name": f"{tenant.name} Commercial",
+                "primary_domain": f"b2b.{tenant.subdomain}.example.com",
+                "custom_domains": f"wholesale.{tenant.subdomain}.example.com",
+                "default_currency": default_curr,
+                "supported_currencies": "USD,EUR",
+                "default_locale": "en-US",
+                "supported_locales": "en-US",
+                "root_category": root_cat,
+                "default_fulfillment_center": fc,
+                "theme_identifier": "theme-corporate-slate",
+                "status": "active",
+                "is_default": False,
+                "checkout_mode": "one_page_express",
+                "ssl_certificate_status": "active_provisioned",
+                "description": f"Wholesale & Corporate ordering portal with tiered net terms.",
+            },
+        )
+
+        # Storefront Catalog Assignments
+        first_product = CatalogProduct.objects.filter(tenant=tenant).first()
+        if first_product:
+            StorefrontCatalogAssignment.objects.get_or_create(
+                tenant=tenant,
+                storefront=store_retail,
+                product=first_product,
+                defaults={
+                    "is_visible": True,
+                    "is_featured": True,
+                    "custom_title": f"{first_product.name} (Online Exclusive)",
+                    "storefront_badge": "Best Seller",
+                    "sort_order": 1,
+                    "publish_status": "published",
+                },
+            )
+
+        second_product = CatalogProduct.objects.filter(tenant=tenant).order_by("-id").first()
+        if second_product and second_product.pk != getattr(first_product, "pk", None):
+            StorefrontCatalogAssignment.objects.get_or_create(
+                tenant=tenant,
+                storefront=store_b2b,
+                product=second_product,
+                defaults={
+                    "is_visible": True,
+                    "is_featured": False,
+                    "custom_price": Decimal("249.99"),
+                    "custom_currency": default_curr,
+                    "storefront_badge": "Contract Special",
+                    "sort_order": 5,
+                    "publish_status": "published",
+                },
+            )
+
+        # Platform Environments
+        env_prod, _ = PlatformEnvironment.objects.get_or_create(
+            tenant=tenant,
+            name=f"{tenant.name} Production Primary",
+            defaults={
+                "env_type": "production",
+                "storefront": store_retail,
+                "cluster_region": "us-east-1",
+                "base_url": f"https://shop.{tenant.subdomain}.example.com",
+                "current_active_slot": "blue",
+                "is_sandbox_locked": False,
+                "status": "healthy",
+                "resource_tier": "standard",
+                "last_health_check_at": timezone.now() - timedelta(minutes=5),
+                "description": "High-availability multi-zone production cluster serving live traffic.",
+            },
+        )
+
+        env_stage, _ = PlatformEnvironment.objects.get_or_create(
+            tenant=tenant,
+            name=f"{tenant.name} Staging Sandbox",
+            defaults={
+                "env_type": "staging",
+                "storefront": store_retail,
+                "cluster_region": "us-west-2",
+                "base_url": f"https://staging.{tenant.subdomain}.example.com",
+                "current_active_slot": "green",
+                "is_sandbox_locked": True,
+                "status": "healthy",
+                "resource_tier": "starter",
+                "last_health_check_at": timezone.now() - timedelta(minutes=15),
+                "description": "Isolated staging environment for pre-release validation and QA.",
+            },
+        )
+
+        # Deployment Pipelines
+        DeploymentPipeline.objects.get_or_create(
+            tenant=tenant,
+            environment=env_prod,
+            release_version="v2.4.0",
+            defaults={
+                "git_branch": "main",
+                "git_commit_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+                "deployment_strategy": "blue_green",
+                "target_slot": "blue",
+                "status": "promoted_active",
+                "preview_endpoint_url": f"https://preview-v240.{tenant.subdomain}.example.com",
+                "traffic_percentage": 100,
+                "migration_executed": True,
+                "build_duration_seconds": 195,
+                "deployment_notes": "Production release v2.4.0 promoted with zero downtime.",
+                "promoted_by": admin_user,
+                "promoted_at": timezone.now() - timedelta(days=2),
+            },
+        )
+
+        DeploymentPipeline.objects.get_or_create(
+            tenant=tenant,
+            environment=env_stage,
+            release_version="v2.5.0-rc1",
+            defaults={
+                "git_branch": "release/v2.5",
+                "git_commit_sha": "f9e8d7c6b5a41029384756483920192837465019",
+                "deployment_strategy": "blue_green",
+                "target_slot": "green",
+                "status": "staging_preview",
+                "preview_endpoint_url": f"https://preview-v250.{tenant.subdomain}.example.com",
+                "traffic_percentage": 0,
+                "migration_executed": False,
+                "build_duration_seconds": 142,
+                "deployment_notes": "Staging candidate build ready for QA validation sweep.",
             },
         )
 
