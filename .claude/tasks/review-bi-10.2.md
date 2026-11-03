@@ -100,3 +100,36 @@
 - **Defect**: Delete button only exists on list views.
 - **Fix**: Add POST-confirm delete button in action bar on detail pages.
 
+---
+
+## Pass 3: `frontend-reviewer` Findings
+
+### C3. Lesson L10 Violation — Unsafe Nested Lookup in Template Filter Argument Causes 500 when `promoted_by` is `None`
+- **Locations**:
+  - `templates/bi/etl_pipelines/etl_pipeline/detail.html` (L250)
+  - `templates/bi/etl_pipelines/etl_pipeline_version/list.html` (L123)
+  - `templates/bi/etl_pipelines/etl_pipeline_version/detail.html` (L94)
+- **Defect**: `ver.promoted_by.get_full_name|default:ver.promoted_by.username|default:"System"`. Because `promoted_by` is nullable, evaluating the filter argument `ver.promoted_by.username` raises `VariableDoesNotExist` and causes a 500 Server Error when `promoted_by` is `None`.
+- **Fix**: Replace with `{% if ver.promoted_by %}{{ ver.promoted_by.get_full_name|default:ver.promoted_by.username }}{% else %}System{% endif %}`.
+
+### I9. Pagination Bar Flex Justification in List Templates
+- **Locations**: All 4 list templates under `templates/bi/etl_pipelines/`
+- **Defect**: `.pagination` uses `justify-content: flex-end`. Adding `justify-between` spreads the summary count and pagination controls evenly across the footer.
+- **Fix**: Change `<div class="pagination">` to `<div class="pagination justify-between">`.
+
+### I10. Delete Actions Rendered for Non-Tenant Admins
+- **Locations**: List templates for pipelines, steps, and versions
+- **Defect**: Delete views require `@tenant_admin_required`. Non-admins see the button and receive 403 on submit.
+- **Fix**: Wrap delete action form with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+
+### M7. Delete Icon Button Styling Consistency
+- **Locations**: List templates actions column
+- **Defect**: Delete button uses solid `btn-danger`.
+- **Fix**: Use `btn-outline text-danger` for consistent ghost action buttons.
+
+### M8. Breadcrumb Separator Class (`.sep`)
+- **Locations**: All 12 templates under `templates/bi/etl_pipelines/`
+- **Defect**: Breadcrumb separator uses `<span>/</span>` rather than `<span class="sep">/</span>`.
+- **Fix**: Add `class="sep"` to separators.
+
+
