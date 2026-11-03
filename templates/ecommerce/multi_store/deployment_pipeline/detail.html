@@ -28,6 +28,8 @@
             <span class="badge badge-green">Target: Green Slot</span>
             {% elif pipeline.target_slot == 'blue' %}
             <span class="badge badge-info">Target: Blue Slot</span>
+            {% else %}
+            <span class="badge badge-slate">Target: Primary Slot</span>
             {% endif %}
         </div>
         <p class="text-secondary text-sm font-mono mt-0.5">{{ pipeline.number }} &bull; Target: {{ pipeline.environment.name }} &bull; Branch: {{ pipeline.git_branch }}</p>
@@ -106,7 +108,13 @@
                     </div>
                     <div>
                         <span class="text-secondary block">Target Blue-Green Slot</span>
+                        {% if pipeline.target_slot == 'green' %}
+                        <span class="badge badge-green">{{ pipeline.get_target_slot_display }}</span>
+                        {% elif pipeline.target_slot == 'blue' %}
                         <span class="badge badge-info">{{ pipeline.get_target_slot_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ pipeline.get_target_slot_display }}</span>
+                        {% endif %}
                     </div>
                     <div>
                         <span class="text-secondary block">Live Routed Traffic</span>
