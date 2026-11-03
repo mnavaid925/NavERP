@@ -73,12 +73,14 @@ def ingestion_pipeline_detail(request, pk):
         select_related=("connector", "rate_limit_policy", "mapping_template", "cdc_config"),
     )
     cdc_config = getattr(pipeline, "cdc_config", None)
-    runs = pipeline.runs.all().order_by("-started_at")[:20]
+    runs_count = pipeline.runs.count()
+    runs = list(pipeline.runs.all().order_by("-started_at")[:20])
 
     context = {
         "pipeline": pipeline,
         "cdc_config": cdc_config,
         "runs": runs,
+        "runs_count": runs_count,
     }
     return render(request, "bi/data_integration/ingestion_pipeline/detail.html", context)
 
