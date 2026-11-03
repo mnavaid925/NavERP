@@ -113,7 +113,7 @@
                     POST /api/bi/ingest/{{ pipeline.webhook_token }}/
                 </div>
                 <div class="text-xs text-secondary mt-1">
-                    Send streaming records as JSON payload or event arrays. Secret: <span class="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{{ pipeline.webhook_secret|default:"None" }}</span>
+                    Send streaming records as JSON payload or event arrays. Secret: <span class="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{% if pipeline.webhook_secret %}••••••••••••••••{% else %}None{% endif %}</span>
                 </div>
             </div>
             {% endif %}
