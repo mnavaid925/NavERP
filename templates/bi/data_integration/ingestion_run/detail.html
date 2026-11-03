@@ -44,22 +44,34 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-    <div class="card p-4">
-        <div class="text-xs uppercase font-semibold text-muted">Duration</div>
-        <div class="text-2xl font-bold text-slate-800 mt-1">{{ run.duration_seconds }}<span class="text-sm font-normal text-muted">s</span></div>
+<div class="stat-grid mb-6">
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="timer"></i></div>
+        <div>
+            <div class="stat-label">Duration</div>
+            <div class="stat-value">{{ run.duration_seconds }}<span class="text-sm font-normal text-muted">s</span></div>
+        </div>
     </div>
-    <div class="card p-4">
-        <div class="text-xs uppercase font-semibold text-muted">Records Extracted</div>
-        <div class="text-2xl font-bold text-slate-800 mt-1">{{ run.records_extracted }}</div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="arrow-down-to-line"></i></div>
+        <div>
+            <div class="stat-label">Records Extracted</div>
+            <div class="stat-value">{{ run.records_extracted }}</div>
+        </div>
     </div>
-    <div class="card p-4">
-        <div class="text-xs uppercase font-semibold text-muted">Records Inserted</div>
-        <div class="text-2xl font-bold text-green-600 mt-1">{{ run.records_inserted }}</div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div>
+            <div class="stat-label">Records Inserted</div>
+            <div class="stat-value text-green-600">{{ run.records_inserted }}</div>
+        </div>
     </div>
-    <div class="card p-4">
-        <div class="text-xs uppercase font-semibold text-muted">Records Rejected</div>
-        <div class="text-2xl font-bold {% if run.records_rejected > 0 %}text-red-500{% else %}text-slate-800{% endif %} mt-1">{{ run.records_rejected }}</div>
+    <div class="stat-card">
+        <div class="stat-icon {% if run.records_rejected > 0 %}red{% else %}slate{% endif %}"><i data-lucide="alert-triangle"></i></div>
+        <div>
+            <div class="stat-label">Records Rejected</div>
+            <div class="stat-value {% if run.records_rejected > 0 %}text-red-500{% endif %}">{{ run.records_rejected }}</div>
+        </div>
     </div>
 </div>
 
