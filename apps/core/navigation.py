@@ -2894,6 +2894,20 @@ LIVE_LINKS = {
         "Ingestion Runs": "bi:ingestion_run_list",
     },
 
+    # 10.2 ETL/ELT & Data Pipelines
+    "10.2": {
+        "Visual Pipeline Builder": "bi:etl_pipeline_list",
+        "Transformation Library": "bi:transformation_step_list",
+        "Orchestration & Scheduling": "bi:etl_pipeline_list",
+        "Pipeline Monitoring & Logging": "bi:etl_pipeline_run_list",
+        "Version Control & CI/CD": "bi:etl_pipeline_version_list",
+        # Extra live leaves
+        "ETL Pipelines": "bi:etl_pipeline_list",
+        "Transformation Steps": "bi:transformation_step_list",
+        "Pipeline Versions": "bi:etl_pipeline_version_list",
+        "Execution Runs": "bi:etl_pipeline_run_list",
+    },
+
 
 
 
