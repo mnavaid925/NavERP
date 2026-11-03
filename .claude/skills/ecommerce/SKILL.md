@@ -1,11 +1,11 @@
 ---
 name: ecommerce
-description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management, 9.20 Multi-Store & Platform Operations: centralized multi-store channels, localized currencies and domains, catalog pricing overrides, staging/production environments, and blue-green CI/CD deployment pipelines). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.20), or invokes /ecommerce.
+description: Work on the eCommerce module (Module 9 — 9.1 Product Catalog, 9.2 Inventory & Stock, 9.3 Pricing & Promotion Engine, 9.4 Shopping Cart & Checkout, 9.5 Order Management System (OMS), 9.6 Customer Account & Profile, 9.7 Search & Product Discovery, 9.8 Personalization & Recommendation Engine, 9.9 Content Management System (CMS), 9.10 Marketing & Campaign Management, 9.11 Marketplace & Multi-Vendor, 9.12 Subscription & Recurring Commerce, 9.13 Reviews & User-Generated Content, 9.14 Customer Service & Support, 9.15 Analytics & Business Intelligence, 9.16 Mobile Commerce, 9.17 B2B & Wholesale Commerce, 9.18 Fraud & Risk Management, 9.19 Integration & API Ecosystem: external ERP synchronization, payment gateway connectors, logistics carrier tracking, outbound webhooks with HMAC signing, and headless storefront API credentials, 9.20 Multi-Store & Platform Operations: centralized multi-store channels, localized currencies and domains, catalog pricing overrides, staging/production environments, and blue-green CI/CD deployment pipelines). Use when the user asks to add/change/debug anything under apps/ecommerce or templates/ecommerce, extend the eCommerce seeder, touch eCommerce sidebar wiring (LIVE_LINKS 9.1 through 9.20), or invokes /ecommerce.
 ---
 
 # eCommerce Module (Module 9: 9.1 Catalog through 9.20 Multi-Store & Platform Operations)
 
-The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, a simulated PunchOut procurement gateway (cXML/OCI), and an enterprise Fraud & Risk Management engine (9.18) powering heuristic and velocity fraud rule evaluation, composite transaction risk assessment scoring with automated decisions and manual analyst review queues, chargeback and inquiry dispute case management with representment evidence tracking, and account security alert monitoring with automated policy responses. It integrates seamlessly with the NavERP core spine and physical supply chain:
+The eCommerce Management System handles online store merchandising, product catalog management, SKU variants, product relationships, multi-node fulfillment center routing, real-time stock allocations, available-to-promise (ATP) calculation, backorder/pre-order waitlists, multi-channel inventory synchronization feeds, dynamic rule-based pricing engines, coupon code promotions, lightning flash sales, competitive repricing intelligence, persistent and guest shopping carts, 1-click cart abandonment recovery, multi-step and one-page checkout conversion funnels, flexible shipping calculation matrices, payment gateway orchestration, an enterprise omnichannel Order Management System (OMS) with intelligent order fulfillment routing, carrier dispatch tracking, return merchandise authorization (RMA) workflows, an enterprise Customer Account & Profile subsystem with tiered loyalty status, multi-mode authentication, address book delivery preferences, multi-wishlist curation, statutory GDPR/CCPA privacy request management, an enterprise Search & Product Discovery engine featuring bidirectional/unidirectional synonyms, dynamic multi-select and slider facet configurations, rule-driven merchandising, query telemetry analytics, a Content Management System (CMS) featuring dynamic page building, editorial blog posts, digital asset management (DAM), reusable content blocks, live preview, an omnichannel Customer Service & Support suite with WISMO resolution, SLA tracking, an enterprise Analytics & Business Intelligence (BI) engine with daily sales snapshots, cohort retention curves, merchandising turnover velocity, multi-touch marketing attribution, a comprehensive Mobile Commerce engine (9.16) powering Progressive Web Apps (PWA) manifest generation and offline caching, native iOS/Android device registrations with APNs/FCM push telemetry, rich push notification campaigns, circular store locator geofences with curbside pickup arrival radar, an enterprise B2B & Wholesale Commerce engine (9.17) providing corporate buyer account management, tiered buyer hierarchies with approval thresholds, quote request (RFQ) negotiation state machines with order conversion and trade credit limit tracking, matrix SKU fast-entry ordering with CSV spreadsheet upload, a simulated PunchOut procurement gateway (cXML/OCI), and an enterprise Fraud & Risk Management engine (9.18) powering heuristic and velocity fraud rule evaluation, composite transaction risk assessment scoring with automated decisions and manual analyst review queues, chargeback and inquiry dispute case management with representment evidence tracking, and account security alert monitoring with automated policy responses. an enterprise Integration & API Ecosystem engine (9.19) delivering pre-built connector adapters (ERP, payments, logistics, marketing) with diagnostic ping health monitoring, bidirectional scheduled/manual batch sync job execution queues with parent/child retry cascades and JSON payload snapshots, outbound event-driven webhook subscriptions with HMAC-SHA256 signature dispatch and circuit breaker protection, and headless commerce API credentials with scoped permission tokens and cryptographic hashing at rest, It integrates seamlessly with the NavERP core spine and physical supply chain:
 - **Tenant Isolation**: Every model inherits `TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`). All queries and lookups are strictly tenant-scoped (`tenant=request.tenant`).
 - **Physical Inventory Boundary**: Products, variants, and fulfillment centers link to `scm.Item` and `scm.Location` via string foreign keys. Module 9 does not duplicate inventory ledger balances or physical bin movements; physical warehouse stock and valuation remain anchored in `apps/scm` and `apps/inventory`, while eCommerce manages digital storefront availability, reservations, buffers, and channel broadcasting.
 - **App Path**: `apps/ecommerce/`
@@ -99,6 +99,21 @@ apps/ecommerce/
 │   │   ├── TransactionRiskAssessments.py # TransactionRiskAssessment model (ETRA-)
 │   │   ├── ChargebackDisputes.py    # ChargebackDispute model (ECBD-)
 │   │   └── AccountSecurityAlerts.py # AccountSecurityAlert model (EASA-)
+│   ├── IntegrationApi/
+│   │   ├── EcommerceConnectors.py       # EcommerceConnector model (ECON-)
+│   │   ├── IntegrationSyncJobs.py       # IntegrationSyncJob model (ESYJ-)
+│   │   ├── WebhookSubscriptions.py      # WebhookSubscription model (EWBS-)
+│   │   └── ApiCredentials.py            # ApiCredential model (EAPC-)
+│   ├── IntegrationApi/
+│   │   ├── EcommerceConnectors.py       # hub, list, create, detail, edit, delete, test_connection
+│   │   ├── IntegrationSyncJobs.py       # list, create, detail, edit, delete, retry
+│   │   ├── WebhookSubscriptions.py      # list, create, detail, edit, delete, ping
+│   │   └── ApiCredentials.py            # list, create, detail, edit, delete, revoke
+│   ├── IntegrationApi/
+│   │   ├── EcommerceConnectors.py
+│   │   ├── IntegrationSyncJobs.py
+│   │   ├── WebhookSubscriptions.py
+│   │   └── ApiCredentials.py
 │   ├── MultiStore/
 │   │   ├── StorefrontInstances.py   # StorefrontInstance model (ESTR-)
 │   │   ├── StorefrontCatalogAssignments.py # StorefrontCatalogAssignment model (ESCA-)
@@ -511,6 +526,16 @@ apps/ecommerce/
 | `TransactionRiskAssessment` | `ETRA-` | `order`, `customer_party`, `user`, `total_amount`, `currency_code`, `risk_score`, `risk_tier`, `recommended_action`, `actual_decision`, `analyst_user`, `reviewed_at`, `avs_result_code`, `cvv_result_code`, `ip_address`, `device_fingerprint_id`, `geolocation_country`, `rule_triggers_json`, `notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `auth.User` (`user`, `analyst_user`) | Multi-variable telemetry evaluation, composite risk scoring (0–100), composite index `["tenant", "-created_at"]` |
 | `ChargebackDispute` | `ECBD-` | `order`, `customer_party`, `gateway_dispute_id`, `dispute_amount`, `currency`, `stage`, `reason_category`, `reason_code`, `evidence_submitted_json`, `due_date`, `representment_submitted_at`, `is_liability_shift`, `resolution_notes` | `EcommerceOrder` (`order`), `core.Party` (`customer_party`), `accounting.Currency` (`currency`) | Statutory card network dispute lifecycle, evidence submission tracking, composite index `["tenant", "-created_at"]` |
 | `AccountSecurityAlert` | `EASA-` | `party`, `user`, `alert_type`, `severity`, `status`, `automated_action_taken`, `assigned_investigator`, `resolved_by`, `resolved_at`, `ip_address`, `location_info`, `user_agent`, `incident_details`, `resolution_notes` | `core.Party` (`party`), `auth.User` (`user`, `assigned_investigator`, `resolved_by`) | Automated threat mitigation policies (`mfa_required`, `session_revoked`, `account_locked`), incident timeline, composite index `["tenant", "-created_at"]` |
+
+---
+
+### Sub-module 9.19: Integration & API Ecosystem
+| Model | Prefix | Key Fields | Core / External FKs | Key Methods / Properties |
+|---|---|---|---|---|
+| `EcommerceConnector` | `ECON-` | `name`, `category`, `provider`, `auth_type`, `status`, `health_status`, `base_url`, `api_key`, `api_secret`, `timeout_seconds`, `rate_limit_per_minute`, `is_active`, `last_health_check_at`, `last_synced_at`, `last_error_message` | None | Multi-category adapters (`erp`, `payment`, `shipping`, `marketing`, `custom`), health tracking (`healthy`, `degraded`, `failing`), SSRF defense |
+| `IntegrationSyncJob` | `ESYJ-` | `connector`, `sync_entity`, `direction`, `trigger_type`, `status`, `started_at`, `finished_at`, `records_total`, `records_processed`, `records_failed`, `cursor_value`, `error_log`, `payload_snapshot`, `retry_count`, `max_retries`, `parent_job`, `triggered_by` | `EcommerceConnector` (`connector`), `IntegrationSyncJob` (`parent_job`), `auth.User` (`triggered_by`) | Batch sync execution, progress calculation, parent/child retry cascades, composite index `["tenant", "-created_at"]` |
+| `WebhookSubscription` | `EWBS-` | `target_url`, `event_topic`, `secret_key`, `status`, `is_active`, `is_verify_ssl`, `custom_headers`, `total_delivered_count`, `total_failed_count`, `consecutive_failure_count`, `last_delivery_at`, `last_status_code`, `last_error_message` | None | Event dispatch (`order.created`, `inventory.low_stock`, etc.), HMAC-SHA256 signing, circuit breaker backoff |
+| `ApiCredential` | `EAPC-` | `name`, `client_id`, `client_secret_hash`, `status`, `tier`, `scopes`, `allowed_ips`, `rate_limit_rpm`, `is_active`, `created_by`, `expires_at`, `last_used_at`, `revoked_at` | `auth.User` (`created_by`) | Headless API access, SHA-256 secret hashing at rest, `@property scopes_list`, tier isolation (`storefront_public`, `admin_server`) |
 
 ---
 
@@ -990,6 +1015,37 @@ All routes live under `/ecommerce/` with namespace `ecommerce`:
 | `fraud-risk/alerts/<int:pk>/edit/` | `account_security_alert_edit` | `account_security_alert_edit` | Triage security alert, assign investigator, and update status |
 | `fraud-risk/alerts/<int:pk>/delete/` | `account_security_alert_delete` | `account_security_alert_delete` | Delete account security alert (POST only) |
 
+### 9.19 Integration & API Ecosystem Routes
+| URL Pattern | View Function | URL Name | Description |
+|---|---|---|---|
+| `integration-api/` | `integration_api_hub` | `integration_api_hub` | Integration & API Ecosystem command center hub |
+| `integration-api/connectors/` | `ecommerce_connector_list` | `ecommerce_connector_list` | External connectors registry with category, status, and provider filters |
+| `integration-api/connectors/create/` | `ecommerce_connector_create` | `ecommerce_connector_create` | Register new external API connector (@tenant_admin_required) |
+| `integration-api/connectors/<int:pk>/` | `ecommerce_connector_detail` | `ecommerce_connector_detail` | Connector detail with recent sync jobs and health status |
+| `integration-api/connectors/<int:pk>/edit/` | `ecommerce_connector_edit` | `ecommerce_connector_edit` | Edit connector configuration and credentials (@tenant_admin_required) |
+| `integration-api/connectors/<int:pk>/delete/` | `ecommerce_connector_delete` | `ecommerce_connector_delete` | Delete connector (POST only, @tenant_admin_required) |
+| `integration-api/connectors/<int:pk>/test-connection/` | `ecommerce_connector_test_connection` | `ecommerce_connector_test_connection` | Test connection health ping (POST only, @tenant_admin_required) |
+| `integration-api/sync-jobs/` | `integration_sync_job_list` | `integration_sync_job_list` | Sync jobs queue with status, entity, direction, trigger, and connector filters |
+| `integration-api/sync-jobs/create/` | `integration_sync_job_create` | `integration_sync_job_create` | Dispatch/schedule new integration sync job |
+| `integration-api/sync-jobs/<int:pk>/` | `integration_sync_job_detail` | `integration_sync_job_detail` | Sync job execution metrics, error logs, and payload snapshot |
+| `integration-api/sync-jobs/<int:pk>/edit/` | `integration_sync_job_edit` | `integration_sync_job_edit` | Edit sync job schedule and retry parameters |
+| `integration-api/sync-jobs/<int:pk>/delete/` | `integration_sync_job_delete` | `integration_sync_job_delete` | Delete sync job (POST only) |
+| `integration-api/sync-jobs/<int:pk>/retry/` | `integration_sync_job_retry` | `integration_sync_job_retry` | Retry failed sync job and spawn child attempt (POST only) |
+| `integration-api/webhooks/` | `webhook_subscription_list` | `webhook_subscription_list` | Outbound webhook subscriptions with topic and status filters |
+| `integration-api/webhooks/create/` | `webhook_subscription_create` | `webhook_subscription_create` | Register new outbound webhook endpoint (@tenant_admin_required) |
+| `integration-api/webhooks/<int:pk>/` | `webhook_subscription_detail` | `webhook_subscription_detail` | Webhook subscription details, delivery stats, and HMAC signing key |
+| `integration-api/webhooks/<int:pk>/edit/` | `webhook_subscription_edit` | `webhook_subscription_edit` | Edit webhook subscription URL, event topic, and custom headers (@tenant_admin_required) |
+| `integration-api/webhooks/<int:pk>/delete/` | `webhook_subscription_delete` | `webhook_subscription_delete` | Delete webhook subscription (POST only, @tenant_admin_required) |
+| `integration-api/webhooks/<int:pk>/ping/` | `webhook_subscription_ping` | `webhook_subscription_ping` | Send diagnostic ping test payload (POST only, @tenant_admin_required) |
+| `integration-api/api-credentials/` | `api_credential_list` | `api_credential_list` | Headless API credentials register with tier and status filters |
+| `integration-api/api-credentials/create/` | `api_credential_create` | `api_credential_create` | Provision new client API token with one-time secret display (@tenant_admin_required) |
+| `integration-api/api-credentials/<int:pk>/` | `api_credential_detail` | `api_credential_detail` | API credential detail with scopes list and RPM rate limit |
+| `integration-api/api-credentials/<int:pk>/edit/` | `api_credential_edit` | `api_credential_edit` | Edit API credential scopes and allowed IP whitelist (@tenant_admin_required) |
+| `integration-api/api-credentials/<int:pk>/delete/` | `api_credential_delete` | `api_credential_delete` | Delete API credential (POST only, @tenant_admin_required) |
+| `integration-api/api-credentials/<int:pk>/revoke/` | `api_credential_revoke` | `api_credential_revoke` | Permanently revoke API credential (POST only, @tenant_admin_required) |
+
+---
+
 ### 9.20 Multi-Store & Platform Operations Routes
 | URL Pattern | View Function | URL Name | Description |
 |---|---|---|---|
@@ -1433,6 +1489,19 @@ LIVE_LINKS["9.18"] = {
     "Risk Assessments": "ecommerce:transaction_risk_assessment_list",
     "Chargeback Disputes": "ecommerce:chargeback_dispute_list",
     "Security Alerts": "ecommerce:account_security_alert_list",
+}
+LIVE_LINKS["9.19"] = {
+    "ERP & Back-Office Sync": "ecommerce:integrationsyncjob_list",
+    "Payment Gateway Connectors": "ecommerce:ecommerceconnector_list?category=payment",
+    "Shipping & Logistics APIs": "ecommerce:ecommerceconnector_list?category=shipping",
+    "Marketing Tool Integrations": "ecommerce:ecommerceconnector_list?category=marketing",
+    "Headless Commerce & API-First": "ecommerce:apicredential_list",
+    # Extra live leaves
+    "Integration Hub": "ecommerce:integration_api_hub",
+    "Connectors Registry": "ecommerce:ecommerceconnector_list",
+    "Sync Execution Queue": "ecommerce:integrationsyncjob_list",
+    "Webhook Subscriptions": "ecommerce:webhooksubscription_list",
+    "API Keys & Access Tokens": "ecommerce:apicredential_list",
 }
 LIVE_LINKS["9.20"] = {
     "Multi-Store & Multi-Brand Management": "ecommerce:storefront_instance_list",
