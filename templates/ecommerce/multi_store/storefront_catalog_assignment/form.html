@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Catalog Assignment{% else %}Assign Product to Storefront{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:storefront_catalog_assignment_list' %}">Catalog Assignments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ assignment.number }}{% else %}New Assignment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Catalog Assignment{% else %}Assign Product to Storefront{% endif %}</h1>
+        <p class="text-secondary text-sm">Configure channel visibility, custom storefront titles, and retail pricing overrides</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:storefront_catalog_assignment_detail' assignment.pk %}{% else %}{% url 'ecommerce:storefront_catalog_assignment_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.storefront.id_for_label }}">Storefront Channel *</label>
+                    {{ form.storefront }}
+                    {% if form.storefront.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storefront.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.product.id_for_label }}">Catalog Product *</label>
+                    {{ form.product }}
+                    {% if form.product.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.product.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.custom_title.id_for_label }}">Storefront Display Title Override</label>
+                    {{ form.custom_title }}
+                    <span class="text-xs text-muted">Leave blank to use the master catalog product name</span>
+                    {% if form.custom_title.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.custom_title.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.storefront_badge.id_for_label }}">Storefront Badge Text</label>
+                    {{ form.storefront_badge }}
+                    <span class="text-xs text-muted">e.g. Exclusive, Best Seller, Web Special</span>
+                    {% if form.storefront_badge.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storefront_badge.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.custom_price.id_for_label }}">Custom Storefront Price</label>
+                    {{ form.custom_price }}
+                    <span class="text-xs text-muted">Leave blank to use default catalog retail price</span>
+                    {% if form.custom_price.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.custom_price.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.custom_currency.id_for_label }}">Custom Currency Override</label>
+                    {{ form.custom_currency }}
+                    <span class="text-xs text-muted">Leave blank to inherit storefront default currency</span>
+                    {% if form.custom_currency.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.custom_currency.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.publish_status.id_for_label }}">Publish Status</label>
+                    {{ form.publish_status }}
+                    {% if form.publish_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.publish_status.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.sort_order.id_for_label }}">Sort Order</label>
+                    {{ form.sort_order }}
+                    {% if form.sort_order.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sort_order.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded mb-6 flex flex-wrap gap-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_visible }}
+                    <span class="font-medium text-sm">Visible in Storefront Catalog</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_featured }}
+                    <span class="font-medium text-sm">Featured in Storefront Highlights</span>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'ecommerce:storefront_catalog_assignment_detail' assignment.pk %}{% else %}{% url 'ecommerce:storefront_catalog_assignment_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Assignment{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
