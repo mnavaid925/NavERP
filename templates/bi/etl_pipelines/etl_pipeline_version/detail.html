@@ -7,13 +7,13 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}">{{ pipeline.number }}</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_version_list' %}">Versions</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <span>{{ version.version_number }}</span>
         </div>
         <div class="flex items-center gap-3 mt-1">
