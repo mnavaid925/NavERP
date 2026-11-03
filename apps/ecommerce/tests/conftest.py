@@ -80,6 +80,10 @@ from apps.ecommerce.models import (
     TransactionRiskAssessment,
     ChargebackDispute,
     AccountSecurityAlert,
+    StorefrontInstance,
+    StorefrontCatalogAssignment,
+    PlatformEnvironment,
+    DeploymentPipeline,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -4358,6 +4362,183 @@ def ecom_security_alert_b(tenant_b, user_b):
         status="investigating",
         automated_action_taken="terminate_sessions",
     )
+
+
+# ---------------------------------------------------------------------------
+# Module 9.20 Multi-Store & Platform Operations Test Contracts & Fixtures
+# ---------------------------------------------------------------------------
+
+MULTISTORE_PAGE_SIZE = 15
+
+MULTISTORE_MODEL_FIELDS = {
+    "StorefrontInstance": (
+        "id", "tenant", "number", "name", "code", "store_type", "brand_name",
+        "primary_domain", "custom_domains", "default_currency", "supported_currencies",
+        "default_locale", "supported_locales", "root_category",
+        "default_fulfillment_center", "theme_identifier", "status", "is_default",
+        "checkout_mode", "ssl_certificate_status", "description", "created_at", "updated_at",
+    ),
+    "StorefrontCatalogAssignment": (
+        "id", "tenant", "number", "storefront", "product", "is_visible",
+        "is_featured", "custom_title", "custom_price", "custom_currency",
+        "storefront_badge", "sort_order", "publish_status", "created_at", "updated_at",
+    ),
+    "PlatformEnvironment": (
+        "id", "tenant", "number", "name", "env_type", "storefront",
+        "cluster_region", "base_url", "current_active_slot", "is_sandbox_locked",
+        "status", "resource_tier", "last_health_check_at", "description",
+        "created_at", "updated_at",
+    ),
+    "DeploymentPipeline": (
+        "id", "tenant", "number", "environment", "release_version", "git_branch",
+        "git_commit_sha", "deployment_strategy", "target_slot", "status",
+        "preview_endpoint_url", "traffic_percentage", "migration_executed",
+        "build_duration_seconds", "promoted_by", "promoted_at", "deployment_notes",
+        "created_at", "updated_at",
+    ),
+}
+
+MULTISTORE_URL_NAMES = (
+    "multi_store_hub",
+    "storefront_instance_list",
+    "storefront_instance_create",
+    "storefront_instance_detail",
+    "storefront_instance_edit",
+    "storefront_instance_delete",
+    "storefront_toggle_status",
+    "storefront_catalog_assignment_list",
+    "storefront_catalog_assignment_create",
+    "storefront_catalog_assignment_detail",
+    "storefront_catalog_assignment_edit",
+    "storefront_catalog_assignment_delete",
+    "platform_environment_list",
+    "platform_environment_create",
+    "platform_environment_detail",
+    "platform_environment_edit",
+    "platform_environment_delete",
+    "deployment_pipeline_list",
+    "deployment_pipeline_create",
+    "deployment_pipeline_detail",
+    "deployment_pipeline_edit",
+    "deployment_pipeline_delete",
+    "deployment_promote",
+    "deployment_rollback",
+)
+
+
+def _multistore_storefront_instance(tenant, name="Apex Test Store", code=None, default_currency=None, is_default=False, **kwargs):
+    if not code:
+        code = f"apex-{timezone.now().timestamp()}"[:20]
+    if default_currency is None:
+        default_currency = Currency.objects.filter(is_active=True).first()
+        if not default_currency:
+            default_currency = Currency.objects.create(code="USD", name="US Dollar", symbol="$", is_active=True)
+    params = {
+        "tenant": tenant,
+        "name": name,
+        "code": code,
+        "store_type": "flagship",
+        "brand_name": "Apex Brand",
+        "primary_domain": f"{code}.shop.example.com",
+        "default_currency": default_currency,
+        "supported_currencies": "USD,EUR",
+        "default_locale": "en-US",
+        "status": "active",
+        "is_default": is_default,
+        "checkout_mode": "one_page",
+        "ssl_certificate_status": "valid",
+    }
+    params.update(kwargs)
+    return StorefrontInstance.objects.create(**params)
+
+
+def _multistore_catalog_assignment(tenant, storefront, product, **kwargs):
+    params = {
+        "tenant": tenant,
+        "storefront": storefront,
+        "product": product,
+        "is_visible": True,
+        "is_featured": False,
+        "custom_title": "Custom Display Title",
+        "custom_price": Decimal("39.99"),
+        "publish_status": "published",
+    }
+    params.update(kwargs)
+    return StorefrontCatalogAssignment.objects.create(**params)
+
+
+def _multistore_platform_environment(tenant, storefront=None, name="US Production Primary", env_type="production", **kwargs):
+    params = {
+        "tenant": tenant,
+        "name": name,
+        "env_type": env_type,
+        "storefront": storefront,
+        "cluster_region": "us-east",
+        "base_url": "https://us-prod.example.com",
+        "current_active_slot": "blue",
+        "status": "healthy",
+        "resource_tier": "standard",
+    }
+    params.update(kwargs)
+    return PlatformEnvironment.objects.create(**params)
+
+
+def _multistore_deployment_pipeline(tenant, environment, release_version="v2.1.0", **kwargs):
+    params = {
+        "tenant": tenant,
+        "environment": environment,
+        "release_version": release_version,
+        "git_branch": "main",
+        "git_commit_sha": "a1b2c3d4e5f678901234567890abcdef12345678",
+        "deployment_strategy": "blue_green",
+        "target_slot": "green",
+        "status": "building",
+        "traffic_percentage": 0,
+        "build_duration_seconds": 120,
+    }
+    params.update(kwargs)
+    return DeploymentPipeline.objects.create(**params)
+
+
+@pytest.fixture
+def ecom_storefront_a(tenant_a):
+    return _multistore_storefront_instance(tenant_a, name="Acme Main Storefront", code="acme-main")
+
+
+@pytest.fixture
+def ecom_storefront_b(tenant_b):
+    return _multistore_storefront_instance(tenant_b, name="Globex Retail Store", code="globex-retail")
+
+
+@pytest.fixture
+def ecom_catalog_assignment_a(tenant_a, ecom_storefront_a, ecom_catalog_product_a):
+    return _multistore_catalog_assignment(tenant_a, ecom_storefront_a, ecom_catalog_product_a)
+
+
+@pytest.fixture
+def ecom_catalog_assignment_b(tenant_b, ecom_storefront_b, ecom_catalog_product_b):
+    return _multistore_catalog_assignment(tenant_b, ecom_storefront_b, ecom_catalog_product_b)
+
+
+@pytest.fixture
+def ecom_environment_a(tenant_a, ecom_storefront_a):
+    return _multistore_platform_environment(tenant_a, storefront=ecom_storefront_a, name="Acme Prod Cluster")
+
+
+@pytest.fixture
+def ecom_environment_b(tenant_b, ecom_storefront_b):
+    return _multistore_platform_environment(tenant_b, storefront=ecom_storefront_b, name="Globex Prod Cluster")
+
+
+@pytest.fixture
+def ecom_pipeline_a(tenant_a, ecom_environment_a):
+    return _multistore_deployment_pipeline(tenant_a, ecom_environment_a, release_version="v1.0.0-acme")
+
+
+@pytest.fixture
+def ecom_pipeline_b(tenant_b, ecom_environment_b):
+    return _multistore_deployment_pipeline(tenant_b, ecom_environment_b, release_version="v1.0.0-globex")
+
 
 
 
