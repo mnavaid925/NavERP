@@ -121,6 +121,9 @@ def cdc_sync_config_delete(request, pk):
     write_audit_log(request.user, config, "delete", tenant=request.tenant)
     config.delete()
     messages.success(request, f"CDC Sync Config {number} deleted successfully.")
+    next_param = request.GET.get("next") or request.POST.get("next")
+    if next_param == "list":
+        return redirect("bi:cdc_sync_config_list")
     return redirect("bi:ingestion_pipeline_detail", pk=pipeline_pk)
 
 
