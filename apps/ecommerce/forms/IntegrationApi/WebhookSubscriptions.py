@@ -98,6 +98,28 @@ class WebhookSubscriptionForm(TenantUniqueMixin, TenantModelForm):
                     raise forms.ValidationError("Custom headers must be a JSON object / dictionary.")
             except json.JSONDecodeError as e:
                 raise forms.ValidationError(f"Invalid JSON in custom headers: {e}")
+
+            hop_by_hop = {
+                "connection",
+                "keep-alive",
+                "proxy-authenticate",
+                "proxy-authorization",
+                "te",
+                "trailer",
+                "transfer-encoding",
+                "upgrade",
+                "host",
+                "content-length",
+            }
+            for k, v in parsed.items():
+                if not isinstance(k, str) or not isinstance(v, (str, int, float)):
+                    raise forms.ValidationError(f"Header '{k}' key and value must be strings.")
+                k_str = str(k).strip()
+                v_str = str(v).strip()
+                if "\r" in k_str or "\n" in k_str or "\r" in v_str or "\n" in v_str:
+                    raise forms.ValidationError("CRLF carriage returns and newlines are not permitted in headers.")
+                if k_str.lower() in hop_by_hop:
+                    raise forms.ValidationError(f"Hop-by-hop header '{k_str}' cannot be overridden.")
         return val or "{}"
 
     def clean_secret_key(self):
