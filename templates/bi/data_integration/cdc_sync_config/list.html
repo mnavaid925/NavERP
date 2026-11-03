@@ -124,7 +124,7 @@
                                     <i data-lucide="rotate-ccw"></i>
                                 </button>
                             </form>
-                            <form method="post" action="{% url 'bi:cdc_sync_config_delete' config.pk %}" onsubmit="return confirm('Remove CDC configuration from pipeline?');" class="inline">
+                            <form method="post" action="{% url 'bi:cdc_sync_config_delete' config.pk %}?next=list" onsubmit="return confirm('Remove CDC configuration from pipeline?');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete CDC config">
                                     <i data-lucide="trash-2"></i>
