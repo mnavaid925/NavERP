@@ -12,7 +12,7 @@ class DataSourceConnectorForm(TenantUniqueMixin, forms.ModelForm):
         widget=forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 4}),
         required=False,
         label="Connection Configuration (JSON)",
-        help_text="Host, port, database name, bucket, credentials, or custom query options in valid JSON format.",
+        help_text="Host, port, database name, bucket, or custom options in valid JSON format. Sensitive keys or passwords must be stored via the API Credential dropdown.",
     )
 
     class Meta:
