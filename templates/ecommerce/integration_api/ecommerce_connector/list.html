@@ -92,7 +92,7 @@
                     <span>Filter</span>
                 </button>
                 {% if search_query or category_filter or status_filter or provider_filter %}
-                <a href="{% url 'ecommerce:ecommerceconnector_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'ecommerce:ecommerceconnector_list' %}" class="btn btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -176,21 +176,21 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'ecommerce:ecommerceconnector_detail' connector.pk %}" class="btn btn-outline btn-icon" title="View Details">
+                            <a href="{% url 'ecommerce:ecommerceconnector_detail' connector.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:ecommerceconnector_edit' connector.pk %}" class="btn btn-outline btn-icon" title="Edit Configuration">
+                            <a href="{% url 'ecommerce:ecommerceconnector_edit' connector.pk %}" class="btn btn-outline btn-icon" title="Edit Configuration" aria-label="Edit Configuration">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:ecommerceconnector_test_connection' connector.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-icon" title="Test Connection">
+                                <button type="submit" class="btn btn-outline btn-icon" title="Test Connection" aria-label="Test Connection">
                                     <i data-lucide="wifi"></i>
                                 </button>
                             </form>
                             <form method="post" action="{% url 'ecommerce:ecommerceconnector_delete' connector.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete connector {{ connector.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Connector">
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Connector" aria-label="Delete Connector">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
