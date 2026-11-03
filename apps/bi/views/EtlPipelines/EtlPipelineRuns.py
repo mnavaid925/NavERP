@@ -11,7 +11,7 @@ from apps.bi.views._common import bi_object, bi_scope, csv_export_response, csv_
 
 @login_required
 def etl_pipeline_run_list(request):
-    queryset = bi_scope(EtlPipelineRun.objects.all(), request)
+    queryset = bi_scope(EtlPipelineRun.objects.all(), request).defer("execution_log", "step_progress")
 
     q = request.GET.get("q", "").strip()
     if q:
