@@ -46,7 +46,7 @@ def ingestion_run_list(request):
     page_number = request.GET.get("page")
     runs = paginator.get_page(page_number)
 
-    pipelines = bi_scope(IngestionPipeline.objects.all(), request).order_by("name")
+    pipelines = bi_scope(IngestionPipeline.objects.all(), request).only("id", "name").order_by("name")
 
     context = {
         "runs": runs,
