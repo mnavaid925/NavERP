@@ -117,7 +117,6 @@ class ApiCredential(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_eapc_ten_status"),
             models.Index(fields=["tenant", "tier"], name="idx_eapc_ten_tier"),
-            models.Index(fields=["client_id"], name="idx_eapc_client_id"),
         ]
 
     @property
