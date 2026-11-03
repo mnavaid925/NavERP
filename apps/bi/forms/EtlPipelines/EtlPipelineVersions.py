@@ -73,8 +73,8 @@ class EtlPipelineVersionForm(TenantUniqueMixin, forms.ModelForm):
         dag_def = self.cleaned_data.get("dag_definition_raw")
         if dag_def:
             instance.dag_definition = dag_def
-        elif not instance.dag_definition and instance.pipeline_id:
-            # Auto-snapshot from current pipeline steps
+        elif instance.pipeline_id:
+            # Re-snapshot from current pipeline steps whenever raw input is empty
             steps = instance.pipeline.steps.all().order_by("sequence")
             instance.dag_definition = {
                 "pipeline_number": instance.pipeline.number,
