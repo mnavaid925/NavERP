@@ -17,7 +17,7 @@
             <span class="badge badge-info">{{ config.get_sync_mode_display }}</span>
             <span class="badge badge-slate">{{ config.get_capture_method_display }}</span>
         </div>
-        <p class="text-secondary text-sm">CDC Config Code: <span class="font-mono">{{ config.number }}</span> &bull; Target Table: <span class="font-mono text-primary font-semibold">{{ config.pipeline.target_staging_table }}</span></p>
+        <p class="text-muted text-sm">CDC Config Code: <span class="font-mono">{{ config.number }}</span> &bull; Target Table: <span class="font-mono text-brand font-semibold">{{ config.pipeline.target_staging_table }}</span></p>
     </div>
     <div class="page-actions">
         <form method="post" action="{% url 'bi:cdc_sync_config_reset_cursor' config.pk %}" onsubmit="return confirm('Reset high-water mark cursor? The next sync will re-evaluate all delta records.');" class="inline">
@@ -46,27 +46,27 @@
         <div class="card-body">
             <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Capture Method</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Capture Method</dt>
                     <dd class="mt-1 text-sm font-semibold text-slate-800">{{ config.get_capture_method_display }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Target Sync Mode</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Target Sync Mode</dt>
                     <dd class="mt-1 text-sm font-semibold text-slate-800">{{ config.get_sync_mode_display }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Primary Key Columns</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Primary Key Columns</dt>
                     <dd class="mt-1 text-sm font-mono text-slate-800 bg-slate-50 p-1.5 rounded border border-slate-200">
                         {{ config.primary_key_fields }}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Cursor Tracking Field</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Cursor Tracking Field</dt>
                     <dd class="mt-1 text-sm font-mono text-slate-800 bg-slate-50 p-1.5 rounded border border-slate-200">
                         {{ config.cursor_field|default:"(None specified)" }}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Schema Drift Policy</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Schema Drift Policy</dt>
                     <dd class="mt-1">
                         {% if config.schema_drift_policy == 'auto_propagate' %}
                         <span class="badge badge-green">Auto-Propagate Columns</span>
@@ -78,11 +78,11 @@
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Deletion Tracking</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Deletion Tracking</dt>
                     <dd class="mt-1 text-sm text-slate-800">
                         {% if config.capture_deletes %}
                         <span class="badge badge-green">Enabled</span>
-                        <span class="text-xs text-secondary ml-1 font-mono">(Field: {{ config.soft_delete_field }})</span>
+                        <span class="text-xs text-muted ml-1 font-mono">(Field: {{ config.soft_delete_field }})</span>
                         {% else %}
                         <span class="badge badge-muted">Disabled</span>
                         {% endif %}
@@ -91,11 +91,11 @@
             </dl>
 
             <div class="mt-6 pt-4 border-t border-slate-100">
-                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">Committed High-Water Mark Cursor</h3>
+                <h3 class="text-xs uppercase font-semibold text-muted mb-2">Committed High-Water Mark Cursor</h3>
                 <div class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono break-all">
                     {{ config.last_cursor_value|default:"No cursor offset recorded yet." }}
                 </div>
-                <div class="text-xs text-secondary mt-1 flex items-center justify-between">
+                <div class="text-xs text-muted mt-1 flex items-center justify-between">
                     <span>Last checkpoint timestamp: {{ config.last_checkpoint_at|date:"Y-m-d H:i:s"|default:"Never" }}</span>
                     <span>Created: {{ config.created_at|date:"M d, Y" }}</span>
                 </div>
@@ -110,23 +110,23 @@
         <div class="card-body">
             <div class="space-y-4">
                 <div>
-                    <span class="text-xs uppercase font-semibold text-secondary block">Pipeline</span>
-                    <a href="{% url 'bi:ingestion_pipeline_detail' config.pipeline.pk %}" class="text-base font-bold text-primary hover:underline">
+                    <span class="text-xs uppercase font-semibold text-muted block">Pipeline</span>
+                    <a href="{% url 'bi:ingestion_pipeline_detail' config.pipeline.pk %}" class="text-base font-bold text-brand hover:underline">
                         {{ config.pipeline.name }}
                     </a>
                     <div class="text-xs text-muted">{{ config.pipeline.number }}</div>
                 </div>
                 <div>
-                    <span class="text-xs uppercase font-semibold text-secondary block">Source Connector</span>
+                    <span class="text-xs uppercase font-semibold text-muted block">Source Connector</span>
                     <span class="text-sm font-medium text-slate-800">{{ config.pipeline.connector.name }}</span>
                     <div class="text-xs text-muted">{{ config.pipeline.connector.get_connector_type_display }}</div>
                 </div>
                 <div>
-                    <span class="text-xs uppercase font-semibold text-secondary block">Target Staging Table</span>
-                    <span class="text-sm font-mono font-semibold text-primary">{{ config.pipeline.target_staging_table }}</span>
+                    <span class="text-xs uppercase font-semibold text-muted block">Target Staging Table</span>
+                    <span class="text-sm font-mono font-semibold text-brand">{{ config.pipeline.target_staging_table }}</span>
                 </div>
                 <div>
-                    <span class="text-xs uppercase font-semibold text-secondary block">Cadence</span>
+                    <span class="text-xs uppercase font-semibold text-muted block">Cadence</span>
                     <span class="text-sm text-slate-700">{{ config.pipeline.get_schedule_cadence_display }}</span>
                 </div>
             </div>
