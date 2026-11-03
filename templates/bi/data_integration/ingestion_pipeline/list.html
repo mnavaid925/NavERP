@@ -140,12 +140,14 @@
                             <a href="{% url 'bi:ingestion_pipeline_edit' pipeline.pk %}" class="btn btn-icon btn-outline" title="Edit pipeline">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:ingestion_pipeline_delete' pipeline.pk %}" onsubmit="return confirm('Delete this ingestion pipeline?');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete pipeline">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
