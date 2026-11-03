@@ -51,7 +51,7 @@
                     <span>Filter</span>
                 </button>
                 {% if q or capture_method or sync_mode %}
-                <a href="{% url 'bi:cdc_sync_config_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'bi:cdc_sync_config_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
