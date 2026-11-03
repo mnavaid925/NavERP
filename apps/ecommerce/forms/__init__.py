@@ -109,6 +109,10 @@ from apps.ecommerce.forms.IntegrationApi.EcommerceConnectors import EcommerceCon
 from apps.ecommerce.forms.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJobForm
 from apps.ecommerce.forms.IntegrationApi.WebhookSubscriptions import WebhookSubscriptionForm
 from apps.ecommerce.forms.IntegrationApi.ApiCredentials import ApiCredentialForm
+from apps.ecommerce.forms.MultiStore.StorefrontInstances import StorefrontInstanceForm
+from apps.ecommerce.forms.MultiStore.StorefrontCatalogAssignments import StorefrontCatalogAssignmentForm
+from apps.ecommerce.forms.MultiStore.PlatformEnvironments import PlatformEnvironmentForm
+from apps.ecommerce.forms.MultiStore.DeploymentPipelines import DeploymentPipelineForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -223,4 +227,9 @@ __all__ = [
     "IntegrationSyncJobForm",
     "WebhookSubscriptionForm",
     "ApiCredentialForm",
+    # 9.20 Multi-Store & Platform Operations
+    "StorefrontInstanceForm",
+    "StorefrontCatalogAssignmentForm",
+    "PlatformEnvironmentForm",
+    "DeploymentPipelineForm",
 ]
