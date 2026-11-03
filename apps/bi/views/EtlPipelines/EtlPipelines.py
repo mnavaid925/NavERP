@@ -129,10 +129,11 @@ def etl_pipeline_create(request):
                 instance.created_by = request.user
                 instance.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.etl_pipeline.create",
-                    f"Created ETL Pipeline {instance.number} ({instance.name})",
+                    instance,
+                    "create",
+                    changes={"number": instance.number, "name": instance.name},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"ETL Pipeline {instance.number} created successfully.")
             return redirect("bi:etl_pipeline_detail", pk=instance.pk)
@@ -155,10 +156,11 @@ def etl_pipeline_edit(request, pk):
             with transaction.atomic():
                 instance = form.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.etl_pipeline.update",
-                    f"Updated ETL Pipeline {instance.number} ({instance.name})",
+                    instance,
+                    "update",
+                    changes={"number": instance.number, "name": instance.name},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"ETL Pipeline {instance.number} updated successfully.")
             return redirect("bi:etl_pipeline_detail", pk=instance.pk)
@@ -180,13 +182,14 @@ def etl_pipeline_delete(request, pk):
     number = pipeline.number
     name = pipeline.name
     with transaction.atomic():
-        pipeline.delete()
         write_audit_log(
-            request.tenant,
             request.user,
-            "bi.etl_pipeline.delete",
-            f"Deleted ETL Pipeline {number} ({name})",
+            pipeline,
+            "delete",
+            changes={"number": number, "name": name},
+            tenant=request.tenant,
         )
+        pipeline.delete()
     messages.success(request, f"ETL Pipeline {number} deleted successfully.")
     return redirect("bi:etl_pipeline_list")
 
@@ -235,10 +238,11 @@ def etl_pipeline_trigger(request, pk):
         pipeline.last_run_at = timezone.now()
         pipeline.save(update_fields=["last_run_at"])
         write_audit_log(
-            request.tenant,
             request.user,
-            "bi.etl_pipeline.trigger",
-            f"Triggered manual execution run {run.number} for pipeline {pipeline.number}",
+            run,
+            "trigger",
+            changes={"pipeline_number": pipeline.number, "run_number": run.number},
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Execution run {run.number} initiated for {pipeline.name}.")
