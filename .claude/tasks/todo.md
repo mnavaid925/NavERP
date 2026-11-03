@@ -268,31 +268,31 @@
 ---
 
 ## 10.1-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO live C-level database log parsers or binary streaming daemons in test suite** — Log-based CDC is represented with configurable capture methods, while query-timestamp and sequence cursors execute directly; external WAL streaming interfaces are simulated cleanly without requiring live root-level PostgreSQL replication slots in SQLite unit tests.
-- [ ] **NO live external cloud object storage or SFTP server connections in test suite** — Cloud storage connectors (S3/Azure/GCS/SFTP) are configured via structured metadata and tested with mock payloads/in-memory file buffers; no external network sockets are opened during CI test runs.
-- [ ] **NO automated destructive DDL alteration on operational tables** — Schema drift policies (`auto_propagate`, `detect_and_warn`, `block_and_pause`) detect and log column additions or alterations rather than running unsafe unreviewed raw DDL migrations.
-- [ ] **NO duplication of Module 0 integration tables** — Credentials use `core.ApiCredential`, rate limits use `core.RateLimitPolicy`, mapping templates use `core.MappingTemplate`.
+- [x] **NO live C-level database log parsers or binary streaming daemons in test suite** — Log-based CDC is represented with configurable capture methods, while query-timestamp and sequence cursors execute directly; external WAL streaming interfaces are simulated cleanly without requiring live root-level PostgreSQL replication slots in SQLite unit tests.
+- [x] **NO live external cloud object storage or SFTP server connections in test suite** — Cloud storage connectors (S3/Azure/GCS/SFTP) are configured via structured metadata and tested with mock payloads/in-memory file buffers; no external network sockets are opened during CI test runs.
+- [x] **NO automated destructive DDL alteration on operational tables** — Schema drift policies (`auto_propagate`, `detect_and_warn`, `block_and_pause`) detect and log column additions or alterations rather than running unsafe unreviewed raw DDL migrations.
+- [x] **NO duplication of Module 0 integration tables** — Credentials use `core.ApiCredential`, rate limits use `core.RateLimitPolicy`, mapping templates use `core.MappingTemplate`.
 
 ---
 
 ## Brand-New App Scaffolding (`apps/bi/`)
-- [ ] `apps/bi/__init__.py`
-- [ ] `apps/bi/apps.py` (`BiConfig`)
-- [ ] `apps/bi/migrations/__init__.py`
-- [ ] `apps/bi/models/__init__.py` + `apps/bi/models/_base.py` (`TenantOwned`, `TenantNumbered`)
-- [ ] `apps/bi/forms/__init__.py` + `apps/bi/forms/_common.py` (`TenantUniqueMixin`, `reject_foreign`)
-- [ ] `apps/bi/views/__init__.py` + `apps/bi/views/_common.py` (`bi_scope`, `bi_object`, etc.)
-- [ ] `apps/bi/urls/__init__.py`
-- [ ] `apps/bi/admin.py`
-- [ ] `apps/bi/management/__init__.py`, `apps/bi/management/commands/__init__.py`, `apps/bi/management/commands/seed_bi.py`
-- [ ] `config/settings.py` — register `'apps.bi'` in `INSTALLED_APPS`
-- [ ] `config/urls.py` — register `path('bi/', include('apps.bi.urls'))`
+- [x] `apps/bi/__init__.py`
+- [x] `apps/bi/apps.py` (`BiConfig`)
+- [x] `apps/bi/migrations/__init__.py`
+- [x] `apps/bi/models/__init__.py` + `apps/bi/models/_base.py` (`TenantOwned`, `TenantNumbered`)
+- [x] `apps/bi/forms/__init__.py` + `apps/bi/forms/_common.py` (`TenantUniqueMixin`, `reject_foreign`)
+- [x] `apps/bi/views/__init__.py` + `apps/bi/views/_common.py` (`bi_scope`, `bi_object`, etc.)
+- [x] `apps/bi/urls/__init__.py`
+- [x] `apps/bi/admin.py`
+- [x] `apps/bi/management/__init__.py`, `apps/bi/management/commands/__init__.py`, `apps/bi/management/commands/seed_bi.py`
+- [x] `config/settings.py` — register `'apps.bi'` in `INSTALLED_APPS`
+- [x] `config/urls.py` — register `path('bi/', include('apps.bi.urls'))`
 
 ---
 
 ## Models (4 models in `apps/bi/models/DataIntegration/`)
 
-- [ ] **`DataSourceConnector`** [Prefix: `BDSC-`] (`apps/bi/models/DataIntegration/DataSourceConnectors.py`)
+- [x] **`DataSourceConnector`** [Prefix: `BDSC-`] (`apps/bi/models/DataIntegration/DataSourceConnectors.py`)
   - **Purpose**: Authoritative source system connection registry supporting Internal ERP modules, RDBMS, NoSQL, Cloud Storage, SFTP, REST APIs, and Webhook push channels.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
@@ -311,7 +311,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `discovered_catalog`, `last_tested_at`, `test_status`, `test_message`
 
-- [ ] **`IngestionPipeline`** [Prefix: `BING-`] (`apps/bi/models/DataIntegration/IngestionPipelines.py`)
+- [x] **`IngestionPipeline`** [Prefix: `BING-`] (`apps/bi/models/DataIntegration/IngestionPipelines.py`)
   - **Purpose**: Ingestion pipeline definition linking a data source to a target analytical staging table, with scheduling cadence, file parsing options, and inbound webhook configuration.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
@@ -336,7 +336,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_run_at`, `next_run_due_at`
 
-- [ ] **`CdcSyncConfig`** [Prefix: `BCDC-`] (`apps/bi/models/DataIntegration/CdcSyncConfigs.py`)
+- [x] **`CdcSyncConfig`** [Prefix: `BCDC-`] (`apps/bi/models/DataIntegration/CdcSyncConfigs.py`)
   - **Purpose**: Specializes Change Data Capture (CDC) behavior, delta capture mechanisms, sync strategies, high-water mark cursor tracking, and schema drift handling.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
@@ -355,7 +355,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_checkpoint_at`
 
-- [ ] **`IngestionRun`** [Prefix: `BIJR-`] (`apps/bi/models/DataIntegration/IngestionRuns.py`)
+- [x] **`IngestionRun`** [Prefix: `BIJR-`] (`apps/bi/models/DataIntegration/IngestionRuns.py`)
   - **Purpose**: Immutable operational execution telemetry record capturing status, duration, throughput metrics, checkpoint updates, and error diagnostics for every run.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
@@ -381,35 +381,35 @@
 
 ## Backend (`apps/bi/{models,forms,views,urls}/DataIntegration/`)
 
-- [ ] `apps/bi/models/DataIntegration/__init__.py`
-- [ ] `apps/bi/models/DataIntegration/DataSourceConnectors.py`
-- [ ] `apps/bi/models/DataIntegration/IngestionPipelines.py`
-- [ ] `apps/bi/models/DataIntegration/CdcSyncConfigs.py`
-- [ ] `apps/bi/models/DataIntegration/IngestionRuns.py`
-- [ ] `apps/bi/forms/DataIntegration/__init__.py`
-- [ ] `apps/bi/forms/DataIntegration/DataSourceConnectors.py`
-- [ ] `apps/bi/forms/DataIntegration/IngestionPipelines.py`
-- [ ] `apps/bi/forms/DataIntegration/CdcSyncConfigs.py`
-- [ ] `apps/bi/forms/DataIntegration/IngestionRuns.py`
-- [ ] `apps/bi/views/DataIntegration/__init__.py`
-- [ ] `apps/bi/views/DataIntegration/DataSourceConnectors.py` (CRUD + test_connection action)
-- [ ] `apps/bi/views/DataIntegration/IngestionPipelines.py` (CRUD + trigger_run action)
-- [ ] `apps/bi/views/DataIntegration/CdcSyncConfigs.py` (CRUD + reset_cursor action)
-- [ ] `apps/bi/views/DataIntegration/IngestionRuns.py` (List, Detail, Create, Delete, Retry)
-- [ ] `apps/bi/views/DataIntegration/DataIntegrationHub.py` (Dashboard showing connector statuses, pipeline schedules, active CDC syncs, recent run health)
-- [ ] `apps/bi/urls/DataIntegration/__init__.py`
-- [ ] `apps/bi/urls/DataIntegration/DataSourceConnectors.py`
-- [ ] `apps/bi/urls/DataIntegration/IngestionPipelines.py`
-- [ ] `apps/bi/urls/DataIntegration/CdcSyncConfigs.py`
-- [ ] `apps/bi/urls/DataIntegration/IngestionRuns.py`
+- [x] `apps/bi/models/DataIntegration/__init__.py`
+- [x] `apps/bi/models/DataIntegration/DataSourceConnectors.py`
+- [x] `apps/bi/models/DataIntegration/IngestionPipelines.py`
+- [x] `apps/bi/models/DataIntegration/CdcSyncConfigs.py`
+- [x] `apps/bi/models/DataIntegration/IngestionRuns.py`
+- [x] `apps/bi/forms/DataIntegration/__init__.py`
+- [x] `apps/bi/forms/DataIntegration/DataSourceConnectors.py`
+- [x] `apps/bi/forms/DataIntegration/IngestionPipelines.py`
+- [x] `apps/bi/forms/DataIntegration/CdcSyncConfigs.py`
+- [x] `apps/bi/forms/DataIntegration/IngestionRuns.py`
+- [x] `apps/bi/views/DataIntegration/__init__.py`
+- [x] `apps/bi/views/DataIntegration/DataSourceConnectors.py` (CRUD + test_connection action)
+- [x] `apps/bi/views/DataIntegration/IngestionPipelines.py` (CRUD + trigger_run action)
+- [x] `apps/bi/views/DataIntegration/CdcSyncConfigs.py` (CRUD + reset_cursor action)
+- [x] `apps/bi/views/DataIntegration/IngestionRuns.py` (List, Detail, Create, Delete, Retry)
+- [x] `apps/bi/views/DataIntegration/DataIntegrationHub.py` (Dashboard showing connector statuses, pipeline schedules, active CDC syncs, recent run health)
+- [x] `apps/bi/urls/DataIntegration/__init__.py`
+- [x] `apps/bi/urls/DataIntegration/DataSourceConnectors.py`
+- [x] `apps/bi/urls/DataIntegration/IngestionPipelines.py`
+- [x] `apps/bi/urls/DataIntegration/CdcSyncConfigs.py`
+- [x] `apps/bi/urls/DataIntegration/IngestionRuns.py`
 
 ## Integration & Re-exports
-- [ ] Re-export all 4 models in `apps/bi/models/__init__.py`
-- [ ] Re-export all forms in `apps/bi/forms/__init__.py`
-- [ ] Re-export all views in `apps/bi/views/__init__.py`
-- [ ] Wire URL routes in `apps/bi/urls/__init__.py` (hub at root, plus entity routes & inbound webhook endpoint)
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Add `LIVE_LINKS["10.1"]` entry in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/bi/models/__init__.py`
+- [x] Re-export all forms in `apps/bi/forms/__init__.py`
+- [x] Re-export all views in `apps/bi/views/__init__.py`
+- [x] Wire URL routes in `apps/bi/urls/__init__.py` (hub at root, plus entity routes & inbound webhook endpoint)
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Add `LIVE_LINKS["10.1"]` entry in `apps/core/navigation.py`:
   - `"Source Connectors"`: `"bi:datasourceconnector_list"`
   - `"Batch & Real-Time Ingestion"`: `"bi:ingestionpipeline_list"`
   - `"Change Data Capture (CDC)"`: `"bi:cdcsyncconfig_list"`
@@ -417,32 +417,46 @@
   - `"File & Cloud Storage Imports"`: `"bi:ingestionpipeline_list"`
   - `"Data Integration Hub"`: `"bi:data_integration_hub"`
   - `"Ingestion Runs"`: `"bi:ingestionrun_list"`
-- [ ] Author `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records (connectors across ERP/RDBMS/S3/Webhook, active batch/CDC pipelines, realistic runs)
+- [x] Author `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records (connectors across ERP/RDBMS/S3/Webhook, active batch/CDC pipelines, realistic runs)
 
 ## Templates (`templates/bi/data_integration/`)
-- [ ] `templates/bi/data_integration/data_integration_hub.html`
-- [ ] `templates/bi/data_integration/data_source_connector/list.html`
-- [ ] `templates/bi/data_integration/data_source_connector/detail.html`
-- [ ] `templates/bi/data_integration/data_source_connector/form.html`
-- [ ] `templates/bi/data_integration/ingestion_pipeline/list.html`
-- [ ] `templates/bi/data_integration/ingestion_pipeline/detail.html`
-- [ ] `templates/bi/data_integration/ingestion_pipeline/form.html`
-- [ ] `templates/bi/data_integration/cdc_sync_config/list.html`
-- [ ] `templates/bi/data_integration/cdc_sync_config/detail.html`
-- [ ] `templates/bi/data_integration/cdc_sync_config/form.html`
-- [ ] `templates/bi/data_integration/ingestion_run/list.html`
-- [ ] `templates/bi/data_integration/ingestion_run/detail.html`
-- [ ] `templates/bi/data_integration/ingestion_run/form.html`
+- [x] `templates/bi/data_integration/data_integration_hub.html`
+- [x] `templates/bi/data_integration/data_source_connector/list.html`
+- [x] `templates/bi/data_integration/data_source_connector/detail.html`
+- [x] `templates/bi/data_integration/data_source_connector/form.html`
+- [x] `templates/bi/data_integration/ingestion_pipeline/list.html`
+- [x] `templates/bi/data_integration/ingestion_pipeline/detail.html`
+- [x] `templates/bi/data_integration/ingestion_pipeline/form.html`
+- [x] `templates/bi/data_integration/cdc_sync_config/list.html`
+- [x] `templates/bi/data_integration/cdc_sync_config/detail.html`
+- [x] `templates/bi/data_integration/cdc_sync_config/form.html`
+- [x] `templates/bi/data_integration/ingestion_run/list.html`
+- [x] `templates/bi/data_integration/ingestion_run/detail.html`
+- [x] `templates/bi/data_integration/ingestion_run/form.html`
 
 ## Verification & Close-out
-- [ ] Generate initial migration `python manage.py makemigrations bi` -> `0001_initial.py` and run `migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency
-- [ ] Run `python manage.py check` to verify clean system checks
-- [ ] Execute smoke test (`temp/smoke_bi_10_1.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.1.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dataintegration_models.py`, `test_dataintegration_forms.py`, `test_dataintegration_views.py`, `test_dataintegration_security.py`
-- [ ] Author `.claude/skills/bi/SKILL.md` and update `README.md`
+- [x] Generate initial migration `python manage.py makemigrations bi` -> `0001_initial.py` and run `migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency
+- [x] Run `python manage.py check` to verify clean system checks
+- [x] Execute smoke test (`temp/smoke_bi_10_1.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.1.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_dataintegration_models.py`, `test_dataintegration_forms.py`, `test_dataintegration_views.py`, `test_dataintegration_security.py`
+- [x] Author `.claude/skills/bi/SKILL.md` and update `README.md`
+
+## Review & Close-Out (2026-11-03)
+- **Status**: Shipped & verified green
+- **Models**: `DataSourceConnector` [BDSC-], `IngestionPipeline` [BING-], `CdcSyncConfig` [BCDC-], `IngestionRun` [BIJR-]
+- **Command Center**: `DataIntegrationHub` (`bi:data_integration_hub`, `/bi/data-integration/`)
+- **Scaffolding & Config**: `apps/bi/` scaffolded, `config/settings.py` updated with `'apps.bi'`, `config/urls.py` updated with `path('bi/', include('apps.bi.urls'))`
+- **Navigation**: `LIVE_LINKS["10.1"] = "bi:data_integration_hub"` wired in `apps/core/navigation.py`
+- **Migrations**: `0001_initial.py`, `0002_ingestionrun_idx_bijr_ten_start_desc.py`, `0003_datasourceconnector_idx_bdsc_ten_created_and_more.py`
+- **Seeder**: `manage.py seed_bi` idempotent across multiple runs
+- **Smoke Test**: 15 routes returning HTTP 200, IDOR 404s verified, zero comment leaks
+- **Review**: 6 serial passes recorded in `.claude/tasks/review-bi-10.1.md` (all 27 findings resolved)
+- **Tests**: 20/20 tests passing unfiltered in `apps/bi/tests/` (models, forms, views, security)
+- **Skill & Docs**: Authored `.claude/skills/bi/SKILL.md` and updated `README.md`
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-bi-10.1.md`.
 
 ## Later passes / deferred
 - Visual DAG Pipeline Designer & Transformation Canvas (Joins, Pivots, Casts) -> Sub-module 10.2 ETL/ELT & Data Pipelines
