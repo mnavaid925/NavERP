@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Data Integration &amp; Ingestion Hub — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <span>Business Intelligence</span>
+            <span>/</span>
+            <span>Data Integration &amp; Ingestion</span>
+        </div>
+        <h1 class="page-title">Data Integration &amp; Ingestion Hub</h1>
+        <p class="text-secondary text-sm">Centralized operational control for source connectors, scheduled pipelines, CDC delta streams, and telemetry logs</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_source_connector_create' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>New Connector</span>
+        </a>
+        <a href="{% url 'bi:ingestion_pipeline_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-semibold text-secondary">Connectors</span>
+            <span class="stat-icon blue"><i data-lucide="database"></i></span>
+        </div>
+        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_connectors }}</div>
+        <div class="text-xs text-secondary mt-1">
+            <span class="text-green-600 font-semibold">{{ active_connectors }}</span> active
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-semibold text-secondary">Pipelines</span>
+            <span class="stat-icon green"><i data-lucide="workflow"></i></span>
+        </div>
+        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_pipelines }}</div>
+        <div class="text-xs text-secondary mt-1">
+            <span class="text-green-600 font-semibold">{{ active_pipelines }}</span> active scheduled
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-semibold text-secondary">CDC Streams</span>
+            <span class="stat-icon purple"><i data-lucide="refresh-cw"></i></span>
+        </div>
+        <div class="text-2xl font-bold text-slate-800 mt-2">{{ cdc_streams_count }}</div>
+        <div class="text-xs text-secondary mt-1">
+            Delta capture enabled
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="flex items-center justify-between">
+            <span class="text-xs uppercase font-semibold text-secondary">Total Ingestion Runs</span>
+            <span class="stat-icon orange"><i data-lucide="activity"></i></span>
+        </div>
+        <div class="text-2xl font-bold text-slate-800 mt-2">{{ total_runs }}</div>
+        <div class="text-xs text-secondary mt-1">
+            Execution telemetry logged
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Active Ingestion Pipelines</h2>
+            <a href="{% url 'bi:ingestion_pipeline_list' %}" class="text-xs text-primary font-medium hover:underline">View All ({{ total_pipelines }}) &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Pipeline</th>
+                        <th>Source Entity</th>
+                        <th>Target Staging</th>
+                        <th>Cadence</th>
+                        <th>Status</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pipe in active_pipelines_list %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bi:ingestion_pipeline_detail' pipe.pk %}" class="font-medium text-primary hover:underline">
+                                {{ pipe.name }}
+                            </a>
+                            <div class="text-xs text-muted">{{ pipe.connector.name }}</div>
+                        </td>
+                        <td class="font-mono text-xs text-slate-700">{{ pipe.source_entity }}</td>
+                        <td class="font-mono text-xs text-primary font-semibold">{{ pipe.target_staging_table }}</td>
+                        <td class="text-sm text-secondary">{{ pipe.get_schedule_cadence_display }}</td>
+                        <td><span class="badge badge-green">Active</span></td>
+                        <td class="table-actions text-right">
+                            <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipe.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-primary" title="Trigger run now">
+                                    <i data-lucide="play"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-6 text-secondary text-sm">
+                            No active pipelines configured.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Configured Connectors</h2>
+            <a href="{% url 'bi:data_source_connector_list' %}" class="text-xs text-primary font-medium hover:underline">All ({{ total_connectors }}) &rarr;</a>
+        </div>
+        <div class="card-body">
+            <div class="space-y-3">
+                {% for conn in connectors %}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                    <div>
+                        <a href="{% url 'bi:data_source_connector_detail' conn.pk %}" class="text-sm font-semibold text-slate-800 hover:underline">
+                            {{ conn.name }}
+                        </a>
+                        <div class="text-xs text-secondary">{{ conn.get_connector_type_display }}</div>
+                    </div>
+                    <div class="text-right">
+                        {% if conn.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif conn.status == 'testing' %}
+                        <span class="badge badge-info">Testing</span>
+                        {% elif conn.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-6 text-secondary text-sm">
+                    No connectors configured yet.
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-100">
+                <a href="{% url 'bi:data_source_connector_create' %}" class="btn btn-outline btn-sm w-full justify-center">
+                    <i data-lucide="plus"></i>
+                    <span>Add New Connector</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Recent Ingestion Runs &amp; Telemetry</h2>
+        <a href="{% url 'bi:ingestion_run_list' %}" class="text-xs text-primary font-medium hover:underline">View All ({{ total_runs }}) &rarr;</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run #</th>
+                    <th>Pipeline</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Rows (Ext / Ins / Rej)</th>
+                    <th>Committed Cursor</th>
+                    <th>Started</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in recent_runs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                            {{ run.number }}
+                        </a>
+                    </td>
+                    <td class="text-sm font-medium text-slate-800">{{ run.pipeline.name }}</td>
+                    <td><span class="badge badge-slate">{{ run.get_trigger_type_display }}</span></td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                        <span class="badge badge-green">Completed</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% elif run.status == 'running' %}
+                        <span class="badge badge-info">Running</span>
+                        {% elif run.status == 'warning' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="font-mono text-xs">
+                        <span class="text-slate-800">{{ run.records_extracted }}</span> /
+                        <span class="text-green-600 font-semibold">{{ run.records_inserted }}</span> /
+                        <span class="text-red-500">{{ run.records_rejected }}</span>
+                    </td>
+                    <td class="font-mono text-xs text-slate-500 max-w-[140px] truncate">{{ run.committed_cursor|default:"—" }}</td>
+                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i:s" }}</td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="btn btn-icon btn-outline" title="View run details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-secondary text-sm">
+                        No recent ingestion runs logged.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
