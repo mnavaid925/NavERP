@@ -43,7 +43,7 @@ def deployment_pipeline_list(request):
         queryset = queryset.filter(deployment_strategy=strategy_filter)
 
     paginator = Paginator(queryset, 15)
-    page_number = request.GET.get("page")
+    page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
     environments = ecommerce_scope(PlatformEnvironment.objects.all(), request)
