@@ -5,6 +5,11 @@ from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
 
 
 class ApiCredentialForm(TenantUniqueMixin, TenantModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields["tier"].disabled = True
+
     class Meta:
         model = ApiCredential
         exclude = [
@@ -69,6 +74,18 @@ class ApiCredentialForm(TenantUniqueMixin, TenantModelForm):
         if not name:
             raise forms.ValidationError("Credential client name is required.")
         return name
+
+    def clean_tier(self):
+        if self.instance and self.instance.pk:
+            return self.instance.tier
+        return self.cleaned_data.get("tier")
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if self.instance and self.instance.pk:
+            if self.instance.status == "revoked" and status != "revoked":
+                raise forms.ValidationError("Revoked API credentials cannot be reactivated.")
+        return status
 
     def clean_rate_limit_rpm(self):
         val = self.cleaned_data.get("rate_limit_rpm")
