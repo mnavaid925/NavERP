@@ -70,7 +70,7 @@ webhooksubscription_list = webhook_subscription_list
 
 @login_required
 def webhook_subscription_detail(request, pk):
-    webhook = ecommerce_object(WebhookSubscription, pk, request)
+    webhook = ecommerce_object(request, WebhookSubscription, pk)
 
     context = {
         "webhook": webhook,
@@ -120,7 +120,7 @@ webhooksubscription_create = webhook_subscription_create
 
 @login_required
 def webhook_subscription_edit(request, pk):
-    webhook = ecommerce_object(WebhookSubscription, pk, request)
+    webhook = ecommerce_object(request, WebhookSubscription, pk)
 
     if request.method == "POST":
         form = WebhookSubscriptionForm(request.POST, instance=webhook, tenant=request.tenant)
@@ -153,7 +153,7 @@ webhooksubscription_edit = webhook_subscription_edit
 @login_required
 @require_POST
 def webhook_subscription_delete(request, pk):
-    webhook = ecommerce_object(WebhookSubscription, pk, request)
+    webhook = ecommerce_object(request, WebhookSubscription, pk)
     name = webhook.name
     write_audit_log(
         request.user,
@@ -174,7 +174,7 @@ webhooksubscription_delete = webhook_subscription_delete
 @login_required
 @require_POST
 def webhook_subscription_ping(request, pk):
-    webhook = ecommerce_object(WebhookSubscription, pk, request)
+    webhook = ecommerce_object(request, WebhookSubscription, pk)
     webhook.last_delivery_at = timezone.now()
     webhook.last_status_code = 200
     webhook.last_error_message = ""
