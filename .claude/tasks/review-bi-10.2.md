@@ -74,3 +74,29 @@
 ### M5. Semantic Version Duplicate Validation
 - **File**: `apps/bi/forms/EtlPipelines/EtlPipelineVersions.py`
 - **Defect**: Form should validate that `version_number` is not already used on the same pipeline in this tenant.
+
+---
+
+## Pass 2: `explorer` Findings
+
+### I7. Rule L17 Violation: Non-Standard `badge-info` Badges in Templates
+- **Files**:
+  - `templates/bi/etl_pipelines/etl_pipeline/detail.html`
+  - `templates/bi/etl_pipelines/etl_pipeline/canvas.html`
+  - `templates/bi/etl_pipelines/transformation_step/list.html`
+  - `templates/bi/etl_pipelines/transformation_step/detail.html`
+  - `templates/bi/etl_pipelines/etl_pipeline_run/list.html`
+  - `templates/bi/etl_pipelines/etl_pipeline_run/detail.html`
+- **Defect**: Uses `<span class="badge badge-info">`. Project Rule L17 strictly requires color-named badges (`badge-green`, `badge-red`, `badge-blue`, `badge-amber`, `badge-purple`, `badge-slate`, `badge-muted`). `badge-info` renders unstyled.
+- **Fix**: Replace `badge-info` with `badge-blue` or `badge-purple`.
+
+### I8. Form Field Naming for JSON Fields vs Test Contract
+- **File**: `apps/bi/forms/EtlPipelines/{EtlPipelines,TransformationSteps,EtlPipelineVersions}.py`
+- **Defect**: Forms expose `*_raw` fields for JSON textarea editing rather than the raw model field names.
+- **Fix**: Pin `*_raw` convention in tests and ensure clean parsing.
+
+### M6. Missing Delete Buttons on Step and Version Detail Views
+- **Files**: `templates/bi/etl_pipelines/transformation_step/detail.html`, `templates/bi/etl_pipelines/etl_pipeline_version/detail.html`
+- **Defect**: Delete button only exists on list views.
+- **Fix**: Add POST-confirm delete button in action bar on detail pages.
+
