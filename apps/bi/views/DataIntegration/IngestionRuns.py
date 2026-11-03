@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -96,26 +97,27 @@ def ingestion_run_retry(request, pk):
     pipeline = original_run.pipeline
     now = timezone.now()
 
-    new_run = IngestionRun.objects.create(
-        tenant=request.tenant,
-        pipeline=pipeline,
-        trigger_type="manual",
-        status="completed",
-        started_at=now,
-        ended_at=now,
-        duration_seconds=Decimal("2.10"),
-        records_extracted=original_run.records_extracted or 100,
-        records_inserted=original_run.records_extracted or 100,
-        records_updated=0,
-        records_rejected=0,
-        bytes_transferred=(original_run.records_extracted or 100) * 256,
-        committed_cursor=now.isoformat(),
-        log_summary=f"Retry of run {original_run.number} by {request.user.username}. All records ingested cleanly into {pipeline.target_staging_table}.",
-    )
+    with transaction.atomic():
+        new_run = IngestionRun.objects.create(
+            tenant=request.tenant,
+            pipeline=pipeline,
+            trigger_type="manual",
+            status="completed",
+            started_at=now,
+            ended_at=now,
+            duration_seconds=Decimal("2.10"),
+            records_extracted=original_run.records_extracted or 100,
+            records_inserted=original_run.records_extracted or 100,
+            records_updated=0,
+            records_rejected=0,
+            bytes_transferred=(original_run.records_extracted or 100) * 256,
+            committed_cursor=now.isoformat(),
+            log_summary=f"Retry of run {original_run.number} by {request.user.username}. All records ingested cleanly into {pipeline.target_staging_table}.",
+        )
 
-    pipeline.last_run_at = now
-    pipeline.save(update_fields=["last_run_at", "updated_at"])
+        pipeline.last_run_at = now
+        pipeline.save(update_fields=["last_run_at", "updated_at"])
 
-    write_audit_log(request.user, new_run, "retry", changes={"original_run": original_run.number}, tenant=request.tenant)
+        write_audit_log(request.user, new_run, "retry", changes={"original_run": original_run.number}, tenant=request.tenant)
     messages.success(request, f"Retry executed successfully. New run {new_run.number} completed.")
     return redirect("bi:ingestion_run_detail", pk=new_run.pk)
