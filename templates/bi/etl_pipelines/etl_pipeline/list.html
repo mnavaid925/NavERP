@@ -196,7 +196,7 @@
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:etl_pipeline_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete ETL Pipeline {{ p.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete pipeline" aria-label="Delete pipeline">
+                                <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete pipeline" aria-label="Delete pipeline">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
