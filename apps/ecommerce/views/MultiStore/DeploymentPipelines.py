@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -157,17 +158,18 @@ def deployment_pipeline_delete(request, pk):
 @require_POST
 def deployment_promote(request, pk):
     pipeline = ecommerce_object(request, DeploymentPipeline, pk=pk, select_related=("environment",))
-    pipeline.status = "promoted_active"
-    pipeline.traffic_percentage = 100
-    pipeline.promoted_at = timezone.now()
-    pipeline.promoted_by = request.user
-    pipeline.save()
+    with transaction.atomic():
+        pipeline.status = "promoted_active"
+        pipeline.traffic_percentage = 100
+        pipeline.promoted_at = timezone.now()
+        pipeline.promoted_by = request.user
+        pipeline.save()
 
-    # Update parent environment active slot if target_slot is blue or green
-    if pipeline.target_slot in ["blue", "green"]:
-        pipeline.environment.current_active_slot = pipeline.target_slot
-        pipeline.environment.status = "healthy"
-        pipeline.environment.save()
+        # Update parent environment active slot if target_slot is blue or green
+        if pipeline.target_slot in ["blue", "green"]:
+            pipeline.environment.current_active_slot = pipeline.target_slot
+            pipeline.environment.status = "healthy"
+            pipeline.environment.save()
 
     write_audit_log(
         request.user,
