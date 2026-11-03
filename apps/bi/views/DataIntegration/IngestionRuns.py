@@ -19,7 +19,6 @@ from apps.core.utils import write_audit_log
 @login_required
 def ingestion_run_list(request):
     queryset = bi_scope(IngestionRun.objects.all(), request)
-    total_count = queryset.count()
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -58,7 +57,7 @@ def ingestion_run_list(request):
         "status_choices": IngestionRun.STATUS_CHOICES,
         "trigger_choices": IngestionRun.TRIGGER_TYPE_CHOICES,
         "pipelines": pipelines,
-        "total_count": total_count,
+        "total_count": runs.paginator.count,
     }
     return render(request, "bi/data_integration/ingestion_run/list.html", context)
 
