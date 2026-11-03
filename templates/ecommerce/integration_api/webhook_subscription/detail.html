@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Webhook {{ webhook.number }} — {{ webhook.name }} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:webhooksubscription_list' %}">Webhooks</a>
+            <span>/</span>
+            <span>{{ webhook.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ webhook.name }}</h1>
+            <span class="font-mono text-sm text-secondary bg-slate-100 px-2 py-0.5 rounded">{{ webhook.number }}</span>
+            {% if webhook.status == "active" %}
+            <span class="badge badge-green">Active</span>
+            {% elif webhook.status == "circuit_broken" %}
+            <span class="badge badge-red">Circuit Broken</span>
+            {% elif webhook.status == "paused" %}
+            <span class="badge badge-amber">Paused</span>
+            {% else %}
+            <span class="badge badge-slate">{{ webhook.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-info font-mono text-xs">{{ webhook.event_topic }}</span>
+        </div>
+        <p class="text-secondary text-sm">Target: <span class="font-mono text-slate-700">{{ webhook.target_url }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Webhooks</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:webhooksubscription_ping' webhook.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send"></i>
+                <span>Send Test Ping</span>
+            </button>
+        </form>
+        <a href="{% url 'ecommerce:webhooksubscription_edit' webhook.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Webhook</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:webhooksubscription_delete' webhook.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete webhook {{ webhook.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-base font-semibold">Subscriber Endpoint Configuration</h2>
+                <span class="badge badge-slate font-mono text-xs">{{ webhook.payload_format|upper }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <div class="text-xs text-muted uppercase font-semibold">Destination Target URL</div>
+                        <div class="font-mono text-sm mt-1 text-slate-800 break-all p-2 bg-slate-50 rounded">
+                            {{ webhook.target_url }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Subscribed Event Topic</div>
+                        <div class="font-mono text-sm mt-1 text-primary font-semibold">{{ webhook.event_topic }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">TLS / SSL Verification</div>
+                        <div class="text-sm mt-1">
+                            {% if webhook.is_verify_ssl %}
+                            <span class="badge badge-green flex items-center gap-1 w-fit">
+                                <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Strict SSL Verified
+                            </span>
+                            {% else %}
+                            <span class="badge badge-amber flex items-center gap-1 w-fit">
+                                <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i> SSL Verification Disabled
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div class="text-xs text-muted uppercase font-semibold">HMAC-SHA256 Signature Secret</div>
+                        <div class="font-mono text-xs mt-1 text-slate-700 bg-slate-50 p-2 rounded flex justify-between items-center">
+                            <span>
+                                {% if webhook.secret_key %}
+                                {{ webhook.secret_key|slice:":10" }}••••••••••••••••••••••••
+                                {% else %}
+                                <span class="text-muted italic">None configured</span>
+                                {% endif %}
+                            </span>
+                            <span class="text-xs text-muted">Sent in X-NavERP-Signature</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <div class="text-xs text-muted uppercase font-semibold mb-1">Custom HTTP Headers</div>
+                    <div class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all">
+                        {{ webhook.custom_headers|default:"{}" }}
+                    </div>
+                </div>
+
+                {% if webhook.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <div class="text-xs text-muted uppercase font-semibold">Notes &amp; Description</div>
+                    <div class="text-sm text-slate-700 mt-1">{{ webhook.description }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if webhook.last_error_message %}
+        <div class="card border border-red-200">
+            <div class="card-header bg-red-50 flex items-center gap-2 text-red-800">
+                <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                <h2 class="card-title text-base font-semibold text-red-800">Last Delivery Error Trace</h2>
+            </div>
+            <div class="card-body">
+                <div class="bg-slate-900 text-red-300 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all">
+                    {{ webhook.last_error_message }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Delivery Performance &amp; Circuit Breaker</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-green-50 p-2.5 rounded">
+                        <div class="text-xs text-green-700 uppercase font-semibold">Delivered Events</div>
+                        <div class="text-lg font-bold font-mono text-green-800 mt-0.5">{{ webhook.total_delivered_count }}</div>
+                    </div>
+                    <div class="bg-red-50 p-2.5 rounded">
+                        <div class="text-xs text-red-700 uppercase font-semibold">Failed Deliveries</div>
+                        <div class="text-lg font-bold font-mono text-red-800 mt-0.5">{{ webhook.total_failed_count }}</div>
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <div class="text-xs text-muted uppercase font-semibold">Consecutive Failures</div>
+                    <div class="mt-1 flex items-center justify-between">
+                        <span class="font-mono font-semibold {% if webhook.consecutive_failures > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                            {{ webhook.consecutive_failures }} / {{ webhook.max_consecutive_failures }}
+                        </span>
+                        {% if webhook.status == "circuit_broken" %}
+                        <span class="badge badge-red">Circuit Tripped</span>
+                        {% else %}
+                        <span class="badge badge-green">Circuit Closed</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last HTTP Status</div>
+                    <div class="mt-1 font-mono">
+                        {% if webhook.last_status_code %}
+                        <span class="font-semibold {% if webhook.last_status_code == 200 %}text-green-600{% else %}text-red-600{% endif %}">
+                            HTTP {{ webhook.last_status_code }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted italic">No delivery recorded yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last Delivery Attempt</div>
+                    <div class="mt-1 text-slate-800">
+                        {{ webhook.last_delivery_at|date:"M d, Y H:i:s"|default:"Never delivered" }}
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <form method="post" action="{% url 'ecommerce:webhooksubscription_ping' webhook.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline w-full justify-center">
+                            <i data-lucide="send"></i>
+                            <span>Send Live Ping Event</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Metadata &amp; Timestamps</h2>
+            </div>
+            <div class="card-body space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-muted">Created</span>
+                    <span class="font-medium">{{ webhook.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Last Updated</span>
+                    <span class="font-medium">{{ webhook.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
