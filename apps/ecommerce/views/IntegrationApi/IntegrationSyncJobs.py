@@ -102,7 +102,7 @@ def integration_sync_job_detail(request, pk):
         pk,
         select_related=("connector", "triggered_by", "parent_job"),
     )
-    child_retries = sync_job.child_retries.all().order_by("-created_at")
+    child_retries = sync_job.child_retries.all().order_by("-created_at")[:20]
 
     context = {
         "sync_job": sync_job,
