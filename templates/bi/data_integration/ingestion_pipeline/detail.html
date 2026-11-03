@@ -28,6 +28,10 @@
         <p class="text-muted text-sm">Pipeline Code: <span class="font-mono">{{ pipeline.number }}</span> &bull; Target Table: <span class="font-mono text-brand font-semibold">{{ pipeline.target_staging_table }}</span></p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:ingestion_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
         <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary" title="Trigger pipeline extraction now">
