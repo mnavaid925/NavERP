@@ -15,7 +15,7 @@
             <span>{% if is_edit %}Edit {{ pipeline.number }}{% else %}New Pipeline{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Ingestion Pipeline: {{ pipeline.name }}{% else %}New Ingestion Pipeline{% endif %}</h1>
-        <p class="text-secondary text-sm">Define extraction parameters, cadence schedule, and staging destination</p>
+        <p class="text-muted text-sm">Define extraction parameters, cadence schedule, and staging destination</p>
     </div>
     <div class="page-actions">
         <a href="{% if is_edit %}{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}{% else %}{% url 'bi:ingestion_pipeline_list' %}{% endif %}" class="btn btn-outline">
@@ -72,14 +72,14 @@
                         <div class="form-group">
                             <label class="form-label" for="{{ form.source_entity.id_for_label }}">Source Entity / Path / Query <span class="text-danger">*</span></label>
                             {{ form.source_entity }}
-                            <p class="text-xs text-secondary mt-1">Table name (e.g. <code>accounting_invoice</code>), S3 prefix, or API route.</p>
+                            <p class="text-xs text-muted mt-1">Table name (e.g. <code>accounting_invoice</code>), S3 prefix, or API route.</p>
                             {% if form.source_entity.errors %}<div class="form-error">{{ form.source_entity.errors.0 }}</div>{% endif %}
                         </div>
 
                         <div class="form-group">
                             <label class="form-label" for="{{ form.target_staging_table.id_for_label }}">Target Staging Table <span class="text-danger">*</span></label>
                             {{ form.target_staging_table }}
-                            <p class="text-xs text-secondary mt-1">Staging dataset table name, e.g. <code>stg_accounting_invoices</code>.</p>
+                            <p class="text-xs text-muted mt-1">Staging dataset table name, e.g. <code>stg_accounting_invoices</code>.</p>
                             {% if form.target_staging_table.errors %}<div class="form-error">{{ form.target_staging_table.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
