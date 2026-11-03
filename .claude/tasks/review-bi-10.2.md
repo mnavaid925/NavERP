@@ -176,5 +176,20 @@
 - **Defect**: `TransformationStepAdmin`, `EtlPipelineVersionAdmin`, `EtlPipelineRunAdmin` display foreign keys without `list_select_related`.
 - **Fix**: Add `list_select_related` on admin classes.
 
+---
+
+## Pass 5: `qa-smoke-tester` Findings
+
+### I14. Runtime Audit Log Verification
+- **Files**: `apps/bi/views/EtlPipelines/{EtlPipelines,TransformationSteps,EtlPipelineVersions}.py`
+- **Defect**: Runtime inspection of `AuditLog` records created during POST operations confirmed that `AuditLog.user` is saved as NULL and `action` is truncated to 10 chars due to the argument transposition identified in C1.
+- **Fix**: Apply C1 fix across all 11 call sites.
+
+### M12. Direct GET on `@require_POST` Endpoints
+- **Files**: Delete and trigger views
+- **Defect**: Returns raw 405 on direct browser address-bar GET.
+- **Fix**: Standard Django behavior; working as designed.
+
+
 
 
