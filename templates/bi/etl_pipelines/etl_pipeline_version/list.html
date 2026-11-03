@@ -166,7 +166,7 @@
     </div>
 
     {% if page_obj.has_other_pages %}
-    <div class="pagination">
+    <div class="pagination justify-between">
         <div class="text-xs text-muted">
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} versions
         </div>
