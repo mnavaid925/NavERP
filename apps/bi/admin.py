@@ -55,6 +55,7 @@ class EtlPipelineAdmin(admin.ModelAdmin):
 @admin.register(TransformationStep)
 class TransformationStepAdmin(admin.ModelAdmin):
     list_display = ("number", "pipeline", "sequence", "name", "step_type", "status", "is_blocking", "tenant")
+    list_select_related = ("pipeline",)
     list_filter = ("step_type", "status", "is_blocking", "tenant")
     search_fields = ("number", "name", "pipeline__name", "description")
     readonly_fields = ("number", "created_at", "updated_at")
@@ -63,6 +64,7 @@ class TransformationStepAdmin(admin.ModelAdmin):
 @admin.register(EtlPipelineVersion)
 class EtlPipelineVersionAdmin(admin.ModelAdmin):
     list_display = ("number", "pipeline", "version_number", "environment", "status", "promoted_by", "promoted_at", "tenant")
+    list_select_related = ("pipeline", "promoted_by")
     list_filter = ("environment", "status", "tenant")
     search_fields = ("number", "version_number", "pipeline__name", "changelog")
     readonly_fields = ("number", "created_at", "updated_at", "promoted_at")
@@ -71,6 +73,7 @@ class EtlPipelineVersionAdmin(admin.ModelAdmin):
 @admin.register(EtlPipelineRun)
 class EtlPipelineRunAdmin(admin.ModelAdmin):
     list_display = ("number", "pipeline", "trigger_type", "status", "duration_seconds", "records_in", "records_out", "records_rejected", "sla_missed", "started_at")
+    list_select_related = ("pipeline",)
     list_filter = ("status", "trigger_type", "sla_missed", "is_backfill", "tenant")
     search_fields = ("number", "pipeline__name", "error_message")
     readonly_fields = ("number", "started_at", "ended_at", "created_at")
