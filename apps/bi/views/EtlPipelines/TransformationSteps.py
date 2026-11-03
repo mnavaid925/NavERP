@@ -58,7 +58,6 @@ def transformation_step_list(request):
             rows=rows,
         )
 
-    total_count = queryset.count()
     paginator = Paginator(
         queryset.select_related("pipeline", "mapping_template"),
         20,
@@ -79,7 +78,6 @@ def transformation_step_list(request):
         "step_type_choices": TransformationStep.STEP_TYPE_CHOICES,
         "status_choices": TransformationStep.STATUS_CHOICES,
         "pipelines": pipelines,
-        "total_count": total_count,
     }
     return render(request, "bi/etl_pipelines/transformation_step/list.html", context)
 
