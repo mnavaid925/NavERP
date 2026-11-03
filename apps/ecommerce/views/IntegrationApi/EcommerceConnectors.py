@@ -6,6 +6,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.IntegrationApi.EcommerceConnectors import EcommerceConnectorForm
 from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceConnector
@@ -151,7 +152,7 @@ def ecommerce_connector_detail(request, pk):
 ecommerceconnector_detail = ecommerce_connector_detail
 
 
-@login_required
+@tenant_admin_required
 def ecommerce_connector_create(request):
     if request.method == "POST":
         form = EcommerceConnectorForm(request.POST, tenant=request.tenant)
@@ -188,7 +189,7 @@ def ecommerce_connector_create(request):
 ecommerceconnector_create = ecommerce_connector_create
 
 
-@login_required
+@tenant_admin_required
 def ecommerce_connector_edit(request, pk):
     connector = ecommerce_object(request, EcommerceConnector, pk)
 
@@ -220,7 +221,7 @@ def ecommerce_connector_edit(request, pk):
 ecommerceconnector_edit = ecommerce_connector_edit
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def ecommerce_connector_delete(request, pk):
     connector = ecommerce_object(request, EcommerceConnector, pk)
@@ -241,7 +242,7 @@ def ecommerce_connector_delete(request, pk):
 ecommerceconnector_delete = ecommerce_connector_delete
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def ecommerce_connector_test_connection(request, pk):
     connector = ecommerce_object(request, EcommerceConnector, pk)
