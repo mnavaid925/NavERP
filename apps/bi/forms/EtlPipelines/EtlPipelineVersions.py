@@ -66,6 +66,18 @@ class EtlPipelineVersionForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["pipeline", "environment_instance"])
+        pipeline = cleaned.get("pipeline")
+        version_number = cleaned.get("version_number")
+        if pipeline and version_number and self.tenant:
+            qs = EtlPipelineVersion.objects.filter(
+                tenant=self.tenant,
+                pipeline=pipeline,
+                version_number=version_number,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error("version_number", f"Version '{version_number}' already exists for this pipeline.")
         return cleaned
 
     def save(self, commit=True):
