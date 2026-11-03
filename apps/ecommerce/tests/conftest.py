@@ -84,6 +84,10 @@ from apps.ecommerce.models import (
     StorefrontCatalogAssignment,
     PlatformEnvironment,
     DeploymentPipeline,
+    EcommerceConnector,
+    IntegrationSyncJob,
+    WebhookSubscription,
+    ApiCredential,
 )
 
 PRODUCTCATALOG_PAGE_SIZE = 20
@@ -4538,6 +4542,154 @@ def ecom_pipeline_a(tenant_a, ecom_environment_a):
 @pytest.fixture
 def ecom_pipeline_b(tenant_b, ecom_environment_b):
     return _multistore_deployment_pipeline(tenant_b, ecom_environment_b, release_version="v1.0.0-globex")
+
+
+# ==============================================================================
+# Sub-module 9.19 Integration & API Ecosystem Fixtures
+# ==============================================================================
+
+INTEGRATIONAPI_PAGE_SIZE = 15
+
+INTEGRATIONAPI_MODEL_FIELDS = {
+    "EcommerceConnector": (
+        "id", "tenant", "number", "name", "category", "provider", "auth_type",
+        "status", "health_status", "base_url", "api_key", "api_secret",
+        "oauth_client_id", "oauth_refresh_token", "timeout_seconds",
+        "rate_limit_per_minute", "is_active", "last_health_check_at",
+        "last_synced_at", "last_error_message", "metadata", "created_at", "updated_at",
+    ),
+    "IntegrationSyncJob": (
+        "id", "tenant", "number", "connector", "sync_entity", "direction",
+        "trigger_type", "status", "started_at", "finished_at", "records_total",
+        "records_processed", "records_failed", "cursor_value", "error_log",
+        "payload_snapshot", "retry_count", "max_retries", "parent_job",
+        "triggered_by", "created_at", "updated_at",
+    ),
+    "WebhookSubscription": (
+        "id", "tenant", "number", "target_url", "event_topic", "secret_key",
+        "status", "is_active", "is_verify_ssl", "custom_headers",
+        "total_delivered_count", "total_failed_count", "consecutive_failure_count",
+        "last_delivery_at", "last_status_code", "last_error_message",
+        "created_at", "updated_at",
+    ),
+    "ApiCredential": (
+        "id", "tenant", "number", "name", "client_id", "client_secret_hash",
+        "status", "tier", "scopes", "allowed_ips", "rate_limit_rpm",
+        "is_active", "created_by", "expires_at", "last_used_at", "revoked_at",
+        "created_at", "updated_at",
+    ),
+}
+
+
+def _integrationapi_connector(tenant, **kwargs):
+    params = {
+        "tenant": tenant,
+        "name": "Stripe Gateway",
+        "category": "payment",
+        "provider": "stripe",
+        "auth_type": "api_key",
+        "status": "connected",
+        "health_status": "healthy",
+        "base_url": "https://api.stripe.com/v1",
+        "api_key": "sk_test_demo12345",
+        "timeout_seconds": 30,
+        "rate_limit_per_minute": 100,
+        "is_active": True,
+    }
+    params.update(kwargs)
+    return EcommerceConnector.objects.create(**params)
+
+
+def _integrationapi_sync_job(tenant, connector, **kwargs):
+    params = {
+        "tenant": tenant,
+        "connector": connector,
+        "sync_entity": "orders",
+        "direction": "outbound",
+        "trigger_type": "manual",
+        "status": "pending",
+        "records_total": 50,
+        "records_processed": 0,
+        "records_failed": 0,
+    }
+    params.update(kwargs)
+    return IntegrationSyncJob.objects.create(**params)
+
+
+def _integrationapi_webhook(tenant, **kwargs):
+    params = {
+        "tenant": tenant,
+        "target_url": f"https://api.example.com/webhook/{tenant.pk}/",
+        "event_topic": "order.created",
+        "secret_key": "whsec_test_secret_12345",
+        "status": "active",
+        "is_active": True,
+        "is_verify_ssl": True,
+    }
+    params.update(kwargs)
+    return WebhookSubscription.objects.create(**params)
+
+
+def _integrationapi_credential(tenant, created_by, **kwargs):
+    import hashlib
+    raw_secret = kwargs.pop("raw_secret", "test_client_secret_12345")
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+    client_id = f"nep_pub_test_{tenant.pk}_{timezone.now().timestamp()}"
+    params = {
+        "tenant": tenant,
+        "name": "Public Storefront App",
+        "client_id": client_id,
+        "client_secret_hash": secret_hash,
+        "status": "active",
+        "tier": "storefront_public",
+        "scopes": "read_catalog,write_orders",
+        "rate_limit_rpm": 60,
+        "is_active": True,
+        "created_by": created_by,
+    }
+    params.update(kwargs)
+    return ApiCredential.objects.create(**params)
+
+
+@pytest.fixture
+def ecom_connector_a(tenant_a):
+    return _integrationapi_connector(tenant_a, name="Acme Stripe Connector")
+
+
+@pytest.fixture
+def ecom_connector_b(tenant_b):
+    return _integrationapi_connector(tenant_b, name="Globex Stripe Connector")
+
+
+@pytest.fixture
+def ecom_sync_job_a(tenant_a, ecom_connector_a, admin_user):
+    return _integrationapi_sync_job(tenant_a, ecom_connector_a, triggered_by=admin_user)
+
+
+@pytest.fixture
+def ecom_sync_job_b(tenant_b, ecom_connector_b, admin_b):
+    return _integrationapi_sync_job(tenant_b, ecom_connector_b, triggered_by=admin_b)
+
+
+@pytest.fixture
+def ecom_webhook_a(tenant_a):
+    return _integrationapi_webhook(tenant_a, target_url=f"https://acme-external-{tenant_a.pk}.com/webhooks/orders/")
+
+
+@pytest.fixture
+def ecom_webhook_b(tenant_b):
+    return _integrationapi_webhook(tenant_b, target_url=f"https://globex-external-{tenant_b.pk}.com/webhooks/orders/")
+
+
+@pytest.fixture
+def ecom_credential_a(tenant_a, admin_user):
+    return _integrationapi_credential(tenant_a, admin_user, name="Acme Mobile SDK Token", client_id=f"nep_pub_acme_sdk_{tenant_a.pk}")
+
+
+@pytest.fixture
+def ecom_credential_b(tenant_b, admin_b):
+    return _integrationapi_credential(tenant_b, admin_b, name="Globex Mobile SDK Token", client_id=f"nep_pub_globex_sdk_{tenant_b.pk}")
+
 
 
 
