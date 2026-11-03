@@ -28,7 +28,7 @@
 - [x] **I5**: Missing Deferral of Large Text & JSON Fields in list views. `EtlPipelineRun.execution_log` (TextField) and `step_progress` (JSONField) in `etl_pipeline_run_list` and `etl_pipeline_detail`, and `EtlPipelineVersion.dag_definition` in `etl_pipeline_version_list`. Add `.defer("execution_log", "step_progress")` and `.defer("dag_definition")`.
 - [x] **I6**: Missing Cross-Field Validation for `cron_expression` when `trigger_type == 'scheduled_cron'`. Require `cron_expression` in `EtlPipelineForm.clean()` when trigger type is scheduled cron.
 - [x] **I7**: Concurrency Guard on `etl_pipeline_trigger`. Guard against duplicate active runs: if `pipeline.runs.filter(status="running").exists()`, warn user and redirect instead of creating duplicate running run.
-- [ ] **I8**: Inconsistent Delete Redirect Target from Transformation Steps and Versions List Views. Support redirecting back to `bi:transformation_step_list` and `bi:etl_pipeline_version_list` when deleted from list view context.
+- [x] **I8**: Inconsistent Delete Redirect Target from Transformation Steps and Versions List Views. Support redirecting back to `bi:transformation_step_list` and `bi:etl_pipeline_version_list` when deleted from list view context.
 - [ ] **I9**: Pagination Bar Flex Justification in List Templates. List templates render `.pagination` without `justify-between`, clustering summary text and navigation buttons to the right. Add `justify-between` to `.pagination`.
 - [ ] **I10**: Cross-Model Validation in `EtlPipelineRunForm`. Verify `version.pipeline_id == pipeline.id` when both are submitted.
 
