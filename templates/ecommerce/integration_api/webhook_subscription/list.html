@@ -84,7 +84,7 @@
                     <span>Filter</span>
                 </button>
                 {% if search_query or topic_filter or status_filter %}
-                <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="btn btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -156,21 +156,21 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'ecommerce:webhooksubscription_detail' webhook.pk %}" class="btn btn-outline btn-icon" title="View Details">
+                            <a href="{% url 'ecommerce:webhooksubscription_detail' webhook.pk %}" class="btn btn-outline btn-icon" title="View Details" aria-label="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:webhooksubscription_edit' webhook.pk %}" class="btn btn-outline btn-icon" title="Edit Configuration">
+                            <a href="{% url 'ecommerce:webhooksubscription_edit' webhook.pk %}" class="btn btn-outline btn-icon" title="Edit Configuration" aria-label="Edit Configuration">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'ecommerce:webhooksubscription_ping' webhook.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-icon" title="Test Delivery (Ping)">
+                                <button type="submit" class="btn btn-outline btn-icon" title="Test Delivery (Ping)" aria-label="Test Delivery (Ping)">
                                     <i data-lucide="send"></i>
                                 </button>
                             </form>
                             <form method="post" action="{% url 'ecommerce:webhooksubscription_delete' webhook.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete webhook {{ webhook.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Webhook">
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Webhook" aria-label="Delete Webhook">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
