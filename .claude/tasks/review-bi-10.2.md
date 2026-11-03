@@ -36,7 +36,7 @@
 
 ## Minor Findings
 
-- [ ] **M1**: CSV Export in `etl_pipeline_list` Leaves "Source Staging" Blank for Bound Ingestion Pipelines. Use `p.source_ingestion_pipeline.target_staging_table if p.source_ingestion_pipeline else p.source_staging_table`.
+- [x] **M1**: CSV Export in `etl_pipeline_list` Leaves "Source Staging" Blank for Bound Ingestion Pipelines. Use `p.source_ingestion_pipeline.target_staging_table if p.source_ingestion_pipeline else p.source_staging_table`.
 - [ ] **M2**: Redundant SLA Formatting in `etl_pipeline/detail.html`. Simplify `{{ pipeline.sla_timeout_seconds }}s ({{ pipeline.sla_timeout_seconds|floatformat:0 }} sec)` to `{{ pipeline.sla_timeout_seconds }}s`.
 - [ ] **M3**: Redundant `total_count` Queries in Step and Version List Views. Remove unused `total_count = queryset.count()` calls.
 - [ ] **M4**: ModelForm Dropdown Field Optimization. Add `.only("id", "name", "number")` to form dropdown querysets for `pipeline`.
