@@ -43,4 +43,21 @@
 
 ## Reviewer 3: Frontend Reviewer
 
+### Critical
+- *None*
+
+### Important
+- **[IF1] Non-existent CSS classes .text-secondary and .text-primary**: `theme.css` does not define `.text-secondary` or `.text-primary` (only `.text-muted`, `.text-brand`, `.text-danger`, etc.). Replace `text-secondary` with `text-muted` (or `text-slate-500`) and `text-primary` with `text-brand` (or `text-blue-600`) across `templates/bi/`.
+- **[IF2] Ad-hoc KPI grid instead of theme.css .stat-grid / .stat-card**: In `data_integration_hub.html` and `ingestion_run/detail.html`, KPI metrics use ad-hoc grid cards instead of canonical `.stat-grid`, `.stat-card`, `.stat-value`, `.stat-label`.
+
+### Minor
+- **[MF1] Filter clear buttons missing .btn-icon and aria-label**: Filter reset buttons on all 4 list views should use `class="btn btn-icon btn-outline"` with `aria-label="Clear filters"`.
+- **[MF2] Missing Back-to-List button in detail sidebars**: Detail templates should include an explicit "Back to List" button in their action sidebars.
+- **[MF3] Physical margin ml-1 in CDC detail**: `cdc_sync_config/detail.html:85` uses physical `ml-1`; replace with logical `ms-1` for RTL compatibility.
+
+---
+
+## Reviewer 4: Performance Reviewer
+
+
 
