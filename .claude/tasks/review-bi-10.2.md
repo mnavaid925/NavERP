@@ -132,4 +132,49 @@
 - **Defect**: Breadcrumb separator uses `<span>/</span>` rather than `<span class="sep">/</span>`.
 - **Fix**: Add `class="sep"` to separators.
 
+---
+
+## Pass 4: `performance-reviewer` Findings
+
+### C4. Missing Composite Index on `EtlPipelineRun(tenant, -started_at)`
+- **File**: `apps/bi/models/EtlPipelines/EtlPipelineRuns.py`
+- **Defect**: `EtlPipelineRun` default ordering is `['-started_at']`. Existing indexes have `pipeline` or `status` preceding `started_at`, causing table scans/filesorts on tenant-scoped queries.
+- **Fix**: Add `models.Index(fields=["tenant", "-started_at"], name="idx_bexr_ten_start_desc")` and create migration.
+
+### C5. Chained Foreign Key Dereference in `__str__` Methods
+- **Files**: `apps/bi/models/EtlPipelines/EtlPipelineRuns.py`, `apps/bi/models/EtlPipelines/EtlPipelineVersions.py`
+- **Defect**: `__str__` dereferences `self.pipeline.name`, triggering N+1 queries when rendered without `select_related("pipeline")`.
+- **Fix**: Rely on local identifiers in `__str__`: `f"{self.number} ({self.get_status_display()})"` and `f"{self.number} — {self.version_number} ({self.get_environment_display()})"`.
+
+### I11. Multiple Separate Count Queries on Run and Pipeline Lists
+- **Files**: `apps/bi/views/EtlPipelines/EtlPipelineRuns.py`, `apps/bi/views/EtlPipelines/EtlPipelines.py`
+- **Defect**: Executing 3 separate `COUNT(*)` queries on runs and 2 on pipelines on every page load.
+- **Fix**: Combine into single conditional aggregation using `Count("id", filter=Q(...))`.
+
+### I12. Missing Deferral of Large Text & JSON Fields
+- **Files**: `apps/bi/views/EtlPipelines/EtlPipelineRuns.py`, `apps/bi/views/EtlPipelines/EtlPipelineVersions.py`, `apps/bi/views/EtlPipelines/EtlPipelines.py`
+- **Defect**: List views fetch large `execution_log`, `step_progress`, and `dag_definition` fields that are not rendered in table rows.
+- **Fix**: Add `.defer("execution_log", "step_progress")` and `.defer("dag_definition")` to list querysets.
+
+### I13. Missing Composite Index on `EtlPipelineVersion(tenant, -created_at)`
+- **File**: `apps/bi/models/EtlPipelines/EtlPipelineVersions.py`
+- **Defect**: Model orders by `['-created_at']` with `tenant` filter, requiring in-memory sort.
+- **Fix**: Add `models.Index(fields=["tenant", "-created_at"], name="idx_bpvr_ten_created_desc")`.
+
+### M9. Redundant `total_count` Queries in Step and Version List Views
+- **Files**: `apps/bi/views/EtlPipelines/TransformationSteps.py`, `apps/bi/views/EtlPipelines/EtlPipelineVersions.py`
+- **Defect**: Evaluates `total_count = queryset.count()` which is redundant to `paginator.count`.
+- **Fix**: Remove redundant count query.
+
+### M10. ModelForm Dropdown Field Optimization
+- **Files**: `apps/bi/forms/EtlPipelines/TransformationSteps.py`, `apps/bi/forms/EtlPipelines/EtlPipelineVersions.py`
+- **Defect**: Dropdown querysets for `pipeline` load full model rows with heavy JSON.
+- **Fix**: Add `.only("id", "name", "number")` to form dropdown querysets.
+
+### M11. Missing `list_select_related` in Django Admin
+- **File**: `apps/bi/admin.py`
+- **Defect**: `TransformationStepAdmin`, `EtlPipelineVersionAdmin`, `EtlPipelineRunAdmin` display foreign keys without `list_select_related`.
+- **Fix**: Add `list_select_related` on admin classes.
+
+
 
