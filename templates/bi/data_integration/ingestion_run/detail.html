@@ -30,6 +30,10 @@
         <p class="text-muted text-sm">Pipeline: <a href="{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}" class="text-brand font-medium hover:underline">{{ pipeline.name }}</a> &bull; Staging: <span class="font-mono text-slate-800">{{ pipeline.target_staging_table }}</span></p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:ingestion_run_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
         <form method="post" action="{% url 'bi:ingestion_run_retry' run.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary" title="Re-execute this pipeline run">
