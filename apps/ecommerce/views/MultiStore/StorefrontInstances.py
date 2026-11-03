@@ -93,8 +93,8 @@ def storefront_instance_create(request):
             storefront.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 storefront,
+                "CREATE",
                 f"Created storefront channel '{storefront.name}' ({storefront.number})"
             )
             messages.success(request, f"Storefront '{storefront.name}' created successfully.")
@@ -122,8 +122,8 @@ def storefront_instance_edit(request, pk):
             storefront.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 storefront,
+                "UPDATE",
                 f"Updated storefront channel '{storefront.name}' ({storefront.number})"
             )
             messages.success(request, f"Storefront '{storefront.name}' updated successfully.")
@@ -148,9 +148,10 @@ def storefront_instance_delete(request, pk):
     storefront.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         None,
-        f"Deleted storefront channel '{name}' ({num})"
+        "DELETE",
+        f"Deleted storefront channel '{name}' ({num})",
+        tenant=request.tenant,
     )
     messages.success(request, f"Storefront '{name}' was deleted.")
     return redirect("ecommerce:storefront_instance_list")
@@ -167,8 +168,8 @@ def storefront_toggle_status(request, pk):
     storefront.save()
     write_audit_log(
         request.user,
-        "UPDATE",
         storefront,
+        "UPDATE",
         f"Toggled status of storefront '{storefront.name}' to '{storefront.get_status_display()}'"
     )
     messages.success(request, f"Storefront status updated to {storefront.get_status_display()}.")
