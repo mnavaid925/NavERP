@@ -85,8 +85,7 @@ def deployment_pipeline_create(request):
         initial["environment"] = environment_id
 
     if request.method == "POST":
-        form = DeploymentPipelineForm(request.POST)
-        form.tenant = request.tenant
+        form = DeploymentPipelineForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             pipeline = form.save(commit=False)
             pipeline.tenant = request.tenant
@@ -100,8 +99,7 @@ def deployment_pipeline_create(request):
             messages.success(request, f"Deployment pipeline '{pipeline.release_version}' created successfully.")
             return redirect("ecommerce:deployment_pipeline_detail", pk=pipeline.pk)
     else:
-        form = DeploymentPipelineForm(initial=initial)
-        form.tenant = request.tenant
+        form = DeploymentPipelineForm(initial=initial, tenant=request.tenant)
 
     context = {
         "form": form,
@@ -115,8 +113,7 @@ def deployment_pipeline_create(request):
 def deployment_pipeline_edit(request, pk):
     pipeline = ecommerce_object(request, DeploymentPipeline, pk=pk)
     if request.method == "POST":
-        form = DeploymentPipelineForm(request.POST, instance=pipeline)
-        form.tenant = request.tenant
+        form = DeploymentPipelineForm(request.POST, instance=pipeline, tenant=request.tenant)
         if form.is_valid():
             pipeline = form.save()
             write_audit_log(
@@ -128,8 +125,7 @@ def deployment_pipeline_edit(request, pk):
             messages.success(request, f"Deployment pipeline '{pipeline.release_version}' updated.")
             return redirect("ecommerce:deployment_pipeline_detail", pk=pipeline.pk)
     else:
-        form = DeploymentPipelineForm(instance=pipeline)
-        form.tenant = request.tenant
+        form = DeploymentPipelineForm(instance=pipeline, tenant=request.tenant)
 
     context = {
         "form": form,
