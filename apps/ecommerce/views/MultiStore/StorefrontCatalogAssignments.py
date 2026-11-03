@@ -86,8 +86,8 @@ def storefront_catalog_assignment_create(request):
             assignment.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 assignment,
+                "CREATE",
                 f"Assigned product '{assignment.product.name}' to storefront '{assignment.storefront.name}' ({assignment.number})"
             )
             messages.success(request, f"Product assigned to storefront successfully.")
@@ -112,8 +112,8 @@ def storefront_catalog_assignment_edit(request, pk):
             assignment = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 assignment,
+                "UPDATE",
                 f"Updated catalog assignment for '{assignment.product.name}' on storefront '{assignment.storefront.name}' ({assignment.number})"
             )
             messages.success(request, "Catalog assignment updated successfully.")
@@ -139,9 +139,10 @@ def storefront_catalog_assignment_delete(request, pk):
     assignment.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         None,
-        f"Removed product '{prod_name}' from storefront '{store_name}' ({num})"
+        "DELETE",
+        f"Removed product '{prod_name}' from storefront '{store_name}' ({num})",
+        tenant=request.tenant,
     )
     messages.success(request, f"Product assignment removed.")
     return redirect("ecommerce:storefront_catalog_assignment_list")
