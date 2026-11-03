@@ -62,6 +62,7 @@ def integration_sync_job_list(request):
     connectors = ecommerce_scope(EcommerceConnector.objects.all(), request).only("id", "name").order_by("name")
 
     paginator = Paginator(qs, 15)
+    paginator._count = total_count
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
