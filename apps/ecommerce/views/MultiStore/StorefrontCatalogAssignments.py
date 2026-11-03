@@ -79,8 +79,7 @@ def storefront_catalog_assignment_create(request):
         initial["storefront"] = storefront_id
 
     if request.method == "POST":
-        form = StorefrontCatalogAssignmentForm(request.POST)
-        form.tenant = request.tenant
+        form = StorefrontCatalogAssignmentForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             assignment = form.save(commit=False)
             assignment.tenant = request.tenant
@@ -94,8 +93,7 @@ def storefront_catalog_assignment_create(request):
             messages.success(request, f"Product assigned to storefront successfully.")
             return redirect("ecommerce:storefront_catalog_assignment_detail", pk=assignment.pk)
     else:
-        form = StorefrontCatalogAssignmentForm(initial=initial)
-        form.tenant = request.tenant
+        form = StorefrontCatalogAssignmentForm(initial=initial, tenant=request.tenant)
 
     context = {
         "form": form,
@@ -109,8 +107,7 @@ def storefront_catalog_assignment_create(request):
 def storefront_catalog_assignment_edit(request, pk):
     assignment = ecommerce_object(request, StorefrontCatalogAssignment, pk=pk)
     if request.method == "POST":
-        form = StorefrontCatalogAssignmentForm(request.POST, instance=assignment)
-        form.tenant = request.tenant
+        form = StorefrontCatalogAssignmentForm(request.POST, instance=assignment, tenant=request.tenant)
         if form.is_valid():
             assignment = form.save()
             write_audit_log(
@@ -122,8 +119,7 @@ def storefront_catalog_assignment_edit(request, pk):
             messages.success(request, "Catalog assignment updated successfully.")
             return redirect("ecommerce:storefront_catalog_assignment_detail", pk=assignment.pk)
     else:
-        form = StorefrontCatalogAssignmentForm(instance=assignment)
-        form.tenant = request.tenant
+        form = StorefrontCatalogAssignmentForm(instance=assignment, tenant=request.tenant)
 
     context = {
         "form": form,
