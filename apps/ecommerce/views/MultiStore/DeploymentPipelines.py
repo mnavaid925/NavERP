@@ -30,7 +30,7 @@ def deployment_pipeline_list(request):
         )
 
     environment_filter = request.GET.get("environment", "").strip()
-    if environment_filter:
+    if environment_filter and environment_filter.isdigit():
         queryset = queryset.filter(environment_id=environment_filter)
 
     status_filter = request.GET.get("status", "").strip()
