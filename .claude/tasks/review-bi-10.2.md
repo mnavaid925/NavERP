@@ -39,7 +39,7 @@
 - [x] **M1**: CSV Export in `etl_pipeline_list` Leaves "Source Staging" Blank for Bound Ingestion Pipelines. Use `p.source_ingestion_pipeline.target_staging_table if p.source_ingestion_pipeline else p.source_staging_table`.
 - [x] **M2**: Redundant SLA Formatting in `etl_pipeline/detail.html`. Simplify `{{ pipeline.sla_timeout_seconds }}s ({{ pipeline.sla_timeout_seconds|floatformat:0 }} sec)` to `{{ pipeline.sla_timeout_seconds }}s`.
 - [x] **M3**: Redundant `total_count` Queries in Step and Version List Views. Remove unused `total_count = queryset.count()` calls.
-- [ ] **M4**: ModelForm Dropdown Field Optimization. Add `.only("id", "name", "number")` to form dropdown querysets for `pipeline`.
+- [x] **M4**: ModelForm Dropdown Field Optimization. Add `.only("id", "name", "number")` to form dropdown querysets for `pipeline`.
 - [ ] **M5**: Delete Actions Rendered for Non-Tenant Admins in UI Templates. Wrap delete forms with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 - [ ] **M6**: Delete Icon Button Styling Consistency. Use `btn-icon btn-outline text-danger` for consistent ghost action buttons.
 - [ ] **M7**: Breadcrumb Separator Class. Add `class="sep"` to breadcrumb separators.
