@@ -75,6 +75,10 @@ from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceCo
 from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
 from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
 from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
+from apps.ecommerce.models.MultiStore.StorefrontInstances import StorefrontInstance
+from apps.ecommerce.models.MultiStore.StorefrontCatalogAssignments import StorefrontCatalogAssignment
+from apps.ecommerce.models.MultiStore.PlatformEnvironments import PlatformEnvironment
+from apps.ecommerce.models.MultiStore.DeploymentPipelines import DeploymentPipeline
 
 __all__ = [
     "TenantOwned",
@@ -177,4 +181,9 @@ __all__ = [
     "IntegrationSyncJob",
     "WebhookSubscription",
     "ApiCredential",
+    # 9.20 Multi-Store & Platform Operations
+    "StorefrontInstance",
+    "StorefrontCatalogAssignment",
+    "PlatformEnvironment",
+    "DeploymentPipeline",
 ]
