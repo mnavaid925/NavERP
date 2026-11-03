@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys &amp; Credentials — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <span>API Credentials</span>
+        </div>
+        <h1 class="page-title">API Keys &amp; Headless Access Tokens</h1>
+        <p class="text-secondary text-sm">Issue and manage public storefront access keys and server-to-server admin API credentials</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:integration_api_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Integration Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:apicredential_create' %}" class="btn btn-primary">
+            <i data-lucide="key"></i>
+            <span>Generate API Key</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card blue">
+        <div class="stat-icon blue"><i data-lucide="key"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Total Provisioned</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Active &amp; Authorized</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card red">
+        <div class="stat-icon red"><i data-lucide="slash"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Revoked Credentials</div>
+            <div class="stat-value">{{ revoked_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-icon orange"><i data-lucide="gauge"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Rate Limiting</div>
+            <div class="stat-value">Enforced</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:apicredential_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search client name, client ID, scopes..." class="form-input" aria-label="Search API credentials">
+            </div>
+            <div class="form-group mb-0">
+                <select name="tier" class="form-select" aria-label="Filter by tier">
+                    <option value="">All Tiers</option>
+                    {% for val, label in tier_choices %}
+                    <option value="{{ val }}" {% if tier_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="status" class="form-select" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or tier_filter or status_filter %}
+                <a href="{% url 'ecommerce:apicredential_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>App Name &amp; Key Number</th>
+                    <th>Client ID</th>
+                    <th>Access Tier</th>
+                    <th>Status</th>
+                    <th>Scopes</th>
+                    <th>Total Requests</th>
+                    <th>Last Active</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cred in credentials %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:apicredential_detail' cred.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ cred.number }}
+                        </a>
+                        <span class="block text-sm font-medium text-slate-800">{{ cred.name }}</span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-700 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                            {{ cred.client_id }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if cred.tier == "storefront_public" %}
+                        <span class="badge badge-info">Storefront Public</span>
+                        {% elif cred.tier == "admin_server" %}
+                        <span class="badge badge-purple">Admin Private</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ cred.get_tier_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cred.status == "active" %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif cred.status == "revoked" %}
+                        <span class="badge badge-red">Revoked</span>
+                        {% elif cred.status == "expired" %}
+                        <span class="badge badge-muted">Expired</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ cred.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-secondary max-w-xs truncate block" title="{{ cred.scopes }}">
+                            {{ cred.scopes }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm font-medium text-slate-700">{{ cred.total_requests_count }}</span>
+                        <span class="text-xs text-muted block">calls</span>
+                    </td>
+                    <td>
+                        {% if cred.last_used_at %}
+                        <span class="text-xs text-secondary">{{ cred.last_used_at|date:"M d, H:i" }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Never</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:apicredential_detail' cred.pk %}" class="btn btn-outline btn-icon" title="View Key">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:apicredential_edit' cred.pk %}" class="btn btn-outline btn-icon" title="Edit Settings">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if cred.status == "active" %}
+                            <form method="post" action="{% url 'ecommerce:apicredential_revoke' cred.pk %}" class="inline" onsubmit="return confirm('Revoke API key {{ cred.name }}? External integrations using this key will immediately fail.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Revoke Key">
+                                    <i data-lucide="slash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'ecommerce:apicredential_delete' cred.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to permanently delete credential {{ cred.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Key">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i data-lucide="key"></i></div>
+                            <div class="empty-state-title">No API keys provisioned</div>
+                            <div class="empty-state-desc">Generate public storefront access tokens or private server-to-server API credentials.</div>
+                            <a href="{% url 'ecommerce:apicredential_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="key"></i>
+                                <span>Generate API Key</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if tier_filter %}&tier={{ tier_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
