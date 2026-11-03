@@ -37,7 +37,7 @@ class WebhookSubscriptionForm(TenantUniqueMixin, TenantModelForm):
             "event_topic": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "secret_key": forms.PasswordInput(
-                render_value=True,
+                render_value=False,
                 attrs={
                     "class": "form-input font-mono",
                     "placeholder": "HMAC secret key (auto-generated if left blank)",
@@ -86,5 +86,7 @@ class WebhookSubscriptionForm(TenantUniqueMixin, TenantModelForm):
     def clean_secret_key(self):
         val = self.cleaned_data.get("secret_key", "").strip()
         if not val:
+            if self.instance and self.instance.pk and self.instance.secret_key:
+                return self.instance.secret_key
             val = f"whsec_{secrets.token_hex(24)}"
         return val
