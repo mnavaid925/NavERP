@@ -59,5 +59,24 @@
 
 ## Reviewer 4: Performance Reviewer
 
+### Critical
+- *None*
+
+### Important
+- **[IP1] Missing select_related('cdc_config') on pipeline detail**: `apps/bi/views/DataIntegration/IngestionPipelines.py:72` retrieves pipeline without `cdc_config` in `select_related`, issuing an extra query when accessing `pipeline.cdc_config`. Add `"cdc_config"` to `select_related`.
+- **[IP2] Redundant .count() and sliced count queries in detail views**: `data_source_connector/detail.html` and `ingestion_pipeline/detail.html` evaluate `{{ pipelines.count }}` and `{{ runs.count }}` multiple times and on sliced querysets. Pre-evaluate `list(...)` and pass `len(...)` or use `|length` in templates.
+- **[IP3] Missing (tenant, -started_at) index on high-volume IngestionRun table**: `apps/bi/models/DataIntegration/IngestionRuns.py` orders by `-started_at`, but indexes have intermediate columns (`status`, `pipeline`), causing filesorts on high-volume unfiltered queries. Add `models.Index(fields=["tenant", "-started_at"], name="idx_bijr_ten_start_desc")`.
+- **[IP4] Redundant unfiltered count before pagination in list views**: In all 4 list views, `queryset.count()` is evaluated before filters are applied, adding a redundant query. Pass `page_obj.paginator.count` instead.
+
+### Minor
+- **[MP1] Consolidate hub KPI counts via conditional aggregation**: In `DataIntegrationHub.py`, combine separate `.count()` calls using `Count("id", filter=Q(...))` to reduce round-trips from 6 to 4.
+- **[MP2] Defer heavy JSON fields in dropdown querysets**: In `ingestion_pipeline_list` and `ingestion_run_list`, use `.only("id", "name")` when loading filter dropdown querysets.
+- **[MP3] Add (tenant, -created_at) indexes on connectors and pipelines**: Add composite ordering indexes `idx_bdsc_ten_created` and `idx_bing_ten_created`.
+
+---
+
+## Reviewer 5: QA Smoke Tester
+
+
 
 
