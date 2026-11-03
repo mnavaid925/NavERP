@@ -7,6 +7,225 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.1: Data Integration & Ingestion (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.1.md` (2026-11-03)
+
+> **This plan SCAFFOLDS A BRAND NEW APP.** `apps/bi` is being established with Sub-module 10.1 as the foundational entry point for Module 10 (Business Intelligence).
+> **Scaffold step REQUIRED:** `apps/bi/apps.py`, `apps/bi/__init__.py`, `apps/bi/migrations/__init__.py`, `apps/bi/models/_base.py`, `apps/bi/forms/_common.py`, `apps/bi/views/_common.py`, `apps/bi/management/commands/seed_bi.py`.
+> **Configuration edits REQUIRED:** `config/settings.py` (add `'apps.bi'` to `INSTALLED_APPS`), `config/urls.py` (add `path('bi/', include('apps.bi.urls'))`).
+> **Initial Migration:** `apps/bi/migrations/0001_initial.py` via `python manage.py makemigrations bi`.
+> Plan written from `.claude/tasks/research-bi-10.1.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/DataIntegration/`
+> Template folder name: `templates/bi/data_integration/{data_source_connector,ingestion_pipeline,cdc_sync_config,ingestion_run}/` + `data_integration_hub.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Data Integration & Ingestion Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Credentials: `DataSourceConnector.credential` links to verified `core.ApiCredential` (Module 0).
+  - Rate Limiting: `IngestionPipeline.rate_limit_policy` links to `core.RateLimitPolicy` (Module 0).
+  - Mapping Templates: `IngestionPipeline.mapping_template` links to `core.MappingTemplate` (Module 0).
+  - User references: `DataSourceConnector.created_by` links to `settings.AUTH_USER_MODEL`.
+  - Operational Boundary: 10.1 owns *data ingestion, extraction, CDC streaming configuration, file parsing, and run telemetry*. It does not transform data (10.2 DAG builder), store star/snowflake marts (10.3), or mutate operational ERP ledgers (Module 2 Accounting, Module 4 SCM, Module 8 Sales).
+  - Audit logging: Administrative actions (connector testing, pipeline triggering, pause/resume, CDC resets) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Sibling Boundaries (10.1 vs. 10.2 vs. 10.3 vs. 10.7 vs. 10.19)**:
+  - 10.1 (`DataIntegration`): Source connectors, batch/real-time ingestion schedules, CDC delta capture, webhook gateway, file imports, execution run logs.
+  - 10.2 (`EtlPipelines`): Visual DAG pipeline designer, transformation node library (joins, aggregations, pivots), orchestration dependency chaining.
+  - 10.3 (`DataWarehouse`): Star/Snowflake dimensional schemas, facts/dimensions, data marts, storage tiering.
+  - 10.7 (`DataCatalog`): Enterprise metadata catalog, lineage graphs, data governance policies.
+  - 10.19 (`IntegrationApi`): Outbound BI syndication to Snowflake, BigQuery, Tableau, Looker, external message queues.
+- **Prefix Collision Sweep**: `BDSC`, `BING`, `BCDC`, `BIJR` verified 100% collision-free across the entire repository.
+
+---
+
+## 10.1-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO live C-level database log parsers or binary streaming daemons in test suite** — Log-based CDC is represented with configurable capture methods, while query-timestamp and sequence cursors execute directly; external WAL streaming interfaces are simulated cleanly without requiring live root-level PostgreSQL replication slots in SQLite unit tests.
+- [ ] **NO live external cloud object storage or SFTP server connections in test suite** — Cloud storage connectors (S3/Azure/GCS/SFTP) are configured via structured metadata and tested with mock payloads/in-memory file buffers; no external network sockets are opened during CI test runs.
+- [ ] **NO automated destructive DDL alteration on operational tables** — Schema drift policies (`auto_propagate`, `detect_and_warn`, `block_and_pause`) detect and log column additions or alterations rather than running unsafe unreviewed raw DDL migrations.
+- [ ] **NO duplication of Module 0 integration tables** — Credentials use `core.ApiCredential`, rate limits use `core.RateLimitPolicy`, mapping templates use `core.MappingTemplate`.
+
+---
+
+## Brand-New App Scaffolding (`apps/bi/`)
+- [ ] `apps/bi/__init__.py`
+- [ ] `apps/bi/apps.py` (`BiConfig`)
+- [ ] `apps/bi/migrations/__init__.py`
+- [ ] `apps/bi/models/__init__.py` + `apps/bi/models/_base.py` (`TenantOwned`, `TenantNumbered`)
+- [ ] `apps/bi/forms/__init__.py` + `apps/bi/forms/_common.py` (`TenantUniqueMixin`, `reject_foreign`)
+- [ ] `apps/bi/views/__init__.py` + `apps/bi/views/_common.py` (`bi_scope`, `bi_object`, etc.)
+- [ ] `apps/bi/urls/__init__.py`
+- [ ] `apps/bi/admin.py`
+- [ ] `apps/bi/management/__init__.py`, `apps/bi/management/commands/__init__.py`, `apps/bi/management/commands/seed_bi.py`
+- [ ] `config/settings.py` — register `'apps.bi'` in `INSTALLED_APPS`
+- [ ] `config/urls.py` — register `path('bi/', include('apps.bi.urls'))`
+
+---
+
+## Models (4 models in `apps/bi/models/DataIntegration/`)
+
+- [ ] **`DataSourceConnector`** [Prefix: `BDSC-`] (`apps/bi/models/DataIntegration/DataSourceConnectors.py`)
+  - **Purpose**: Authoritative source system connection registry supporting Internal ERP modules, RDBMS, NoSQL, Cloud Storage, SFTP, REST APIs, and Webhook push channels.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)`
+    - `connector_type`: `CharField(max_length=30, choices=[('internal_erp', 'NavERP Internal Module'), ('database_rdbms', 'Relational Database (RDBMS)'), ('database_nosql', 'NoSQL / Document Store'), ('cloud_storage', 'Cloud Object Storage (S3/GCS/Azure)'), ('sftp_server', 'SFTP / Secure File Server'), ('rest_api', 'REST API Endpoint'), ('webhook_push', 'Inbound HTTP Webhook'), ('file_upload', 'Manual File Upload Buffer')], default='internal_erp')`
+    - `status`: `CharField(max_length=20, choices=[('active', 'Active / Ready'), ('inactive', 'Inactive / Disabled'), ('testing', 'Testing Connection'), ('error', 'Connection Error')], default='active')`
+    - `connection_config`: `JSONField(default=dict, blank=True, help_text="Host, port, database, bucket, sftp_path, ssl_mode, query_options")`
+    - `credential`: `ForeignKey("core.ApiCredential", on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_connectors")`
+    - `discovered_catalog`: `JSONField(default=dict, blank=True, help_text="Cached list of discovered streams, tables, and column attributes")`
+    - `last_tested_at`: `DateTimeField(null=True, blank=True)`
+    - `test_status`: `CharField(max_length=20, choices=[('untested', 'Untested'), ('success', 'Connection Verified'), ('failed', 'Connection Failed')], default='untested')`
+    - `test_message`: `CharField(max_length=255, blank=True)`
+    - `description`: `TextField(blank=True)`
+    - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_connectors_created")`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `discovered_catalog`, `last_tested_at`, `test_status`, `test_message`
+
+- [ ] **`IngestionPipeline`** [Prefix: `BING-`] (`apps/bi/models/DataIntegration/IngestionPipelines.py`)
+  - **Purpose**: Ingestion pipeline definition linking a data source to a target analytical staging table, with scheduling cadence, file parsing options, and inbound webhook configuration.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)`
+    - `connector`: `ForeignKey("bi.DataSourceConnector", on_delete=models.PROTECT, related_name="pipelines")`
+    - `ingestion_mode`: `CharField(max_length=30, choices=[('batch_scheduled', 'Scheduled Batch'), ('micro_batch', 'Micro-Batch (Near-Real-Time)'), ('real_time_webhook', 'Real-Time Webhook Push'), ('manual_on_demand', 'Manual On-Demand Only')], default='batch_scheduled')`
+    - `source_entity`: `CharField(max_length=150, help_text="Source table, collection, API endpoint, or ERP model identifier")`
+    - `target_staging_table`: `CharField(max_length=150, help_text="Target analytical staging table, e.g. stg_accounting_invoices")`
+    - `schedule_cadence`: `CharField(max_length=30, choices=[('manual', 'Manual Trigger Only'), ('every_15_min', 'Every 15 Minutes'), ('hourly', 'Hourly'), ('daily', 'Daily'), ('weekly', 'Weekly'), ('custom_cron', 'Custom Cron Expression')], default='daily')`
+    - `cron_expression`: `CharField(max_length=60, blank=True)`
+    - `file_format`: `CharField(max_length=20, choices=[('none', 'Not Applicable / Database Query'), ('csv', 'CSV (Comma-Separated)'), ('tsv', 'TSV (Tab-Separated)'), ('json', 'JSON Array / Objects'), ('ndjson', 'Newline-Delimited JSON'), ('excel', 'Excel Spreadsheet (.xlsx)'), ('parquet', 'Apache Parquet')], default='none')`
+    - `file_parsing_options`: `JSONField(default=dict, blank=True, help_text="delimiter, quote_char, has_header, skip_rows, encoding, path_pattern")`
+    - `webhook_token`: `CharField(max_length=64, blank=True, unique=True, db_index=True, help_text="Unique secret URL slug for inbound webhook ingress")`
+    - `webhook_secret`: `CharField(max_length=128, blank=True, help_text="HMAC verification secret or shared token")`
+    - `rate_limit_policy`: `ForeignKey("core.RateLimitPolicy", on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_pipelines")`
+    - `mapping_template`: `ForeignKey("core.MappingTemplate", on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_pipelines")`
+    - `status`: `CharField(max_length=20, choices=[('active', 'Active / Scheduled'), ('paused', 'Paused'), ('draft', 'Draft / In Setup'), ('error', 'Error / Attention Needed')], default='draft')`
+    - `last_run_at`: `DateTimeField(null=True, blank=True)`
+    - `next_run_due_at`: `DateTimeField(null=True, blank=True)`
+    - `description`: `TextField(blank=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_run_at`, `next_run_due_at`
+
+- [ ] **`CdcSyncConfig`** [Prefix: `BCDC-`] (`apps/bi/models/DataIntegration/CdcSyncConfigs.py`)
+  - **Purpose**: Specializes Change Data Capture (CDC) behavior, delta capture mechanisms, sync strategies, high-water mark cursor tracking, and schema drift handling.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `pipeline`: `OneToOneField("bi.IngestionPipeline", on_delete=models.CASCADE, related_name="cdc_config")`
+    - `capture_method`: `CharField(max_length=30, choices=[('log_based', 'Log-Based CDC (WAL / Binlog / Redo)'), ('query_timestamp', 'Query-Based Timestamp Cursor'), ('query_incrementing_id', 'Query-Based Incrementing Primary Key'), ('full_snapshot', 'Full Table Snapshot (No Delta)')], default='query_timestamp')`
+    - `sync_mode`: `CharField(max_length=30, choices=[('full_refresh_overwrite', 'Full Refresh Overwrite'), ('full_refresh_append', 'Full Refresh Append (Historical Versioning)'), ('incremental_append', 'Incremental Append (Event Log)'), ('incremental_deduped', 'Incremental Deduped History (Upsert by PK)')], default='incremental_deduped')`
+    - `primary_key_fields`: `CharField(max_length=150, default="id", help_text="Comma-separated primary key columns for record deduplication")`
+    - `cursor_field`: `CharField(max_length=100, blank=True, default="updated_at", help_text="Column used as high-water mark cursor (e.g. updated_at, sequence_id)")`
+    - `last_cursor_value`: `CharField(max_length=255, blank=True, help_text="Persisted high-water mark offset or timestamp from last committed run")`
+    - `last_checkpoint_at`: `DateTimeField(null=True, blank=True)`
+    - `schema_drift_policy`: `CharField(max_length=30, choices=[('auto_propagate', 'Auto-Propagate New Columns'), ('detect_and_warn', 'Detect & Warn (Log Drift)'), ('block_and_pause', 'Block & Pause Pipeline on Schema Change')], default='detect_and_warn')`
+    - `capture_deletes`: `BooleanField(default=True, help_text="Capture and flag deleted records from source system")`
+    - `soft_delete_field`: `CharField(max_length=60, default="is_deleted", help_text="Staging attribute name storing soft-delete status")`
+    - `description`: `TextField(blank=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_checkpoint_at`
+
+- [ ] **`IngestionRun`** [Prefix: `BIJR-`] (`apps/bi/models/DataIntegration/IngestionRuns.py`)
+  - **Purpose**: Immutable operational execution telemetry record capturing status, duration, throughput metrics, checkpoint updates, and error diagnostics for every run.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE)`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `pipeline`: `ForeignKey("bi.IngestionPipeline", on_delete=models.CASCADE, related_name="runs")`
+    - `trigger_type`: `CharField(max_length=20, choices=[('scheduled', 'Scheduled Cadence'), ('manual', 'Manual Trigger'), ('webhook', 'Inbound Webhook Event'), ('cdc_stream', 'CDC Streaming Delta')], default='manual')`
+    - `status`: `CharField(max_length=20, choices=[('pending', 'Pending Execution'), ('running', 'Running / In Progress'), ('completed', 'Completed Successfully'), ('warning', 'Completed with Warnings'), ('failed', 'Failed'), ('cancelled', 'Cancelled')], default='pending')`
+    - `started_at`: `DateTimeField(default=timezone.now)`
+    - `ended_at`: `DateTimeField(null=True, blank=True)`
+    - `duration_seconds`: `DecimalField(max_digits=10, decimal_places=2, default=0)`
+    - `records_extracted`: `PositiveIntegerField(default=0)`
+    - `records_inserted`: `PositiveIntegerField(default=0)`
+    - `records_updated`: `PositiveIntegerField(default=0)`
+    - `records_rejected`: `PositiveIntegerField(default=0)`
+    - `bytes_transferred`: `BigIntegerField(default=0)`
+    - `committed_cursor`: `CharField(max_length=255, blank=True, help_text="High-water mark cursor value committed upon completion")`
+    - `error_message`: `CharField(max_length=500, blank=True)`
+    - `log_summary`: `TextField(blank=True, help_text="Execution summary, step breakdown, and error traceback log")`
+    - `created_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `ended_at`, `duration_seconds`
+
+---
+
+## Backend (`apps/bi/{models,forms,views,urls}/DataIntegration/`)
+
+- [ ] `apps/bi/models/DataIntegration/__init__.py`
+- [ ] `apps/bi/models/DataIntegration/DataSourceConnectors.py`
+- [ ] `apps/bi/models/DataIntegration/IngestionPipelines.py`
+- [ ] `apps/bi/models/DataIntegration/CdcSyncConfigs.py`
+- [ ] `apps/bi/models/DataIntegration/IngestionRuns.py`
+- [ ] `apps/bi/forms/DataIntegration/__init__.py`
+- [ ] `apps/bi/forms/DataIntegration/DataSourceConnectors.py`
+- [ ] `apps/bi/forms/DataIntegration/IngestionPipelines.py`
+- [ ] `apps/bi/forms/DataIntegration/CdcSyncConfigs.py`
+- [ ] `apps/bi/forms/DataIntegration/IngestionRuns.py`
+- [ ] `apps/bi/views/DataIntegration/__init__.py`
+- [ ] `apps/bi/views/DataIntegration/DataSourceConnectors.py` (CRUD + test_connection action)
+- [ ] `apps/bi/views/DataIntegration/IngestionPipelines.py` (CRUD + trigger_run action)
+- [ ] `apps/bi/views/DataIntegration/CdcSyncConfigs.py` (CRUD + reset_cursor action)
+- [ ] `apps/bi/views/DataIntegration/IngestionRuns.py` (List, Detail, Create, Delete, Retry)
+- [ ] `apps/bi/views/DataIntegration/DataIntegrationHub.py` (Dashboard showing connector statuses, pipeline schedules, active CDC syncs, recent run health)
+- [ ] `apps/bi/urls/DataIntegration/__init__.py`
+- [ ] `apps/bi/urls/DataIntegration/DataSourceConnectors.py`
+- [ ] `apps/bi/urls/DataIntegration/IngestionPipelines.py`
+- [ ] `apps/bi/urls/DataIntegration/CdcSyncConfigs.py`
+- [ ] `apps/bi/urls/DataIntegration/IngestionRuns.py`
+
+## Integration & Re-exports
+- [ ] Re-export all 4 models in `apps/bi/models/__init__.py`
+- [ ] Re-export all forms in `apps/bi/forms/__init__.py`
+- [ ] Re-export all views in `apps/bi/views/__init__.py`
+- [ ] Wire URL routes in `apps/bi/urls/__init__.py` (hub at root, plus entity routes & inbound webhook endpoint)
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Add `LIVE_LINKS["10.1"]` entry in `apps/core/navigation.py`:
+  - `"Source Connectors"`: `"bi:datasourceconnector_list"`
+  - `"Batch & Real-Time Ingestion"`: `"bi:ingestionpipeline_list"`
+  - `"Change Data Capture (CDC)"`: `"bi:cdcsyncconfig_list"`
+  - `"API & Webhook Gateway"`: `"bi:ingestionpipeline_list"`
+  - `"File & Cloud Storage Imports"`: `"bi:ingestionpipeline_list"`
+  - `"Data Integration Hub"`: `"bi:data_integration_hub"`
+  - `"Ingestion Runs"`: `"bi:ingestionrun_list"`
+- [ ] Author `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records (connectors across ERP/RDBMS/S3/Webhook, active batch/CDC pipelines, realistic runs)
+
+## Templates (`templates/bi/data_integration/`)
+- [ ] `templates/bi/data_integration/data_integration_hub.html`
+- [ ] `templates/bi/data_integration/data_source_connector/list.html`
+- [ ] `templates/bi/data_integration/data_source_connector/detail.html`
+- [ ] `templates/bi/data_integration/data_source_connector/form.html`
+- [ ] `templates/bi/data_integration/ingestion_pipeline/list.html`
+- [ ] `templates/bi/data_integration/ingestion_pipeline/detail.html`
+- [ ] `templates/bi/data_integration/ingestion_pipeline/form.html`
+- [ ] `templates/bi/data_integration/cdc_sync_config/list.html`
+- [ ] `templates/bi/data_integration/cdc_sync_config/detail.html`
+- [ ] `templates/bi/data_integration/cdc_sync_config/form.html`
+- [ ] `templates/bi/data_integration/ingestion_run/list.html`
+- [ ] `templates/bi/data_integration/ingestion_run/detail.html`
+- [ ] `templates/bi/data_integration/ingestion_run/form.html`
+
+## Verification & Close-out
+- [ ] Generate initial migration `python manage.py makemigrations bi` -> `0001_initial.py` and run `migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency
+- [ ] Run `python manage.py check` to verify clean system checks
+- [ ] Execute smoke test (`temp/smoke_bi_10_1.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.1.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dataintegration_models.py`, `test_dataintegration_forms.py`, `test_dataintegration_views.py`, `test_dataintegration_security.py`
+- [ ] Author `.claude/skills/bi/SKILL.md` and update `README.md`
+
+## Later passes / deferred
+- Visual DAG Pipeline Designer & Transformation Canvas (Joins, Pivots, Casts) -> Sub-module 10.2 ETL/ELT & Data Pipelines
+- Star/Snowflake Schemas, Dimensions, Facts & Departmental Marts -> Sub-module 10.3 Data Warehouse & Storage
+- Data Modeling & Semantic Metric Layer -> Sub-module 10.4 Data Modeling & Semantic Layer
+- Data Quality Profiling & Validation Scoring -> Sub-module 10.5 Data Quality & Cleansing
+- Master Data Management (MDM) Golden Records & De-duplication -> Sub-module 10.6 Master Data Management
+- Enterprise Data Catalog & End-to-End Lineage Visualizer -> Sub-module 10.7 Data Catalog, Lineage & Governance
+- Dashboards, Visual Widgets & Reporting Canvas -> Sub-module 10.8 Dashboards & Visualization
+- Outbound Syndication to Snowflake, BigQuery, Tableau, Looker -> Sub-module 10.19 Integration & API Hub
+- Native binary C-level WAL/Binlog streaming daemons & dedicated Kafka brokers -> Enterprise deployment phase
+
+---
+
 # Sub-module 9.20: Multi-Store & Platform Operations (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.20.md` (2026-11-03)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.18.
