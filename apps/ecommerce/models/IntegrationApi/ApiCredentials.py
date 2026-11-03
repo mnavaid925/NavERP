@@ -120,5 +120,9 @@ class ApiCredential(TenantNumbered):
             models.Index(fields=["client_id"], name="idx_eapc_client_id"),
         ]
 
+    @property
+    def scopes_list(self):
+        return [s.strip() for s in (self.scopes or "").split(",") if s.strip()]
+
     def __str__(self):
         return f"{self.number} - {self.name} ({self.client_id[:16]}...)"
