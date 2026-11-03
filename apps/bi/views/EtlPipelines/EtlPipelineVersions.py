@@ -114,10 +114,11 @@ def etl_pipeline_version_create(request):
                 instance.tenant = request.tenant
                 instance.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.etl_pipeline_version.create",
-                    f"Created ETL Pipeline Version {instance.version_number} ({instance.number}) for {instance.pipeline.name}",
+                    instance,
+                    "create",
+                    changes={"version_number": instance.version_number, "number": instance.number},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Pipeline Version {instance.version_number} created successfully.")
             return redirect("bi:etl_pipeline_version_detail", pk=instance.pk)
@@ -139,10 +140,11 @@ def etl_pipeline_version_edit(request, pk):
             with transaction.atomic():
                 instance = form.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.etl_pipeline_version.update",
-                    f"Updated ETL Pipeline Version {instance.version_number} ({instance.number})",
+                    instance,
+                    "update",
+                    changes={"version_number": instance.version_number, "number": instance.number},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Pipeline Version {instance.version_number} updated successfully.")
             return redirect("bi:etl_pipeline_version_detail", pk=instance.pk)
@@ -164,13 +166,14 @@ def etl_pipeline_version_delete(request, pk):
     pipeline_pk = version.pipeline_id
     version_number = version.version_number
     with transaction.atomic():
-        version.delete()
         write_audit_log(
-            request.tenant,
             request.user,
-            "bi.etl_pipeline_version.delete",
-            f"Deleted ETL Pipeline Version {version_number}",
+            version,
+            "delete",
+            changes={"version_number": version_number, "number": version.number},
+            tenant=request.tenant,
         )
+        version.delete()
     messages.success(request, f"Pipeline Version {version_number} deleted successfully.")
     return redirect("bi:etl_pipeline_detail", pk=pipeline_pk)
 
@@ -194,10 +197,11 @@ def etl_pipeline_version_promote(request, pk):
             version.pipeline.save(update_fields=["active_version"])
 
         write_audit_log(
-            request.tenant,
             request.user,
-            "bi.etl_pipeline_version.promote",
-            f"Promoted Version {version.version_number} of {version.pipeline.name} to {target_env.title()}",
+            version,
+            "promote",
+            changes={"version_number": version.version_number, "target_env": target_env},
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Version {version.version_number} successfully promoted to {target_env.title()}.")
