@@ -84,8 +84,7 @@ def storefront_instance_detail(request, pk):
 @login_required
 def storefront_instance_create(request):
     if request.method == "POST":
-        form = StorefrontInstanceForm(request.POST)
-        form.tenant = request.tenant
+        form = StorefrontInstanceForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             storefront = form.save(commit=False)
             storefront.tenant = request.tenant
@@ -101,8 +100,7 @@ def storefront_instance_create(request):
             messages.success(request, f"Storefront '{storefront.name}' created successfully.")
             return redirect("ecommerce:storefront_instance_detail", pk=storefront.pk)
     else:
-        form = StorefrontInstanceForm()
-        form.tenant = request.tenant
+        form = StorefrontInstanceForm(tenant=request.tenant)
 
     context = {
         "form": form,
@@ -116,8 +114,7 @@ def storefront_instance_create(request):
 def storefront_instance_edit(request, pk):
     storefront = ecommerce_object(request, StorefrontInstance, pk=pk)
     if request.method == "POST":
-        form = StorefrontInstanceForm(request.POST, instance=storefront)
-        form.tenant = request.tenant
+        form = StorefrontInstanceForm(request.POST, instance=storefront, tenant=request.tenant)
         if form.is_valid():
             storefront = form.save(commit=False)
             if storefront.is_default:
@@ -132,8 +129,7 @@ def storefront_instance_edit(request, pk):
             messages.success(request, f"Storefront '{storefront.name}' updated successfully.")
             return redirect("ecommerce:storefront_instance_detail", pk=storefront.pk)
     else:
-        form = StorefrontInstanceForm(instance=storefront)
-        form.tenant = request.tenant
+        form = StorefrontInstanceForm(instance=storefront, tenant=request.tenant)
 
     context = {
         "form": form,
