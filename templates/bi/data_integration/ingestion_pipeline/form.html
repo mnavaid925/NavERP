@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Pipeline: {{ pipeline.name }}{% else %}New Ingestion Pipeline{% endif %} — NavERP BI
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <a href="{% url 'bi:ingestion_pipeline_list' %}">Pipelines</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ pipeline.number }}{% else %}New Pipeline{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Ingestion Pipeline: {{ pipeline.name }}{% else %}New Ingestion Pipeline{% endif %}</h1>
+        <p class="text-secondary text-sm">Define extraction parameters, cadence schedule, and staging destination</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}{% else %}{% url 'bi:ingestion_pipeline_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-semibold flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Please correct the errors below:</span>
+                    </div>
+                    <ul class="mt-2 list-disc list-inside space-y-1">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>{{ field|capfirst }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Pipeline Identifier Name <span class="text-danger">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.connector.id_for_label }}">Data Source Connector <span class="text-danger">*</span></label>
+                            {{ form.connector }}
+                            {% if form.connector.errors %}<div class="form-error">{{ form.connector.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.ingestion_mode.id_for_label }}">Ingestion Mode <span class="text-danger">*</span></label>
+                            {{ form.ingestion_mode }}
+                            {% if form.ingestion_mode.errors %}<div class="form-error">{{ form.ingestion_mode.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.source_entity.id_for_label }}">Source Entity / Path / Query <span class="text-danger">*</span></label>
+                            {{ form.source_entity }}
+                            <p class="text-xs text-secondary mt-1">Table name (e.g. <code>accounting_invoice</code>), S3 prefix, or API route.</p>
+                            {% if form.source_entity.errors %}<div class="form-error">{{ form.source_entity.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_staging_table.id_for_label }}">Target Staging Table <span class="text-danger">*</span></label>
+                            {{ form.target_staging_table }}
+                            <p class="text-xs text-secondary mt-1">Staging dataset table name, e.g. <code>stg_accounting_invoices</code>.</p>
+                            {% if form.target_staging_table.errors %}<div class="form-error">{{ form.target_staging_table.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.schedule_cadence.id_for_label }}">Schedule Cadence <span class="text-danger">*</span></label>
+                            {{ form.schedule_cadence }}
+                            {% if form.schedule_cadence.errors %}<div class="form-error">{{ form.schedule_cadence.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.cron_expression.id_for_label }}">Custom Cron Expression (Optional)</label>
+                            {{ form.cron_expression }}
+                            {% if form.cron_expression.errors %}<div class="form-error">{{ form.cron_expression.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.file_format.id_for_label }}">File Format</label>
+                            {{ form.file_format }}
+                            {% if form.file_format.errors %}<div class="form-error">{{ form.file_format.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Pipeline Status <span class="text-danger">*</span></label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.file_parsing_options_raw.id_for_label }}">File Parsing Options (JSON)</label>
+                        {{ form.file_parsing_options_raw }}
+                        {% if form.file_parsing_options_raw.errors %}<div class="form-error">{{ form.file_parsing_options_raw.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.rate_limit_policy.id_for_label }}">Rate Limit Policy (Optional)</label>
+                            {{ form.rate_limit_policy }}
+                            {% if form.rate_limit_policy.errors %}<div class="form-error">{{ form.rate_limit_policy.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.mapping_template.id_for_label }}">Schema Mapping Template (Optional)</label>
+                            {{ form.mapping_template }}
+                            {% if form.mapping_template.errors %}<div class="form-error">{{ form.mapping_template.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.webhook_secret.id_for_label }}">Webhook Shared Secret / HMAC Key</label>
+                        {{ form.webhook_secret }}
+                        <p class="text-xs text-secondary mt-1">Optional shared secret key for validating inbound streaming webhook payloads.</p>
+                        {% if form.webhook_secret.errors %}<div class="form-error">{{ form.webhook_secret.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                    <a href="{% if is_edit %}{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}{% else %}{% url 'bi:ingestion_pipeline_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Update Pipeline{% else %}Save Pipeline{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
