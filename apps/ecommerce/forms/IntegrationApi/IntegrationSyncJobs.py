@@ -1,6 +1,6 @@
 from django import forms
 from apps.core.forms import TenantModelForm
-from apps.ecommerce.forms._common import TenantUniqueMixin
+from apps.ecommerce.forms._common import TenantUniqueMixin, reject_foreign
 from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceConnector
 from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
 
@@ -67,3 +67,8 @@ class IntegrationSyncJobForm(TenantUniqueMixin, TenantModelForm):
         if val is not None and val < 0:
             raise forms.ValidationError("Maximum retries cannot be negative.")
         return val
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["connector"])
+        return cleaned_data
