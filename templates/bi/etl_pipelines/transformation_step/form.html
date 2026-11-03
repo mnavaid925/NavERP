@@ -9,12 +9,12 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
-            <span>/</span>
+            <span class="sep">/</span>
             {% if pipeline %}
             <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}">{{ pipeline.number }}</a>
-            <span>/</span>
+            <span class="sep">/</span>
             {% endif %}
             <span>{% if is_edit %}Edit Step {{ step.number }}{% else %}New Transform Step{% endif %}</span>
         </div>
