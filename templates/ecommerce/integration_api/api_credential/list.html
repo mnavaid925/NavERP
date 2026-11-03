@@ -84,7 +84,7 @@
                     <span>Filter</span>
                 </button>
                 {% if search_query or tier_filter or status_filter %}
-                <a href="{% url 'ecommerce:apicredential_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'ecommerce:apicredential_list' %}" class="btn btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -160,23 +160,23 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'ecommerce:apicredential_detail' cred.pk %}" class="btn btn-outline btn-icon" title="View Key">
+                            <a href="{% url 'ecommerce:apicredential_detail' cred.pk %}" class="btn btn-outline btn-icon" title="View Key" aria-label="View Key">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'ecommerce:apicredential_edit' cred.pk %}" class="btn btn-outline btn-icon" title="Edit Settings">
+                            <a href="{% url 'ecommerce:apicredential_edit' cred.pk %}" class="btn btn-outline btn-icon" title="Edit Settings" aria-label="Edit Settings">
                                 <i data-lucide="pencil"></i>
                             </a>
                             {% if cred.status == "active" %}
                             <form method="post" action="{% url 'ecommerce:apicredential_revoke' cred.pk %}" class="inline" onsubmit="return confirm('Revoke API key {{ cred.name }}? External integrations using this key will immediately fail.');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Revoke Key">
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Revoke Key" aria-label="Revoke Key">
                                     <i data-lucide="slash"></i>
                                 </button>
                             </form>
                             {% endif %}
                             <form method="post" action="{% url 'ecommerce:apicredential_delete' cred.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to permanently delete credential {{ cred.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Key">
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Key" aria-label="Delete Key">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
