@@ -63,6 +63,7 @@ class IngestionRun(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bijr_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-started_at"], name="idx_bijr_ten_start_desc"),
             models.Index(fields=["tenant", "status", "started_at"], name="idx_bijr_ten_stat_start"),
             models.Index(fields=["tenant", "pipeline", "started_at"], name="idx_bijr_ten_pipe_start"),
         ]
