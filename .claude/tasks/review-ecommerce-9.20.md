@@ -31,3 +31,19 @@ PASS / CLEAN (0 Critical, 0 Important, 2 Minor)
 - **[MINOR] M4**: `apps/ecommerce/views/MultiStore/StorefrontInstances.py:70-79` — Unused context variable `recent_deployments` in `storefront_instance_detail`. Fix: Remove or display in template.
 - **[MINOR] M5**: `apps/ecommerce/views/MultiStore/PlatformEnvironments.py:43-55` — Unused context variable `storefronts` in `platform_environment_list` (corresponds with I3). Fix: Wire storefront filter in view and list template.
 
+---
+
+## 3. frontend-reviewer Findings
+
+### Verdict
+PASS with Important & Minor findings (0 Critical, 3 Important, 3 Minor)
+
+### Findings
+- **[IMPORTANT] I4**: `templates/ecommerce/multi_store/deployment_pipeline/detail.html:44, 54` — Missing `|escapejs` in JavaScript confirmation onclick strings. Fix: Wrap variable interpolations with `|escapejs`.
+- **[IMPORTANT] I5**: `templates/ecommerce/multi_store/deployment_pipeline/detail.html:159-165` — Failed deployment status rendered with amber badge fallback in lifecycle block. Fix: Handle `failed` and `rolled_back` with `badge-red`, `pending`/`building` with `badge-info`.
+- **[IMPORTANT] I6**: `templates/ecommerce/multi_store/storefront_catalog_assignment/detail.html:133` — Storefront status hardcoded to `badge-green`. Fix: Map `active` to green, `maintenance` to amber, `suspended`/`archived` to red, else slate.
+- **[MINOR] M6**: `templates/ecommerce/multi_store/deployment_pipeline/detail.html:27-31` — Target slot badge in header lacks fallback for `'primary'` slot. Fix: Add `badge-slate` fallback.
+- **[MINOR] M7**: `templates/ecommerce/multi_store/storefront_catalog_assignment/list.html:113` — Undefined utility class `text-info`. Fix: Change to `<span class="badge badge-info text-xs mt-0.5">`.
+- **[MINOR] M8**: `templates/ecommerce/multi_store/deployment_pipeline/detail.html:109` — Target slot styled with static `badge-info`. Fix: Map slot values to `badge-green`, `badge-info`, `badge-slate`.
+
+
