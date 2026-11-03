@@ -77,13 +77,7 @@ def cdc_sync_config_create(request):
         form = CdcSyncConfigForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             config = form.save()
-            write_audit_log(
-                request,
-                action="create",
-                model_name="CdcSyncConfig",
-                object_id=config.pk,
-                description=f"Created CDC Sync Config {config.number} for pipeline {config.pipeline.number}",
-            )
+            write_audit_log(request.user, config, "create", tenant=request.tenant)
             messages.success(request, f"CDC Sync Config {config.number} created successfully.")
             return redirect("bi:cdc_sync_config_detail", pk=config.pk)
     else:
@@ -104,13 +98,7 @@ def cdc_sync_config_edit(request, pk):
         form = CdcSyncConfigForm(request.POST, instance=config, tenant=request.tenant)
         if form.is_valid():
             config = form.save()
-            write_audit_log(
-                request,
-                action="update",
-                model_name="CdcSyncConfig",
-                object_id=config.pk,
-                description=f"Updated CDC Sync Config {config.number}",
-            )
+            write_audit_log(request.user, config, "update", tenant=request.tenant)
             messages.success(request, f"CDC Sync Config {config.number} updated successfully.")
             return redirect("bi:cdc_sync_config_detail", pk=config.pk)
     else:
@@ -131,14 +119,8 @@ def cdc_sync_config_delete(request, pk):
     config = bi_object(request, CdcSyncConfig, pk)
     number = config.number
     pipeline_pk = config.pipeline_id
+    write_audit_log(request.user, config, "delete", tenant=request.tenant)
     config.delete()
-    write_audit_log(
-        request,
-        action="delete",
-        model_name="CdcSyncConfig",
-        object_id=pk,
-        description=f"Deleted CDC Sync Config {number}",
-    )
     messages.success(request, f"CDC Sync Config {number} deleted successfully.")
     return redirect("bi:ingestion_pipeline_detail", pk=pipeline_pk)
 
@@ -152,12 +134,6 @@ def cdc_sync_config_reset_cursor(request, pk):
     config.last_checkpoint_at = None
     config.save(update_fields=["last_cursor_value", "last_checkpoint_at", "updated_at"])
 
-    write_audit_log(
-        request,
-        action="reset_cursor",
-        model_name="CdcSyncConfig",
-        object_id=config.pk,
-        description=f"Reset CDC cursor offset for {config.number} (previous cursor: {old_cursor})",
-    )
+    write_audit_log(request.user, config, "update", changes={"action": "reset_cursor", "old_cursor": old_cursor}, tenant=request.tenant)
     messages.success(request, f"High-water mark cursor for {config.number} has been reset to beginning.")
     return redirect("bi:cdc_sync_config_detail", pk=config.pk)
