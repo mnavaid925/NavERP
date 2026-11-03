@@ -2882,6 +2882,17 @@ LIVE_LINKS = {
         "Platform Environments": "ecommerce:platform_environment_list",
         "CI/CD Pipelines": "ecommerce:deployment_pipeline_list",
     },
+    # 10.1 Data Integration & Ingestion
+    "10.1": {
+        "Source Connectors": "bi:data_source_connector_list",
+        "Batch & Real-Time Ingestion": "bi:ingestion_pipeline_list",
+        "Change Data Capture (CDC)": "bi:cdc_sync_config_list",
+        "API & Webhook Gateway": "bi:ingestion_pipeline_list",
+        "File & Cloud Storage Imports": "bi:ingestion_pipeline_list",
+        # Extra live leaves
+        "Data Integration Hub": "bi:data_integration_hub",
+        "Ingestion Runs": "bi:ingestion_run_list",
+    },
 
 
 
