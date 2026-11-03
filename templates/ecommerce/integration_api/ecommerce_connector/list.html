@@ -58,7 +58,7 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" action="{% url 'ecommerce:ecommerceconnector_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form method="get" action="{% url 'ecommerce:ecommerceconnector_list' %}" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="form-group mb-0 md:col-span-2">
                 <input type="text" name="q" value="{{ search_query }}" placeholder="Search name, provider, URL, account ID..." class="form-input" aria-label="Search connectors">
             </div>
@@ -75,6 +75,14 @@
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="provider" class="form-select" aria-label="Filter by provider">
+                    <option value="">All Providers</option>
+                    {% for val, label in provider_choices %}
+                    <option value="{{ val }}" {% if provider_filter == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -215,13 +223,13 @@
         </div>
         <div class="pagination-controls">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if provider_filter %}&provider={{ provider_filter }}{% endif %}" class="btn btn-outline">
                 <i data-lucide="chevron-left"></i>
                 <span>Previous</span>
             </a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if provider_filter %}&provider={{ provider_filter }}{% endif %}" class="btn btn-outline">
                 <span>Next</span>
                 <i data-lucide="chevron-right"></i>
             </a>
