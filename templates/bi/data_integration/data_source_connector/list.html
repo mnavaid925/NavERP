@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Data Source Connectors — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <span>Connectors</span>
+        </div>
+        <h1 class="page-title">Data Source Connectors</h1>
+        <p class="text-secondary text-sm">Unified connectors to ERP modules, relational databases, cloud storage, SFTP servers, and API webhooks</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_integration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Integration Hub</span>
+        </a>
+        <a href="{% url 'bi:data_source_connector_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Connector</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:data_source_connector_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search name, code, host, description..." class="form-input" aria-label="Search connectors">
+            </div>
+            <div class="form-group mb-0">
+                <select name="connector_type" class="form-select" aria-label="Filter by connector type">
+                    <option value="">All Source Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if connector_type == val or request.GET.connector_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or status or connector_type %}
+                <a href="{% url 'bi:data_source_connector_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number &amp; Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Credential / Auth</th>
+                    <th>Connection Verification</th>
+                    <th>Created</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for connector in connectors %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:data_source_connector_detail' connector.pk %}" class="font-medium text-primary hover:underline">
+                            {{ connector.number }}
+                        </a>
+                        <div class="text-sm font-semibold text-slate-800">{{ connector.name }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">
+                            {{ connector.get_connector_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if connector.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif connector.status == 'testing' %}
+                        <span class="badge badge-info">Testing</span>
+                        {% elif connector.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if connector.credential %}
+                        <span class="text-xs font-mono text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                            {{ connector.credential.name }}
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-muted">Internal / None</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if connector.test_status == 'success' %}
+                        <span class="badge badge-green">Verified</span>
+                        {% elif connector.test_status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% else %}
+                        <span class="badge badge-slate">Untested</span>
+                        {% endif %}
+                        {% if connector.last_tested_at %}
+                        <div class="text-xs text-muted">{{ connector.last_tested_at|date:"M d, H:i" }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">
+                        {{ connector.created_at|date:"M d, Y" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'bi:data_source_connector_detail' connector.pk %}" class="btn btn-icon btn-outline" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:data_source_connector_edit' connector.pk %}" class="btn btn-icon btn-outline" title="Edit connector">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:data_source_connector_delete' connector.pk %}" onsubmit="return confirm('Delete this connector?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete connector">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="database" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-800">No data source connectors found</h3>
+                            <p class="text-sm text-secondary mt-1">Configure your first connection to start ingesting business records into BI.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:data_source_connector_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Add Data Connector</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if connectors.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-secondary">
+            Showing {{ connectors.start_index }} to {{ connectors.end_index }} of {{ total_count }} connectors
+        </div>
+        <div class="flex gap-1">
+            {% if connectors.has_previous %}
+            <a href="?page={{ connectors.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if connector_type %}&connector_type={{ connector_type }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline active font-semibold">{{ connectors.number }} / {{ connectors.paginator.num_pages }}</span>
+            {% if connectors.has_next %}
+            <a href="?page={{ connectors.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if connector_type %}&connector_type={{ connector_type }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
