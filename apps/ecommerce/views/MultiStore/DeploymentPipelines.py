@@ -92,8 +92,8 @@ def deployment_pipeline_create(request):
             pipeline.save()
             write_audit_log(
                 request.user,
-                "CREATE",
                 pipeline,
+                "CREATE",
                 f"Created deployment pipeline '{pipeline.release_version}' for {pipeline.environment.name} ({pipeline.number})"
             )
             messages.success(request, f"Deployment pipeline '{pipeline.release_version}' created successfully.")
@@ -118,8 +118,8 @@ def deployment_pipeline_edit(request, pk):
             pipeline = form.save()
             write_audit_log(
                 request.user,
-                "UPDATE",
                 pipeline,
+                "UPDATE",
                 f"Updated deployment pipeline '{pipeline.release_version}' ({pipeline.number})"
             )
             messages.success(request, f"Deployment pipeline '{pipeline.release_version}' updated.")
@@ -144,9 +144,10 @@ def deployment_pipeline_delete(request, pk):
     pipeline.delete()
     write_audit_log(
         request.user,
-        "DELETE",
         None,
-        f"Deleted deployment pipeline '{version}' ({num})"
+        "DELETE",
+        f"Deleted deployment pipeline '{version}' ({num})",
+        tenant=request.tenant,
     )
     messages.success(request, f"Deployment pipeline '{version}' deleted.")
     return redirect("ecommerce:deployment_pipeline_list")
@@ -170,8 +171,8 @@ def deployment_promote(request, pk):
 
     write_audit_log(
         request.user,
-        "EXECUTE",
         pipeline,
+        "EXECUTE",
         f"Promoted deployment '{pipeline.release_version}' to active 100% traffic on slot {pipeline.target_slot} ({pipeline.number})"
     )
     messages.success(request, f"Release '{pipeline.release_version}' promoted to active live traffic.")
@@ -188,8 +189,8 @@ def deployment_rollback(request, pk):
 
     write_audit_log(
         request.user,
-        "EXECUTE",
         pipeline,
+        "EXECUTE",
         f"Rolled back deployment '{pipeline.release_version}' on {pipeline.environment.name} ({pipeline.number})"
     )
     messages.warning(request, f"Release '{pipeline.release_version}' rolled back.")
