@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit CDC Config: {{ config.number }}{% else %}New CDC Stream{% endif %} — NavERP BI
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <a href="{% url 'bi:cdc_sync_config_list' %}">CDC Streams</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ config.number }}{% else %}New CDC Config{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit CDC Configuration: {{ config.number }}{% else %}New CDC Stream Configuration{% endif %}</h1>
+        <p class="text-secondary text-sm">Define Change Data Capture capture method, cursor tracking field, and schema drift policies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:cdc_sync_config_detail' config.pk %}{% else %}{% url 'bi:cdc_sync_config_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-semibold flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Please correct the errors below:</span>
+                    </div>
+                    <ul class="mt-2 list-disc list-inside space-y-1">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>{{ field|capfirst }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.pipeline.id_for_label }}">Ingestion Pipeline <span class="text-danger">*</span></label>
+                        {{ form.pipeline }}
+                        <p class="text-xs text-secondary mt-1">Select the target pipeline for this CDC delta engine.</p>
+                        {% if form.pipeline.errors %}<div class="form-error">{{ form.pipeline.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.capture_method.id_for_label }}">Capture Method <span class="text-danger">*</span></label>
+                            {{ form.capture_method }}
+                            {% if form.capture_method.errors %}<div class="form-error">{{ form.capture_method.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sync_mode.id_for_label }}">Target Sync Mode <span class="text-danger">*</span></label>
+                            {{ form.sync_mode }}
+                            {% if form.sync_mode.errors %}<div class="form-error">{{ form.sync_mode.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.primary_key_fields.id_for_label }}">Primary Key Column(s) <span class="text-danger">*</span></label>
+                            {{ form.primary_key_fields }}
+                            <p class="text-xs text-secondary mt-1">Comma-separated unique key column(s) for deduplication (e.g. <code>id</code> or <code>order_id</code>).</p>
+                            {% if form.primary_key_fields.errors %}<div class="form-error">{{ form.primary_key_fields.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.cursor_field.id_for_label }}">Cursor Tracking Field</label>
+                            {{ form.cursor_field }}
+                            <p class="text-xs text-secondary mt-1">Timestamp or incrementing ID column (e.g. <code>updated_at</code> or <code>lsn</code>).</p>
+                            {% if form.cursor_field.errors %}<div class="form-error">{{ form.cursor_field.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.schema_drift_policy.id_for_label }}">Schema Drift Policy <span class="text-danger">*</span></label>
+                        {{ form.schema_drift_policy }}
+                        <p class="text-xs text-secondary mt-1">Determines how pipeline handles unexpected upstream schema modifications.</p>
+                        {% if form.schema_drift_policy.errors %}<div class="form-error">{{ form.schema_drift_policy.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                        <div class="flex items-center gap-2">
+                            {{ form.capture_deletes }}
+                            <label for="{{ form.capture_deletes.id_for_label }}" class="text-sm font-medium text-slate-800">
+                                Capture and Propagate Deletions
+                            </label>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label class="form-label" for="{{ form.soft_delete_field.id_for_label }}">Soft-Delete Column Name</label>
+                            {{ form.soft_delete_field }}
+                            <p class="text-xs text-secondary mt-1">Field indicating row deletion (e.g. <code>is_deleted</code> or <code>deleted_at</code>).</p>
+                            {% if form.soft_delete_field.errors %}<div class="form-error">{{ form.soft_delete_field.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                    <a href="{% if is_edit %}{% url 'bi:cdc_sync_config_detail' config.pk %}{% else %}{% url 'bi:cdc_sync_config_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Update CDC Stream{% else %}Save CDC Stream{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
