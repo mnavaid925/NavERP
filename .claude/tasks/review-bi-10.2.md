@@ -30,7 +30,7 @@
 - [x] **I7**: Concurrency Guard on `etl_pipeline_trigger`. Guard against duplicate active runs: if `pipeline.runs.filter(status="running").exists()`, warn user and redirect instead of creating duplicate running run.
 - [x] **I8**: Inconsistent Delete Redirect Target from Transformation Steps and Versions List Views. Support redirecting back to `bi:transformation_step_list` and `bi:etl_pipeline_version_list` when deleted from list view context.
 - [x] **I9**: Pagination Bar Flex Justification in List Templates. List templates render `.pagination` without `justify-between`, clustering summary text and navigation buttons to the right. Add `justify-between` to `.pagination`.
-- [ ] **I10**: Cross-Model Validation in `EtlPipelineRunForm`. Verify `version.pipeline_id == pipeline.id` when both are submitted.
+- [x] **I10**: Cross-Model Validation in `EtlPipelineRunForm`. Verify `version.pipeline_id == pipeline.id` when both are submitted.
 
 ---
 
