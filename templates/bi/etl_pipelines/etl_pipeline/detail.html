@@ -247,7 +247,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <span class="text-xs text-slate-700">{{ ver.promoted_by.get_full_name|default:ver.promoted_by.username|default:"System" }}</span>
+                        <span class="text-xs text-slate-700">{% if ver.promoted_by %}{{ ver.promoted_by.get_full_name|default:ver.promoted_by.username }}{% else %}System{% endif %}</span>
                     </td>
                     <td>
                         <span class="text-xs text-slate-600">{{ ver.promoted_at|date:"M d, Y H:i"|default:"Not Promoted" }}</span>
