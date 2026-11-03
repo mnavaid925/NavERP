@@ -82,8 +82,7 @@ def platform_environment_create(request):
         initial["storefront"] = storefront_id
 
     if request.method == "POST":
-        form = PlatformEnvironmentForm(request.POST)
-        form.tenant = request.tenant
+        form = PlatformEnvironmentForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             environment = form.save(commit=False)
             environment.tenant = request.tenant
@@ -97,8 +96,7 @@ def platform_environment_create(request):
             messages.success(request, f"Environment '{environment.name}' created successfully.")
             return redirect("ecommerce:platform_environment_detail", pk=environment.pk)
     else:
-        form = PlatformEnvironmentForm(initial=initial)
-        form.tenant = request.tenant
+        form = PlatformEnvironmentForm(initial=initial, tenant=request.tenant)
 
     context = {
         "form": form,
@@ -112,8 +110,7 @@ def platform_environment_create(request):
 def platform_environment_edit(request, pk):
     environment = ecommerce_object(request, PlatformEnvironment, pk=pk)
     if request.method == "POST":
-        form = PlatformEnvironmentForm(request.POST, instance=environment)
-        form.tenant = request.tenant
+        form = PlatformEnvironmentForm(request.POST, instance=environment, tenant=request.tenant)
         if form.is_valid():
             environment = form.save()
             write_audit_log(
@@ -125,8 +122,7 @@ def platform_environment_edit(request, pk):
             messages.success(request, f"Environment '{environment.name}' updated successfully.")
             return redirect("ecommerce:platform_environment_detail", pk=environment.pk)
     else:
-        form = PlatformEnvironmentForm(instance=environment)
-        form.tenant = request.tenant
+        form = PlatformEnvironmentForm(instance=environment, tenant=request.tenant)
 
     context = {
         "form": form,
