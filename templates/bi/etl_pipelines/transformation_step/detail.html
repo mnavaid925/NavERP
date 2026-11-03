@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Step #{{ step.sequence }}: {{ step.name }} — Transformation Library — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}">{{ pipeline.number }}</a>
+            <span>/</span>
+            <span>Step #{{ step.sequence }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Step #{{ step.sequence }}: {{ step.name }}</h1>
+            <span class="font-mono text-sm text-muted">({{ step.number }})</span>
+            <span class="badge badge-info">{{ step.get_step_type_display }}</span>
+            {% if step.status == 'active' %}
+                <span class="badge badge-green">{{ step.get_status_display }}</span>
+            {% elif step.status == 'draft' %}
+                <span class="badge badge-amber">{{ step.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-muted">{{ step.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">{{ step.description|default:"No description provided for this transformation step." }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_canvas' pipeline.pk %}" class="btn btn-outline text-purple-700">
+            <i data-lucide="git-merge"></i>
+            <span>Visual Designer</span>
+        </a>
+        <a href="{% url 'bi:transformation_step_edit' step.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Parent Pipeline</div>
+        <div class="font-medium text-sm text-slate-800 mt-1">
+            <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="text-blue-600 hover:underline">{{ pipeline.name }}</a>
+        </div>
+        <div class="text-xs font-mono text-muted mt-0.5">{{ pipeline.number }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Topological Sequence</div>
+        <div class="font-mono text-xl font-bold text-slate-800 mt-1">#{{ step.sequence }}</div>
+        <div class="text-xs text-muted mt-0.5">Execution Order in DAG</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Failure Behavior</div>
+        <div class="text-sm font-semibold mt-1">
+            {% if step.is_blocking %}
+                <span class="text-red-600 font-bold">Blocking Node</span>
+            {% else %}
+                <span class="text-slate-600">Non-Blocking Node</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-0.5">{% if step.is_blocking %}Halts downstream DAG on failure{% else %}Logs warning &amp; continues{% endif %}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Mapping Template</div>
+        <div class="text-sm font-medium text-slate-800 mt-1">
+            {% if mapping_template %}
+                {{ mapping_template.name }}
+            {% else %}
+                <span class="text-muted">None (Custom Logic)</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-0.5">Core Schema Template</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Transform Configuration JSON -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Transform Specification (JSON)</h2>
+            <span class="badge badge-slate text-xs font-mono">{{ step.get_step_type_display }}</span>
+        </div>
+        <div class="card-body">
+            {% if step.step_config %}
+            <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed">{{ step.step_config|pprint }}</pre>
+            {% else %}
+            <p class="text-sm text-muted">No custom configuration parameters defined.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Upstream Dependencies & Canvas Coordinates -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">DAG Dependencies &amp; Coordinates</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs uppercase font-semibold text-muted mb-2">Prerequisite Upstream Nodes</div>
+                {% if step.upstream_step_ids %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for up_id in step.upstream_step_ids %}
+                        <span class="font-mono text-xs bg-slate-100 text-slate-800 px-2.5 py-1 rounded border border-slate-200">
+                            {{ up_id }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-xs text-muted">Root node in DAG. Receives source staging records directly from extract phase.</p>
+                {% endif %}
+            </div>
+
+            <div class="border-t border-slate-100 pt-3">
+                <div class="text-xs uppercase font-semibold text-muted mb-1">Canvas Positioning</div>
+                <div class="font-mono text-xs text-slate-700">
+                    X: {{ step.canvas_x }}px · Y: {{ step.canvas_y }}px
+                </div>
+            </div>
+
+            <div class="border-t border-slate-100 pt-3 text-xs text-muted space-y-1">
+                <div>Created: <span class="text-slate-700">{{ step.created_at|date:"M d, Y H:i" }}</span></div>
+                <div>Last Updated: <span class="text-slate-700">{{ step.updated_at|date:"M d, Y H:i" }}</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
