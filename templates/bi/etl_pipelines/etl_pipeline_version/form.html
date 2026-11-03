@@ -9,11 +9,11 @@
     <div>
         <div class="breadcrumb">
             <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <a href="{% url 'bi:etl_pipeline_version_list' %}">Versions</a>
-            <span>/</span>
+            <span class="sep">/</span>
             <span>{% if is_edit %}Edit {{ version.version_number }}{% else %}New Version{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Pipeline Version: {{ version.version_number }}{% else %}New Pipeline Version Snapshot{% endif %}</h1>
