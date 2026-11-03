@@ -117,6 +117,7 @@
                             <a href="{% url 'bi:cdc_sync_config_edit' config.pk %}" class="btn btn-icon btn-outline" title="Edit CDC config">
                                 <i data-lucide="pencil"></i>
                             </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:cdc_sync_config_reset_cursor' config.pk %}" onsubmit="return confirm('Reset high-water mark cursor? Next sync will perform full delta capture.');" class="inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon btn-outline text-amber-600" title="Reset cursor checkpoint">
@@ -129,6 +130,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
