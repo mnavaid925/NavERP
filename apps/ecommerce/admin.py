@@ -76,6 +76,10 @@ from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceCo
 from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
 from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
 from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
+from apps.ecommerce.models.MultiStore.StorefrontInstances import StorefrontInstance
+from apps.ecommerce.models.MultiStore.StorefrontCatalogAssignments import StorefrontCatalogAssignment
+from apps.ecommerce.models.MultiStore.PlatformEnvironments import PlatformEnvironment
+from apps.ecommerce.models.MultiStore.DeploymentPipelines import DeploymentPipeline
 
 
 @admin.register(StoreCategory)
@@ -1003,6 +1007,47 @@ class ApiCredentialAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "client_id", "client_secret_hash", "secret_prefix", "total_requests_count", "last_used_at", "revoked_at", "created_at", "updated_at"]
     list_select_related = ["created_by"]
     ordering = ["-created_at"]
+
+
+@admin.register(StorefrontInstance)
+class StorefrontInstanceAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "code", "store_type", "primary_domain", "default_currency", "status", "is_default", "created_at"]
+    list_filter = ["store_type", "status", "is_default", "checkout_mode", "tenant"]
+    search_fields = ["number", "name", "code", "brand_name", "primary_domain"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["default_currency", "root_category", "default_fulfillment_center"]
+    ordering = ["-is_default", "name"]
+
+
+@admin.register(StorefrontCatalogAssignment)
+class StorefrontCatalogAssignmentAdmin(admin.ModelAdmin):
+    list_display = ["number", "storefront", "product", "is_visible", "is_featured", "custom_price", "publish_status", "sort_order"]
+    list_filter = ["is_visible", "is_featured", "publish_status", "tenant"]
+    search_fields = ["number", "product__name", "product__sku", "custom_title", "storefront_badge"]
+    readonly_fields = ["number", "created_at", "updated_at"]
+    list_select_related = ["storefront", "product", "custom_currency"]
+    ordering = ["sort_order", "-created_at"]
+
+
+@admin.register(PlatformEnvironment)
+class PlatformEnvironmentAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "env_type", "cluster_region", "current_active_slot", "is_sandbox_locked", "status", "resource_tier"]
+    list_filter = ["env_type", "cluster_region", "current_active_slot", "is_sandbox_locked", "status", "tenant"]
+    search_fields = ["number", "name", "base_url"]
+    readonly_fields = ["number", "created_at", "updated_at", "last_health_check_at"]
+    list_select_related = ["storefront"]
+    ordering = ["-created_at"]
+
+
+@admin.register(DeploymentPipeline)
+class DeploymentPipelineAdmin(admin.ModelAdmin):
+    list_display = ["number", "release_version", "environment", "git_branch", "deployment_strategy", "target_slot", "traffic_percentage", "status"]
+    list_filter = ["deployment_strategy", "target_slot", "status", "migration_executed", "tenant"]
+    search_fields = ["number", "release_version", "git_branch", "git_commit_sha"]
+    readonly_fields = ["number", "created_at", "updated_at", "promoted_at", "promoted_by"]
+    list_select_related = ["environment", "promoted_by"]
+    ordering = ["-created_at"]
+
 
 
 
