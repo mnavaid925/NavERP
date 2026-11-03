@@ -8,6 +8,230 @@
 > Do not mass-tick the backlog.
 ---
 
+# Sub-module 9.19: Integration & API Ecosystem (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.19.md` (2026-11-03)
+
+> **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.18.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0036_accountsecurityalert_idx_easa_ten_created_and_more.py`, so **9.19 claims `0037`**.
+> Plan written from `.claude/tasks/research-ecommerce-9.19.md` (Phase 1).
+> Package folder name: `apps/ecommerce/{models,forms,views,urls}/IntegrationApi/`
+> Template folder name: `templates/ecommerce/integration_api/{ecommerce_connector,integration_sync_job,webhook_subscription,api_credential}/` + `integration_api_hub.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Integration & API Ecosystem Spine Integration (L28/L29)**:
+  - All 4 Integration & API models inherit from `TenantNumbered` (`apps/ecommerce/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - API client credentials can link to `core.Party` (`issued_to_party`) for external developer, partner, or corporate wholesale account identity (Module 0).
+  - Administrative actions, sync runs, and key rotations write to `core.AuditLog` via `apps.core.utils.write_audit_log` (or `apps.core.crud` helpers).
+  - Financial Ledger Boundary: Payment gateway connectors configure external API connectivity and track gateway sync events, but Module 2 `accounting` remains the authoritative financial ledger (`Invoice`, `Payment`, `JournalEntry`) (L29).
+  - Webhook Security & Resilience: Outbound event webhooks sign payloads with HMAC-SHA256 (`X-NavERP-Signature`) and use a circuit breaker pattern (`closed`, `half_open`, `open`) to prevent resource exhaustion against failing third-party endpoints.
+- **Clear Sibling Boundaries (9.1 vs. 9.4 vs. 9.5 vs. 9.6 vs. 9.10 vs. 9.17 vs. 9.19)**:
+  - 9.1 (`ProductCatalog`): Owns products, categories, variants. 9.19 exports catalog data and syncs external marketplace pricing.
+  - 9.4 (`CartCheckout`): Owns shopping cart and checkout session state. 9.19 provides public storefront API credentials for headless checkout.
+  - 9.5 (`OrderManagement`): Owns core orders and fulfillment records. 9.19 exports paid orders to ERPs and syncs carrier dispatch tracking back into NavERP.
+  - 9.6 (`CustomerProfile`): Owns customer accounts and address books. 9.19 syncs opt-in customer profiles to external marketing platforms (Klaviyo, Mailchimp).
+  - 9.10 (`MarketingCampaign`): Owns internal email/SMS campaigns and affiliate programs. 9.19 streams real-time behavioral webhook events to external CDPs/ESPs (Segment, Klaviyo).
+  - 9.17 (`B2bWholesale`): Owns B2B corporate company accounts. 9.19 provides private admin API credentials and ERP sync for wholesale accounts.
+- **Prefix Collision Sweep**: `ECON`, `ESYJ`, `EWBS`, `EAPC` verified 100% collision-free across the entire repository.
+
+---
+
+## 9.19-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate financial general ledger tables** — Payment connectors configure external gateway credentials and transaction sync; authoritative invoices, payments, and journals remain anchored in `accounting` (L29).
+- [ ] **NO live external network daemon or paid third-party API subscription dependency in test suite** — ERP sync, payment gateway pings, carrier rate queries, and webhook dispatches operate locally and deterministically via mock/simulated HTTP dispatch handlers.
+- [ ] **NO external distributed Celery / Redis broker dependency required for basic operation** — Sync jobs and webhook dispatch logs are recorded in database tables with synchronous execution and retry triggers; background queue workers remain cross-cutting infrastructure.
+- [ ] **NO duplicate order or catalog tables** — Sync jobs point to and exchange data with verified `ecommerce.EcommerceOrder`, `ecommerce.CatalogProduct`, and `core.Party`.
+- [ ] **NO full OAuth 2.0 PKCE consent screen server UI** — Storefront public tokens, server-to-server admin secret keys, and webhook keys provide clean, standard authentication without OAuth server overhead.
+
+---
+
+## Models (4 models in `apps/ecommerce/models/IntegrationApi/`)
+
+- [ ] **`EcommerceConnector`** [Prefix: `ECON-`] (`apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`)
+  - **Purpose**: Central registry for external integration connection profiles across ERP, Payment, Shipping, and Marketing providers (Celigo, Patchworks, MuleSoft, Commerce Layer).
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `name`: CharField(max_length=120)
+    - `category`: CharField(max_length=30, choices=[("erp", "ERP & Back-Office"), ("payment", "Payment Gateway"), ("shipping", "Shipping & Logistics"), ("marketing", "Marketing & Analytics"), ("custom", "Custom REST API")], default="erp")
+    - `provider`: CharField(max_length=40, choices=[("netsuite", "Oracle NetSuite"), ("sap_s4hana", "SAP S/4HANA"), ("ms_dynamics", "Microsoft Dynamics 365"), ("odoo", "Odoo ERP"), ("stripe", "Stripe Payments"), ("adyen", "Adyen"), ("paypal", "PayPal"), ("square", "Square"), ("fedex", "FedEx"), ("ups", "UPS"), ("dhl", "DHL Express"), ("easypost", "EasyPost"), ("shipstation", "ShipStation"), ("klaviyo", "Klaviyo"), ("mailchimp", "Mailchimp"), ("braze", "Braze"), ("segment", "Segment"), ("ga4_measurement", "Google Analytics 4"), ("custom", "Custom Provider")], default="netsuite")
+    - `environment`: CharField(max_length=20, choices=[("sandbox", "Sandbox / Testing"), ("production", "Production / Live")], default="sandbox")
+    - `base_url`: URLField()
+    - `auth_type`: CharField(max_length=20, choices=[("api_key", "API Key / Token"), ("oauth2_bearer", "OAuth 2.0 Bearer Token"), ("basic_auth", "HTTP Basic Auth"), ("hmac_signature", "HMAC Signature"), ("none", "None / Public")], default="api_key")
+    - `api_key_masked`: CharField(max_length=100, blank=True, default="")
+    - `api_secret_hash`: CharField(max_length=255, blank=True, default="")
+    - `account_identifier`: CharField(max_length=100, blank=True, default="", help_text="Merchant ID / Realm ID / Account Number")
+    - `status`: CharField(max_length=20, choices=[("draft", "Draft"), ("active", "Active"), ("paused", "Paused"), ("error", "Error / Degraded"), ("maintenance", "Maintenance")], default="draft")
+    - `is_sync_enabled`: BooleanField(default=True)
+    - `timeout_seconds`: PositiveIntegerField(default=30)
+    - `max_retries`: PositiveIntegerField(default=3)
+    - `last_health_check_at`: DateTimeField(null=True, blank=True)
+    - `last_health_status`: CharField(max_length=20, choices=[("unknown", "Unknown"), ("healthy", "Healthy (Online)"), ("degraded", "Degraded (High Latency)"), ("unreachable", "Unreachable (Offline)")], default="unknown")
+    - `last_error_message`: TextField(blank=True, default="")
+    - `notes`: TextField(blank=True, default="")
+    - `created_by`: ForeignKey(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="ecommerce_connectors_created")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_health_check_at`, `last_health_status`, `last_error_message`, `created_by`, `api_secret_hash`
+
+- [ ] **`IntegrationSyncJob`** [Prefix: `ESYJ-`] (`apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`)
+  - **Purpose**: Records and tracks synchronization job runs, scheduled data batch flows, execution metrics, and error retry queues across ERP, payments, carrier tracking, and marketing events (Celigo, Patchworks, Alloy).
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `connector`: ForeignKey(`EcommerceConnector`, CASCADE, related_name="sync_jobs")
+    - `job_type`: CharField(max_length=40, choices=[("orders_export", "Orders Outbound Export (Order-to-Cash)"), ("orders_import", "Orders Inbound Import"), ("inventory_sync", "Inventory Level Reconciliation"), ("catalog_export", "Product Catalog & Pricing Export"), ("fulfillment_tracking", "Carrier Dispatch & Tracking Sync"), ("customer_sync", "Customer & Party Account Sync"), ("marketing_events", "Behavioral Marketing Events Sync"), ("payment_settlement", "Payment Gateway Settlement Sync")], default="orders_export")
+    - `direction`: CharField(max_length=20, choices=[("outbound", "Outbound (NavERP -> External)"), ("inbound", "Inbound (External -> NavERP)"), ("bidirectional", "Bidirectional Sync")], default="outbound")
+    - `trigger_type`: CharField(max_length=20, choices=[("manual", "Manual Execution"), ("scheduled", "Scheduled Cadence"), ("event_driven", "Event-Driven Trigger"), ("retry", "Error Retry Execution")], default="manual")
+    - `status`: CharField(max_length=20, choices=[("queued", "Queued"), ("running", "Running"), ("completed", "Completed"), ("partial_success", "Completed with Warnings / Partial"), ("failed", "Failed"), ("cancelled", "Cancelled")], default="queued")
+    - `started_at`: DateTimeField(null=True, blank=True)
+    - `completed_at`: DateTimeField(null=True, blank=True)
+    - `duration_seconds`: DecimalField(max_digits=8, decimal_places=2, default=Decimal("0.00"))
+    - `records_total`: PositiveIntegerField(default=0)
+    - `records_succeeded`: PositiveIntegerField(default=0)
+    - `records_failed`: PositiveIntegerField(default=0)
+    - `payload_summary`: TextField(blank=True, default="", help_text="JSON or text summary of synchronized payload")
+    - `error_log`: TextField(blank=True, default="", help_text="Diagnostic error log trace if failed")
+    - `retry_count`: PositiveIntegerField(default=0)
+    - `parent_job`: ForeignKey("self", SET_NULL, null=True, blank=True, related_name="retries")
+    - `initiated_by`: ForeignKey(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="sync_jobs_initiated")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `started_at`, `completed_at`, `duration_seconds`, `retry_count`, `initiated_by`
+
+- [ ] **`WebhookSubscription`** [Prefix: `EWBS-`] (`apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`)
+  - **Purpose**: Manages outbound real-time event webhooks to external consumer systems (JAMstack storefronts, ERPs, 3PLs, marketing tools) with HMAC signature security and circuit breaker resilience (Shopify, commercetools, Commerce Layer).
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `name`: CharField(max_length=120)
+    - `target_url`: URLField()
+    - `event_topics`: CharField(max_length=255, default="order.created,order.fulfilled", help_text="Comma-separated event topics or * for all")
+    - `secret_key`: CharField(max_length=120, blank=True, default="", help_text="Secret for HMAC-SHA256 signature header")
+    - `payload_format`: CharField(max_length=20, choices=[("json_standard", "Standard JSON Payload"), ("json_api", "JSON:API v1.0 Spec"), ("cloud_events", "CloudEvents 1.0 Spec")], default="json_standard")
+    - `status`: CharField(max_length=20, choices=[("active", "Active"), ("paused", "Paused / Muted"), ("disabled_failures", "Disabled (Excessive Failures)"), ("archived", "Archived")], default="active")
+    - `consecutive_failures`: PositiveIntegerField(default=0)
+    - `max_failure_threshold`: PositiveIntegerField(default=10, help_text="Failures before tripping circuit breaker")
+    - `circuit_state`: CharField(max_length=20, choices=[("closed", "Closed (Normal Operations)"), ("half_open", "Half-Open (Testing Recovery)"), ("open", "Open (Tripped / Bypassing)")], default="closed")
+    - `last_delivery_at`: DateTimeField(null=True, blank=True)
+    - `last_http_status`: PositiveIntegerField(null=True, blank=True)
+    - `total_delivered_count`: PositiveIntegerField(default=0)
+    - `total_failed_count`: PositiveIntegerField(default=0)
+    - `connector`: ForeignKey(`EcommerceConnector`, SET_NULL, null=True, blank=True, related_name="webhooks")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `consecutive_failures`, `circuit_state`, `last_delivery_at`, `last_http_status`, `total_delivered_count`, `total_failed_count`
+
+- [ ] **`ApiCredential`** [Prefix: `EAPC-`] (`apps/ecommerce/models/IntegrationApi/ApiCredentials.py`)
+  - **Purpose**: Manages API keys and client access credentials for Headless Storefronts, Jamstack frontends, native mobile apps, and third-party developer integrations with permission scopes and rate limiting (Shopify, commercetools, BigCommerce).
+  - **Fields**:
+    - `tenant` (`core.Tenant`, CASCADE)
+    - `client_name`: CharField(max_length=120)
+    - `credential_type`: CharField(max_length=30, choices=[("storefront_public", "Public Storefront Token (Browser/Mobile safe)"), ("admin_secret", "Private Admin API Key (Server-to-Server)"), ("webhook_receiver", "Inbound Webhook Verification Key"), ("partner_integration", "Third-Party SaaS Partner Key")], default="storefront_public")
+    - `api_key_prefix`: CharField(max_length=16, blank=True, default="", help_text="Public prefix identifier e.g. nep_live_")
+    - `api_key_hash`: CharField(max_length=255, blank=True, default="", help_text="SHA-256 hashed secret for authentication")
+    - `scopes`: TextField(default="read_products,write_carts,write_orders", help_text="Comma-separated permission scopes")
+    - `allowed_origins`: TextField(blank=True, default="", help_text="CORS allowed origins e.g. https://shop.acme.com")
+    - `allowed_ips`: TextField(blank=True, default="", help_text="IP or CIDR whitelist for server-to-server credentials")
+    - `rate_limit_rpm`: PositiveIntegerField(default=60, help_text="Rate limit requests per minute")
+    - `status`: CharField(max_length=20, choices=[("active", "Active"), ("suspended", "Suspended"), ("revoked", "Revoked"), ("expired", "Expired")], default="active")
+    - `expires_at`: DateTimeField(null=True, blank=True)
+    - `last_used_at`: DateTimeField(null=True, blank=True)
+    - `total_request_count`: PositiveIntegerField(default=0)
+    - `notes`: TextField(blank=True, default="")
+    - `issued_to_party`: ForeignKey("core.Party", SET_NULL, null=True, blank=True, related_name="ecommerce_api_credentials")
+    - `created_by`: ForeignKey(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="api_credentials_created")
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `api_key_prefix`, `api_key_hash`, `last_used_at`, `total_request_count`, `created_by`
+
+---
+
+## Backend Packages (`apps/ecommerce/`)
+
+### Models (`apps/ecommerce/models/IntegrationApi/`)
+- [ ] `apps/ecommerce/models/IntegrationApi/__init__.py`
+- [ ] `apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`
+- [ ] `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`
+- [ ] `apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`
+- [ ] `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
+
+### Forms (`apps/ecommerce/forms/IntegrationApi/`)
+- [ ] `apps/ecommerce/forms/IntegrationApi/__init__.py`
+- [ ] `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py`
+- [ ] `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py`
+- [ ] `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py`
+- [ ] `apps/ecommerce/forms/IntegrationApi/ApiCredentials.py`
+
+### Views (`apps/ecommerce/views/IntegrationApi/`)
+- [ ] `apps/ecommerce/views/IntegrationApi/__init__.py`
+- [ ] `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py`
+- [ ] `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py`
+- [ ] `apps/ecommerce/views/IntegrationApi/WebhookSubscriptions.py`
+- [ ] `apps/ecommerce/views/IntegrationApi/ApiCredentials.py`
+
+### URLs (`apps/ecommerce/urls/IntegrationApi/`)
+- [ ] `apps/ecommerce/urls/IntegrationApi/__init__.py`
+- [ ] `apps/ecommerce/urls/IntegrationApi/EcommerceConnectors.py`
+- [ ] `apps/ecommerce/urls/IntegrationApi/IntegrationSyncJobs.py`
+- [ ] `apps/ecommerce/urls/IntegrationApi/WebhookSubscriptions.py`
+- [ ] `apps/ecommerce/urls/IntegrationApi/ApiCredentials.py`
+
+---
+
+## Package Re-Exports & Wiring
+- [ ] Re-export all 4 models in `apps/ecommerce/models/__init__.py`
+- [ ] Re-export all 4 forms in `apps/ecommerce/forms/__init__.py`
+- [ ] Re-export all views in `apps/ecommerce/views/__init__.py`
+- [ ] Wire url patterns into `apps/ecommerce/urls/__init__.py`
+- [ ] Register all 4 models in `apps/ecommerce/admin.py`
+- [ ] Add `LIVE_LINKS["9.19"]` in `apps/core/navigation.py` mapping all 5 NavERP.md feature bullets:
+  * "ERP & Back-Office Sync" -> `ecommerce:integrationsyncjob_list`
+  * "Payment Gateway Connectors" -> `ecommerce:ecommerceconnector_list?category=payment`
+  * "Shipping & Logistics APIs" -> `ecommerce:ecommerceconnector_list?category=shipping`
+  * "Marketing Tool Integrations" -> `ecommerce:ecommerceconnector_list?category=marketing`
+  * "Headless Commerce & API-First" -> `ecommerce:apicredential_list`
+  * Extra live leaves: "Integration Hub", "Connectors", "Sync Jobs & Batch Flows", "Webhook Subscriptions", "API Credentials"
+- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent 9.19 seed data
+
+---
+
+## Frontend Templates (`templates/ecommerce/integration_api/`)
+- [ ] `templates/ecommerce/integration_api/integration_api_hub.html` (Overview cockpit with connector status, recent sync jobs, webhook health, and quick actions)
+- [ ] `templates/ecommerce/integration_api/ecommerce_connector/list.html`
+- [ ] `templates/ecommerce/integration_api/ecommerce_connector/detail.html`
+- [ ] `templates/ecommerce/integration_api/ecommerce_connector/form.html`
+- [ ] `templates/ecommerce/integration_api/integration_sync_job/list.html`
+- [ ] `templates/ecommerce/integration_api/integration_sync_job/detail.html`
+- [ ] `templates/ecommerce/integration_api/integration_sync_job/form.html`
+- [ ] `templates/ecommerce/integration_api/webhook_subscription/list.html`
+- [ ] `templates/ecommerce/integration_api/webhook_subscription/detail.html`
+- [ ] `templates/ecommerce/integration_api/webhook_subscription/form.html`
+- [ ] `templates/ecommerce/integration_api/api_credential/list.html`
+- [ ] `templates/ecommerce/integration_api/api_credential/detail.html`
+- [ ] `templates/ecommerce/integration_api/api_credential/form.html`
+
+---
+
+## Verification & Smoke
+- [ ] `makemigrations ecommerce` (claim `0037`)
+- [ ] `migrate`
+- [ ] `seed_ecommerce` (run twice to verify idempotence)
+- [ ] `manage.py check` clean
+- [ ] Smoke test script in `temp/` verifying HTTP 200/302, zero leak markers, and cross-tenant IDOR 404
+- [ ] Sidebar shows 9.19 Live with all 5 feature bullets verified
+
+---
+
+## Close-out
+- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+- [ ] Phase 5 Fixer: `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.19.md`
+- [ ] Phase 6 Tests: Contract, conftest, and test suite green (`test_integrationapi_models.py`, `test_integrationapi_forms.py`, `test_integrationapi_views.py`, `test_integrationapi_security.py`)
+- [ ] Phase 7 Skill & README update (`.claude/skills/ecommerce/SKILL.md` + `README.md`)
+
+---
+
+## Later passes / deferred
+- [ ] Distributed Celery / Redis asynchronous task worker infrastructure for high-throughput webhook queues
+- [ ] Full interactive OAuth 2.0 PKCE consent screen server UI for public third-party app marketplace
+- [ ] Native GraphQL AST execution engine endpoint inside Django
+- [ ] Direct thermal label printer (ZPL/EPL) streaming for warehouse packing lines (deferred to Module 5/WMS)
+
+---
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 9.18: Fraud & Risk Management (Module 9: eCommerce Management System, `ecommerce`) — plan from `research-ecommerce-9.18.md` (2026-11-02)
 
 > **This plan EXTENDS an existing app.** `apps/ecommerce/` is live with 9.1 through 9.17.
