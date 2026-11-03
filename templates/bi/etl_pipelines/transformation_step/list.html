@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Transformation Library — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <span>Transformation Library</span>
+        </div>
+        <h1 class="page-title">Transformation Library</h1>
+        <p class="text-muted text-sm">Relational joins, grouped aggregations, pivots, schema casts, lookups, and reusable business logic</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Pipelines</span>
+        </a>
+        <a href="{% url 'bi:transformation_step_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add Transform Step</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:transformation_step_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search step name, ID, or description..." class="form-input" aria-label="Search transformation steps">
+            </div>
+            <div class="form-group mb-0">
+                <select name="pipeline_id" class="form-select" aria-label="Filter by pipeline">
+                    <option value="">All Pipelines</option>
+                    {% for p in pipelines %}
+                    <option value="{{ p.pk }}" {% if pipeline_filter == p.pk|stringformat:"d" or request.GET.pipeline_id == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }} ({{ p.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="step_type" class="form-select" aria-label="Filter by step type">
+                    <option value="">All Transform Types</option>
+                    {% for val, label in step_type_choices %}
+                    <option value="{{ val }}" {% if step_type_filter == val or request.GET.step_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" title="Filter steps">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or step_type_filter or status_filter or pipeline_filter %}
+                <a href="{% url 'bi:transformation_step_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline</th>
+                    <th style="width: 70px;">Seq</th>
+                    <th>Step Name &amp; ID</th>
+                    <th>Transform Type</th>
+                    <th>Upstream Prerequisites</th>
+                    <th>Status</th>
+                    <th>Failure Behavior</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for step in steps %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_detail' step.pipeline.pk %}" class="hover:text-blue-600">{{ step.pipeline.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ step.pipeline.number }}</div>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">#{{ step.sequence }}</span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:transformation_step_detail' step.pk %}" class="hover:text-blue-600">{{ step.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ step.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ step.get_step_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if step.upstream_step_ids %}
+                            <div class="flex flex-wrap gap-1">
+                                {% for up_id in step.upstream_step_ids %}
+                                <span class="font-mono text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">{{ up_id }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="text-xs text-muted">Root Node (Source Stage)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if step.status == 'active' %}
+                            <span class="badge badge-green">{{ step.get_status_display }}</span>
+                        {% elif step.status == 'draft' %}
+                            <span class="badge badge-amber">{{ step.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-muted">{{ step.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if step.is_blocking %}
+                            <span class="badge badge-red text-xs">Blocking (Halts Pipeline)</span>
+                        {% else %}
+                            <span class="badge badge-slate text-xs">Non-Blocking</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:transformation_step_detail' step.pk %}" class="btn btn-icon btn-outline" title="View details" aria-label="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:transformation_step_edit' step.pk %}" class="btn btn-icon btn-outline" title="Edit step" aria-label="Edit step">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:transformation_step_delete' step.pk %}" class="inline" onsubmit="return confirm('Delete Transformation Step {{ step.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete step" aria-label="Delete step">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="layers" class="empty-icon text-muted mx-auto"></i>
+                            <h3 class="empty-title">No transformation steps found</h3>
+                            <p class="empty-description">Create transformation steps to apply relational joins, group aggregations, pivots, and lookups.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:transformation_step_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Add Transformation Step</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} steps
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if step_type_filter %}&step_type={{ step_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Previous page" aria-label="Previous page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="text-sm px-2 text-muted">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if step_type_filter %}&step_type={{ step_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if pipeline_filter %}&pipeline_id={{ pipeline_filter }}{% endif %}" class="btn btn-icon btn-outline" title="Next page" aria-label="Next page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
