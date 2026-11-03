@@ -200,7 +200,7 @@
 
 <div class="card">
     <div class="card-header flex items-center justify-between">
-        <h2 class="text-base font-semibold text-slate-800">Pipeline Execution Runs ({{ runs.count }})</h2>
+        <h2 class="text-base font-semibold text-slate-800">Pipeline Execution Runs ({{ runs_count }})</h2>
         <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline btn-sm">
