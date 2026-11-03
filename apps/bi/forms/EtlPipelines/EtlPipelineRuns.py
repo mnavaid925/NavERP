@@ -36,4 +36,8 @@ class EtlPipelineRunForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["pipeline", "version"])
+        pipeline = cleaned.get("pipeline")
+        version = cleaned.get("version")
+        if pipeline and version and version.pipeline_id != pipeline.id:
+            self.add_error("version", "Selected pipeline version does not belong to the selected pipeline.")
         return cleaned
