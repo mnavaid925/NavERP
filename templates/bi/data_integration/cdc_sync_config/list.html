@@ -11,7 +11,7 @@
             <span>CDC Streams</span>
         </div>
         <h1 class="page-title">Change Data Capture (CDC) Streams</h1>
-        <p class="text-secondary text-sm">Log-based and query-driven delta replication, high-water mark cursor tracking, and schema drift rules</p>
+        <p class="text-muted text-sm">Log-based and query-driven delta replication, high-water mark cursor tracking, and schema drift rules</p>
     </div>
     <div class="page-actions">
         <a href="{% url 'bi:data_integration_hub' %}" class="btn btn-outline">
@@ -78,7 +78,7 @@
                 {% for config in cdc_configs %}
                 <tr>
                     <td>
-                        <a href="{% url 'bi:cdc_sync_config_detail' config.pk %}" class="font-mono font-medium text-primary hover:underline">
+                        <a href="{% url 'bi:cdc_sync_config_detail' config.pk %}" class="font-mono font-medium text-brand hover:underline">
                             {{ config.number }}
                         </a>
                     </td>
@@ -96,7 +96,7 @@
                     </td>
                     <td>
                         <div class="text-xs font-mono text-slate-800 font-semibold">{{ config.cursor_field }}</div>
-                        <div class="text-xs font-mono text-secondary truncate max-w-[180px]">
+                        <div class="text-xs font-mono text-muted truncate max-w-[180px]">
                             {{ config.last_cursor_value|default:"No checkpoint" }}
                         </div>
                     </td>
@@ -138,7 +138,7 @@
                         <div class="empty-state">
                             <i data-lucide="refresh-cw" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
                             <h3 class="text-base font-medium text-slate-800">No CDC sync configurations found</h3>
-                            <p class="text-sm text-secondary mt-1">Configure Change Data Capture on an existing pipeline for incremental delta synchronization.</p>
+                            <p class="text-sm text-muted mt-1">Configure Change Data Capture on an existing pipeline for incremental delta synchronization.</p>
                             <div class="mt-4">
                                 <a href="{% url 'bi:cdc_sync_config_create' %}" class="btn btn-primary">
                                     <i data-lucide="plus"></i>
@@ -155,7 +155,7 @@
 
     {% if cdc_configs.has_other_pages %}
     <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
-        <div class="text-sm text-secondary">
+        <div class="text-sm text-muted">
             Showing {{ cdc_configs.start_index }} to {{ cdc_configs.end_index }} of {{ total_count }} CDC configurations
         </div>
         <div class="flex gap-1">
