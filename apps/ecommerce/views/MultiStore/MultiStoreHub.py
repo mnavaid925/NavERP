@@ -28,9 +28,9 @@ def multi_store_hub(request):
     total_environments = environment_stats["total"]
     production_environments = environment_stats["production"]
 
-    storefronts = storefronts_qs.select_related("default_currency", "root_category")[:6]
-    environments = environments_qs.select_related("storefront")[:6]
-    recent_pipelines = pipelines_qs.select_related("environment", "promoted_by")[:8]
+    storefronts = storefronts_qs[:6]
+    environments = environments_qs[:6]
+    recent_pipelines = pipelines_qs.select_related("environment")[:8]
 
     context = {
         "total_storefronts": total_storefronts,
