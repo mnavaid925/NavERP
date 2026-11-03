@@ -4213,7 +4213,7 @@ class Command(BaseCommand):
             tenant=tenant,
             connector=conn_netsuite,
             sync_entity="order_to_cash",
-            batch_id="batch-seed-o2c-001",
+            batch_id=f"batch-seed-o2c-{tenant.pk}",
             defaults={
                 "direction": "outbound",
                 "status": "completed",
@@ -4234,7 +4234,7 @@ class Command(BaseCommand):
             tenant=tenant,
             connector=conn_netsuite,
             sync_entity="inventory_levels",
-            batch_id="batch-seed-inv-002",
+            batch_id=f"batch-seed-inv-{tenant.pk}",
             defaults={
                 "direction": "inbound",
                 "status": "completed",
@@ -4255,7 +4255,7 @@ class Command(BaseCommand):
             tenant=tenant,
             connector=conn_fedex,
             sync_entity="shipment_tracking",
-            batch_id="batch-seed-shp-003",
+            batch_id=f"batch-seed-shp-{tenant.pk}",
             defaults={
                 "direction": "inbound",
                 "status": "completed",
@@ -4276,7 +4276,7 @@ class Command(BaseCommand):
             tenant=tenant,
             connector=conn_klaviyo,
             sync_entity="marketing_events",
-            batch_id="batch-seed-mkt-004",
+            batch_id=f"batch-seed-mkt-{tenant.pk}",
             defaults={
                 "direction": "outbound",
                 "status": "completed",
@@ -4297,11 +4297,11 @@ class Command(BaseCommand):
         WebhookSubscription.objects.get_or_create(
             tenant=tenant,
             name="External OMS Order Intake Hook",
-            target_url="https://webhook.site/demo-oms/orders/created",
+            target_url=f"https://webhook.site/demo-oms/{tenant.pk}/orders/created",
             defaults={
                 "event_topic": "order.created",
                 "status": "active",
-                "secret_key": "whsec_demo_signature_secret_key_8899",
+                "secret_key": f"whsec_demo_signature_{tenant.pk}_8899",
                 "payload_format": "json",
                 "custom_headers": '{"X-NavERP-Integration": "OMS-Production"}',
                 "total_delivered_count": 24,
@@ -4315,11 +4315,11 @@ class Command(BaseCommand):
         WebhookSubscription.objects.get_or_create(
             tenant=tenant,
             name="Finance Payment Capture Notification",
-            target_url="https://webhook.site/demo-finance/payments/captured",
+            target_url=f"https://webhook.site/demo-finance/{tenant.pk}/payments/captured",
             defaults={
                 "event_topic": "order.paid",
                 "status": "active",
-                "secret_key": "whsec_demo_finance_secret_key_7711",
+                "secret_key": f"whsec_demo_finance_{tenant.pk}_7711",
                 "payload_format": "json",
                 "custom_headers": '{"X-NavERP-Domain": "Payments"}',
                 "total_delivered_count": 18,
@@ -4333,11 +4333,11 @@ class Command(BaseCommand):
         WebhookSubscription.objects.get_or_create(
             tenant=tenant,
             name="Warehouse Low Stock Notification",
-            target_url="https://webhook.site/demo-warehouse/alerts/low-stock",
+            target_url=f"https://webhook.site/demo-warehouse/{tenant.pk}/alerts/low-stock",
             defaults={
                 "event_topic": "inventory.low_stock",
                 "status": "active",
-                "secret_key": "whsec_demo_inv_secret_key_6622",
+                "secret_key": f"whsec_demo_inv_{tenant.pk}_6622",
                 "payload_format": "json",
                 "custom_headers": '{"X-Priority": "High"}',
                 "total_delivered_count": 5,
@@ -4351,7 +4351,7 @@ class Command(BaseCommand):
         # API Credentials
         ApiCredential.objects.get_or_create(
             tenant=tenant,
-            client_id="nep_pub_nextjs_demo_storefront",
+            client_id=f"nep_pub_nextjs_{tenant.pk}",
             defaults={
                 "name": "Next.js Public Web Storefront App",
                 "tier": "storefront_public",
@@ -4370,7 +4370,7 @@ class Command(BaseCommand):
 
         ApiCredential.objects.get_or_create(
             tenant=tenant,
-            client_id="nep_live_admin_netsuite_daemon",
+            client_id=f"nep_live_admin_netsuite_{tenant.pk}",
             defaults={
                 "name": "NetSuite Sync Server Daemon Key",
                 "tier": "admin_server",
@@ -4378,6 +4378,14 @@ class Command(BaseCommand):
                 "secret_prefix": "nep_sec_srvd...",
                 "scopes": "admin_full",
                 "allowed_origins": "*",
+                "allowed_ips": "198.51.100.0/24",
+                "rate_limit_rpm": 600,
+                "total_requests_count": 850,
+                "last_used_at": timezone.now() - timedelta(minutes=10),
+                "created_by": admin_user,
+                "description": "Secure server-to-server daemon key for back-office integration worker.",
+            },
+        )
                 "allowed_ips": "198.51.100.0/24",
                 "rate_limit_rpm": 600,
                 "total_requests_count": 850,
