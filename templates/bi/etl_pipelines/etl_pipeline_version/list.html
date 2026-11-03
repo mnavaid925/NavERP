@@ -138,7 +138,7 @@
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'bi:etl_pipeline_version_delete' ver.pk %}?next=list" class="inline" onsubmit="return confirm('Delete Version {{ ver.version_number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon btn-danger" title="Delete version" aria-label="Delete version">
+                                <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete version" aria-label="Delete version">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
