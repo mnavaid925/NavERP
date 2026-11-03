@@ -96,7 +96,7 @@ integrationsyncjob_list = integration_sync_job_list
 
 @login_required
 def integration_sync_job_detail(request, pk):
-    sync_job = ecommerce_object(IntegrationSyncJob, pk, request)
+    sync_job = ecommerce_object(request, IntegrationSyncJob, pk)
     child_retries = sync_job.child_retries.all().order_by("-created_at")
 
     context = {
@@ -166,7 +166,7 @@ integrationsyncjob_create = integration_sync_job_create
 
 @login_required
 def integration_sync_job_edit(request, pk):
-    sync_job = ecommerce_object(IntegrationSyncJob, pk, request)
+    sync_job = ecommerce_object(request, IntegrationSyncJob, pk)
 
     if request.method == "POST":
         form = IntegrationSyncJobForm(request.POST, instance=sync_job, tenant=request.tenant)
@@ -199,7 +199,7 @@ integrationsyncjob_edit = integration_sync_job_edit
 @login_required
 @require_POST
 def integration_sync_job_delete(request, pk):
-    sync_job = ecommerce_object(IntegrationSyncJob, pk, request)
+    sync_job = ecommerce_object(request, IntegrationSyncJob, pk)
     number = sync_job.number
     write_audit_log(
         request.user,
@@ -220,7 +220,7 @@ integrationsyncjob_delete = integration_sync_job_delete
 @login_required
 @require_POST
 def integration_sync_job_retry(request, pk):
-    parent_job = ecommerce_object(IntegrationSyncJob, pk, request)
+    parent_job = ecommerce_object(request, IntegrationSyncJob, pk)
 
     retry_job = IntegrationSyncJob.objects.create(
         tenant=request.tenant,
