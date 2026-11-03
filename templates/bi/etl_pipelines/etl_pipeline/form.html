@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Pipeline: {{ pipeline.name }}{% else %}New ETL Pipeline{% endif %} — NavERP BI
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ pipeline.number }}{% else %}New Pipeline{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit ETL Pipeline: {{ pipeline.name }}{% else %}New ETL Pipeline{% endif %}</h1>
+        <p class="text-muted text-sm">Configure transformation target, execution cadence, dependencies, and SLA alerts</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:etl_pipeline_detail' pipeline.pk %}{% else %}{% url 'bi:etl_pipeline_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-semibold flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Please correct the errors below:</span>
+                    </div>
+                    <ul class="mt-2 list-disc list-inside space-y-1">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>{{ field|capfirst }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-5">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Pipeline Name <span class="text-danger">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.source_ingestion_pipeline.id_for_label }}">Source Ingestion Pipeline (Staging Buffer)</label>
+                            {{ form.source_ingestion_pipeline }}
+                            {% if form.source_ingestion_pipeline.errors %}<div class="form-error">{{ form.source_ingestion_pipeline.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Links directly to upstream 10.1 Ingestion Pipeline.</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.source_staging_table.id_for_label }}">Source Staging Table Name</label>
+                            {{ form.source_staging_table }}
+                            {% if form.source_staging_table.errors %}<div class="form-error">{{ form.source_staging_table.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">e.g. <code>stg_accounting_invoices</code> or custom staging buffer</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_table.id_for_label }}">Target Warehouse / Mart Table <span class="text-danger">*</span></label>
+                            {{ form.target_table }}
+                            {% if form.target_table.errors %}<div class="form-error">{{ form.target_table.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">e.g. <code>fct_monthly_sales</code> or <code>dim_customer_master</code></p>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_layer.id_for_label }}">Target Architectural Layer <span class="text-danger">*</span></label>
+                            {{ form.target_layer }}
+                            {% if form.target_layer.errors %}<div class="form-error">{{ form.target_layer.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.trigger_type.id_for_label }}">Trigger Type <span class="text-danger">*</span></label>
+                            {{ form.trigger_type }}
+                            {% if form.trigger_type.errors %}<div class="form-error">{{ form.trigger_type.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.cron_expression.id_for_label }}">Cron Schedule Expression</label>
+                            {{ form.cron_expression }}
+                            {% if form.cron_expression.errors %}<div class="form-error">{{ form.cron_expression.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">e.g. <code>0 2 * * *</code> (Daily at 2:00 AM UTC)</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.sla_timeout_seconds.id_for_label }}">SLA Timeout (Seconds)</label>
+                            {{ form.sla_timeout_seconds }}
+                            {% if form.sla_timeout_seconds.errors %}<div class="form-error">{{ form.sla_timeout_seconds.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Pipeline Lifecycle Status</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.alert_rule.id_for_label }}">Observability Alert Rule</label>
+                            {{ form.alert_rule }}
+                            {% if form.alert_rule.errors %}<div class="form-error">{{ form.alert_rule.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group flex items-center pt-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.alert_on_sla_miss }}
+                                <span class="text-sm text-slate-800 font-medium">Alert on SLA Runtime Breach</span>
+                            </label>
+                            {% if form.alert_on_sla_miss.errors %}<div class="form-error">{{ form.alert_on_sla_miss.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="border-t border-slate-200 pt-4 space-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.upstream_dependencies_raw.id_for_label }}">Upstream Pipeline Dependencies (JSON Array)</label>
+                            {{ form.upstream_dependencies_raw }}
+                            {% if form.upstream_dependencies_raw.errors %}<div class="form-error">{{ form.upstream_dependencies_raw.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Prerequisite pipelines that must successfully complete before this pipeline triggers.</p>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.retry_policy_raw.id_for_label }}">Retry Policy (JSON Object)</label>
+                            {{ form.retry_policy_raw }}
+                            {% if form.retry_policy_raw.errors %}<div class="form-error">{{ form.retry_policy_raw.errors.0 }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">e.g. <code>{"max_retries": 3, "retry_delay_seconds": 60, "backoff_factor": 2}</code></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'bi:etl_pipeline_detail' pipeline.pk %}{% else %}{% url 'bi:etl_pipeline_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Pipeline{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
