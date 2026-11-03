@@ -42,7 +42,7 @@
         <form method="post" action="{% url 'bi:etl_pipeline_version_promote' version.pk %}" class="inline">
             {% csrf_token %}
             <input type="hidden" name="target_environment" value="production">
-            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote version {{ version.version_number }} to live Production?');">
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote version {{ version.version_number|escapejs }} to live Production?');">
                 <i data-lucide="upload-cloud"></i>
                 <span>Promote to Production</span>
             </button>
@@ -52,7 +52,7 @@
         <form method="post" action="{% url 'bi:etl_pipeline_version_promote' version.pk %}" class="inline">
             {% csrf_token %}
             <input type="hidden" name="target_environment" value="staging">
-            <button type="submit" class="btn btn-outline" onclick="return confirm('Promote version {{ version.version_number }} to QA / Staging?');">
+            <button type="submit" class="btn btn-outline" onclick="return confirm('Promote version {{ version.version_number|escapejs }} to QA / Staging?');">
                 <i data-lucide="check-circle-2"></i>
                 <span>Deploy to Staging</span>
             </button>
