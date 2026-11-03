@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Ingestion Pipelines — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <span>Pipelines</span>
+        </div>
+        <h1 class="page-title">Ingestion Pipelines</h1>
+        <p class="text-secondary text-sm">Batch, micro-batch, and streaming ingestion tasks loading source data into staging tables</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_integration_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Integration Hub</span>
+        </a>
+        <a href="{% url 'bi:ingestion_pipeline_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'bi:ingestion_pipeline_list' %}" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search pipeline, source, staging table..." class="form-input" aria-label="Search pipelines">
+            </div>
+            <div class="form-group mb-0">
+                <select name="connector_id" class="form-select" aria-label="Filter by connector">
+                    <option value="">All Connectors</option>
+                    {% for conn in connectors %}
+                    <option value="{{ conn.pk }}" {% if connector_id == conn.pk|stringformat:"d" or request.GET.connector_id == conn.pk|stringformat:"d" %}selected{% endif %}>{{ conn.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="ingestion_mode" class="form-select" aria-label="Filter by mode">
+                    <option value="">All Ingestion Modes</option>
+                    {% for val, label in mode_choices %}
+                    <option value="{{ val }}" {% if ingestion_mode == val or request.GET.ingestion_mode == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val or request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if q or status or ingestion_mode or connector_id %}
+                <a href="{% url 'bi:ingestion_pipeline_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline Name</th>
+                    <th>Source Connector</th>
+                    <th>Mode &amp; Cadence</th>
+                    <th>Source Entity</th>
+                    <th>Target Staging</th>
+                    <th>Status</th>
+                    <th>Last Run</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pipeline in pipelines %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}" class="font-medium text-primary hover:underline">
+                            {{ pipeline.number }}
+                        </a>
+                        <div class="text-sm font-semibold text-slate-800">{{ pipeline.name }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:data_source_connector_detail' pipeline.connector.pk %}" class="text-xs font-medium text-slate-700 hover:underline">
+                            {{ pipeline.connector.name }}
+                        </a>
+                        <div class="text-xs text-muted">{{ pipeline.connector.get_connector_type_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ pipeline.get_ingestion_mode_display }}</span>
+                        <div class="text-xs text-secondary mt-0.5">{{ pipeline.get_schedule_cadence_display }}</div>
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">
+                        {{ pipeline.source_entity }}
+                    </td>
+                    <td class="font-mono text-xs text-primary font-semibold">
+                        {{ pipeline.target_staging_table }}
+                    </td>
+                    <td>
+                        {% if pipeline.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif pipeline.status == 'paused' %}
+                        <span class="badge badge-muted">Paused</span>
+                        {% elif pipeline.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% else %}
+                        <span class="badge badge-info">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">
+                        {% if pipeline.last_run_at %}
+                        {{ pipeline.last_run_at|date:"M d, H:i" }}
+                        {% else %}
+                        <span class="text-muted text-xs">Never run</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-primary" title="Trigger run now">
+                                    <i data-lucide="play"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:ingestion_pipeline_detail' pipeline.pk %}" class="btn btn-icon btn-outline" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:ingestion_pipeline_edit' pipeline.pk %}" class="btn btn-icon btn-outline" title="Edit pipeline">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:ingestion_pipeline_delete' pipeline.pk %}" onsubmit="return confirm('Delete this ingestion pipeline?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-danger" title="Delete pipeline">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="workflow" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-800">No ingestion pipelines found</h3>
+                            <p class="text-sm text-secondary mt-1">Create an ingestion pipeline to extract data from connectors into analytical staging.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:ingestion_pipeline_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Pipeline</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if pipelines.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-secondary">
+            Showing {{ pipelines.start_index }} to {{ pipelines.end_index }} of {{ total_count }} pipelines
+        </div>
+        <div class="flex gap-1">
+            {% if pipelines.has_previous %}
+            <a href="?page={{ pipelines.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if ingestion_mode %}&ingestion_mode={{ ingestion_mode }}{% endif %}{% if connector_id %}&connector_id={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            <span class="btn btn-sm btn-outline active font-semibold">{{ pipelines.number }} / {{ pipelines.paginator.num_pages }}</span>
+            {% if pipelines.has_next %}
+            <a href="?page={{ pipelines.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if ingestion_mode %}&ingestion_mode={{ ingestion_mode }}{% endif %}{% if connector_id %}&connector_id={{ connector_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
