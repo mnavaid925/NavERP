@@ -66,4 +66,4 @@ class DeploymentPipeline(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.release_version} -> {self.environment.name} [{self.status}] ({self.number})"
+        return f"{self.release_version} [{self.status}] ({self.number})"
