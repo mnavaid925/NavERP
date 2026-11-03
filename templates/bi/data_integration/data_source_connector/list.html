@@ -51,7 +51,7 @@
                     <span>Filter</span>
                 </button>
                 {% if q or status or connector_type %}
-                <a href="{% url 'bi:data_source_connector_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'bi:data_source_connector_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
