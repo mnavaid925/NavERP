@@ -35,7 +35,7 @@
 
 ### Minor
 
-- [ ] **M1**: `apps/bi/views/DataIntegration/CdcSyncConfigs.py:143` — **Inflexible redirect in cdc_sync_config_delete**: Always redirects to pipeline detail. Support redirecting back to `cdc_sync_config_list` when initiated from list.
+- [x] **M1**: `apps/bi/views/DataIntegration/CdcSyncConfigs.py:143` — **Inflexible redirect in cdc_sync_config_delete**: Always redirects to pipeline detail. Support redirecting back to `cdc_sync_config_list` when initiated from list. Fixed in `33bb7aa5`, `d2b518d9`.
 - [ ] **M2**: `apps/bi/management/commands/seed_bi.py` — **Missing --flush argument in seeder**: Support `--flush` flag to reset and re-seed demo data.
 - [ ] **M3**: `templates/bi/data_integration/**/detail.html` — **Missing "Back to List" button in page-actions**: Add explicit back-to-list navigation button in detail headers and sidebars.
 - [ ] **M4**: `templates/bi/data_integration/**/list.html` — **Filter reset buttons missing .btn-icon and aria-label**: Add `.btn-icon` and `aria-label="Clear filters"`.
