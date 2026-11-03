@@ -15,7 +15,7 @@
             <span>{% if is_edit %}Edit {{ connector.number }}{% else %}New Connector{% endif %}</span>
         </div>
         <h1 class="page-title">{% if is_edit %}Edit Connector: {{ connector.name }}{% else %}New Data Source Connector{% endif %}</h1>
-        <p class="text-secondary text-sm">Configure connectivity parameters for internal ERP tables, databases, cloud storage, or API endpoints</p>
+        <p class="text-muted text-sm">Configure connectivity parameters for internal ERP tables, databases, cloud storage, or API endpoints</p>
     </div>
     <div class="page-actions">
         <a href="{% if is_edit %}{% url 'bi:data_source_connector_detail' connector.pk %}{% else %}{% url 'bi:data_source_connector_list' %}{% endif %}" class="btn btn-outline">
@@ -71,14 +71,14 @@
                     <div class="form-group">
                         <label class="form-label" for="{{ form.credential.id_for_label }}">API Credential (Optional)</label>
                         {{ form.credential }}
-                        <p class="text-xs text-secondary mt-1">Select pre-configured API key / token from Module 0 credentials if authentication is required.</p>
+                        <p class="text-xs text-muted mt-1">Select pre-configured API key / token from Module 0 credentials if authentication is required.</p>
                         {% if form.credential.errors %}<div class="form-error">{{ form.credential.errors.0 }}</div>{% endif %}
                     </div>
 
                     <div class="form-group">
                         <label class="form-label" for="{{ form.connection_config_raw.id_for_label }}">Connection Metadata (JSON Object)</label>
                         {{ form.connection_config_raw }}
-                        <p class="text-xs text-secondary mt-1">Provide connection parameters in JSON format. Example: <code>{"host": "db.acme.internal", "port": 5432, "database": "analytics", "ssl": true}</code></p>
+                        <p class="text-xs text-muted mt-1">Provide connection parameters in JSON format. Example: <code>{"host": "db.acme.internal", "port": 5432, "database": "analytics", "ssl": true}</code></p>
                         {% if form.connection_config_raw.errors %}<div class="form-error">{{ form.connection_config_raw.errors.0 }}</div>{% endif %}
                     </div>
 
