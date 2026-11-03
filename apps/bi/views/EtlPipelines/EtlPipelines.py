@@ -223,6 +223,10 @@ def etl_pipeline_canvas(request, pk):
 def etl_pipeline_trigger(request, pk):
     pipeline = bi_object(request, EtlPipeline, pk)
 
+    if pipeline.runs.filter(status="running").exists():
+        messages.warning(request, f"Execution run is already in progress for pipeline {pipeline.number}.")
+        return redirect("bi:etl_pipeline_detail", pk=pipeline.pk)
+
     with transaction.atomic():
         run = EtlPipelineRun.objects.create(
             tenant=request.tenant,
