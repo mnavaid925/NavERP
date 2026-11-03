@@ -64,19 +64,11 @@ def storefront_instance_detail(request, pk):
     )
     catalog_assignments = storefront.catalog_assignments.select_related("product", "custom_currency")[:10]
     environments = storefront.environments.all()[:10]
-    recent_deployments = []
-    if environments.exists():
-        from apps.ecommerce.models.MultiStore.DeploymentPipelines import DeploymentPipeline
-        recent_deployments = ecommerce_scope(
-            DeploymentPipeline.objects.filter(environment__in=environments).select_related("environment", "promoted_by"),
-            request,
-        ).order_by("-created_at")[:5]
 
     context = {
         "storefront": storefront,
         "catalog_assignments": catalog_assignments,
         "environments": environments,
-        "recent_deployments": recent_deployments,
     }
     return render(request, "ecommerce/multi_store/storefront_instance/detail.html", context)
 
