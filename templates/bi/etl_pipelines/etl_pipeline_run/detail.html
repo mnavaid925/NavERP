@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Execution Run {{ run.number }} ({{ pipeline.name }}) — NavERP BI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}">{{ pipeline.number }}</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_run_list' %}">Runs</a>
+            <span>/</span>
+            <span>{{ run.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">Run: {{ run.number }}</h1>
+            {% if run.status == 'completed' %}
+                <span class="badge badge-green">{{ run.get_status_display }}</span>
+            {% elif run.status == 'running' %}
+                <span class="badge badge-info">{{ run.get_status_display }}</span>
+            {% elif run.status == 'failed' or run.status == 'timed_out' %}
+                <span class="badge badge-red">{{ run.get_status_display }}</span>
+            {% elif run.status == 'warning' %}
+                <span class="badge badge-amber">{{ run.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-slate">{{ run.get_status_display }}</span>
+            {% endif %}
+            {% if run.sla_missed %}
+                <span class="badge badge-red">SLA Breached</span>
+            {% else %}
+                <span class="badge badge-green">Within SLA</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">Execution instance of {{ pipeline.name }} ({{ pipeline.number }})</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_detail' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Pipeline Overview</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_run_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>All Runs</span>
+        </a>
+    </div>
+</div>
+
+<!-- Throughput KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Records Extracted</div>
+        <div class="font-mono text-2xl font-bold text-blue-600 mt-1">{{ run.records_in }}</div>
+        <div class="text-xs text-muted mt-0.5">Staging source ingress</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Transformed</div>
+        <div class="font-mono text-2xl font-bold text-purple-600 mt-1">{{ run.records_transformed }}</div>
+        <div class="text-xs text-muted mt-0.5">Passed transformation nodes</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Loaded to Target</div>
+        <div class="font-mono text-2xl font-bold text-green-600 mt-1">{{ run.records_out }}</div>
+        <div class="text-xs text-muted mt-0.5">Written to {{ pipeline.target_table }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Rejected / Filtered</div>
+        <div class="font-mono text-2xl font-bold text-red-500 mt-1">{{ run.records_rejected }}</div>
+        <div class="text-xs text-muted mt-0.5">Failed join/type check</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Data Volume</div>
+        <div class="font-mono text-2xl font-bold text-slate-700 mt-1">{{ run.bytes_processed|filesizeformat }}</div>
+        <div class="text-xs text-muted mt-0.5">Total memory/disk volume</div>
+    </div>
+</div>
+
+<!-- Execution Timing & Diagnostics -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Trigger Source</div>
+        <div class="text-sm font-semibold text-slate-800 mt-1">{{ run.get_trigger_type_display }}</div>
+        {% if run.is_backfill %}
+        <div class="text-xs text-amber-600 font-medium mt-0.5">
+            Backfill: {{ run.backfill_range_start|date:"M d" }} - {{ run.backfill_range_end|date:"M d" }}
+        </div>
+        {% endif %}
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Duration &amp; Runtime</div>
+        <div class="font-mono text-lg font-bold text-slate-800 mt-1">{{ run.duration_seconds }}s</div>
+        <div class="text-xs text-muted mt-0.5">SLA Limit: {{ pipeline.sla_timeout_seconds }}s</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Timestamp</div>
+        <div class="text-xs text-slate-700 mt-1">Started: <span class="font-mono font-medium">{{ run.started_at|date:"M d, Y H:i:s" }}</span></div>
+        <div class="text-xs text-slate-700 mt-0.5">Ended: <span class="font-mono font-medium">{{ run.ended_at|date:"M d, Y H:i:s"|default:"Running..." }}</span></div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Version Instance</div>
+        <div class="text-sm font-semibold text-slate-800 mt-1">
+            {% if version %}
+                <a href="{% url 'bi:etl_pipeline_version_detail' version.pk %}" class="text-blue-600 hover:underline">
+                    {{ version.version_number }}
+                </a>
+            {% else %}
+                <span class="text-muted">Draft / Unversioned</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-0.5">Retries: {{ run.retry_count }}</div>
+    </div>
+</div>
+
+{% if run.error_message %}
+<div class="card border-l-4 border-red-500 mb-6 p-4 bg-red-50/40">
+    <div class="flex items-start gap-3">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"></i>
+        <div>
+            <h3 class="text-sm font-semibold text-red-800">Pipeline Error Diagnostic</h3>
+            <pre class="mt-1 text-xs font-mono text-red-700 bg-red-50 p-3 rounded border border-red-200 whitespace-pre-wrap leading-relaxed">{{ run.error_message }}</pre>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Step Execution Progress -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Transformation Step Progress (JSON)</h2>
+        </div>
+        <div class="card-body">
+            {% if run.step_progress %}
+            <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed max-h-96">{{ run.step_progress|pprint }}</pre>
+            {% else %}
+            <p class="text-sm text-muted">No granular step progress logged for this run.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Execution Console Log -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Worker Execution Console Log</h2>
+        </div>
+        <div class="card-body">
+            {% if run.execution_log %}
+            <pre class="bg-slate-950 text-green-400 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed max-h-96 whitespace-pre-wrap">{{ run.execution_log }}</pre>
+            {% else %}
+            <p class="text-sm text-muted">No execution stdout/stderr recorded.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
