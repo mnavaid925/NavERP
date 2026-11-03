@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}Integration &amp; API Ecosystem — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:product_catalog_overview' %}">eCommerce</a>
+            <span>/</span>
+            <span>Integration &amp; API</span>
+        </div>
+        <h1 class="page-title">Integration &amp; API Ecosystem</h1>
+        <p class="text-secondary text-sm">Enterprise ERP sync, payment gateways, carrier logistics APIs, marketing integrations, and headless storefront tokens</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:ecommerceconnector_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>New Connector</span>
+        </a>
+        <a href="{% url 'ecommerce:integrationsyncjob_create' %}" class="btn btn-outline">
+            <i data-lucide="play"></i>
+            <span>Trigger Sync</span>
+        </a>
+        <a href="{% url 'ecommerce:webhooksubscription_create' %}" class="btn btn-outline">
+            <i data-lucide="webhook"></i>
+            <span>Add Webhook</span>
+        </a>
+        <a href="{% url 'ecommerce:apicredential_create' %}" class="btn btn-primary">
+            <i data-lucide="key"></i>
+            <span>Generate API Key</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card blue">
+        <div class="stat-icon blue"><i data-lucide="network"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Connectors Configured</div>
+            <div class="stat-value">{{ stats.total_connectors }}</div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon green"><i data-lucide="rotate-cw"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Sync Jobs Run</div>
+            <div class="stat-value">{{ stats.total_jobs }}</div>
+        </div>
+    </div>
+    <div class="stat-card purple">
+        <div class="stat-icon purple"><i data-lucide="webhook"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Webhook Subscriptions</div>
+            <div class="stat-value">{{ stats.total_webhooks }}</div>
+        </div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-icon orange"><i data-lucide="key"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Active API Keys</div>
+            <div class="stat-value">{{ stats.active_credentials }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <a href="{% url 'ecommerce:ecommerceconnector_list' %}?category=erp" class="card hover:shadow-md transition p-4 flex items-center justify-between">
+        <div>
+            <div class="text-xs uppercase font-semibold text-muted">ERP &amp; Back-Office</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">SAP, NetSuite, Dynamics</div>
+            <span class="text-xs text-primary font-medium mt-1 inline-block">Order-to-Cash &bull; Inventory Sync &rarr;</span>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+            <i data-lucide="database" class="w-5 h-5"></i>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:ecommerceconnector_list' %}?category=payment" class="card hover:shadow-md transition p-4 flex items-center justify-between">
+        <div>
+            <div class="text-xs uppercase font-semibold text-muted">Payment Gateways</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">Stripe, Adyen, PayPal</div>
+            <span class="text-xs text-primary font-medium mt-1 inline-block">Settlements &bull; Webhooks &rarr;</span>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-green-600">
+            <i data-lucide="credit-card" class="w-5 h-5"></i>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:ecommerceconnector_list' %}?category=shipping" class="card hover:shadow-md transition p-4 flex items-center justify-between">
+        <div>
+            <div class="text-xs uppercase font-semibold text-muted">Shipping &amp; Logistics</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">FedEx, UPS, DHL, USPS</div>
+            <span class="text-xs text-primary font-medium mt-1 inline-block">Live Rates &bull; Tracking &rarr;</span>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-purple-600">
+            <i data-lucide="truck" class="w-5 h-5"></i>
+        </div>
+    </a>
+    <a href="{% url 'ecommerce:ecommerceconnector_list' %}?category=marketing" class="card hover:shadow-md transition p-4 flex items-center justify-between">
+        <div>
+            <div class="text-xs uppercase font-semibold text-muted">Marketing &amp; CDP</div>
+            <div class="text-lg font-bold text-slate-800 mt-1">Klaviyo, Segment, Braze</div>
+            <span class="text-xs text-primary font-medium mt-1 inline-block">Audience Sync &bull; GA4 &rarr;</span>
+        </div>
+        <div class="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center text-orange-600">
+            <i data-lucide="share-2" class="w-5 h-5"></i>
+        </div>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title text-base font-semibold">Active Integration Connectors</h2>
+            <a href="{% url 'ecommerce:ecommerceconnector_list' %}" class="text-primary text-xs font-medium hover:underline">View All &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Connector</th>
+                        <th>Category</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Health</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for conn in recent_connectors %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:ecommerceconnector_detail' conn.pk %}" class="font-semibold text-primary hover:underline">
+                                {{ conn.name }}
+                            </a>
+                            <span class="block text-xs font-mono text-muted">{{ conn.number }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-info">{{ conn.get_category_display }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm font-medium">{{ conn.get_provider_display }}</span>
+                        </td>
+                        <td>
+                            {% if conn.status == "active" %}
+                            <span class="badge badge-green">Active</span>
+                            {% elif conn.status == "testing" %}
+                            <span class="badge badge-amber">Testing</span>
+                            {% else %}
+                            <span class="badge badge-slate">{{ conn.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if conn.health_status == "healthy" %}
+                            <span class="badge badge-green">Healthy</span>
+                            {% else %}
+                            <span class="badge badge-amber">{{ conn.health_status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-sm text-muted">
+                            No connectors configured yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title text-base font-semibold">Recent Sync Executions</h2>
+            <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="text-primary text-xs font-medium hover:underline">View Queue &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Job Number</th>
+                        <th>Connector</th>
+                        <th>Sync Entity</th>
+                        <th>Status</th>
+                        <th>Records</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in recent_jobs %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:integrationsyncjob_detail' job.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                                {{ job.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="text-sm font-medium text-slate-800">{{ job.connector.name }}</span>
+                        </td>
+                        <td>
+                            <span class="text-sm">{{ job.get_sync_entity_display }}</span>
+                        </td>
+                        <td>
+                            {% if job.status == "completed" %}
+                            <span class="badge badge-green">Completed</span>
+                            {% elif job.status == "failed" %}
+                            <span class="badge badge-red">Failed</span>
+                            {% elif job.status == "running" %}
+                            <span class="badge badge-amber">Running</span>
+                            {% else %}
+                            <span class="badge badge-slate">{{ job.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="font-mono text-xs">{{ job.records_succeeded }}/{{ job.records_total }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-sm text-muted">
+                            No sync executions logged yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title text-base font-semibold">Real-Time Webhook Subscriptions</h2>
+            <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="text-primary text-xs font-medium hover:underline">View All &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Subscriber</th>
+                        <th>Event Topic</th>
+                        <th>Delivered</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for wh in active_webhooks %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:webhooksubscription_detail' wh.pk %}" class="font-semibold text-primary hover:underline">
+                                {{ wh.name }}
+                            </a>
+                            <span class="block text-xs font-mono text-muted truncate max-w-xs">{{ wh.target_url }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-info font-mono text-xs">{{ wh.event_topic }}</span>
+                        </td>
+                        <td>
+                            <span class="font-mono text-sm">{{ wh.total_delivered_count }}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-green">Active</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-sm text-muted">
+                            No active webhook endpoints.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h2 class="card-title text-base font-semibold">Headless Storefront &amp; Admin API Keys</h2>
+            <a href="{% url 'ecommerce:apicredential_list' %}" class="text-primary text-xs font-medium hover:underline">View All &rarr;</a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Client App</th>
+                        <th>Client ID</th>
+                        <th>Tier</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cred in active_credentials %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:apicredential_detail' cred.pk %}" class="font-semibold text-primary hover:underline">
+                                {{ cred.name }}
+                            </a>
+                            <span class="block text-xs font-mono text-muted">{{ cred.number }}</span>
+                        </td>
+                        <td>
+                            <span class="font-mono text-xs bg-slate-50 px-1 py-0.5 rounded border border-slate-200">
+                                {{ cred.client_id }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if cred.tier == "storefront_public" %}
+                            <span class="badge badge-info">Storefront Public</span>
+                            {% else %}
+                            <span class="badge badge-purple">Admin Private</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge badge-green">Active</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-sm text-muted">
+                            No API credentials issued yet.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
