@@ -39,8 +39,8 @@ def ingestion_run_list(request):
         queryset = queryset.filter(trigger_type=trigger_type)
 
     pipeline_id = request.GET.get("pipeline_id", "").strip()
-    if pipeline_id:
-        queryset = queryset.filter(pipeline_id=pipeline_id)
+    if pipeline_id and pipeline_id.isdigit():
+        queryset = queryset.filter(pipeline_id=int(pipeline_id))
 
     paginator = Paginator(queryset.select_related("pipeline", "pipeline__connector"), 25)
     page_number = request.GET.get("page")
