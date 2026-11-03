@@ -96,3 +96,71 @@ A few notable items require attention regarding AuditLog action lengths, templat
 - **Remediation:** Note as a security hardening item for production deployment to use symmetric envelope encryption (e.g. Fernet / KMS) for external client secrets.
 
 ---
+
+
+## Pass 2: Explorer Reviewer (`explorer`)
+
+### Executive Summary
+Sub-module 9.19 (*Integration & API Ecosystem*) demonstrates exemplary adherence to NavERP's architecture and coding standards. The four entities (`EcommerceConnector`, `IntegrationSyncJob`, `WebhookSubscription`, and `ApiCredential`) strictly isolate tenants via `TenantNumbered`, enforce tenant query scoping through `ecommerce_scope`, protect against cross-tenant IDOR across all mutation and detail views via `ecommerce_object`, and wire every state mutation to CSRF-protected `@require_POST` handlers with audit logging.
+
+Package structure strictly follows NavERP's modular layout with single-responsibility files under `apps/ecommerce/{models,forms,views,urls}/IntegrationApi/` and clean re-exports in package `__init__.py`. All 5 `NavERP.md` feature bullets are accurately wired in `apps/core/navigation.py` under `LIVE_LINKS["9.19"]`, and all 13 template files resolve URLs without dead links. Admin registration is fully implemented, and the seeder is idempotent across multiple tenants.
+
+### Critical Findings
+*None.*
+
+### Important Findings
+
+#### 1. Comma-Separated Scope Splitting Fails in Template
+- **File:** `templates/ecommerce/integration_api/api_credential/detail.html` (Lines 112–115)
+- **Problem:** The template uses `{% for scope in credential.scopes.split %}` to iterate over permission badges. In Python/Django template resolution, `str.split` without arguments defaults to splitting on whitespace (`sep=None`), not commas. Because `scopes` is stored comma-separated (e.g. `"read_catalog,read_orders,write_orders"`), it renders as a single monolithic badge rather than individual scope badges.
+- **Remediation:** Define a property on `ApiCredential`:
+  ```python
+  @property
+  def scopes_list(self):
+      return [s.strip() for s in self.scopes.split(",") if s.strip()]
+  ```
+  And update `api_credential/detail.html` to iterate over `{% for scope in credential.scopes_list %}`.
+
+#### 2. Connector List View: Missing Provider Dropdown and Pagination Parameter Loss
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 100–103)
+  - `templates/ecommerce/integration_api/ecommerce_connector/list.html` (Lines 61–92, 218–224)
+- **Problem:**
+  1. The view filters on `provider_filter = request.GET.get("provider", "").strip()` and supplies `provider_choices` and `provider_filter` to the context, but the template filter bar does not include a `<select name="provider">` dropdown.
+  2. The pagination controls do not append `{% if provider_filter %}&provider={{ provider_filter }}{% endif %}`, dropping the provider filter when paginating.
+- **Remediation:** Add the provider filter dropdown to `ecommerce_connector/list.html` and append the parameter to pagination links.
+
+#### 3. Sync Job List View: Missing Direction and Trigger Dropdowns and Pagination Parameter Loss
+- **Files:**
+  - `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 39–46)
+  - `templates/ecommerce/integration_api/integration_sync_job/list.html` (Lines 61–100, 221–227)
+- **Problem:**
+  1. The view parses `direction_filter` and `trigger_filter` and passes `direction_choices` and `trigger_choices` to context, but the template form only renders `status`, `entity`, and `connector` selects.
+  2. Pagination controls omit `direction_filter` and `trigger_filter`, losing those filters across pages.
+- **Remediation:** Add the `direction` and `trigger` selects to the filter bar and preserve them in pagination links.
+
+#### 4. AuditLog Action Verb Exceeds `varchar(10)`
+- **File:** `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py` (Lines 253–259)
+- **Problem:** In `ecommerce_connector_test_connection`, `write_audit_log` is called with `action="test_connection"`. The `core.AuditLog.action` column is `CharField(max_length=10)`, causing `write_audit_log` to truncate the action to `"test_conne"` with a warning log.
+- **Remediation:** Pass `action="test"` or `action="ping"` (under 10 chars) and record `"action_type": "test_connection"` inside the `changes` dictionary.
+
+### Minor Findings
+
+#### 5. Redundant Index on `ApiCredential.client_id`
+- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py` (Lines 40–43, 120)
+- **Problem:** `client_id` is defined with `unique=True`, which already creates a unique b-tree index in the database. `Meta.indexes` specifies a second index `models.Index(fields=["client_id"], name="idx_eapc_client_id")`, creating duplicate indexing overhead.
+- **Remediation:** Remove `idx_eapc_client_id` from `Meta.indexes` in future schema maintenance.
+
+#### 6. Undefined CSS Class `.badge-purple`
+- **Files:**
+  - `templates/ecommerce/integration_api/integration_api_hub.html` (Line 309)
+  - `templates/ecommerce/integration_api/api_credential/list.html` (Line 129)
+- **Problem:** `<span class="badge badge-purple">Admin Private</span>` is used, but `.badge-purple` is not declared in `static/css/theme.css`, causing the badge to render without styling.
+- **Remediation:** Use `.badge-info` / `.badge-slate` or define `.badge-purple` in `static/css/theme.css`.
+
+#### 7. Defense-in-Depth Form Foreign Key Validation
+- **File:** `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py` (Lines 58–64)
+- **Observation:** While `__init__` scopes `self.fields["connector"].queryset` to `self.tenant` (blocking cross-tenant values during standard form validation), adding `clean()` with `reject_foreign(self, self.cleaned_data, ["connector"])` provides defense-in-depth against tampered POST payloads.
+- **Remediation:** Add `reject_foreign` in `clean()` for parity with other eCommerce forms.
+
+---
