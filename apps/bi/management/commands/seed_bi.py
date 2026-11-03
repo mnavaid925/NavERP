@@ -15,8 +15,24 @@ from apps.core.models import Tenant
 class Command(BaseCommand):
     help = "Seed demo data for Business Intelligence (BI) Module 10.1 (Data Integration & Ingestion)."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--flush",
+            action="store_true",
+            help="Delete existing BI 10.1 demo data before seeding.",
+        )
+
     def handle(self, *args, **options):
         self.stdout.write("Seeding Business Intelligence (BI) demo data...")
+        flush = options.get("flush", False)
+        if flush:
+            self.stdout.write("Flushing existing BI 10.1 data...")
+            IngestionRun.objects.all().delete()
+            CdcSyncConfig.objects.all().delete()
+            IngestionPipeline.objects.all().delete()
+            DataSourceConnector.objects.all().delete()
+            self.stdout.write(self.style.SUCCESS("Existing BI data flushed successfully."))
+
         tenants = Tenant.objects.all()
         if not tenants.exists():
             self.stdout.write(self.style.WARNING("No tenants found. Run seed_accounts / seed_core first."))
