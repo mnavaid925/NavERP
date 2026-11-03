@@ -25,7 +25,7 @@
             {% endif %}
             <span class="badge badge-slate">{{ pipeline.get_ingestion_mode_display }}</span>
         </div>
-        <p class="text-secondary text-sm">Pipeline Code: <span class="font-mono">{{ pipeline.number }}</span> &bull; Target Table: <span class="font-mono text-primary font-semibold">{{ pipeline.target_staging_table }}</span></p>
+        <p class="text-muted text-sm">Pipeline Code: <span class="font-mono">{{ pipeline.number }}</span> &bull; Target Table: <span class="font-mono text-brand font-semibold">{{ pipeline.target_staging_table }}</span></p>
     </div>
     <div class="page-actions">
         <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
@@ -50,40 +50,40 @@
         <div class="card-body">
             <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Data Source Connector</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Data Source Connector</dt>
                     <dd class="mt-1 text-sm font-semibold text-slate-800">
-                        <a href="{% url 'bi:data_source_connector_detail' pipeline.connector.pk %}" class="text-primary hover:underline">
+                        <a href="{% url 'bi:data_source_connector_detail' pipeline.connector.pk %}" class="text-brand hover:underline">
                             {{ pipeline.connector.name }} ({{ pipeline.connector.number }})
                         </a>
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Source Entity / Path</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Source Entity / Path</dt>
                     <dd class="mt-1 text-sm font-mono text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
                         {{ pipeline.source_entity }}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Target Analytical Staging Table</dt>
-                    <dd class="mt-1 text-sm font-mono text-primary font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    <dt class="text-xs uppercase font-semibold text-muted">Target Analytical Staging Table</dt>
+                    <dd class="mt-1 text-sm font-mono text-brand font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                         {{ pipeline.target_staging_table }}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Schedule &amp; Cadence</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Schedule &amp; Cadence</dt>
                     <dd class="mt-1 text-sm text-slate-800">
                         {{ pipeline.get_schedule_cadence_display }}
                         {% if pipeline.cron_expression %}
-                        <span class="font-mono text-xs text-secondary bg-slate-100 px-1 rounded">({{ pipeline.cron_expression }})</span>
+                        <span class="font-mono text-xs text-muted bg-slate-100 px-1 rounded">({{ pipeline.cron_expression }})</span>
                         {% endif %}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">File Ingestion Format</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">File Ingestion Format</dt>
                     <dd class="mt-1 text-sm text-slate-800">{{ pipeline.get_file_format_display }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Last Run Timestamp</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Last Run Timestamp</dt>
                     <dd class="mt-1 text-sm text-slate-800">
                         {% if pipeline.last_run_at %}
                         {{ pipeline.last_run_at|date:"Y-m-d H:i:s" }}
@@ -94,13 +94,13 @@
                 </div>
                 {% if pipeline.rate_limit_policy %}
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Rate Limit Policy</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Rate Limit Policy</dt>
                     <dd class="mt-1 text-sm text-slate-800">{{ pipeline.rate_limit_policy.name }}</dd>
                 </div>
                 {% endif %}
                 {% if pipeline.mapping_template %}
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Schema Mapping Template</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Schema Mapping Template</dt>
                     <dd class="mt-1 text-sm text-slate-800">{{ pipeline.mapping_template.name }}</dd>
                 </div>
                 {% endif %}
@@ -108,11 +108,11 @@
 
             {% if pipeline.webhook_token %}
             <div class="mt-6 pt-4 border-t border-slate-100">
-                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">Inbound Webhook Ingress Endpoint</h3>
+                <h3 class="text-xs uppercase font-semibold text-muted mb-2">Inbound Webhook Ingress Endpoint</h3>
                 <div class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono break-all">
                     POST /api/bi/ingest/{{ pipeline.webhook_token }}/
                 </div>
-                <div class="text-xs text-secondary mt-1">
+                <div class="text-xs text-muted mt-1">
                     Send streaming records as JSON payload or event arrays. Secret: <span class="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{% if pipeline.webhook_secret %}••••••••••••••••{% else %}None{% endif %}</span>
                 </div>
             </div>
@@ -120,7 +120,7 @@
 
             {% if pipeline.file_parsing_options %}
             <div class="mt-6 pt-4 border-t border-slate-100">
-                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">File Parsing Options (JSON)</h3>
+                <h3 class="text-xs uppercase font-semibold text-muted mb-2">File Parsing Options (JSON)</h3>
                 <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ pipeline.file_parsing_options }}</pre>
             </div>
             {% endif %}
@@ -146,34 +146,34 @@
             {% if cdc_config %}
             <dl class="space-y-3">
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">CDC Config Code</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">CDC Config Code</dt>
                     <dd class="text-sm font-mono text-slate-800">
-                        <a href="{% url 'bi:cdc_sync_config_detail' cdc_config.pk %}" class="text-primary hover:underline">
+                        <a href="{% url 'bi:cdc_sync_config_detail' cdc_config.pk %}" class="text-brand hover:underline">
                             {{ cdc_config.number }}
                         </a>
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Capture Method</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Capture Method</dt>
                     <dd class="text-sm text-slate-800">{{ cdc_config.get_capture_method_display }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Sync Mode</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Sync Mode</dt>
                     <dd class="text-sm text-slate-800"><span class="badge badge-slate">{{ cdc_config.get_sync_mode_display }}</span></dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">High-Water Mark Cursor</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">High-Water Mark Cursor</dt>
                     <dd class="text-xs font-mono text-slate-700 bg-slate-100 p-1.5 rounded break-all">
                         {{ cdc_config.last_cursor_value|default:"No cursor committed" }}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Schema Drift Policy</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Schema Drift Policy</dt>
                     <dd class="text-sm text-slate-800">{{ cdc_config.get_schema_drift_policy_display }}</dd>
                 </div>
             </dl>
             {% else %}
-            <div class="text-center py-6 text-secondary text-sm">
+            <div class="text-center py-6 text-muted text-sm">
                 <i data-lucide="refresh-cw" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
                 <p>No CDC stream configured for this pipeline.</p>
                 <div class="mt-3">
@@ -229,7 +229,7 @@
                 {% for run in runs %}
                 <tr>
                     <td>
-                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-brand hover:underline">
                             {{ run.number }}
                         </a>
                     </td>
@@ -247,17 +247,17 @@
                         <span class="badge badge-slate">{{ run.get_status_display }}</span>
                         {% endif %}
                     </td>
-                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="text-sm text-muted">{{ run.duration_seconds }}s</td>
                     <td class="font-mono text-xs text-slate-800">{{ run.records_extracted }}</td>
                     <td class="font-mono text-xs text-green-600 font-semibold">{{ run.records_inserted }}</td>
                     <td class="font-mono text-xs text-red-500">{{ run.records_rejected }}</td>
                     <td class="font-mono text-xs text-slate-600">{{ run.bytes_transferred }} B</td>
                     <td class="font-mono text-xs text-slate-500 max-w-[150px] truncate">{{ run.committed_cursor|default:"—" }}</td>
-                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i" }}</td>
+                    <td class="text-sm text-muted">{{ run.started_at|date:"M d, H:i" }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="text-center py-6 text-secondary text-sm">
+                    <td colspan="10" class="text-center py-6 text-muted text-sm">
                         No runs recorded for this pipeline yet. Click "Trigger Run Now" above.
                     </td>
                 </tr>
