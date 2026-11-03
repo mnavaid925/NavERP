@@ -16,7 +16,6 @@ from apps.core.utils import write_audit_log
 @login_required
 def cdc_sync_config_list(request):
     queryset = bi_scope(CdcSyncConfig.objects.all(), request)
-    total_count = queryset.count()
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -46,7 +45,7 @@ def cdc_sync_config_list(request):
         "sync_mode": sync_mode,
         "method_choices": CdcSyncConfig.CAPTURE_METHOD_CHOICES,
         "mode_choices": CdcSyncConfig.SYNC_MODE_CHOICES,
-        "total_count": total_count,
+        "total_count": cdc_configs.paginator.count,
     }
     return render(request, "bi/data_integration/cdc_sync_config/list.html", context)
 
