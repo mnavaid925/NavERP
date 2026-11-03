@@ -40,7 +40,7 @@
 - [x] **M3**: `templates/bi/data_integration/**/detail.html` — **Missing "Back to List" button in page-actions**: Add explicit back-to-list navigation button in detail headers and sidebars. Fixed in `6051cfea`, `3a8f58df`, `42dced7a`, `07fd52ca`.
 - [x] **M4**: `templates/bi/data_integration/**/list.html` — **Filter reset buttons missing .btn-icon and aria-label**: Add `.btn-icon` and `aria-label="Clear filters"`. Fixed in `16bc30d7`, `00c2cdcd`, `8b9b3fba`, `e1c4c09c`.
 - [x] **M5**: `templates/bi/data_integration/cdc_sync_config/detail.html:85` — **Physical margin ml-1**: Replace `ml-1` with logical `ms-1` for RTL support. Fixed in `7d6f5d87`.
-- [ ] **M6**: `apps/bi/views/DataIntegration/DataIntegrationHub.py:18` — **Consolidate hub KPI counts via conditional aggregation**: Consolidate `.count()` queries using `Count(..., filter=Q(...))`.
+- [x] **M6**: `apps/bi/views/DataIntegration/DataIntegrationHub.py:18` — **Consolidate hub KPI counts via conditional aggregation**: Consolidate `.count()` queries using `Count(..., filter=Q(...))`. Fixed in `c5050a6a`.
 - [ ] **M7**: `apps/bi/views/DataIntegration/IngestionPipelines.py:50` & `IngestionRuns.py:49` — **Defer heavy JSON fields in dropdown querysets**: Use `.only("id", "name")` when loading connector/pipeline dropdown options.
 - [ ] **M8**: `apps/bi/models/DataIntegration/DataSourceConnectors.py` & `IngestionPipelines.py` — **Missing composite ordering indexes**: Add `(tenant, -created_at)` indexes `idx_bdsc_ten_created` and `idx_bing_ten_created`.
 - [ ] **M9**: `apps/bi/admin.py:24` — **Missing readonly_fields for webhook_secret in Django Admin**: Add `"webhook_secret"` to `readonly_fields`.
