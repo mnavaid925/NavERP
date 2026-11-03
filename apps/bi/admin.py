@@ -3,8 +3,12 @@ from django.contrib import admin
 from apps.bi.models import (
     CdcSyncConfig,
     DataSourceConnector,
+    EtlPipeline,
+    EtlPipelineRun,
+    EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
+    TransformationStep,
 )
 
 
@@ -38,3 +42,35 @@ class IngestionRunAdmin(admin.ModelAdmin):
     list_filter = ("status", "trigger_type", "tenant")
     search_fields = ("number", "pipeline__name", "error_message", "log_summary")
     readonly_fields = ("number", "started_at", "ended_at", "created_at", "updated_at")
+
+
+@admin.register(EtlPipeline)
+class EtlPipelineAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_table", "target_layer", "trigger_type", "status", "tenant", "created_at")
+    list_filter = ("status", "target_layer", "trigger_type", "tenant")
+    search_fields = ("number", "name", "source_staging_table", "target_table", "description")
+    readonly_fields = ("number", "created_at", "updated_at", "last_run_at")
+
+
+@admin.register(TransformationStep)
+class TransformationStepAdmin(admin.ModelAdmin):
+    list_display = ("number", "pipeline", "sequence", "name", "step_type", "status", "is_blocking", "tenant")
+    list_filter = ("step_type", "status", "is_blocking", "tenant")
+    search_fields = ("number", "name", "pipeline__name", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(EtlPipelineVersion)
+class EtlPipelineVersionAdmin(admin.ModelAdmin):
+    list_display = ("number", "pipeline", "version_number", "environment", "status", "promoted_by", "promoted_at", "tenant")
+    list_filter = ("environment", "status", "tenant")
+    search_fields = ("number", "version_number", "pipeline__name", "changelog")
+    readonly_fields = ("number", "created_at", "updated_at", "promoted_at")
+
+
+@admin.register(EtlPipelineRun)
+class EtlPipelineRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "pipeline", "trigger_type", "status", "duration_seconds", "records_in", "records_out", "records_rejected", "sla_missed", "started_at")
+    list_filter = ("status", "trigger_type", "sla_missed", "is_backfill", "tenant")
+    search_fields = ("number", "pipeline__name", "error_message")
+    readonly_fields = ("number", "started_at", "ended_at", "created_at")
