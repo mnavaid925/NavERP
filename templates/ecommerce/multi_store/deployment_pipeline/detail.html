@@ -41,7 +41,7 @@
         {% if pipeline.status != 'promoted_active' and pipeline.status != 'rolled_back' and pipeline.status != 'failed' %}
         <form method="post" action="{% url 'ecommerce:deployment_promote' pipeline.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote {{ pipeline.release_version }} to 100% active live traffic on {{ pipeline.environment.name }}?');">
+            <button type="submit" class="btn btn-primary" onclick="return confirm('Promote {{ pipeline.release_version|escapejs }} to 100% active live traffic on {{ pipeline.environment.name|escapejs }}?');">
                 <i data-lucide="check-circle"></i>
                 <span>Promote to Active Live</span>
             </button>
@@ -51,7 +51,7 @@
         {% if pipeline.status == 'promoted_active' %}
         <form method="post" action="{% url 'ecommerce:deployment_rollback' pipeline.pk %}" class="inline">
             {% csrf_token %}
-            <button type="submit" class="btn btn-danger" onclick="return confirm('Initiate emergency rollback of release {{ pipeline.release_version }}?');">
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Initiate emergency rollback of release {{ pipeline.release_version|escapejs }}?');">
                 <i data-lucide="rotate-ccw"></i>
                 <span>Rollback Release</span>
             </button>
