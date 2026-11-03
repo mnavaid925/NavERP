@@ -2872,6 +2872,16 @@ LIVE_LINKS = {
         "Webhook Subscriptions": "ecommerce:webhooksubscription_list",
         "API Keys & Access Tokens": "ecommerce:apicredential_list",
     },
+    "9.20": {
+        "Multi-Store & Multi-Brand Management": "ecommerce:storefront_instance_list",
+        "Deployment & DevOps (CI/CD)": "ecommerce:deployment_pipeline_list",
+        # Extra live leaves
+        "Multi-Store Operations Hub": "ecommerce:multi_store_hub",
+        "Storefronts": "ecommerce:storefront_instance_list",
+        "Catalog Assignments": "ecommerce:storefront_catalog_assignment_list",
+        "Platform Environments": "ecommerce:platform_environment_list",
+        "CI/CD Pipelines": "ecommerce:deployment_pipeline_list",
+    },
 
 
 
