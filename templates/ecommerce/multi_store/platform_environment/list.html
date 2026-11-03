@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Platform Environments &amp; Clusters — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <span>Platform Environments</span>
+        </div>
+        <h1 class="page-title">Platform Environments &amp; Clusters</h1>
+        <p class="text-secondary text-sm">Runtime operational tiers, staging sandboxes, regional clusters, and zero-downtime blue-green slots</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:multi_store_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Operations Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:platform_environment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Environment</span>
+        </a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:platform_environment_list' %}" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search environment name, base URL, region, number..." class="form-input" aria-label="Search platform environments">
+            </div>
+            <div class="form-group mb-0">
+                <select name="env_type" class="form-select" aria-label="Filter by environment tier">
+                    <option value="">All Environment Tiers</option>
+                    {% for val, label in env_type_choices %}
+                    <option value="{{ val }}" {% if env_type_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <select name="status" class="form-select flex-1" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or env_type_filter or status_filter %}
+                <a href="{% url 'ecommerce:platform_environment_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Environment Name</th>
+                    <th>Tier</th>
+                    <th>Bound Storefront</th>
+                    <th>Region &amp; Tier</th>
+                    <th>Base URL &amp; Slot</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for env in platform_environments %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:platform_environment_detail' env.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ env.number }}
+                        </a>
+                        {% if env.is_sandbox_locked %}
+                        <span class="badge badge-amber text-xs ml-1" title="Sandbox Guard Active: live payments locked">Locked</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'ecommerce:platform_environment_detail' env.pk %}" class="font-medium hover:text-primary">
+                            {{ env.name }}
+                        </a>
+                        {% if env.description %}
+                        <span class="block text-xs text-muted truncate max-w-xs">{{ env.description }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if env.env_type == 'production' %}
+                        <span class="badge badge-red font-semibold">{{ env.get_env_type_display }}</span>
+                        {% elif env.env_type == 'staging' %}
+                        <span class="badge badge-amber">{{ env.get_env_type_display }}</span>
+                        {% elif env.env_type == 'sandbox' %}
+                        <span class="badge badge-info">{{ env.get_env_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ env.get_env_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if env.storefront %}
+                        <a href="{% url 'ecommerce:storefront_instance_detail' env.storefront.pk %}" class="text-sm font-medium hover:text-primary">
+                            {{ env.storefront.name }}
+                        </a>
+                        <span class="block text-xs text-muted">{{ env.storefront.primary_domain }}</span>
+                        {% else %}
+                        <span class="text-muted text-xs">Global Shared Cluster</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-medium">{{ env.get_cluster_region_display }}</span>
+                        <span class="block text-xs text-muted">{{ env.get_resource_tier_display }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ env.base_url }}" target="_blank" rel="noopener" class="font-mono text-xs text-primary hover:underline block truncate max-w-xs">
+                            {{ env.base_url }}
+                        </a>
+                        {% if env.current_active_slot == 'blue' %}
+                        <span class="badge badge-info text-xs mt-0.5">Blue Slot Active</span>
+                        {% elif env.current_active_slot == 'green' %}
+                        <span class="badge badge-green text-xs mt-0.5">Green Slot Active</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs mt-0.5">Single Active</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if env.status == 'healthy' %}
+                        <span class="badge badge-green">{{ env.get_status_display }}</span>
+                        {% elif env.status == 'deploying' %}
+                        <span class="badge badge-info">{{ env.get_status_display }}</span>
+                        {% elif env.status == 'maintenance' or env.status == 'degraded' %}
+                        <span class="badge badge-amber">{{ env.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-red">{{ env.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:platform_environment_detail' env.pk %}" class="btn btn-icon btn-outline" title="View Environment">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:platform_environment_edit' env.pk %}" class="btn btn-icon btn-outline" title="Edit Environment">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:platform_environment_delete' env.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete Environment" onclick="return confirm('Are you sure you want to delete environment \'{{ env.name|escapejs }}\'?');">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="server" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Environments Found</div>
+                            <div class="empty-state-text">No platform runtime instances match your search or filter criteria.</div>
+                            <a href="{% url 'ecommerce:platform_environment_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Provision First Environment</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} environments
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm disabled">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if env_type_filter %}&env_type={{ env_type_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
