@@ -19,6 +19,7 @@ urlpatterns = [
     path("projects/", include("apps.projects.urls")),  # /projects/, requests/charters/stakeholders/kickoffs
     path("sales/", include("apps.sales.urls")),         # /sales/, lead operations/qualification/routing/nurture
     path("ecommerce/", include("apps.ecommerce.urls")), # /ecommerce/, catalog/products/variants/categories
+    path("bi/", include("apps.bi.urls")),               # /bi/, data integration/ingestion/connectors/pipelines
 ]
 
 if settings.DEBUG:
