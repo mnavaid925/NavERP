@@ -4553,30 +4553,33 @@ INTEGRATIONAPI_PAGE_SIZE = 15
 INTEGRATIONAPI_MODEL_FIELDS = {
     "EcommerceConnector": (
         "id", "tenant", "number", "name", "category", "provider", "auth_type",
-        "status", "health_status", "base_url", "api_key", "api_secret",
-        "oauth_client_id", "oauth_refresh_token", "timeout_seconds",
-        "rate_limit_per_minute", "is_active", "last_health_check_at",
-        "last_synced_at", "last_error_message", "metadata", "created_at", "updated_at",
+        "status", "base_url", "api_version", "api_key", "api_secret",
+        "account_id", "is_sandbox", "timeout_seconds", "rate_limit_per_minute",
+        "health_status", "last_health_check_at", "last_error_message",
+        "description", "created_at", "updated_at",
     ),
     "IntegrationSyncJob": (
         "id", "tenant", "number", "connector", "sync_entity", "direction",
-        "trigger_type", "status", "started_at", "finished_at", "records_total",
-        "records_processed", "records_failed", "cursor_value", "error_log",
-        "payload_snapshot", "retry_count", "max_retries", "parent_job",
+        "status", "trigger_type", "batch_id", "records_total",
+        "records_processed", "records_succeeded", "records_failed",
+        "started_at", "finished_at", "duration_seconds", "error_summary",
+        "payload_preview", "retry_count", "max_retries", "parent_job",
         "triggered_by", "created_at", "updated_at",
     ),
     "WebhookSubscription": (
-        "id", "tenant", "number", "target_url", "event_topic", "secret_key",
-        "status", "is_active", "is_verify_ssl", "custom_headers",
-        "total_delivered_count", "total_failed_count", "consecutive_failure_count",
+        "id", "tenant", "number", "name", "target_url", "event_topic",
+        "status", "secret_key", "payload_format", "custom_headers",
+        "consecutive_failures", "max_consecutive_failures",
         "last_delivery_at", "last_status_code", "last_error_message",
-        "created_at", "updated_at",
+        "total_delivered_count", "total_failed_count", "is_verify_ssl",
+        "description", "created_at", "updated_at",
     ),
     "ApiCredential": (
-        "id", "tenant", "number", "name", "client_id", "client_secret_hash",
-        "status", "tier", "scopes", "allowed_ips", "rate_limit_rpm",
-        "is_active", "created_by", "expires_at", "last_used_at", "revoked_at",
-        "created_at", "updated_at",
+        "id", "tenant", "number", "name", "tier", "status", "client_id",
+        "client_secret_hash", "secret_prefix", "scopes", "allowed_origins",
+        "allowed_ips", "rate_limit_rpm", "total_requests_count",
+        "last_used_at", "expires_at", "revoked_at", "description",
+        "created_by", "created_at", "updated_at",
     ),
 }
 
@@ -4588,13 +4591,12 @@ def _integrationapi_connector(tenant, **kwargs):
         "category": "payment",
         "provider": "stripe",
         "auth_type": "api_key",
-        "status": "connected",
+        "status": "active",
         "health_status": "healthy",
         "base_url": "https://api.stripe.com/v1",
         "api_key": "sk_test_demo12345",
         "timeout_seconds": 30,
         "rate_limit_per_minute": 100,
-        "is_active": True,
     }
     params.update(kwargs)
     return EcommerceConnector.objects.create(**params)
@@ -4604,7 +4606,7 @@ def _integrationapi_sync_job(tenant, connector, **kwargs):
     params = {
         "tenant": tenant,
         "connector": connector,
-        "sync_entity": "orders",
+        "sync_entity": "order_to_cash",
         "direction": "outbound",
         "trigger_type": "manual",
         "status": "pending",
@@ -4619,11 +4621,11 @@ def _integrationapi_sync_job(tenant, connector, **kwargs):
 def _integrationapi_webhook(tenant, **kwargs):
     params = {
         "tenant": tenant,
+        "name": "Order Created Webhook",
         "target_url": f"https://api.example.com/webhook/{tenant.pk}/",
         "event_topic": "order.created",
         "secret_key": "whsec_test_secret_12345",
         "status": "active",
-        "is_active": True,
         "is_verify_ssl": True,
     }
     params.update(kwargs)
@@ -4644,7 +4646,6 @@ def _integrationapi_credential(tenant, created_by, **kwargs):
         "tier": "storefront_public",
         "scopes": "read_catalog,write_orders",
         "rate_limit_rpm": 60,
-        "is_active": True,
         "created_by": created_by,
     }
     params.update(kwargs)
