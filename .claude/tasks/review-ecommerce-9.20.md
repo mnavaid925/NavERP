@@ -19,3 +19,15 @@ Needs Fixes (2 Critical, 3 Important, 3 Minor)
 - **[MINOR] M1**: `StorefrontCatalogAssignments.py:77-79`, `PlatformEnvironments.py:80-82`, `DeploymentPipelines.py:83-85` — Prepopulation `initial["storefront"] = request.GET.get("storefront")` lacks `.isdigit()` validation. Fix: Guard with `if val and val.isdigit(): initial["storefront"] = int(val)`.
 - **[MINOR] M2**: `views/MultiStore/*.py` — `page_number = request.GET.get("page")` lacks default. Fix: Use `request.GET.get("page", 1)`.
 - **[MINOR] M3**: `multi_store_hub.html:249`, `deployment_pipeline/list.html:130` — Hardcoded Tailwind color on dot indicator. Fix: Standardize with theme token or emerald utility.
+
+---
+
+## 2. explorer Findings
+
+### Verdict
+PASS / CLEAN (0 Critical, 0 Important, 2 Minor)
+
+### Findings
+- **[MINOR] M4**: `apps/ecommerce/views/MultiStore/StorefrontInstances.py:70-79` — Unused context variable `recent_deployments` in `storefront_instance_detail`. Fix: Remove or display in template.
+- **[MINOR] M5**: `apps/ecommerce/views/MultiStore/PlatformEnvironments.py:43-55` — Unused context variable `storefronts` in `platform_environment_list` (corresponds with I3). Fix: Wire storefront filter in view and list template.
+
