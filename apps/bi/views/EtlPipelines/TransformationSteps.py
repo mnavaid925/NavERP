@@ -111,10 +111,11 @@ def transformation_step_create(request):
                 instance.tenant = request.tenant
                 instance.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.transformation_step.create",
-                    f"Created Transformation Step {instance.number} (#{instance.sequence} {instance.name})",
+                    instance,
+                    "create",
+                    changes={"number": instance.number, "sequence": instance.sequence, "name": instance.name},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Transformation Step {instance.number} created successfully.")
             return redirect("bi:transformation_step_detail", pk=instance.pk)
@@ -144,10 +145,11 @@ def transformation_step_edit(request, pk):
             with transaction.atomic():
                 instance = form.save()
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "bi.transformation_step.update",
-                    f"Updated Transformation Step {instance.number} ({instance.name})",
+                    instance,
+                    "update",
+                    changes={"number": instance.number, "name": instance.name},
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Transformation Step {instance.number} updated successfully.")
             return redirect("bi:transformation_step_detail", pk=instance.pk)
@@ -170,12 +172,13 @@ def transformation_step_delete(request, pk):
     number = step.number
     name = step.name
     with transaction.atomic():
-        step.delete()
         write_audit_log(
-            request.tenant,
             request.user,
-            "bi.transformation_step.delete",
-            f"Deleted Transformation Step {number} ({name})",
+            step,
+            "delete",
+            changes={"number": number, "name": name},
+            tenant=request.tenant,
         )
+        step.delete()
     messages.success(request, f"Transformation Step {number} deleted successfully.")
     return redirect("bi:etl_pipeline_detail", pk=pipeline_pk)
