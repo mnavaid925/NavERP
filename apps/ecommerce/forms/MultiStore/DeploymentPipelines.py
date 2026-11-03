@@ -29,3 +29,20 @@ class DeploymentPipelineForm(TenantUniqueMixin, TenantModelForm):
         tenant = getattr(self, "tenant", None) or getattr(self.instance, "tenant", None)
         if tenant:
             self.fields["environment"].queryset = PlatformEnvironment.objects.filter(tenant=tenant)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.instance.pk:
+            status = cleaned_data.get("status")
+            traffic_percentage = cleaned_data.get("traffic_percentage") or 0
+            if status == "promoted_active":
+                self.add_error(
+                    "status",
+                    "Cannot set 'Promoted / Active Live' status directly on creation. Use the promotion workflow.",
+                )
+            if traffic_percentage > 0:
+                self.add_error(
+                    "traffic_percentage",
+                    "New deployments cannot be assigned live traffic on creation (must be 0%).",
+                )
+        return cleaned_data
