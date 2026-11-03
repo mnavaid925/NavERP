@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Storefront — {{ storefront.name }}{% else %}New Storefront Channel{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:storefront_instance_list' %}">Storefronts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ storefront.number }}{% else %}New Storefront{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Storefront: {{ storefront.name }}{% else %}Create Storefront Channel{% endif %}</h1>
+        <p class="text-secondary text-sm">Configure multi-store channels, domains, localized currencies, and theme styling</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:storefront_instance_detail' storefront.pk %}{% else %}{% url 'ecommerce:storefront_instance_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="store" class="w-4 h-4 text-primary"></i>
+                    <span>Channel Identity &amp; Branding</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.name.id_for_label }}">Storefront Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.code.id_for_label }}">Internal Code / Slug</label>
+                        {{ form.code }}
+                        {% if form.code.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.code.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.store_type.id_for_label }}">Storefront Type</label>
+                        {{ form.store_type }}
+                        {% if form.store_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.store_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.brand_name.id_for_label }}">Brand Portfolio Name</label>
+                        {{ form.brand_name }}
+                        {% if form.brand_name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.brand_name.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="globe" class="w-4 h-4 text-primary"></i>
+                    <span>Domains &amp; SSL Settings</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.primary_domain.id_for_label }}">Primary Production Domain *</label>
+                        {{ form.primary_domain }}
+                        <span class="text-xs text-muted">e.g. shop.acme.com or apexoutdoor.com</span>
+                        {% if form.primary_domain.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.primary_domain.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.ssl_certificate_status.id_for_label }}">SSL Certificate Status</label>
+                        {{ form.ssl_certificate_status }}
+                        {% if form.ssl_certificate_status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.ssl_certificate_status.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="form-label font-medium" for="{{ form.custom_domains.id_for_label }}">Secondary Domains / Subdomains</label>
+                        {{ form.custom_domains }}
+                        <span class="text-xs text-muted">Comma-separated virtual URLs, e.g. eu.acme.com, de.acme.com</span>
+                        {% if form.custom_domains.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.custom_domains.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="coins" class="w-4 h-4 text-primary"></i>
+                    <span>Currencies, Locales &amp; Catalog Routing</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.default_currency.id_for_label }}">Default Accounting Currency *</label>
+                        {{ form.default_currency }}
+                        {% if form.default_currency.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_currency.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.supported_currencies.id_for_label }}">Supported Currencies (Comma-separated)</label>
+                        {{ form.supported_currencies }}
+                        {% if form.supported_currencies.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supported_currencies.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.default_locale.id_for_label }}">Default Language / Locale</label>
+                        {{ form.default_locale }}
+                        {% if form.default_locale.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_locale.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.supported_locales.id_for_label }}">Supported Locales</label>
+                        {{ form.supported_locales }}
+                        {% if form.supported_locales.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.supported_locales.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.root_category.id_for_label }}">Root Category Tree</label>
+                        {{ form.root_category }}
+                        <span class="text-xs text-muted">Leave empty to expose all global catalog categories</span>
+                        {% if form.root_category.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.root_category.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.default_fulfillment_center.id_for_label }}">Default Fulfillment Node</label>
+                        {{ form.default_fulfillment_center }}
+                        <span class="text-xs text-muted">Primary regional warehouse for this store</span>
+                        {% if form.default_fulfillment_center.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.default_fulfillment_center.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="sliders" class="w-4 h-4 text-primary"></i>
+                    <span>Theme &amp; Operational Status</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.theme_identifier.id_for_label }}">Theme Identifier</label>
+                        {{ form.theme_identifier }}
+                        {% if form.theme_identifier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.theme_identifier.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.checkout_mode.id_for_label }}">Checkout Mode</label>
+                        {{ form.checkout_mode }}
+                        {% if form.checkout_mode.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.checkout_mode.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.status.id_for_label }}">Store Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="form-group mt-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_default }}
+                        <span class="font-medium text-sm">Set as Tenant Default Storefront</span>
+                    </label>
+                    <span class="text-xs text-muted block ml-6">If checked, this store acts as the primary fallback store for unspecified domain requests.</span>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label class="form-label font-medium" for="{{ form.description.id_for_label }}">Channel Description / Notes</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'ecommerce:storefront_instance_detail' storefront.pk %}{% else %}{% url 'ecommerce:storefront_instance_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Storefront{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
