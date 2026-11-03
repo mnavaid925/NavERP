@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}{{ connector.number }} — {{ connector.name }} — NavERP BI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <a href="{% url 'bi:data_source_connector_list' %}">Connectors</a>
+            <span>/</span>
+            <span>{{ connector.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ connector.name }}</h1>
+            {% if connector.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif connector.status == 'testing' %}
+            <span class="badge badge-info">Testing</span>
+            {% elif connector.status == 'error' %}
+            <span class="badge badge-red">Error</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+            <span class="badge badge-slate">{{ connector.get_connector_type_display }}</span>
+        </div>
+        <p class="text-secondary text-sm">Connector Code: <span class="font-mono">{{ connector.number }}</span></p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:data_source_connector_test' connector.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Verify connection health">
+                <i data-lucide="check-circle-2"></i>
+                <span>Test Connection</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:data_source_connector_edit' connector.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <a href="{% url 'bi:ingestion_pipeline_create' %}?connector={{ connector.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Pipeline</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Connection Specifications</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Connector Type</dt>
+                    <dd class="mt-1 text-sm font-medium text-slate-800">{{ connector.get_connector_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">API Credential</dt>
+                    <dd class="mt-1 text-sm font-medium text-slate-800">
+                        {% if connector.credential %}
+                        <span class="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-700">{{ connector.credential.name }}</span>
+                        {% else %}
+                        <span class="text-secondary text-xs">No external API credential attached</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Verification Status</dt>
+                    <dd class="mt-1 flex items-center gap-2">
+                        {% if connector.test_status == 'success' %}
+                        <span class="badge badge-green">Verified</span>
+                        {% elif connector.test_status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% else %}
+                        <span class="badge badge-slate">Untested</span>
+                        {% endif %}
+                        {% if connector.last_tested_at %}
+                        <span class="text-xs text-secondary">at {{ connector.last_tested_at|date:"Y-m-d H:i" }}</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Created By &amp; Date</dt>
+                    <dd class="mt-1 text-sm text-slate-700">
+                        {{ connector.created_by.username|default:"System" }} &bull; {{ connector.created_at|date:"M d, Y H:i" }}
+                    </dd>
+                </div>
+                {% if connector.test_message %}
+                <div class="md:col-span-2">
+                    <dt class="text-xs uppercase font-semibold text-secondary">Latest Diagnostic Message</dt>
+                    <dd class="mt-1 text-sm font-mono bg-slate-50 p-2.5 rounded border border-slate-200 text-slate-700">
+                        {{ connector.test_message }}
+                    </dd>
+                </div>
+                {% endif %}
+                {% if connector.description %}
+                <div class="md:col-span-2">
+                    <dt class="text-xs uppercase font-semibold text-secondary">Description</dt>
+                    <dd class="mt-1 text-sm text-slate-700">{{ connector.description }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            {% if connector.connection_config %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">Connection Metadata (JSON)</h3>
+                <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ connector.connection_config }}</pre>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Connector Summary</h2>
+        </div>
+        <div class="card-body">
+            <div class="space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <span class="text-sm text-secondary">Pipelines Configured</span>
+                    <span class="text-base font-bold text-slate-800">{{ pipelines.count }}</span>
+                </div>
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <span class="text-sm text-secondary">Total Ingestion Runs</span>
+                    <span class="text-base font-bold text-slate-800">{{ runs.count }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-secondary">Last Modified</span>
+                    <span class="text-sm font-medium text-slate-700">{{ connector.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <form method="post" action="{% url 'bi:data_source_connector_delete' connector.pk %}" onsubmit="return confirm('Permanently remove this data connector? Pipelines linked to this connector will prevent deletion.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-center">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Connector</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Linked Ingestion Pipelines ({{ pipelines.count }})</h2>
+        <a href="{% url 'bi:ingestion_pipeline_create' %}?connector={{ connector.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i>
+            <span>Add Pipeline</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pipeline Name</th>
+                    <th>Mode</th>
+                    <th>Source Entity</th>
+                    <th>Target Staging</th>
+                    <th>Cadence</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pipe in pipelines %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_pipeline_detail' pipe.pk %}" class="font-medium text-primary hover:underline">
+                            {{ pipe.number }}
+                        </a>
+                        <div class="text-sm font-semibold text-slate-800">{{ pipe.name }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ pipe.get_ingestion_mode_display }}</span>
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">{{ pipe.source_entity }}</td>
+                    <td class="font-mono text-xs text-primary">{{ pipe.target_staging_table }}</td>
+                    <td class="text-sm text-secondary">{{ pipe.get_schedule_cadence_display }}</td>
+                    <td>
+                        {% if pipe.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif pipe.status == 'paused' %}
+                        <span class="badge badge-muted">Paused</span>
+                        {% elif pipe.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% else %}
+                        <span class="badge badge-info">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:ingestion_pipeline_detail' pipe.pk %}" class="btn btn-icon btn-outline" title="View pipeline">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-6 text-secondary text-sm">
+                        No pipelines associated with this connector yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Recent Ingestion Runs via this Connector</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run #</th>
+                    <th>Pipeline</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Rows (Ext / Ins / Rej)</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                            {{ run.number }}
+                        </a>
+                    </td>
+                    <td class="text-sm font-medium text-slate-800">{{ run.pipeline.name }}</td>
+                    <td><span class="badge badge-slate">{{ run.get_trigger_type_display }}</span></td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                        <span class="badge badge-green">Completed</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% elif run.status == 'running' %}
+                        <span class="badge badge-info">Running</span>
+                        {% elif run.status == 'warning' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="font-mono text-xs">
+                        <span class="text-slate-800">{{ run.records_extracted }}</span> /
+                        <span class="text-green-600 font-semibold">{{ run.records_inserted }}</span> /
+                        <span class="text-red-500">{{ run.records_rejected }}</span>
+                    </td>
+                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-6 text-secondary text-sm">
+                        No execution runs logged for this connector yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
