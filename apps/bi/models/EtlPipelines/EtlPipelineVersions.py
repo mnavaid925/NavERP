@@ -82,4 +82,4 @@ class EtlPipelineVersion(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.pipeline.name} ({self.version_number} [{self.get_environment_display()}])"
+        return f"{self.number} ({self.version_number} [{self.get_environment_display()}])"
