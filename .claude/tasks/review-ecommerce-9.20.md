@@ -46,4 +46,24 @@ PASS with Important & Minor findings (0 Critical, 3 Important, 3 Minor)
 - **[MINOR] M7**: `templates/ecommerce/multi_store/storefront_catalog_assignment/list.html:113` — Undefined utility class `text-info`. Fix: Change to `<span class="badge badge-info text-xs mt-0.5">`.
 - **[MINOR] M8**: `templates/ecommerce/multi_store/deployment_pipeline/detail.html:109` — Target slot styled with static `badge-info`. Fix: Map slot values to `badge-green`, `badge-info`, `badge-slate`.
 
+---
+
+## 4. performance-reviewer Findings
+
+### Verdict
+Needs Attention (1 Critical, 5 Important, 4 Minor)
+
+### Findings
+- **[CRITICAL] C3**: `apps/ecommerce/views/MultiStore/StorefrontInstances.py:68-73` — Sliced subquery hazard on MariaDB 10.4 and dead query for `recent_deployments`. Fix: Remove dead subquery and context variable.
+- **[IMPORTANT] I7**: `apps/ecommerce/views/MultiStore/StorefrontCatalogAssignments.py:18` — N+1 query on assignment list for `storefront__default_currency`. Fix: Add `storefront__default_currency` to `select_related`.
+- **[IMPORTANT] I8**: `apps/ecommerce/views/MultiStore/StorefrontCatalogAssignments.py:66` — Missing `storefront__default_currency` in assignment detail view. Fix: Add `storefront__default_currency` to `select_related`.
+- **[IMPORTANT] I9**: `StorefrontCatalogAssignments.py:18` & `StorefrontInstances.py:65` — N+1 query via `CatalogProduct.sku` property access in assignment table loops. Fix: Add `.prefetch_related("product__variants")`.
+- **[IMPORTANT] I10**: `StorefrontCatalogAssignments.py:58` & `DeploymentPipelines.py:69` — Chained FK lookups in model `__str__` methods (Rule L18). Fix: Use non-FK fields (`number`, `custom_title`, `release_version`, `status`).
+- **[IMPORTANT] I11**: `StorefrontInstances.py` & `DeploymentPipelines.py` — Multi-record writes lack `transaction.atomic()` (corroborates I2).
+- **[MINOR] M9**: `StorefrontCatalogAssignments.py:110, 139` — Audit logging touches `assignment.product.name` and `assignment.storefront.name` without eager load. Fix: Add `select_related=("storefront", "product")`.
+- **[MINOR] M10**: `apps/ecommerce/models/MultiStore/StorefrontInstances.py` — Missing composite index on `(tenant, -is_default, name)`. Fix: Add composite index.
+- **[MINOR] M11**: `apps/ecommerce/models/MultiStore/StorefrontCatalogAssignments.py` — Missing index on `(tenant, publish_status)`. Fix: Add index.
+- **[MINOR] M12**: `apps/ecommerce/views/MultiStore/MultiStoreHub.py:31-32` — Redundant joins in hub view querysets. Fix: Omit unneeded `select_related` on unused preview columns.
+
+
 
