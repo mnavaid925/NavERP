@@ -6,6 +6,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.IntegrationApi.WebhookSubscriptions import WebhookSubscriptionForm
 from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
@@ -82,7 +83,7 @@ def webhook_subscription_detail(request, pk):
 webhooksubscription_detail = webhook_subscription_detail
 
 
-@login_required
+@tenant_admin_required
 def webhook_subscription_create(request):
     if request.method == "POST":
         form = WebhookSubscriptionForm(request.POST, tenant=request.tenant)
@@ -118,7 +119,7 @@ def webhook_subscription_create(request):
 webhooksubscription_create = webhook_subscription_create
 
 
-@login_required
+@tenant_admin_required
 def webhook_subscription_edit(request, pk):
     webhook = ecommerce_object(request, WebhookSubscription, pk)
 
@@ -150,7 +151,7 @@ def webhook_subscription_edit(request, pk):
 webhooksubscription_edit = webhook_subscription_edit
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def webhook_subscription_delete(request, pk):
     webhook = ecommerce_object(request, WebhookSubscription, pk)
@@ -171,7 +172,7 @@ def webhook_subscription_delete(request, pk):
 webhooksubscription_delete = webhook_subscription_delete
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def webhook_subscription_ping(request, pk):
     webhook = ecommerce_object(request, WebhookSubscription, pk)
