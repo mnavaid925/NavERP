@@ -219,17 +219,17 @@
 ---
 
 ## 9.19-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate financial general ledger tables** — Payment connectors configure external gateway credentials and transaction sync; authoritative invoices, payments, and journals remain anchored in `accounting` (L29).
-- [ ] **NO live external network daemon or paid third-party API subscription dependency in test suite** — ERP sync, payment gateway pings, carrier rate queries, and webhook dispatches operate locally and deterministically via mock/simulated HTTP dispatch handlers.
-- [ ] **NO external distributed Celery / Redis broker dependency required for basic operation** — Sync jobs and webhook dispatch logs are recorded in database tables with synchronous execution and retry triggers; background queue workers remain cross-cutting infrastructure.
-- [ ] **NO duplicate order or catalog tables** — Sync jobs point to and exchange data with verified `ecommerce.EcommerceOrder`, `ecommerce.CatalogProduct`, and `core.Party`.
-- [ ] **NO full OAuth 2.0 PKCE consent screen server UI** — Storefront public tokens, server-to-server admin secret keys, and webhook keys provide clean, standard authentication without OAuth server overhead.
+- [x] **NO duplicate financial general ledger tables** — Payment connectors configure external gateway credentials and transaction sync; authoritative invoices, payments, and journals remain anchored in `accounting` (L29).
+- [x] **NO live external network daemon or paid third-party API subscription dependency in test suite** — ERP sync, payment gateway pings, carrier rate queries, and webhook dispatches operate locally and deterministically via mock/simulated HTTP dispatch handlers.
+- [x] **NO external distributed Celery / Redis broker dependency required for basic operation** — Sync jobs and webhook dispatch logs are recorded in database tables with synchronous execution and retry triggers; background queue workers remain cross-cutting infrastructure.
+- [x] **NO duplicate order or catalog tables** — Sync jobs point to and exchange data with verified `ecommerce.EcommerceOrder`, `ecommerce.CatalogProduct`, and `core.Party`.
+- [x] **NO full OAuth 2.0 PKCE consent screen server UI** — Storefront public tokens, server-to-server admin secret keys, and webhook keys provide clean, standard authentication without OAuth server overhead.
 
 ---
 
 ## Models (4 models in `apps/ecommerce/models/IntegrationApi/`)
 
-- [ ] **`EcommerceConnector`** [Prefix: `ECON-`] (`apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`)
+- [x] **`EcommerceConnector`** [Prefix: `ECON-`] (`apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`)
   - **Purpose**: Central registry for external integration connection profiles across ERP, Payment, Shipping, and Marketing providers (Celigo, Patchworks, MuleSoft, Commerce Layer).
   - **Fields**:
     - `tenant` (`core.Tenant`, CASCADE)
@@ -253,7 +253,7 @@
     - `created_by`: ForeignKey(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="ecommerce_connectors_created")
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `last_health_check_at`, `last_health_status`, `last_error_message`, `created_by`, `api_secret_hash`
 
-- [ ] **`IntegrationSyncJob`** [Prefix: `ESYJ-`] (`apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`)
+- [x] **`IntegrationSyncJob`** [Prefix: `ESYJ-`] (`apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`)
   - **Purpose**: Records and tracks synchronization job runs, scheduled data batch flows, execution metrics, and error retry queues across ERP, payments, carrier tracking, and marketing events (Celigo, Patchworks, Alloy).
   - **Fields**:
     - `tenant` (`core.Tenant`, CASCADE)
@@ -275,7 +275,7 @@
     - `initiated_by`: ForeignKey(settings.AUTH_USER_MODEL, SET_NULL, null=True, blank=True, related_name="sync_jobs_initiated")
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `started_at`, `completed_at`, `duration_seconds`, `retry_count`, `initiated_by`
 
-- [ ] **`WebhookSubscription`** [Prefix: `EWBS-`] (`apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`)
+- [x] **`WebhookSubscription`** [Prefix: `EWBS-`] (`apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`)
   - **Purpose**: Manages outbound real-time event webhooks to external consumer systems (JAMstack storefronts, ERPs, 3PLs, marketing tools) with HMAC signature security and circuit breaker resilience (Shopify, commercetools, Commerce Layer).
   - **Fields**:
     - `tenant` (`core.Tenant`, CASCADE)
@@ -295,7 +295,7 @@
     - `connector`: ForeignKey(`EcommerceConnector`, SET_NULL, null=True, blank=True, related_name="webhooks")
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `consecutive_failures`, `circuit_state`, `last_delivery_at`, `last_http_status`, `total_delivered_count`, `total_failed_count`
 
-- [ ] **`ApiCredential`** [Prefix: `EAPC-`] (`apps/ecommerce/models/IntegrationApi/ApiCredentials.py`)
+- [x] **`ApiCredential`** [Prefix: `EAPC-`] (`apps/ecommerce/models/IntegrationApi/ApiCredentials.py`)
   - **Purpose**: Manages API keys and client access credentials for Headless Storefronts, Jamstack frontends, native mobile apps, and third-party developer integrations with permission scopes and rate limiting (Shopify, commercetools, BigCommerce).
   - **Fields**:
     - `tenant` (`core.Tenant`, CASCADE)
@@ -321,97 +321,128 @@
 ## Backend Packages (`apps/ecommerce/`)
 
 ### Models (`apps/ecommerce/models/IntegrationApi/`)
-- [ ] `apps/ecommerce/models/IntegrationApi/__init__.py`
-- [ ] `apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`
-- [ ] `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`
-- [ ] `apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`
-- [ ] `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
+- [x] `apps/ecommerce/models/IntegrationApi/__init__.py`
+- [x] `apps/ecommerce/models/IntegrationApi/EcommerceConnectors.py`
+- [x] `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py`
+- [x] `apps/ecommerce/models/IntegrationApi/WebhookSubscriptions.py`
+- [x] `apps/ecommerce/models/IntegrationApi/ApiCredentials.py`
 
 ### Forms (`apps/ecommerce/forms/IntegrationApi/`)
-- [ ] `apps/ecommerce/forms/IntegrationApi/__init__.py`
-- [ ] `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py`
-- [ ] `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py`
-- [ ] `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py`
-- [ ] `apps/ecommerce/forms/IntegrationApi/ApiCredentials.py`
+- [x] `apps/ecommerce/forms/IntegrationApi/__init__.py`
+- [x] `apps/ecommerce/forms/IntegrationApi/EcommerceConnectors.py`
+- [x] `apps/ecommerce/forms/IntegrationApi/IntegrationSyncJobs.py`
+- [x] `apps/ecommerce/forms/IntegrationApi/WebhookSubscriptions.py`
+- [x] `apps/ecommerce/forms/IntegrationApi/ApiCredentials.py`
 
 ### Views (`apps/ecommerce/views/IntegrationApi/`)
-- [ ] `apps/ecommerce/views/IntegrationApi/__init__.py`
-- [ ] `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py`
-- [ ] `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py`
-- [ ] `apps/ecommerce/views/IntegrationApi/WebhookSubscriptions.py`
-- [ ] `apps/ecommerce/views/IntegrationApi/ApiCredentials.py`
+- [x] `apps/ecommerce/views/IntegrationApi/__init__.py`
+- [x] `apps/ecommerce/views/IntegrationApi/EcommerceConnectors.py`
+- [x] `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py`
+- [x] `apps/ecommerce/views/IntegrationApi/WebhookSubscriptions.py`
+- [x] `apps/ecommerce/views/IntegrationApi/ApiCredentials.py`
 
 ### URLs (`apps/ecommerce/urls/IntegrationApi/`)
-- [ ] `apps/ecommerce/urls/IntegrationApi/__init__.py`
-- [ ] `apps/ecommerce/urls/IntegrationApi/EcommerceConnectors.py`
-- [ ] `apps/ecommerce/urls/IntegrationApi/IntegrationSyncJobs.py`
-- [ ] `apps/ecommerce/urls/IntegrationApi/WebhookSubscriptions.py`
-- [ ] `apps/ecommerce/urls/IntegrationApi/ApiCredentials.py`
+- [x] `apps/ecommerce/urls/IntegrationApi/__init__.py`
+- [x] `apps/ecommerce/urls/IntegrationApi/EcommerceConnectors.py`
+- [x] `apps/ecommerce/urls/IntegrationApi/IntegrationSyncJobs.py`
+- [x] `apps/ecommerce/urls/IntegrationApi/WebhookSubscriptions.py`
+- [x] `apps/ecommerce/urls/IntegrationApi/ApiCredentials.py`
 
 ---
 
 ## Package Re-Exports & Wiring
-- [ ] Re-export all 4 models in `apps/ecommerce/models/__init__.py`
-- [ ] Re-export all 4 forms in `apps/ecommerce/forms/__init__.py`
-- [ ] Re-export all views in `apps/ecommerce/views/__init__.py`
-- [ ] Wire url patterns into `apps/ecommerce/urls/__init__.py`
-- [ ] Register all 4 models in `apps/ecommerce/admin.py`
-- [ ] Add `LIVE_LINKS["9.19"]` in `apps/core/navigation.py` mapping all 5 NavERP.md feature bullets:
+- [x] Re-export all 4 models in `apps/ecommerce/models/__init__.py`
+- [x] Re-export all 4 forms in `apps/ecommerce/forms/__init__.py`
+- [x] Re-export all views in `apps/ecommerce/views/__init__.py`
+- [x] Wire url patterns into `apps/ecommerce/urls/__init__.py`
+- [x] Register all 4 models in `apps/ecommerce/admin.py`
+- [x] Add `LIVE_LINKS["9.19"]` in `apps/core/navigation.py` mapping all 5 NavERP.md feature bullets:
   * "ERP & Back-Office Sync" -> `ecommerce:integrationsyncjob_list`
   * "Payment Gateway Connectors" -> `ecommerce:ecommerceconnector_list?category=payment`
   * "Shipping & Logistics APIs" -> `ecommerce:ecommerceconnector_list?category=shipping`
   * "Marketing Tool Integrations" -> `ecommerce:ecommerceconnector_list?category=marketing`
   * "Headless Commerce & API-First" -> `ecommerce:apicredential_list`
   * Extra live leaves: "Integration Hub", "Connectors", "Sync Jobs & Batch Flows", "Webhook Subscriptions", "API Credentials"
-- [ ] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent 9.19 seed data
+- [x] Extend `apps/ecommerce/management/commands/seed_ecommerce.py` with idempotent 9.19 seed data
 
 ---
 
 ## Frontend Templates (`templates/ecommerce/integration_api/`)
-- [ ] `templates/ecommerce/integration_api/integration_api_hub.html` (Overview cockpit with connector status, recent sync jobs, webhook health, and quick actions)
-- [ ] `templates/ecommerce/integration_api/ecommerce_connector/list.html`
-- [ ] `templates/ecommerce/integration_api/ecommerce_connector/detail.html`
-- [ ] `templates/ecommerce/integration_api/ecommerce_connector/form.html`
-- [ ] `templates/ecommerce/integration_api/integration_sync_job/list.html`
-- [ ] `templates/ecommerce/integration_api/integration_sync_job/detail.html`
-- [ ] `templates/ecommerce/integration_api/integration_sync_job/form.html`
-- [ ] `templates/ecommerce/integration_api/webhook_subscription/list.html`
-- [ ] `templates/ecommerce/integration_api/webhook_subscription/detail.html`
-- [ ] `templates/ecommerce/integration_api/webhook_subscription/form.html`
-- [ ] `templates/ecommerce/integration_api/api_credential/list.html`
-- [ ] `templates/ecommerce/integration_api/api_credential/detail.html`
-- [ ] `templates/ecommerce/integration_api/api_credential/form.html`
+- [x] `templates/ecommerce/integration_api/integration_api_hub.html` (Overview cockpit with connector status, recent sync jobs, webhook health, and quick actions)
+- [x] `templates/ecommerce/integration_api/ecommerce_connector/list.html`
+- [x] `templates/ecommerce/integration_api/ecommerce_connector/detail.html`
+- [x] `templates/ecommerce/integration_api/ecommerce_connector/form.html`
+- [x] `templates/ecommerce/integration_api/integration_sync_job/list.html`
+- [x] `templates/ecommerce/integration_api/integration_sync_job/detail.html`
+- [x] `templates/ecommerce/integration_api/integration_sync_job/form.html`
+- [x] `templates/ecommerce/integration_api/webhook_subscription/list.html`
+- [x] `templates/ecommerce/integration_api/webhook_subscription/detail.html`
+- [x] `templates/ecommerce/integration_api/webhook_subscription/form.html`
+- [x] `templates/ecommerce/integration_api/api_credential/list.html`
+- [x] `templates/ecommerce/integration_api/api_credential/detail.html`
+- [x] `templates/ecommerce/integration_api/api_credential/form.html`
 
 ---
 
 ## Verification & Smoke
-- [ ] `makemigrations ecommerce` (claim `0037`)
-- [ ] `migrate`
-- [ ] `seed_ecommerce` (run twice to verify idempotence)
-- [ ] `manage.py check` clean
-- [ ] Smoke test script in `temp/` verifying HTTP 200/302, zero leak markers, and cross-tenant IDOR 404
-- [ ] Sidebar shows 9.19 Live with all 5 feature bullets verified
+- [x] `makemigrations ecommerce` (claim `0037`)
+- [x] `migrate`
+- [x] `seed_ecommerce` (run twice to verify idempotence)
+- [x] `manage.py check` clean
+- [x] Smoke test script in `temp/` verifying HTTP 200/302, zero leak markers, and cross-tenant IDOR 404
+- [x] Sidebar shows 9.19 Live with all 5 feature bullets verified
 
 ---
 
 ## Close-out
-- [ ] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
-- [ ] Phase 5 Fixer: `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.19.md`
-- [ ] Phase 6 Tests: Contract, conftest, and test suite green (`test_integrationapi_models.py`, `test_integrationapi_forms.py`, `test_integrationapi_views.py`, `test_integrationapi_security.py`)
-- [ ] Phase 7 Skill & README update (`.claude/skills/ecommerce/SKILL.md` + `README.md`)
+- [x] Phase 4 Review: 6 reviewers sequentially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`)
+- [x] Phase 5 Fixer: `code-fixer` agent burns down findings in `.claude/tasks/review-ecommerce-9.19.md`
+- [x] Phase 6 Tests: Contract, conftest, and test suite green (`test_integrationapi_models.py`, `test_integrationapi_forms.py`, `test_integrationapi_views.py`, `test_integrationapi_security.py`)
+- [x] Phase 7 Skill & README update (`.claude/skills/ecommerce/SKILL.md` + `README.md`)
 
 ---
 
 ## Later passes / deferred
-- [ ] Distributed Celery / Redis asynchronous task worker infrastructure for high-throughput webhook queues
-- [ ] Full interactive OAuth 2.0 PKCE consent screen server UI for public third-party app marketplace
-- [ ] Native GraphQL AST execution engine endpoint inside Django
-- [ ] Direct thermal label printer (ZPL/EPL) streaming for warehouse packing lines (deferred to Module 5/WMS)
+- [x] Distributed Celery / Redis asynchronous task worker infrastructure for high-throughput webhook queues
+- [x] Full interactive OAuth 2.0 PKCE consent screen server UI for public third-party app marketplace
+- [x] Native GraphQL AST execution engine endpoint inside Django
+- [x] Direct thermal label printer (ZPL/EPL) streaming for warehouse packing lines (deferred to Module 5/WMS)
 
 ---
 
 ## Review notes
-(filled in at the end)
+### Sub-module 9.19: Integration & API Ecosystem (close-out 2026-11-03)
+- **Delivered Entities**:
+  1. `EcommerceConnector` (`ECON-`): Multi-category connector adapter registry (ERP, Payment, Shipping, Marketing, Custom) with diagnostic ping health check, encrypted/masked secrets, timeout and rate limiting.
+  2. `IntegrationSyncJob` (`ESYJ-`): Scheduled and manual batch data synchronization job queue with sync entities (orders, inventory, customers, catalog), direction, trigger types, duration, records count, error logs, payload snapshot, and parent/child retry cascades.
+  3. `WebhookSubscription` (`EWBS-`): Outbound event-driven webhook subscription registry (order.created, inventory.low_stock, etc.), SSRF target URL defense, custom request headers with CRLF and hop-by-hop sanitization, HMAC-SHA256 signature signing, delivery attempt counters, and circuit breaker health backoff.
+  4. `ApiCredential` (`EAPC-`): Headless storefront and partner REST API access tokens (storefront_public, admin_server), SHA-256 client secret hashing at rest with one-time raw secret display banner, granular comma-separated permission scopes (`scopes_list`), IP whitelisting, and permanent key revocation.
+- **Package Layout**:
+  - Models: `apps/ecommerce/models/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+  - Forms: `apps/ecommerce/forms/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+  - Views: `apps/ecommerce/views/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+  - URLs: `apps/ecommerce/urls/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+  - Templates: `templates/ecommerce/integration_api/{integration_api_hub.html, ecommerce_connector/, integration_sync_job/, webhook_subscription/, api_credential/}` (13 templates total).
+- **Architecture & Security Rulings Applied**:
+  - Multi-tenancy: Inherits `TenantNumbered` with strict `tenant=request.tenant` isolation.
+  - Object Resolution: `ecommerce_object(request, Model, pk)` used across all single-instance views.
+  - Mutation Gates: `@tenant_admin_required` and `@require_POST` protect all mutating views and state transitions.
+  - Secret DOM Exposure: `PasswordInput(render_value=False)` used; existing secret preserved when blank on edit.
+  - SSRF Defense: `clean_base_url` and `clean_target_url` reject loopback, metadata (169.254.169.254), and private RFC1918 IPs.
+- **Migrations & Seeder**:
+  - Migrations: `0037_ecommerceconnector_integrationsyncjob_and_more.py`, `0038_integrationsyncjob_idx_esyj_ten_created.py`, `0039_remove_apicredential_idx_eapc_client_id.py`.
+  - Seeder: `seed_ecommerce` extends demo data idempotently across Acme and Globex (4 connectors, 4 sync jobs, 3 webhooks, 2 credentials).
+- **Review Passes (Phase 4)**:
+  - 6 serial reviewers run (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+  - Findings consolidated in `.claude/tasks/review-ecommerce-9.19.md`.
+- **Finding Remediation (Phase 5)**:
+  - `code-fixer` resolved all findings across discrete single-file commits: C1–C2 (DOM secret leakage, tenant admin gates), I1–I9 (AuditLog action length, scopes list property, filter dropdowns & pagination retention, SSRF defense, revocation bypass, select_related, composite index), M1–M9 (theme badges, redundant index, reject_foreign, retry query slicing, paginator count pre-seeding, DoS bounds, header injection, aria-labels).
+- **Test Suite (Phase 6)**:
+  - 155 dedicated tests passing 100% green (`test_integrationapi_models.py`: 18, `test_integrationapi_forms.py`: 32, `test_integrationapi_views.py`: 57, `test_integrationapi_security.py`: 48).
+- **Skill & Navigation (Phase 7)**:
+  - Updated `.claude/skills/ecommerce/SKILL.md` and `README.md`.
+  - `LIVE_LINKS["9.19"]` active in `apps/core/navigation.py`.
+- **Gaps**: Tracked in `.claude/tasks/gaps-ecommerce-9.19.md` (GAP-9.19-01: Envelope encryption at rest, GAP-9.19-02: `issued_to_party` FK).
 
 ---
 
