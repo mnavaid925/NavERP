@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Environment — {{ environment.name }}{% else %}New Platform Environment{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:platform_environment_list' %}">Platform Environments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ environment.number }}{% else %}New Environment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Environment: {{ environment.name }}{% else %}Provision Platform Environment{% endif %}</h1>
+        <p class="text-secondary text-sm">Configure runtime environment tier, cluster region, base URL, and blue-green active slot</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'ecommerce:platform_environment_detail' environment.pk %}{% else %}{% url 'ecommerce:platform_environment_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="server" class="w-4 h-4 text-primary"></i>
+                    <span>Environment Identity &amp; Routing</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.name.id_for_label }}">Environment Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.env_type.id_for_label }}">Environment Tier *</label>
+                        {{ form.env_type }}
+                        {% if form.env_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.env_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.base_url.id_for_label }}">Base URL *</label>
+                        {{ form.base_url }}
+                        <span class="text-xs text-muted">e.g. https://shop.acme.com or https://staging.shop.acme.com</span>
+                        {% if form.base_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.base_url.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.storefront.id_for_label }}">Bound Storefront Channel</label>
+                        {{ form.storefront }}
+                        <span class="text-xs text-muted">Leave empty if this is a shared platform cluster</span>
+                        {% if form.storefront.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.storefront.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-base font-semibold text-slate-800 mb-3 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-primary"></i>
+                    <span>Infrastructure &amp; Blue-Green Slots</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.cluster_region.id_for_label }}">Cluster Region</label>
+                        {{ form.cluster_region }}
+                        {% if form.cluster_region.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.cluster_region.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.resource_tier.id_for_label }}">Resource Tier</label>
+                        {{ form.resource_tier }}
+                        {% if form.resource_tier.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.resource_tier.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.current_active_slot.id_for_label }}">Active Slot</label>
+                        {{ form.current_active_slot }}
+                        {% if form.current_active_slot.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.current_active_slot.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div class="form-group">
+                        <label class="form-label font-medium" for="{{ form.status.id_for_label }}">Operational Health Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group flex flex-col justify-end">
+                        <label class="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 border border-slate-200 rounded">
+                            {{ form.is_sandbox_locked }}
+                            <div>
+                                <span class="font-medium text-sm block">Enable Sandbox Guard Lock</span>
+                                <span class="text-xs text-muted block">Suppresses live payment gateway charges and real customer emails</span>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group mt-4">
+                    <label class="form-label font-medium" for="{{ form.description.id_for_label }}">Description &amp; Architecture Notes</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'ecommerce:platform_environment_detail' environment.pk %}{% else %}{% url 'ecommerce:platform_environment_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Environment{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
