@@ -72,6 +72,10 @@ from apps.ecommerce.models.FraudRisk.FraudRules import FraudRule
 from apps.ecommerce.models.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessment
 from apps.ecommerce.models.FraudRisk.ChargebackDisputes import ChargebackDispute
 from apps.ecommerce.models.FraudRisk.AccountSecurityAlerts import AccountSecurityAlert
+from apps.ecommerce.models.IntegrationApi.EcommerceConnectors import EcommerceConnector
+from apps.ecommerce.models.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJob
+from apps.ecommerce.models.IntegrationApi.WebhookSubscriptions import WebhookSubscription
+from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
 
 
 @admin.register(StoreCategory)
@@ -956,6 +960,50 @@ class AccountSecurityAlertAdmin(admin.ModelAdmin):
     readonly_fields = ["number", "created_at", "updated_at"]
     list_select_related = ["user", "party", "assigned_investigator", "resolved_by"]
     ordering = ["-created_at"]
+
+
+# ---------------------------------------------------------------------------
+# 9.19 Integration & API Ecosystem
+# ---------------------------------------------------------------------------
+
+
+@admin.register(EcommerceConnector)
+class EcommerceConnectorAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "category", "provider", "auth_type", "status", "health_status", "is_sandbox", "created_at"]
+    list_filter = ["category", "provider", "auth_type", "status", "health_status", "is_sandbox", "tenant"]
+    search_fields = ["number", "name", "base_url", "account_id"]
+    readonly_fields = ["number", "last_health_check_at", "created_at", "updated_at"]
+    ordering = ["-created_at"]
+
+
+@admin.register(IntegrationSyncJob)
+class IntegrationSyncJobAdmin(admin.ModelAdmin):
+    list_display = ["number", "connector", "sync_entity", "direction", "status", "records_succeeded", "records_total", "duration_seconds", "created_at"]
+    list_filter = ["sync_entity", "direction", "status", "trigger_type", "tenant"]
+    search_fields = ["number", "batch_id", "connector__name", "error_summary"]
+    readonly_fields = ["number", "started_at", "finished_at", "duration_seconds", "created_at", "updated_at"]
+    list_select_related = ["connector", "triggered_by", "parent_job"]
+    ordering = ["-created_at"]
+
+
+@admin.register(WebhookSubscription)
+class WebhookSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "event_topic", "target_url", "status", "consecutive_failures", "total_delivered_count", "created_at"]
+    list_filter = ["event_topic", "status", "payload_format", "is_verify_ssl", "tenant"]
+    search_fields = ["number", "name", "target_url"]
+    readonly_fields = ["number", "last_delivery_at", "last_status_code", "total_delivered_count", "total_failed_count", "created_at", "updated_at"]
+    ordering = ["-created_at"]
+
+
+@admin.register(ApiCredential)
+class ApiCredentialAdmin(admin.ModelAdmin):
+    list_display = ["number", "name", "client_id", "tier", "status", "rate_limit_rpm", "total_requests_count", "last_used_at", "created_at"]
+    list_filter = ["tier", "status", "tenant"]
+    search_fields = ["number", "name", "client_id", "scopes"]
+    readonly_fields = ["number", "client_id", "client_secret_hash", "secret_prefix", "total_requests_count", "last_used_at", "revoked_at", "created_at", "updated_at"]
+    list_select_related = ["created_by"]
+    ordering = ["-created_at"]
+
 
 
 
