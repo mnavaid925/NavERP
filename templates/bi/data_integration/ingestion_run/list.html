@@ -59,7 +59,7 @@
                     <span>Filter</span>
                 </button>
                 {% if q or status or trigger_type or pipeline_id %}
-                <a href="{% url 'bi:ingestion_run_list' %}" class="btn btn-outline" title="Clear filters">
+                <a href="{% url 'bi:ingestion_run_list' %}" class="btn btn-icon btn-outline" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
