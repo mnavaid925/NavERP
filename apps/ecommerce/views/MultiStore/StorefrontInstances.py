@@ -158,6 +158,13 @@ def storefront_instance_delete(request, pk):
 @require_POST
 def storefront_toggle_status(request, pk):
     storefront = ecommerce_object(request, StorefrontInstance, pk=pk)
+    if storefront.status not in ["active", "maintenance"]:
+        messages.warning(
+            request,
+            f"Cannot toggle status: storefront '{storefront.name}' is currently in '{storefront.get_status_display()}' state.",
+        )
+        return redirect("ecommerce:storefront_instance_detail", pk=storefront.pk)
+
     if storefront.status == "active":
         storefront.status = "maintenance"
     elif storefront.status == "maintenance":
