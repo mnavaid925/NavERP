@@ -30,7 +30,7 @@ def storefront_catalog_assignment_list(request):
         )
 
     storefront_filter = request.GET.get("storefront", "").strip()
-    if storefront_filter:
+    if storefront_filter and storefront_filter.isdigit():
         queryset = queryset.filter(storefront_id=storefront_filter)
 
     publish_status_filter = request.GET.get("publish_status", "").strip()
