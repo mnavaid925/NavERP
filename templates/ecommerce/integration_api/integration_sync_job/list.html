@@ -58,8 +58,8 @@
 
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" action="{% url 'ecommerce:integrationsyncjob_list' %}" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div class="form-group mb-0 md:col-span-2">
+        <form method="get" action="{% url 'ecommerce:integrationsyncjob_list' %}" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div class="form-group mb-0">
                 <input type="text" name="q" value="{{ search_query }}" placeholder="Search job number, batch UUID, connector, error..." class="form-input" aria-label="Search sync jobs">
             </div>
             <div class="form-group mb-0">
@@ -79,6 +79,22 @@
                 </select>
             </div>
             <div class="form-group mb-0">
+                <select name="direction" class="form-select" aria-label="Filter by direction">
+                    <option value="">All Directions</option>
+                    {% for val, label in direction_choices %}
+                    <option value="{{ val }}" {% if direction_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="trigger" class="form-select" aria-label="Filter by trigger type">
+                    <option value="">All Triggers</option>
+                    {% for val, label in trigger_choices %}
+                    <option value="{{ val }}" {% if trigger_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
                 <select name="connector" class="form-select" aria-label="Filter by connector">
                     <option value="">All Connectors</option>
                     {% for conn in connectors %}
@@ -91,7 +107,7 @@
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                {% if search_query or status_filter or entity_filter or direction_filter or connector_filter %}
+                {% if search_query or status_filter or entity_filter or direction_filter or trigger_filter or connector_filter %}
                 <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline" title="Clear filters">
                     <i data-lucide="x"></i>
                 </a>
@@ -218,13 +234,13 @@
         </div>
         <div class="pagination-controls">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
                 <i data-lucide="chevron-left"></i>
                 <span>Previous</span>
             </a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if direction_filter %}&direction={{ direction_filter }}{% endif %}{% if trigger_filter %}&trigger={{ trigger_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
                 <span>Next</span>
                 <i data-lucide="chevron-right"></i>
             </a>
