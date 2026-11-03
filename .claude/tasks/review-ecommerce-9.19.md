@@ -224,3 +224,60 @@ However, several frontend and template issues were detected across Design System
 - **Remediation:** Add a safe fallback check or Promise error handler for clipboard API calls.
 
 ---
+
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Executive Summary
+Sub-module 9.19 (*Integration & API Ecosystem*) exhibits a solid foundation for high-performance ORM usage, tenant query scoping, and database-level aggregation:
+1. `integration_sync_job_list` correctly includes `.select_related("connector")`, preventing 15 N+1 queries per page.
+2. `integration_api_hub` correctly includes `.select_related("connector")[:5]` on recent jobs.
+3. `ecommerce_connector_detail` correctly bounds `recent_jobs` at the SQL level via `[:10]`.
+4. High-level KPIs across the Integration Hub and all 4 list views are computed via single SQL `.aggregate(Count("id"), ...)` calls rather than loading model instances into memory.
+5. Atomic field updates use Django `F()` expressions and explicit `update_fields` to prevent race conditions and redundant column rewrites.
+
+Opportunities exist around `select_related` on detail views, composite indexes, redundant indexes, and paginator count reuse.
+
+### Critical Findings
+*None identified.*
+
+### Important Findings
+
+#### 1. Missing `select_related` on Foreign Keys in `integration_sync_job_detail`
+- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Lines 98–106)
+- **Problem:** `sync_job = ecommerce_object(request, IntegrationSyncJob, pk)` does not pass `select_related`. In `integration_sync_job/detail.html`, `sync_job.connector.name`, `sync_job.triggered_by.get_full_name`, and `sync_job.parent_job.number` are accessed, triggering up to 3 deferred database queries.
+- **Remediation:** Pass `select_related=("connector", "triggered_by", "parent_job")` to `ecommerce_object`.
+
+#### 2. Missing `select_related` on `created_by` in `api_credential_detail`
+- **File:** `apps/ecommerce/views/IntegrationApi/ApiCredentials.py` (Lines 74–82)
+- **Problem:** The detail template displays `credential.created_by.get_full_name`. Calling `ecommerce_object` without `select_related` causes an extra deferred query to `auth_user`.
+- **Remediation:** Update view to pass `select_related=("created_by",)`.
+
+#### 3. Missing Composite Index on `(tenant, -created_at)` for `IntegrationSyncJob`
+- **File:** `apps/ecommerce/models/IntegrationApi/IntegrationSyncJobs.py` (Lines 146–160)
+- **Problem:** Queries in `integration_sync_job_list`, `integration_api_hub` (`recent_jobs`), and `ecommerce_connector_detail` (`recent_jobs`) filter by `tenant` and order by `-created_at`. Without `(tenant, -created_at)`, PostgreSQL and MySQL cannot perform a reverse index scan and must perform filesort over large sync job tables.
+- **Remediation:** Add `models.Index(fields=["tenant", "-created_at"], name="idx_esyj_ten_created")` to `Meta.indexes`.
+
+#### 4. Redundant B-Tree Index on `ApiCredential.client_id`
+- **File:** `apps/ecommerce/models/IntegrationApi/ApiCredentials.py` (Lines 40–43, 117–121)
+- **Problem:** Line 41 defines `client_id` with `unique=True`, which already creates a unique B-tree index. Line 120 explicitly adds `models.Index(fields=["client_id"], name="idx_eapc_client_id")` in `Meta.indexes`, creating duplicate index overhead.
+- **Remediation:** Remove `models.Index(fields=["client_id"], name="idx_eapc_client_id")` from `Meta.indexes`.
+
+### Minor Findings
+
+#### 5. Unbounded Query Evaluation on `child_retries` in `integration_sync_job_detail`
+- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 100)
+- **Problem:** `child_retries = sync_job.child_retries.all().order_by("-created_at")` does not apply a slice.
+- **Remediation:** Limit retry history to `[:20]`.
+
+#### 6. Redundant `COUNT(*)` Query Execution Across All List Views
+- **Files:** `apps/ecommerce/views/IntegrationApi/{EcommerceConnectors,IntegrationSyncJobs,WebhookSubscriptions,ApiCredentials}.py`
+- **Problem:** Each list view runs `stats = qs.aggregate(total_count=Count("id"), ...)`, then `Paginator` executes an additional `SELECT COUNT(*)` query.
+- **Remediation:** Pre-seed `paginator._count = total_count`.
+
+#### 7. Over-Fetching on `connectors` Dropdown Queryset
+- **File:** `apps/ecommerce/views/IntegrationApi/IntegrationSyncJobs.py` (Line 62)
+- **Problem:** Filter dropdown loads full instances with large text fields and secret credentials.
+- **Remediation:** Use `.only("id", "name")`.
+
+---
