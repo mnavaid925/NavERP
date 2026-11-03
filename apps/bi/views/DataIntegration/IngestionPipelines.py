@@ -70,7 +70,7 @@ def ingestion_pipeline_detail(request, pk):
         request,
         IngestionPipeline,
         pk,
-        select_related=("connector", "rate_limit_policy", "mapping_template"),
+        select_related=("connector", "rate_limit_policy", "mapping_template", "cdc_config"),
     )
     cdc_config = getattr(pipeline, "cdc_config", None)
     runs = pipeline.runs.all().order_by("-started_at")[:20]
