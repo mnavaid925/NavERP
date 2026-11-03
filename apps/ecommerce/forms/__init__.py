@@ -105,6 +105,10 @@ from apps.ecommerce.forms.FraudRisk.FraudRules import FraudRuleForm
 from apps.ecommerce.forms.FraudRisk.TransactionRiskAssessments import TransactionRiskAssessmentForm
 from apps.ecommerce.forms.FraudRisk.ChargebackDisputes import ChargebackDisputeForm
 from apps.ecommerce.forms.FraudRisk.AccountSecurityAlerts import AccountSecurityAlertForm
+from apps.ecommerce.forms.IntegrationApi.EcommerceConnectors import EcommerceConnectorForm
+from apps.ecommerce.forms.IntegrationApi.IntegrationSyncJobs import IntegrationSyncJobForm
+from apps.ecommerce.forms.IntegrationApi.WebhookSubscriptions import WebhookSubscriptionForm
+from apps.ecommerce.forms.IntegrationApi.ApiCredentials import ApiCredentialForm
 
 __all__ = [
     "TenantUniqueMixin",
@@ -214,4 +218,9 @@ __all__ = [
     "TransactionRiskAssessmentForm",
     "ChargebackDisputeForm",
     "AccountSecurityAlertForm",
+    # 9.19 Integration & API Ecosystem
+    "EcommerceConnectorForm",
+    "IntegrationSyncJobForm",
+    "WebhookSubscriptionForm",
+    "ApiCredentialForm",
 ]
