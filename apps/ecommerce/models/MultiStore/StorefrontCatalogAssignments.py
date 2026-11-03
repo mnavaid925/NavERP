@@ -55,4 +55,5 @@ class StorefrontCatalogAssignment(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.storefront.name} - {self.product.name} ({self.number})"
+        title = self.custom_title or self.number
+        return f"{title} ({self.number})"
