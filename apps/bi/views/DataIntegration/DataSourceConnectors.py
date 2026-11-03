@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db import transaction
+from django.db.models import ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -127,8 +128,13 @@ def data_source_connector_delete(request, pk):
     connector = bi_object(request, DataSourceConnector, pk)
     number = connector.number
     name = connector.name
-    write_audit_log(request.user, connector, "delete", tenant=request.tenant)
-    connector.delete()
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, connector, "delete", tenant=request.tenant)
+            connector.delete()
+    except ProtectedError:
+        messages.error(request, f"Cannot delete connector {number} ({name}) because active ingestion pipelines depend on it.")
+        return redirect("bi:data_source_connector_detail", pk=pk)
     messages.success(request, f"Data Source Connector {number} deleted successfully.")
     return redirect("bi:data_source_connector_list")
 
