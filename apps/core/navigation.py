@@ -2859,6 +2859,19 @@ LIVE_LINKS = {
         "Chargeback Disputes": "ecommerce:chargeback_dispute_list",
         "Security Alerts (ATO)": "ecommerce:account_security_alert_list",
     },
+    "9.19": {
+        "ERP & Back-Office Sync": "ecommerce:integrationsyncjob_list",
+        "Payment Gateway Connectors": "ecommerce:ecommerceconnector_list?category=payment",
+        "Shipping & Logistics APIs": "ecommerce:ecommerceconnector_list?category=shipping",
+        "Marketing Tool Integrations": "ecommerce:ecommerceconnector_list?category=marketing",
+        "Headless Commerce & API-First": "ecommerce:apicredential_list",
+        # Extra live leaves
+        "Integration Hub": "ecommerce:integration_api_hub",
+        "Connectors Registry": "ecommerce:ecommerceconnector_list",
+        "Sync Execution Queue": "ecommerce:integrationsyncjob_list",
+        "Webhook Subscriptions": "ecommerce:webhooksubscription_list",
+        "API Keys & Access Tokens": "ecommerce:apicredential_list",
+    },
 
 
 
