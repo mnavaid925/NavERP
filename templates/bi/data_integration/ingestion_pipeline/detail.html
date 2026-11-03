@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{{ pipeline.number }} — {{ pipeline.name }} — NavERP BI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <a href="{% url 'bi:ingestion_pipeline_list' %}">Pipelines</a>
+            <span>/</span>
+            <span>{{ pipeline.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ pipeline.name }}</h1>
+            {% if pipeline.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif pipeline.status == 'paused' %}
+            <span class="badge badge-muted">Paused</span>
+            {% elif pipeline.status == 'error' %}
+            <span class="badge badge-red">Error</span>
+            {% else %}
+            <span class="badge badge-info">Draft</span>
+            {% endif %}
+            <span class="badge badge-slate">{{ pipeline.get_ingestion_mode_display }}</span>
+        </div>
+        <p class="text-secondary text-sm">Pipeline Code: <span class="font-mono">{{ pipeline.number }}</span> &bull; Target Table: <span class="font-mono text-primary font-semibold">{{ pipeline.target_staging_table }}</span></p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Trigger pipeline extraction now">
+                <i data-lucide="play"></i>
+                <span>Trigger Run Now</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:ingestion_pipeline_edit' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Pipeline Configuration</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Data Source Connector</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-800">
+                        <a href="{% url 'bi:data_source_connector_detail' pipeline.connector.pk %}" class="text-primary hover:underline">
+                            {{ pipeline.connector.name }} ({{ pipeline.connector.number }})
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Source Entity / Path</dt>
+                    <dd class="mt-1 text-sm font-mono text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                        {{ pipeline.source_entity }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Target Analytical Staging Table</dt>
+                    <dd class="mt-1 text-sm font-mono text-primary font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                        {{ pipeline.target_staging_table }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Schedule &amp; Cadence</dt>
+                    <dd class="mt-1 text-sm text-slate-800">
+                        {{ pipeline.get_schedule_cadence_display }}
+                        {% if pipeline.cron_expression %}
+                        <span class="font-mono text-xs text-secondary bg-slate-100 px-1 rounded">({{ pipeline.cron_expression }})</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">File Ingestion Format</dt>
+                    <dd class="mt-1 text-sm text-slate-800">{{ pipeline.get_file_format_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Last Run Timestamp</dt>
+                    <dd class="mt-1 text-sm text-slate-800">
+                        {% if pipeline.last_run_at %}
+                        {{ pipeline.last_run_at|date:"Y-m-d H:i:s" }}
+                        {% else %}
+                        <span class="text-muted text-xs">Never executed</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                {% if pipeline.rate_limit_policy %}
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Rate Limit Policy</dt>
+                    <dd class="mt-1 text-sm text-slate-800">{{ pipeline.rate_limit_policy.name }}</dd>
+                </div>
+                {% endif %}
+                {% if pipeline.mapping_template %}
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Schema Mapping Template</dt>
+                    <dd class="mt-1 text-sm text-slate-800">{{ pipeline.mapping_template.name }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+
+            {% if pipeline.webhook_token %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">Inbound Webhook Ingress Endpoint</h3>
+                <div class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono break-all">
+                    POST /api/bi/ingest/{{ pipeline.webhook_token }}/
+                </div>
+                <div class="text-xs text-secondary mt-1">
+                    Send streaming records as JSON payload or event arrays. Secret: <span class="font-mono text-slate-700 bg-slate-100 px-1 py-0.5 rounded">{{ pipeline.webhook_secret|default:"None" }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if pipeline.file_parsing_options %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">File Parsing Options (JSON)</h3>
+                <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ pipeline.file_parsing_options }}</pre>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Change Data Capture (CDC)</h2>
+            {% if cdc_config %}
+            <a href="{% url 'bi:cdc_sync_config_edit' cdc_config.pk %}" class="btn btn-outline btn-sm">
+                <i data-lucide="pencil"></i>
+                <span>Edit CDC</span>
+            </a>
+            {% else %}
+            <a href="{% url 'bi:cdc_sync_config_create' %}?pipeline={{ pipeline.pk }}" class="btn btn-primary btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Configure CDC</span>
+            </a>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if cdc_config %}
+            <dl class="space-y-3">
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">CDC Config Code</dt>
+                    <dd class="text-sm font-mono text-slate-800">
+                        <a href="{% url 'bi:cdc_sync_config_detail' cdc_config.pk %}" class="text-primary hover:underline">
+                            {{ cdc_config.number }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Capture Method</dt>
+                    <dd class="text-sm text-slate-800">{{ cdc_config.get_capture_method_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Sync Mode</dt>
+                    <dd class="text-sm text-slate-800"><span class="badge badge-slate">{{ cdc_config.get_sync_mode_display }}</span></dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">High-Water Mark Cursor</dt>
+                    <dd class="text-xs font-mono text-slate-700 bg-slate-100 p-1.5 rounded break-all">
+                        {{ cdc_config.last_cursor_value|default:"No cursor committed" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs uppercase font-semibold text-secondary">Schema Drift Policy</dt>
+                    <dd class="text-sm text-slate-800">{{ cdc_config.get_schema_drift_policy_display }}</dd>
+                </div>
+            </dl>
+            {% else %}
+            <div class="text-center py-6 text-secondary text-sm">
+                <i data-lucide="refresh-cw" class="w-8 h-8 text-slate-300 mx-auto mb-2"></i>
+                <p>No CDC stream configured for this pipeline.</p>
+                <div class="mt-3">
+                    <a href="{% url 'bi:cdc_sync_config_create' %}?pipeline={{ pipeline.pk }}" class="btn btn-outline btn-sm">
+                        <i data-lucide="plus"></i>
+                        <span>Enable CDC Delta Capture</span>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <form method="post" action="{% url 'bi:ingestion_pipeline_delete' pipeline.pk %}" onsubmit="return confirm('Permanently delete this ingestion pipeline? All run history will be removed.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger w-full justify-center">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Pipeline</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Pipeline Execution Runs ({{ runs.count }})</h2>
+        <form method="post" action="{% url 'bi:ingestion_pipeline_trigger' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-sm">
+                <i data-lucide="play"></i>
+                <span>Run Ingestion</span>
+            </button>
+        </form>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run #</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Extracted</th>
+                    <th>Inserted</th>
+                    <th>Rejected</th>
+                    <th>Bytes</th>
+                    <th>Committed Cursor</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                            {{ run.number }}
+                        </a>
+                    </td>
+                    <td><span class="badge badge-slate">{{ run.get_trigger_type_display }}</span></td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                        <span class="badge badge-green">Completed</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="badge badge-red">Failed</span>
+                        {% elif run.status == 'running' %}
+                        <span class="badge badge-info">Running</span>
+                        {% elif run.status == 'warning' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="font-mono text-xs text-slate-800">{{ run.records_extracted }}</td>
+                    <td class="font-mono text-xs text-green-600 font-semibold">{{ run.records_inserted }}</td>
+                    <td class="font-mono text-xs text-red-500">{{ run.records_rejected }}</td>
+                    <td class="font-mono text-xs text-slate-600">{{ run.bytes_transferred }} B</td>
+                    <td class="font-mono text-xs text-slate-500 max-w-[150px] truncate">{{ run.committed_cursor|default:"—" }}</td>
+                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-6 text-secondary text-sm">
+                        No runs recorded for this pipeline yet. Click "Trigger Run Now" above.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
