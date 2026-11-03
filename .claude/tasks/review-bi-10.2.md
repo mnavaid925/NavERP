@@ -41,7 +41,7 @@
 - [x] **M3**: Redundant `total_count` Queries in Step and Version List Views. Remove unused `total_count = queryset.count()` calls.
 - [x] **M4**: ModelForm Dropdown Field Optimization. Add `.only("id", "name", "number")` to form dropdown querysets for `pipeline`.
 - [x] **M5**: Delete Actions Rendered for Non-Tenant Admins in UI Templates. Wrap delete forms with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
-- [ ] **M6**: Delete Icon Button Styling Consistency. Use `btn-icon btn-outline text-danger` for consistent ghost action buttons.
+- [x] **M6**: Delete Icon Button Styling Consistency. Use `btn-icon btn-outline text-danger` for consistent ghost action buttons.
 - [ ] **M7**: Breadcrumb Separator Class. Add `class="sep"` to breadcrumb separators.
 - [ ] **M8**: Missing `list_select_related` in Django Admin for `TransformationStepAdmin`, `EtlPipelineVersionAdmin`, and `EtlPipelineRunAdmin`.
 - [ ] **M9**: Semantic Version Duplicate Validation. Check in `EtlPipelineVersionForm.clean()` that `version_number` is not already used on the same pipeline in this tenant.
