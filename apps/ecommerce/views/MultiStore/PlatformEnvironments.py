@@ -36,6 +36,10 @@ def platform_environment_list(request):
     if status_filter:
         queryset = queryset.filter(status=status_filter)
 
+    storefront_filter = request.GET.get("storefront", "").strip()
+    if storefront_filter and storefront_filter.isdigit():
+        queryset = queryset.filter(storefront_id=storefront_filter)
+
     paginator = Paginator(queryset, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
@@ -50,6 +54,7 @@ def platform_environment_list(request):
         "search_query": search_query,
         "env_type_filter": env_type_filter,
         "status_filter": status_filter,
+        "storefront_filter": storefront_filter,
         "env_type_choices": PlatformEnvironment.ENV_TYPE_CHOICES,
         "status_choices": PlatformEnvironment.STATUS_CHOICES,
         "storefronts": storefronts,
