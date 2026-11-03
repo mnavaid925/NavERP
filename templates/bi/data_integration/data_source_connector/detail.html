@@ -133,6 +133,7 @@
                 </div>
             </div>
 
+            {% if request.user.is_superuser or request.user.is_tenant_admin %}
             <div class="mt-6 pt-4 border-t border-slate-100">
                 <form method="post" action="{% url 'bi:data_source_connector_delete' connector.pk %}" onsubmit="return confirm('Permanently remove this data connector? Pipelines linked to this connector will prevent deletion.');">
                     {% csrf_token %}
@@ -142,6 +143,7 @@
                     </button>
                 </form>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
