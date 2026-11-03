@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Execution Queue — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <span>Sync Jobs</span>
+        </div>
+        <h1 class="page-title">Sync Execution Queue &amp; History</h1>
+        <p class="text-secondary text-sm">Monitor order-to-cash, inventory balance, and product catalog synchronization jobs</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:integration_api_hub' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Integration Hub</span>
+        </a>
+        <a href="{% url 'ecommerce:integrationsyncjob_create' %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Trigger Sync Job</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card blue">
+        <div class="stat-icon blue"><i data-lucide="rotate-cw"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Total Sync Jobs</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Completed Successfully</div>
+            <div class="stat-value">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-icon orange"><i data-lucide="loader"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">In-Flight / Running</div>
+            <div class="stat-value">{{ running_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card red">
+        <div class="stat-icon red"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Failed / Need Retry</div>
+            <div class="stat-value">{{ failed_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" action="{% url 'ecommerce:integrationsyncjob_list' %}" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="form-group mb-0 md:col-span-2">
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search job number, batch UUID, connector, error..." class="form-input" aria-label="Search sync jobs">
+            </div>
+            <div class="form-group mb-0">
+                <select name="status" class="form-select" aria-label="Filter by status">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="entity" class="form-select" aria-label="Filter by sync entity">
+                    <option value="">All Entities</option>
+                    {% for val, label in entity_choices %}
+                    <option value="{{ val }}" {% if entity_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <select name="connector" class="form-select" aria-label="Filter by connector">
+                    <option value="">All Connectors</option>
+                    {% for conn in connectors %}
+                    <option value="{{ conn.pk }}" {% if connector_filter == conn.pk|stringformat:"d" %}selected{% endif %}>{{ conn.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or status_filter or entity_filter or direction_filter or connector_filter %}
+                <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline" title="Clear filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Job &amp; Batch ID</th>
+                    <th>Connector</th>
+                    <th>Sync Entity</th>
+                    <th>Direction</th>
+                    <th>Status</th>
+                    <th>Records (OK / Total)</th>
+                    <th>Duration</th>
+                    <th>Executed At</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in sync_jobs %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:integrationsyncjob_detail' job.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ job.number }}
+                        </a>
+                        {% if job.batch_id %}
+                        <span class="block text-xs font-mono text-muted">{{ job.batch_id }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'ecommerce:ecommerceconnector_detail' job.connector.pk %}" class="text-sm font-medium text-slate-800 hover:text-primary">
+                            {{ job.connector.name }}
+                        </a>
+                        <span class="block text-xs text-muted">{{ job.connector.get_provider_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-sm font-medium">{{ job.get_sync_entity_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ job.get_direction_display }}</span>
+                    </td>
+                    <td>
+                        {% if job.status == "completed" %}
+                        <span class="badge badge-green">Completed</span>
+                        {% elif job.status == "failed" %}
+                        <span class="badge badge-red">Failed</span>
+                        {% elif job.status == "running" %}
+                        <span class="badge badge-amber">Running</span>
+                        {% elif job.status == "partial_success" %}
+                        <span class="badge badge-amber">Partial Success</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ job.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">
+                            <span class="text-green-600 font-semibold">{{ job.records_succeeded }}</span>
+                            <span class="text-muted">/</span>
+                            <span>{{ job.records_total }}</span>
+                        </span>
+                        {% if job.records_failed > 0 %}
+                        <span class="block text-xs text-red-600 font-mono">({{ job.records_failed }} errors)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-secondary">{{ job.duration_seconds }}s</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-secondary">{{ job.created_at|date:"M d, H:i" }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'ecommerce:integrationsyncjob_detail' job.pk %}" class="btn btn-outline btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'ecommerce:integrationsyncjob_edit' job.pk %}" class="btn btn-outline btn-icon" title="Edit Parameters">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'ecommerce:integrationsyncjob_retry' job.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline btn-icon" title="Retry Sync Job">
+                                    <i data-lucide="repeat"></i>
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'ecommerce:integrationsyncjob_delete' job.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete sync job {{ job.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-outline btn-danger btn-icon" title="Delete Job">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-state-icon"><i data-lucide="rotate-cw"></i></div>
+                            <div class="empty-state-title">No sync executions logged</div>
+                            <div class="empty-state-desc">Trigger an order-to-cash or inventory sync job with an active connector.</div>
+                            <a href="{% url 'ecommerce:integrationsyncjob_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="play"></i>
+                                <span>Trigger Sync Job</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if entity_filter %}&entity={{ entity_filter }}{% endif %}{% if connector_filter %}&connector={{ connector_filter }}{% endif %}" class="btn btn-outline">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
