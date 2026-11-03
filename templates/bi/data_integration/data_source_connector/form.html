@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Connector: {{ connector.name }}{% else %}New Data Source Connector{% endif %} — NavERP BI
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Data Integration &amp; Ingestion</a>
+            <span>/</span>
+            <a href="{% url 'bi:data_source_connector_list' %}">Connectors</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ connector.number }}{% else %}New Connector{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Connector: {{ connector.name }}{% else %}New Data Source Connector{% endif %}</h1>
+        <p class="text-secondary text-sm">Configure connectivity parameters for internal ERP tables, databases, cloud storage, or API endpoints</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_source_connector_detail' connector.pk %}{% else %}{% url 'bi:data_source_connector_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl">
+    <div class="card">
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+
+                {% if form.errors %}
+                <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                    <div class="font-semibold flex items-center gap-2">
+                        <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                        <span>Please correct the errors below:</span>
+                    </div>
+                    <ul class="mt-2 list-disc list-inside space-y-1">
+                        {% for field, errors in form.errors.items %}
+                            {% for error in errors %}
+                                <li>{{ field|capfirst }}: {{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Connector Identifier Name <span class="text-danger">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.connector_type.id_for_label }}">Connector Type <span class="text-danger">*</span></label>
+                            {{ form.connector_type }}
+                            {% if form.connector_type.errors %}<div class="form-error">{{ form.connector_type.errors.0 }}</div>{% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Operational Status <span class="text-danger">*</span></label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.credential.id_for_label }}">API Credential (Optional)</label>
+                        {{ form.credential }}
+                        <p class="text-xs text-secondary mt-1">Select pre-configured API key / token from Module 0 credentials if authentication is required.</p>
+                        {% if form.credential.errors %}<div class="form-error">{{ form.credential.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.connection_config_raw.id_for_label }}">Connection Metadata (JSON Object)</label>
+                        {{ form.connection_config_raw }}
+                        <p class="text-xs text-secondary mt-1">Provide connection parameters in JSON format. Example: <code>{"host": "db.acme.internal", "port": 5432, "database": "analytics", "ssl": true}</code></p>
+                        {% if form.connection_config_raw.errors %}<div class="form-error">{{ form.connection_config_raw.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Description &amp; Operational Notes</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="mt-8 pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+                    <a href="{% if is_edit %}{% url 'bi:data_source_connector_detail' connector.pk %}{% else %}{% url 'bi:data_source_connector_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Update Connector{% else %}Save Connector{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
