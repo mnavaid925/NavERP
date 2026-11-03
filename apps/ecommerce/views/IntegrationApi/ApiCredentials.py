@@ -8,6 +8,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.ecommerce.forms.IntegrationApi.ApiCredentials import ApiCredentialForm
 from apps.ecommerce.models.IntegrationApi.ApiCredentials import ApiCredential
@@ -86,7 +87,7 @@ def api_credential_detail(request, pk):
 apicredential_detail = api_credential_detail
 
 
-@login_required
+@tenant_admin_required
 def api_credential_create(request):
     if request.method == "POST":
         form = ApiCredentialForm(request.POST, tenant=request.tenant)
@@ -136,7 +137,7 @@ def api_credential_create(request):
 apicredential_create = api_credential_create
 
 
-@login_required
+@tenant_admin_required
 def api_credential_edit(request, pk):
     credential = ecommerce_object(request, ApiCredential, pk)
 
@@ -168,7 +169,7 @@ def api_credential_edit(request, pk):
 apicredential_edit = api_credential_edit
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def api_credential_delete(request, pk):
     credential = ecommerce_object(request, ApiCredential, pk)
@@ -189,7 +190,7 @@ def api_credential_delete(request, pk):
 apicredential_delete = api_credential_delete
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def api_credential_revoke(request, pk):
     credential = ecommerce_object(request, ApiCredential, pk)
