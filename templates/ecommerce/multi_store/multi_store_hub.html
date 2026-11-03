@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Multi-Store &amp; Platform Operations — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:storefront_instance_list' %}">eCommerce</a>
+            <span>/</span>
+            <span>Multi-Store &amp; Platform</span>
+        </div>
+        <h1 class="page-title">Multi-Store &amp; Platform Operations Hub</h1>
+        <p class="text-secondary text-sm">Centralized administration of multi-brand storefront channels, runtime environments, and CI/CD blue-green deployments</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:storefront_instance_create' %}" class="btn btn-outline">
+            <i data-lucide="store"></i>
+            <span>New Storefront</span>
+        </a>
+        <a href="{% url 'ecommerce:platform_environment_create' %}" class="btn btn-outline">
+            <i data-lucide="server"></i>
+            <span>Provision Environment</span>
+        </a>
+        <a href="{% url 'ecommerce:deployment_pipeline_create' %}" class="btn btn-primary">
+            <i data-lucide="rocket"></i>
+            <span>Trigger Deployment</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card blue">
+        <div class="stat-icon blue"><i data-lucide="store"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Total Storefronts</div>
+            <div class="stat-value">{{ total_storefronts }}</div>
+        </div>
+    </div>
+    <div class="stat-card green">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Active Online Stores</div>
+            <div class="stat-value">{{ active_storefronts }}</div>
+        </div>
+    </div>
+    <div class="stat-card purple">
+        <div class="stat-icon purple"><i data-lucide="server"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Platform Environments</div>
+            <div class="stat-value">{{ total_environments }}</div>
+        </div>
+    </div>
+    <div class="stat-card orange">
+        <div class="stat-icon orange"><i data-lucide="shield-check"></i></div>
+        <div class="stat-content">
+            <div class="stat-label">Production Clusters</div>
+            <div class="stat-value">{{ production_environments }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="store" class="w-5 h-5 text-primary"></i>
+                <h3 class="card-title">Storefront Channels</h3>
+            </div>
+            <a href="{% url 'ecommerce:storefront_instance_list' %}" class="btn btn-outline btn-sm">
+                <span>View All ({{ total_storefronts }})</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Storefront</th>
+                        <th>Type &amp; Brand</th>
+                        <th>Domain</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for store in storefronts %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:storefront_instance_detail' store.pk %}" class="font-medium hover:text-primary">
+                                {{ store.name }}
+                            </a>
+                            <span class="block text-xs font-mono text-muted">{{ store.number }}{% if store.is_default %} &bull; Default{% endif %}</span>
+                        </td>
+                        <td>
+                            <span class="badge badge-slate text-xs">{{ store.get_store_type_display }}</span>
+                            {% if store.brand_name %}
+                            <span class="block text-xs text-muted">{{ store.brand_name }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="font-mono text-xs">{{ store.primary_domain }}</span>
+                        </td>
+                        <td>
+                            {% if store.status == 'active' %}
+                            <span class="badge badge-green text-xs">{{ store.get_status_display }}</span>
+                            {% elif store.status == 'maintenance' %}
+                            <span class="badge badge-amber text-xs">{{ store.get_status_display }}</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">{{ store.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted text-sm">No storefronts created yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <i data-lucide="server" class="w-5 h-5 text-primary"></i>
+                <h3 class="card-title">Runtime Platform Environments</h3>
+            </div>
+            <a href="{% url 'ecommerce:platform_environment_list' %}" class="btn btn-outline btn-sm">
+                <span>View All ({{ total_environments }})</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Environment</th>
+                        <th>Tier</th>
+                        <th>Active Slot</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for env in environments %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'ecommerce:platform_environment_detail' env.pk %}" class="font-medium hover:text-primary">
+                                {{ env.name }}
+                            </a>
+                            <span class="block text-xs font-mono text-muted">{{ env.number }} &bull; {{ env.get_cluster_region_display }}</span>
+                        </td>
+                        <td>
+                            {% if env.env_type == 'production' %}
+                            <span class="badge badge-red text-xs">{{ env.get_env_type_display }}</span>
+                            {% elif env.env_type == 'staging' %}
+                            <span class="badge badge-amber text-xs">{{ env.get_env_type_display }}</span>
+                            {% else %}
+                            <span class="badge badge-info text-xs">{{ env.get_env_type_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if env.current_active_slot == 'green' %}
+                            <span class="badge badge-green text-xs">Green Slot Active</span>
+                            {% elif env.current_active_slot == 'blue' %}
+                            <span class="badge badge-info text-xs">Blue Slot Active</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Single Slot</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if env.status == 'healthy' %}
+                            <span class="badge badge-green text-xs">{{ env.get_status_display }}</span>
+                            {% else %}
+                            <span class="badge badge-amber text-xs">{{ env.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted text-sm">No environments provisioned yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <i data-lucide="rocket" class="w-5 h-5 text-primary"></i>
+            <h3 class="card-title">Recent CI/CD Deployment Releases</h3>
+        </div>
+        <a href="{% url 'ecommerce:deployment_pipeline_list' %}" class="btn btn-outline btn-sm">
+            <span>All Deployments</span>
+            <i data-lucide="chevron-right"></i>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Release Version</th>
+                    <th>Target Environment</th>
+                    <th>Git Branch &amp; Commit</th>
+                    <th>Strategy</th>
+                    <th>Slot</th>
+                    <th>Traffic Cutover</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pl in recent_pipelines %}
+                <tr>
+                    <td>
+                        <a href="{% url 'ecommerce:deployment_pipeline_detail' pl.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                            {{ pl.release_version }}
+                        </a>
+                        <span class="block text-xs text-muted">{{ pl.number }} &bull; {{ pl.created_at|date:"M d, H:i" }}</span>
+                    </td>
+                    <td>
+                        <a href="{% url 'ecommerce:platform_environment_detail' pl.environment.pk %}" class="font-medium hover:text-primary">
+                            {{ pl.environment.name }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-semibold">{{ pl.git_branch }}</span>
+                        <span class="block font-mono text-xs text-muted">{{ pl.git_commit_sha|slice:":8" }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs">{{ pl.get_deployment_strategy_display }}</span>
+                    </td>
+                    <td>
+                        {% if pl.target_slot == 'green' %}
+                        <span class="badge badge-green text-xs">Green</span>
+                        {% elif pl.target_slot == 'blue' %}
+                        <span class="badge badge-info text-xs">Blue</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">Primary</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1.5 font-mono text-xs font-medium">
+                            <span>{{ pl.traffic_percentage }}%</span>
+                            {% if pl.traffic_percentage > 0 %}
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if pl.status == 'promoted_active' %}
+                        <span class="badge badge-green text-xs">{{ pl.get_status_display }}</span>
+                        {% elif pl.status == 'awaiting_approval' or pl.status == 'staging_preview' %}
+                        <span class="badge badge-amber text-xs">{{ pl.get_status_display }}</span>
+                        {% elif pl.status == 'failed' or pl.status == 'rolled_back' %}
+                        <span class="badge badge-red text-xs">{{ pl.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-info text-xs">{{ pl.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <a href="{% url 'ecommerce:deployment_pipeline_detail' pl.pk %}" class="btn btn-icon btn-outline" title="View Pipeline">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-muted text-sm">
+                        No deployment pipelines executed yet. Start your first build release.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
