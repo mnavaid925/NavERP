@@ -85,13 +85,7 @@ def data_source_connector_create(request):
             connector.created_by = request.user
             connector.save()
             form.save_m2m()
-            write_audit_log(
-                request,
-                action="create",
-                model_name="DataSourceConnector",
-                object_id=connector.pk,
-                description=f"Created Data Source Connector {connector.number} ({connector.name})",
-            )
+            write_audit_log(request.user, connector, "create", tenant=request.tenant)
             messages.success(request, f"Data Source Connector {connector.number} created successfully.")
             return redirect("bi:data_source_connector_detail", pk=connector.pk)
     else:
@@ -112,13 +106,7 @@ def data_source_connector_edit(request, pk):
         form = DataSourceConnectorForm(request.POST, instance=connector, tenant=request.tenant)
         if form.is_valid():
             connector = form.save()
-            write_audit_log(
-                request,
-                action="update",
-                model_name="DataSourceConnector",
-                object_id=connector.pk,
-                description=f"Updated Data Source Connector {connector.number} ({connector.name})",
-            )
+            write_audit_log(request.user, connector, "update", tenant=request.tenant)
             messages.success(request, f"Data Source Connector {connector.number} updated successfully.")
             return redirect("bi:data_source_connector_detail", pk=connector.pk)
     else:
@@ -139,14 +127,8 @@ def data_source_connector_delete(request, pk):
     connector = bi_object(request, DataSourceConnector, pk)
     number = connector.number
     name = connector.name
+    write_audit_log(request.user, connector, "delete", tenant=request.tenant)
     connector.delete()
-    write_audit_log(
-        request,
-        action="delete",
-        model_name="DataSourceConnector",
-        object_id=pk,
-        description=f"Deleted Data Source Connector {number} ({name})",
-    )
     messages.success(request, f"Data Source Connector {number} deleted successfully.")
     return redirect("bi:data_source_connector_list")
 
@@ -160,12 +142,6 @@ def data_source_connector_test(request, pk):
     connector.last_tested_at = timezone.now()
     connector.save(update_fields=["test_status", "test_message", "last_tested_at", "updated_at"])
 
-    write_audit_log(
-        request,
-        action="test_connection",
-        model_name="DataSourceConnector",
-        object_id=connector.pk,
-        description=f"Verified connection for {connector.number} ({connector.name})",
-    )
+    write_audit_log(request.user, connector, "test", changes={"action": "test_connection", "status": connector.test_status}, tenant=request.tenant)
     messages.success(request, f"Connection test for {connector.number} succeeded.")
     return redirect("bi:data_source_connector_detail", pk=connector.pk)
