@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}{{ pipeline.name }} ({{ pipeline.number }}) — ETL Pipelines — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span>/</span>
+            <a href="{% url 'bi:etl_pipeline_list' %}">ETL Pipelines</a>
+            <span>/</span>
+            <span>{{ pipeline.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ pipeline.name }}</h1>
+            <span class="font-mono text-sm text-muted">({{ pipeline.number }})</span>
+            {% if pipeline.status == 'active' %}
+                <span class="badge badge-green">{{ pipeline.get_status_display }}</span>
+            {% elif pipeline.status == 'draft' %}
+                <span class="badge badge-amber">{{ pipeline.get_status_display }}</span>
+            {% elif pipeline.status == 'paused' %}
+                <span class="badge badge-muted">{{ pipeline.get_status_display }}</span>
+            {% elif pipeline.status == 'error' %}
+                <span class="badge badge-red">{{ pipeline.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-slate">{{ pipeline.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">{{ pipeline.description|default:"No description provided." }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:etl_pipeline_canvas' pipeline.pk %}" class="btn btn-outline text-purple-700 hover:text-purple-800">
+            <i data-lucide="git-merge"></i>
+            <span>Visual Designer</span>
+        </a>
+        <form method="post" action="{% url 'bi:etl_pipeline_trigger' pipeline.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play"></i>
+                <span>Run Pipeline</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:etl_pipeline_edit' pipeline.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <a href="{% url 'bi:etl_pipeline_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back</span>
+        </a>
+    </div>
+</div>
+
+<!-- Architecture Summary Grid -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Source Staging</div>
+        <div class="font-mono text-sm font-semibold text-slate-800 mt-1">
+            {% if pipeline.source_ingestion_pipeline %}
+                <a href="{% url 'bi:ingestion_pipeline_detail' pipeline.source_ingestion_pipeline.pk %}" class="text-blue-600 hover:underline">
+                    {{ pipeline.source_ingestion_pipeline.target_staging_table }}
+                </a>
+            {% elif pipeline.source_staging_table %}
+                {{ pipeline.source_staging_table }}
+            {% else %}
+                <span class="text-muted">Direct Staging</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-0.5">Ingestion Source Buffer</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Target Warehouse</div>
+        <div class="font-mono text-sm font-semibold text-blue-700 mt-1">{{ pipeline.target_table }}</div>
+        <div class="text-xs text-muted mt-0.5">{{ pipeline.get_target_layer_display }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">Orchestration Trigger</div>
+        <div class="text-sm font-semibold text-slate-800 mt-1">{{ pipeline.get_trigger_type_display }}</div>
+        <div class="text-xs text-muted font-mono mt-0.5">{{ pipeline.cron_expression|default:"On-Demand / Event" }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs uppercase font-semibold text-muted tracking-wider">SLA Bound &amp; Alerts</div>
+        <div class="text-sm font-semibold text-slate-800 mt-1">{{ pipeline.sla_timeout_seconds }}s ({{ pipeline.sla_timeout_seconds|floatformat:0 }} sec)</div>
+        <div class="text-xs text-muted mt-0.5">Alerts: {% if pipeline.alert_on_sla_miss %}<span class="text-green-600 font-semibold">Enabled</span>{% else %}<span class="text-muted">Disabled</span>{% endif %}</div>
+    </div>
+</div>
+
+<!-- Transformation Steps DAG Section -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Transformation Steps (DAG Pipeline)</h2>
+            <p class="text-xs text-muted">Sequential &amp; branched transform nodes executing joins, aggregations, pivots, and business logic</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'bi:transformation_step_create' %}?pipeline={{ pipeline.pk }}" class="btn btn-outline text-xs">
+                <i data-lucide="plus"></i>
+                <span>Add Step</span>
+            </a>
+            <a href="{% url 'bi:etl_pipeline_canvas' pipeline.pk %}" class="btn btn-outline text-xs text-purple-700">
+                <i data-lucide="git-merge"></i>
+                <span>Open Canvas</span>
+            </a>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 80px;">Seq</th>
+                    <th>Step Name &amp; ID</th>
+                    <th>Transformation Type</th>
+                    <th>Upstream Dependencies</th>
+                    <th>Status</th>
+                    <th>Blocking</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for step in steps %}
+                <tr>
+                    <td>
+                        <span class="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">#{{ step.sequence }}</span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">
+                            <a href="{% url 'bi:transformation_step_detail' step.pk %}" class="hover:text-blue-600">{{ step.name }}</a>
+                        </div>
+                        <div class="text-xs font-mono text-muted">{{ step.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ step.get_step_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if step.upstream_step_ids %}
+                            <div class="flex flex-wrap gap-1">
+                                {% for up_id in step.upstream_step_ids %}
+                                <span class="font-mono text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded">{{ up_id }}</span>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="text-xs text-muted">Root Step (Source Staging)</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if step.status == 'active' %}
+                            <span class="badge badge-green">{{ step.get_status_display }}</span>
+                        {% elif step.status == 'draft' %}
+                            <span class="badge badge-amber">{{ step.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-muted">{{ step.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if step.is_blocking %}
+                            <span class="badge badge-red text-xs">Halts DAG on Error</span>
+                        {% else %}
+                            <span class="badge badge-slate text-xs">Non-Blocking</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:transformation_step_detail' step.pk %}" class="btn btn-icon btn-outline" title="View step" aria-label="View step">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:transformation_step_edit' step.pk %}" class="btn btn-icon btn-outline" title="Edit step" aria-label="Edit step">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state py-8">
+                            <i data-lucide="layers" class="empty-icon text-muted mx-auto"></i>
+                            <h4 class="empty-title text-sm">No transformation steps configured</h4>
+                            <p class="empty-description text-xs">Add joins, aggregations, pivots, or expressions to transform staged data into warehouse schema.</p>
+                            <div class="mt-3">
+                                <a href="{% url 'bi:transformation_step_create' %}?pipeline={{ pipeline.pk }}" class="btn btn-outline text-xs">
+                                    <i data-lucide="plus"></i>
+                                    <span>Add Transformation Step</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Versions & Environment Promotion Section -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Pipeline Versions &amp; Multi-Environment Promotion</h2>
+            <p class="text-xs text-muted">Declarative DAG version snapshots, environment deployments, and rollback tracking</p>
+        </div>
+        <div>
+            <a href="{% url 'bi:etl_pipeline_version_create' %}?pipeline={{ pipeline.pk }}" class="btn btn-outline text-xs">
+                <i data-lucide="plus"></i>
+                <span>Snapshot Version</span>
+            </a>
+        </div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Version Number</th>
+                    <th>Target Environment</th>
+                    <th>Status</th>
+                    <th>Promoted By</th>
+                    <th>Promoted At</th>
+                    <th>Changelog</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ver in versions %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-sm font-bold text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_version_detail' ver.pk %}" class="hover:text-blue-600">{{ ver.version_number }}</a>
+                        </div>
+                        <div class="text-xs font-mono text-muted">{{ ver.number }}</div>
+                    </td>
+                    <td>
+                        {% if ver.environment == 'production' %}
+                            <span class="badge badge-green font-semibold">{{ ver.get_environment_display }}</span>
+                        {% elif ver.environment == 'staging' %}
+                            <span class="badge badge-amber font-semibold">{{ ver.get_environment_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate font-semibold">{{ ver.get_environment_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ver.status == 'published' %}
+                            <span class="badge badge-green">{{ ver.get_status_display }}</span>
+                        {% elif ver.status == 'rolled_back' %}
+                            <span class="badge badge-red">{{ ver.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ ver.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ ver.promoted_by.get_full_name|default:ver.promoted_by.username|default:"System" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ ver.promoted_at|date:"M d, Y H:i"|default:"Not Promoted" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600 truncate max-w-xs block">{{ ver.changelog|default:"Initial version release" }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:etl_pipeline_version_detail' ver.pk %}" class="btn btn-icon btn-outline" title="View version" aria-label="View version">
+                                <i data-lucide="eye"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state py-6">
+                            <i data-lucide="tag" class="empty-icon text-muted mx-auto"></i>
+                            <p class="empty-description text-xs">No version snapshots recorded yet. Create a version snapshot for staging or production promotion.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Execution History Section -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Recent Execution Runs &amp; Telemetry</h2>
+            <p class="text-xs text-muted">Execution durations, throughput metrics, and SLA adherence status</p>
+        </div>
+        <a href="{% url 'bi:etl_pipeline_run_list' %}?pipeline_id={{ pipeline.pk }}" class="btn btn-outline text-xs">
+            <span>View All Runs</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Run Number</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Started At</th>
+                    <th>Duration</th>
+                    <th>Throughput (In / Out / Rej)</th>
+                    <th>SLA Adherence</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in recent_runs %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-sm font-semibold text-slate-800">
+                            <a href="{% url 'bi:etl_pipeline_run_detail' run.pk %}" class="hover:text-blue-600">{{ run.number }}</a>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ run.get_trigger_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                            <span class="badge badge-green">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'running' %}
+                            <span class="badge badge-info">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'failed' or run.status == 'timed_out' %}
+                            <span class="badge badge-red">{{ run.get_status_display }}</span>
+                        {% elif run.status == 'warning' %}
+                            <span class="badge badge-amber">{{ run.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-slate">{{ run.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ run.started_at|date:"M d, Y H:i:s" }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-slate-700">{{ run.duration_seconds }}s</span>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-700">
+                            <span class="text-blue-600">{{ run.records_in }}</span> in /
+                            <span class="text-green-600">{{ run.records_out }}</span> out /
+                            <span class="text-red-500">{{ run.records_rejected }}</span> rej
+                        </div>
+                    </td>
+                    <td>
+                        {% if run.sla_missed %}
+                            <span class="badge badge-red text-xs">SLA Breached</span>
+                        {% else %}
+                            <span class="badge badge-green text-xs">Within SLA</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <a href="{% url 'bi:etl_pipeline_run_detail' run.pk %}" class="btn btn-icon btn-outline" title="Run details" aria-label="Run details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-6">
+                            <p class="empty-description text-xs">No runs recorded for this pipeline yet.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
