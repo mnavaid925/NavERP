@@ -4,10 +4,64 @@ from apps.bi.views._common import (
     csv_export_response,
     safe_parse_date,
 )
+from apps.bi.views.DataIntegration.CdcSyncConfigs import (
+    cdc_sync_config_create,
+    cdc_sync_config_delete,
+    cdc_sync_config_detail,
+    cdc_sync_config_edit,
+    cdc_sync_config_list,
+    cdc_sync_config_reset_cursor,
+)
+from apps.bi.views.DataIntegration.DataIntegrationHub import data_integration_hub
+from apps.bi.views.DataIntegration.DataSourceConnectors import (
+    data_source_connector_create,
+    data_source_connector_delete,
+    data_source_connector_detail,
+    data_source_connector_edit,
+    data_source_connector_list,
+    data_source_connector_test,
+)
+from apps.bi.views.DataIntegration.IngestionPipelines import (
+    ingestion_pipeline_create,
+    ingestion_pipeline_delete,
+    ingestion_pipeline_detail,
+    ingestion_pipeline_edit,
+    ingestion_pipeline_list,
+    ingestion_pipeline_trigger,
+)
+from apps.bi.views.DataIntegration.IngestionRuns import (
+    ingestion_run_delete,
+    ingestion_run_detail,
+    ingestion_run_list,
+    ingestion_run_retry,
+)
 
 __all__ = [
     "bi_scope",
     "bi_object",
     "safe_parse_date",
     "csv_export_response",
+    "data_integration_hub",
+    "data_source_connector_list",
+    "data_source_connector_create",
+    "data_source_connector_detail",
+    "data_source_connector_edit",
+    "data_source_connector_delete",
+    "data_source_connector_test",
+    "ingestion_pipeline_list",
+    "ingestion_pipeline_create",
+    "ingestion_pipeline_detail",
+    "ingestion_pipeline_edit",
+    "ingestion_pipeline_delete",
+    "ingestion_pipeline_trigger",
+    "cdc_sync_config_list",
+    "cdc_sync_config_create",
+    "cdc_sync_config_detail",
+    "cdc_sync_config_edit",
+    "cdc_sync_config_delete",
+    "cdc_sync_config_reset_cursor",
+    "ingestion_run_list",
+    "ingestion_run_detail",
+    "ingestion_run_delete",
+    "ingestion_run_retry",
 ]
