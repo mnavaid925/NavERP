@@ -50,14 +50,14 @@ def etl_pipeline_list(request):
             [
                 csv_safe(p.number),
                 csv_safe(p.name),
-                csv_safe(p.source_staging_table),
+                csv_safe(p.source_ingestion_pipeline.target_staging_table if p.source_ingestion_pipeline else p.source_staging_table),
                 csv_safe(p.target_table),
                 csv_safe(p.get_target_layer_display()),
                 csv_safe(p.get_trigger_type_display()),
                 csv_safe(p.get_status_display()),
                 csv_safe(p.last_run_at.isoformat() if p.last_run_at else ""),
             ]
-            for p in queryset
+            for p in queryset.select_related("source_ingestion_pipeline")
         ]
         return csv_export_response(
             request,
