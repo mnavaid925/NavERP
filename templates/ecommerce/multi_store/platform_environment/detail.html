@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}{{ environment.name }} — Platform Environment — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:multi_store_hub' %}">Multi-Store &amp; Platform</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:platform_environment_list' %}">Platform Environments</a>
+            <span>/</span>
+            <span>{{ environment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ environment.name }}</h1>
+            {% if environment.env_type == 'production' %}
+            <span class="badge badge-red font-semibold">{{ environment.get_env_type_display }}</span>
+            {% elif environment.env_type == 'staging' %}
+            <span class="badge badge-amber">{{ environment.get_env_type_display }}</span>
+            {% elif environment.env_type == 'sandbox' %}
+            <span class="badge badge-info">{{ environment.get_env_type_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ environment.get_env_type_display }}</span>
+            {% endif %}
+
+            {% if environment.status == 'healthy' %}
+            <span class="badge badge-green">{{ environment.get_status_display }}</span>
+            {% elif environment.status == 'deploying' %}
+            <span class="badge badge-info">{{ environment.get_status_display }}</span>
+            {% else %}
+            <span class="badge badge-amber">{{ environment.get_status_display }}</span>
+            {% endif %}
+
+            {% if environment.is_sandbox_locked %}
+            <span class="badge badge-amber" title="Live transactions locked">Sandbox Lock Active</span>
+            {% endif %}
+        </div>
+        <p class="text-secondary text-sm font-mono mt-0.5">{{ environment.number }} &bull; {{ environment.get_cluster_region_display }} &bull; {{ environment.base_url }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:platform_environment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>All Environments</span>
+        </a>
+        <a href="{% url 'ecommerce:deployment_pipeline_create' %}?environment={{ environment.pk }}" class="btn btn-primary">
+            <i data-lucide="rocket"></i>
+            <span>Trigger Deployment</span>
+        </a>
+        <a href="{% url 'ecommerce:platform_environment_edit' environment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Environment</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:platform_environment_delete' environment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete environment \'{{ environment.name|escapejs }}\'?');">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Instance Specifications &amp; Traffic Slot</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-secondary block">Environment Tier</span>
+                        <span class="font-medium text-base">{{ environment.get_env_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Cluster Region</span>
+                        <span class="font-medium">{{ environment.get_cluster_region_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Base URL</span>
+                        <a href="{{ environment.base_url }}" target="_blank" rel="noopener" class="font-mono text-primary font-medium hover:underline block truncate">
+                            {{ environment.base_url }}
+                        </a>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Active Traffic Slot (Blue-Green)</span>
+                        {% if environment.current_active_slot == 'blue' %}
+                        <span class="badge badge-info font-medium">Blue Slot (100% Live Traffic)</span>
+                        {% elif environment.current_active_slot == 'green' %}
+                        <span class="badge badge-green font-medium">Green Slot (100% Live Traffic)</span>
+                        {% else %}
+                        <span class="badge badge-slate font-medium">Single Slot Direct</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Resource &amp; Node Tier</span>
+                        <span class="font-medium">{{ environment.get_resource_tier_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Operational Health Status</span>
+                        {% if environment.status == 'healthy' %}
+                        <span class="badge badge-green">{{ environment.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ environment.get_status_display }}</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Bound Storefront Channel</span>
+                        {% if environment.storefront %}
+                        <a href="{% url 'ecommerce:storefront_instance_detail' environment.storefront.pk %}" class="font-medium text-primary hover:underline">
+                            {{ environment.storefront.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Global Platform Multi-Tenant Cluster</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-secondary block">Sandbox Guard Safeguards</span>
+                        {% if environment.is_sandbox_locked %}
+                        <span class="badge badge-amber">Locked — Outbound APIs &amp; Live Payments Suppressed</span>
+                        {% else %}
+                        <span class="badge badge-green">Unlocked — Production Mode</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if environment.description %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <span class="text-secondary block text-xs font-semibold uppercase mb-1">Architecture &amp; Deployment Notes</span>
+                    <p class="text-sm text-secondary">{{ environment.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">CI/CD Deployment Pipelines ({{ pipelines|length }})</h3>
+                <a href="{% url 'ecommerce:deployment_pipeline_create' %}?environment={{ environment.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>New Build</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Release &amp; Version</th>
+                            <th>Branch &amp; Commit</th>
+                            <th>Strategy</th>
+                            <th>Slot</th>
+                            <th>Traffic</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pl in pipelines %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'ecommerce:deployment_pipeline_detail' pl.pk %}" class="font-medium hover:text-primary">
+                                    {{ pl.release_version }}
+                                </a>
+                                <span class="block text-xs font-mono text-muted">{{ pl.number }}</span>
+                            </td>
+                            <td>
+                                <span class="font-mono text-xs font-semibold">{{ pl.git_branch }}</span>
+                                <span class="block text-xs font-mono text-muted">{{ pl.git_commit_sha|slice:":8" }}</span>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate text-xs">{{ pl.get_deployment_strategy_display }}</span>
+                            </td>
+                            <td>
+                                {% if pl.target_slot == 'green' %}
+                                <span class="badge badge-green text-xs">Green</span>
+                                {% elif pl.target_slot == 'blue' %}
+                                <span class="badge badge-info text-xs">Blue</span>
+                                {% else %}
+                                <span class="badge badge-slate text-xs">Primary</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="font-mono font-medium">{{ pl.traffic_percentage }}%</span>
+                            </td>
+                            <td>
+                                {% if pl.status == 'promoted_active' %}
+                                <span class="badge badge-green">{{ pl.get_status_display }}</span>
+                                {% elif pl.status == 'awaiting_approval' or pl.status == 'staging_preview' %}
+                                <span class="badge badge-amber">{{ pl.get_status_display }}</span>
+                                {% elif pl.status == 'failed' or pl.status == 'rolled_back' %}
+                                <span class="badge badge-red">{{ pl.get_status_display }}</span>
+                                {% else %}
+                                <span class="badge badge-info">{{ pl.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted text-sm">
+                                No deployment pipelines recorded for this environment yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">DevOps Deployment Guardrails</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-secondary block">Zero-Downtime Blue-Green Readiness</span>
+                    <span class="font-medium text-green-700 flex items-center gap-1.5">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        <span>Dual-Slot Routing Configured</span>
+                    </span>
+                </div>
+                <div>
+                    <span class="text-secondary block">Traffic Shift Cutover</span>
+                    <span class="text-muted text-xs">Instant DNS/Load-Balancer cutover between Blue and Green without container restart downtime.</span>
+                </div>
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="text-secondary block">Preview Endpoint Gate</span>
+                    <span class="text-muted text-xs">Deployments generate isolated preview endpoints for automated smoke sweeps prior to traffic promotion.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Audit Metadata</h3>
+            </div>
+            <div class="card-body text-xs space-y-2 text-secondary">
+                <div class="flex justify-between">
+                    <span>Record Number:</span>
+                    <span class="font-mono text-slate-800">{{ environment.number }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Created At:</span>
+                    <span>{{ environment.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Last Updated:</span>
+                    <span>{{ environment.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
