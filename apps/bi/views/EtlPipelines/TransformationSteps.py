@@ -181,4 +181,7 @@ def transformation_step_delete(request, pk):
         )
         step.delete()
     messages.success(request, f"Transformation Step {number} deleted successfully.")
+    next_param = request.GET.get("next") or request.POST.get("next")
+    if next_param == "list":
+        return redirect("bi:transformation_step_list")
     return redirect("bi:etl_pipeline_detail", pk=pipeline_pk)
