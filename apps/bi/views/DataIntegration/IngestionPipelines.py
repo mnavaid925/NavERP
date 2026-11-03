@@ -147,6 +147,10 @@ def ingestion_pipeline_delete(request, pk):
 @login_required
 def ingestion_pipeline_trigger(request, pk):
     pipeline = bi_object(request, IngestionPipeline, pk)
+    if pipeline.status == "paused":
+        messages.warning(request, f"Cannot trigger execution: Pipeline {pipeline.number} is currently paused.")
+        return redirect("bi:ingestion_pipeline_detail", pk=pipeline.pk)
+
     now = timezone.now()
 
     with transaction.atomic():
