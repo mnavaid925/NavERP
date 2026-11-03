@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Sync Job {{ sync_job.number }} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:integrationsyncjob_list' %}">Sync Jobs</a>
+            <span>/</span>
+            <span>{{ sync_job.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ sync_job.get_sync_entity_display }}</h1>
+            <span class="font-mono text-sm text-secondary bg-slate-100 px-2 py-0.5 rounded">{{ sync_job.number }}</span>
+            {% if sync_job.status == "completed" %}
+            <span class="badge badge-green">Completed</span>
+            {% elif sync_job.status == "failed" %}
+            <span class="badge badge-red">Failed</span>
+            {% elif sync_job.status == "running" %}
+            <span class="badge badge-amber">Running</span>
+            {% elif sync_job.status == "partial_success" %}
+            <span class="badge badge-amber">Partial Success</span>
+            {% else %}
+            <span class="badge badge-slate">{{ sync_job.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-info">{{ sync_job.get_direction_display }}</span>
+        </div>
+        <p class="text-secondary text-sm">Connector: <a href="{% url 'ecommerce:ecommerceconnector_detail' sync_job.connector.pk %}" class="text-primary hover:underline font-medium">{{ sync_job.connector.name }}</a> &bull; Batch: <span class="font-mono">{{ sync_job.batch_id|default:"N/A" }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Queue</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:integrationsyncjob_retry' sync_job.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="repeat"></i>
+                <span>Retry Execution</span>
+            </button>
+        </form>
+        <a href="{% url 'ecommerce:integrationsyncjob_edit' sync_job.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'ecommerce:integrationsyncjob_delete' sync_job.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this sync job record?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Records Transfer Metrics</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="bg-slate-50 p-3 rounded">
+                        <div class="text-xs text-muted uppercase font-semibold">Total Targeted</div>
+                        <div class="text-xl font-bold font-mono text-slate-800 mt-1">{{ sync_job.records_total }}</div>
+                    </div>
+                    <div class="bg-blue-50 p-3 rounded">
+                        <div class="text-xs text-blue-700 uppercase font-semibold">Processed</div>
+                        <div class="text-xl font-bold font-mono text-blue-800 mt-1">{{ sync_job.records_processed }}</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded">
+                        <div class="text-xs text-green-700 uppercase font-semibold">Succeeded</div>
+                        <div class="text-xl font-bold font-mono text-green-800 mt-1">{{ sync_job.records_succeeded }}</div>
+                    </div>
+                    <div class="bg-red-50 p-3 rounded">
+                        <div class="text-xs text-red-700 uppercase font-semibold">Failed</div>
+                        <div class="text-xl font-bold font-mono text-red-800 mt-1">{{ sync_job.records_failed }}</div>
+                    </div>
+                </div>
+
+                <div class="text-xs text-muted mb-1 flex justify-between font-medium">
+                    <span>Transfer Success Rate</span>
+                    <span>
+                        {% if sync_job.records_total > 0 %}
+                        {{ sync_job.records_succeeded|floatformat:0 }} of {{ sync_job.records_total }} records
+                        {% else %}
+                        0 records
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="progress h-2 rounded bg-slate-100 overflow-hidden">
+                    <div class="progress-bar bg-green-500 h-full" style="width: {% if sync_job.records_total > 0 %}{% widthratio sync_job.records_succeeded sync_job.records_total 100 %}%{% else %}0%{% endif %}"></div>
+                </div>
+            </div>
+        </div>
+
+        {% if sync_job.error_summary %}
+        <div class="card border border-red-200">
+            <div class="card-header bg-red-50 flex items-center gap-2 text-red-800">
+                <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                <h2 class="card-title text-base font-semibold text-red-800">Failure Diagnostics &amp; Trace</h2>
+            </div>
+            <div class="card-body">
+                <div class="bg-slate-900 text-red-300 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all">
+                    {{ sync_job.error_summary }}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Payload &amp; Query Summary</h2>
+            </div>
+            <div class="card-body">
+                {% if sync_job.payload_preview %}
+                <div class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all">
+                    {{ sync_job.payload_preview }}
+                </div>
+                {% else %}
+                <div class="text-sm text-muted italic">No sample payload stored for this execution.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if child_retries %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Retry Executions Triggered From This Job</h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Retry Job Number</th>
+                            <th>Status</th>
+                            <th>Records Succeeded</th>
+                            <th>Executed At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for retry in child_retries %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'ecommerce:integrationsyncjob_detail' retry.pk %}" class="font-mono text-primary font-semibold hover:underline">
+                                    {{ retry.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge badge-green">{{ retry.get_status_display }}</span>
+                            </td>
+                            <td>
+                                <span class="font-mono text-sm">{{ retry.records_succeeded }}/{{ retry.records_total }}</span>
+                            </td>
+                            <td>
+                                <span class="text-xs text-secondary">{{ retry.created_at|date:"M d, H:i:s" }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Execution Details</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Connector</div>
+                    <div class="mt-1">
+                        <a href="{% url 'ecommerce:ecommerceconnector_detail' sync_job.connector.pk %}" class="text-primary hover:underline font-medium">
+                            {{ sync_job.connector.name }}
+                        </a>
+                        <span class="block text-xs text-muted font-mono">{{ sync_job.connector.number }}</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Trigger Origin</div>
+                    <div class="mt-1 font-medium text-slate-800">{{ sync_job.get_trigger_type_display }}</div>
+                    {% if sync_job.triggered_by %}
+                    <span class="text-xs text-muted">By {{ sync_job.triggered_by.get_full_name|default:sync_job.triggered_by.username }}</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Retry Policy</div>
+                    <div class="mt-1 text-slate-800">
+                        Attempt <span class="font-semibold">{{ sync_job.retry_count }}</span> of {{ sync_job.max_retries }} max retries
+                    </div>
+                    {% if sync_job.parent_job %}
+                    <div class="text-xs text-muted mt-1">
+                        Parent Job: <a href="{% url 'ecommerce:integrationsyncjob_detail' sync_job.parent_job.pk %}" class="text-primary hover:underline font-mono">{{ sync_job.parent_job.number }}</a>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Execution Duration</div>
+                    <div class="mt-1 font-mono font-medium text-slate-800">{{ sync_job.duration_seconds }} seconds</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Started At</div>
+                    <div class="mt-1 text-slate-800">{{ sync_job.started_at|date:"M d, Y H:i:s"|default:"Not started" }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Finished At</div>
+                    <div class="mt-1 text-slate-800">{{ sync_job.finished_at|date:"M d, Y H:i:s"|default:"In-flight / N/A" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Metadata &amp; Timestamps</h2>
+            </div>
+            <div class="card-body space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-muted">Created</span>
+                    <span class="font-medium">{{ sync_job.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Last Updated</span>
+                    <span class="font-medium">{{ sync_job.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
