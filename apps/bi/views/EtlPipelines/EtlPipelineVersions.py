@@ -60,7 +60,6 @@ def etl_pipeline_version_list(request):
             rows=rows,
         )
 
-    total_count = queryset.count()
     paginator = Paginator(
         queryset.select_related("pipeline", "environment_instance", "promoted_by"),
         20,
@@ -81,7 +80,6 @@ def etl_pipeline_version_list(request):
         "environment_choices": EtlPipelineVersion.ENVIRONMENT_CHOICES,
         "status_choices": EtlPipelineVersion.STATUS_CHOICES,
         "pipelines": pipelines,
-        "total_count": total_count,
     }
     return render(request, "bi/etl_pipelines/etl_pipeline_version/list.html", context)
 
