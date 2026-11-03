@@ -83,8 +83,8 @@ def platform_environment_detail(request, pk):
 def platform_environment_create(request):
     initial = {}
     storefront_id = request.GET.get("storefront")
-    if storefront_id:
-        initial["storefront"] = storefront_id
+    if storefront_id and storefront_id.isdigit():
+        initial["storefront"] = int(storefront_id)
 
     if request.method == "POST":
         form = PlatformEnvironmentForm(request.POST, tenant=request.tenant)
