@@ -25,7 +25,7 @@
             {% endif %}
             <span class="badge badge-slate">{{ connector.get_connector_type_display }}</span>
         </div>
-        <p class="text-secondary text-sm">Connector Code: <span class="font-mono">{{ connector.number }}</span></p>
+        <p class="text-muted text-sm">Connector Code: <span class="font-mono">{{ connector.number }}</span></p>
     </div>
     <div class="page-actions">
         <form method="post" action="{% url 'bi:data_source_connector_test' connector.pk %}" class="inline">
@@ -54,21 +54,21 @@
         <div class="card-body">
             <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Connector Type</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Connector Type</dt>
                     <dd class="mt-1 text-sm font-medium text-slate-800">{{ connector.get_connector_type_display }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">API Credential</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">API Credential</dt>
                     <dd class="mt-1 text-sm font-medium text-slate-800">
                         {% if connector.credential %}
                         <span class="font-mono bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-700">{{ connector.credential.name }}</span>
                         {% else %}
-                        <span class="text-secondary text-xs">No external API credential attached</span>
+                        <span class="text-muted text-xs">No external API credential attached</span>
                         {% endif %}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Verification Status</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Verification Status</dt>
                     <dd class="mt-1 flex items-center gap-2">
                         {% if connector.test_status == 'success' %}
                         <span class="badge badge-green">Verified</span>
@@ -78,19 +78,19 @@
                         <span class="badge badge-slate">Untested</span>
                         {% endif %}
                         {% if connector.last_tested_at %}
-                        <span class="text-xs text-secondary">at {{ connector.last_tested_at|date:"Y-m-d H:i" }}</span>
+                        <span class="text-xs text-muted">at {{ connector.last_tested_at|date:"Y-m-d H:i" }}</span>
                         {% endif %}
                     </dd>
                 </div>
                 <div>
-                    <dt class="text-xs uppercase font-semibold text-secondary">Created By &amp; Date</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Created By &amp; Date</dt>
                     <dd class="mt-1 text-sm text-slate-700">
                         {{ connector.created_by.username|default:"System" }} &bull; {{ connector.created_at|date:"M d, Y H:i" }}
                     </dd>
                 </div>
                 {% if connector.test_message %}
                 <div class="md:col-span-2">
-                    <dt class="text-xs uppercase font-semibold text-secondary">Latest Diagnostic Message</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Latest Diagnostic Message</dt>
                     <dd class="mt-1 text-sm font-mono bg-slate-50 p-2.5 rounded border border-slate-200 text-slate-700">
                         {{ connector.test_message }}
                     </dd>
@@ -98,7 +98,7 @@
                 {% endif %}
                 {% if connector.description %}
                 <div class="md:col-span-2">
-                    <dt class="text-xs uppercase font-semibold text-secondary">Description</dt>
+                    <dt class="text-xs uppercase font-semibold text-muted">Description</dt>
                     <dd class="mt-1 text-sm text-slate-700">{{ connector.description }}</dd>
                 </div>
                 {% endif %}
@@ -106,7 +106,7 @@
 
             {% if connector.connection_config %}
             <div class="mt-6 pt-4 border-t border-slate-100">
-                <h3 class="text-xs uppercase font-semibold text-secondary mb-2">Connection Metadata (JSON)</h3>
+                <h3 class="text-xs uppercase font-semibold text-muted mb-2">Connection Metadata (JSON)</h3>
                 <pre class="bg-slate-900 text-slate-100 p-3 rounded font-mono text-xs overflow-x-auto">{{ connector.connection_config }}</pre>
             </div>
             {% endif %}
@@ -120,15 +120,15 @@
         <div class="card-body">
             <div class="space-y-4">
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <span class="text-sm text-secondary">Pipelines Configured</span>
+                    <span class="text-sm text-muted">Pipelines Configured</span>
                     <span class="text-base font-bold text-slate-800">{{ pipelines.count }}</span>
                 </div>
                 <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <span class="text-sm text-secondary">Total Ingestion Runs</span>
+                    <span class="text-sm text-muted">Total Ingestion Runs</span>
                     <span class="text-base font-bold text-slate-800">{{ runs.count }}</span>
                 </div>
                 <div class="flex items-center justify-between">
-                    <span class="text-sm text-secondary">Last Modified</span>
+                    <span class="text-sm text-muted">Last Modified</span>
                     <span class="text-sm font-medium text-slate-700">{{ connector.updated_at|date:"M d, Y" }}</span>
                 </div>
             </div>
@@ -171,7 +171,7 @@
                 {% for pipe in pipelines %}
                 <tr>
                     <td>
-                        <a href="{% url 'bi:ingestion_pipeline_detail' pipe.pk %}" class="font-medium text-primary hover:underline">
+                        <a href="{% url 'bi:ingestion_pipeline_detail' pipe.pk %}" class="font-medium text-brand hover:underline">
                             {{ pipe.number }}
                         </a>
                         <div class="text-sm font-semibold text-slate-800">{{ pipe.name }}</div>
@@ -180,8 +180,8 @@
                         <span class="badge badge-slate">{{ pipe.get_ingestion_mode_display }}</span>
                     </td>
                     <td class="font-mono text-xs text-slate-700">{{ pipe.source_entity }}</td>
-                    <td class="font-mono text-xs text-primary">{{ pipe.target_staging_table }}</td>
-                    <td class="text-sm text-secondary">{{ pipe.get_schedule_cadence_display }}</td>
+                    <td class="font-mono text-xs text-brand">{{ pipe.target_staging_table }}</td>
+                    <td class="text-sm text-muted">{{ pipe.get_schedule_cadence_display }}</td>
                     <td>
                         {% if pipe.status == 'active' %}
                         <span class="badge badge-green">Active</span>
@@ -201,7 +201,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center py-6 text-secondary text-sm">
+                    <td colspan="7" class="text-center py-6 text-muted text-sm">
                         No pipelines associated with this connector yet.
                     </td>
                 </tr>
@@ -232,7 +232,7 @@
                 {% for run in runs %}
                 <tr>
                     <td>
-                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-primary hover:underline">
+                        <a href="{% url 'bi:ingestion_run_detail' run.pk %}" class="font-mono font-medium text-brand hover:underline">
                             {{ run.number }}
                         </a>
                     </td>
@@ -251,17 +251,17 @@
                         <span class="badge badge-slate">{{ run.get_status_display }}</span>
                         {% endif %}
                     </td>
-                    <td class="text-sm text-secondary">{{ run.duration_seconds }}s</td>
+                    <td class="text-sm text-muted">{{ run.duration_seconds }}s</td>
                     <td class="font-mono text-xs">
                         <span class="text-slate-800">{{ run.records_extracted }}</span> /
                         <span class="text-green-600 font-semibold">{{ run.records_inserted }}</span> /
                         <span class="text-red-500">{{ run.records_rejected }}</span>
                     </td>
-                    <td class="text-sm text-secondary">{{ run.started_at|date:"M d, H:i" }}</td>
+                    <td class="text-sm text-muted">{{ run.started_at|date:"M d, H:i" }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="text-center py-6 text-secondary text-sm">
+                    <td colspan="7" class="text-center py-6 text-muted text-sm">
                         No execution runs logged for this connector yet.
                     </td>
                 </tr>
