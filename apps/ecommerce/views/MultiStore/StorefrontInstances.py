@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
@@ -80,9 +81,10 @@ def storefront_instance_create(request):
         if form.is_valid():
             storefront = form.save(commit=False)
             storefront.tenant = request.tenant
-            if storefront.is_default:
-                StorefrontInstance.objects.filter(tenant=request.tenant, is_default=True).update(is_default=False)
-            storefront.save()
+            with transaction.atomic():
+                if storefront.is_default:
+                    StorefrontInstance.objects.filter(tenant=request.tenant, is_default=True).update(is_default=False)
+                storefront.save()
             write_audit_log(
                 request.user,
                 storefront,
@@ -109,9 +111,10 @@ def storefront_instance_edit(request, pk):
         form = StorefrontInstanceForm(request.POST, instance=storefront, tenant=request.tenant)
         if form.is_valid():
             storefront = form.save(commit=False)
-            if storefront.is_default:
-                StorefrontInstance.objects.filter(tenant=request.tenant, is_default=True).exclude(pk=storefront.pk).update(is_default=False)
-            storefront.save()
+            with transaction.atomic():
+                if storefront.is_default:
+                    StorefrontInstance.objects.filter(tenant=request.tenant, is_default=True).exclude(pk=storefront.pk).update(is_default=False)
+                storefront.save()
             write_audit_log(
                 request.user,
                 storefront,
