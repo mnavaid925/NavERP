@@ -101,8 +101,11 @@ class EcommerceConnectorForm(TenantUniqueMixin, TenantModelForm):
 
     def clean_timeout_seconds(self):
         val = self.cleaned_data.get("timeout_seconds")
-        if val is not None and val < 1:
-            raise forms.ValidationError("Timeout must be at least 1 second.")
+        if val is not None:
+            if val < 1:
+                raise forms.ValidationError("Timeout must be at least 1 second.")
+            if val > 300:
+                raise forms.ValidationError("Timeout cannot exceed 300 seconds (5 minutes).")
         return val
 
     def clean_rate_limit_per_minute(self):
