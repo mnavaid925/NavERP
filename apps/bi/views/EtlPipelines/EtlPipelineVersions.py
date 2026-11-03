@@ -163,6 +163,17 @@ def etl_pipeline_version_delete(request, pk):
     version = bi_object(request, EtlPipelineVersion, pk, select_related=("pipeline",))
     pipeline_pk = version.pipeline_id
     version_number = version.version_number
+
+    if version.pipeline.active_version_id == version.pk or (version.environment == "production" and version.status == "published"):
+        messages.error(
+            request,
+            f"Cannot delete Version {version_number}: it is the active production version. Reassign or promote another version before deletion.",
+        )
+        next_param = request.GET.get("next") or request.POST.get("next")
+        if next_param == "list":
+            return redirect("bi:etl_pipeline_version_list")
+        return redirect("bi:etl_pipeline_detail", pk=pipeline_pk)
+
     with transaction.atomic():
         write_audit_log(
             request.user,
