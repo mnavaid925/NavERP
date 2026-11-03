@@ -77,7 +77,7 @@ class Command(BaseCommand):
                         "status": "active",
                         "connection_config": {
                             "provider": "aws_s3",
-                            "bucket_name": f"{tenant.subdomain}-analytics-raw-ingress",
+                            "bucket_name": f"{getattr(tenant, 'slug', tenant.name.lower().replace(' ', '-'))}-analytics-raw-ingress",
                             "region": "us-east-1",
                             "prefix": "incoming/",
                         },
