@@ -77,6 +77,22 @@
 
 ## Reviewer 5: QA Smoke Tester
 
+### Critical
+- **[CS1] TypeError in write_audit_log call signature on all POST/mutation views**: `write_audit_log(user, obj, action, changes=None, tenant=None)` in `apps/core/utils.py:10` requires `user, obj, action`. All views in `apps/bi/views/DataIntegration/` pass `request, action=..., model_name=..., object_id=...`, which raises `TypeError: write_audit_log() got an unexpected keyword argument 'model_name'` on every POST save/delete/action (create, edit, delete, test, trigger, reset, retry). Update all 14 calls to `write_audit_log(request.user, obj, action, tenant=request.tenant)`.
+
+### Important
+- **[IS1] 500 ValueError on non-integer connector_id in pipeline list**: `GET /bi/pipelines/?connector_id=notanint` raises unhandled ValueError. Guard with `.isdigit()`.
+- **[IS2] 500 ValueError on non-integer pipeline_id in run list**: `GET /bi/runs/?pipeline_id=junk` raises unhandled ValueError. Guard with `.isdigit()`.
+- **[IS3] 500 ProtectedError on DataSourceConnector delete**: Deleting a connector referenced by pipelines raises uncaught `ProtectedError`. Wrap in `try ... except ProtectedError:` with user-friendly warning message.
+
+### Minor
+- *None*
+
+---
+
+## Reviewer 6: Security Reviewer
+
+
 
 
 
