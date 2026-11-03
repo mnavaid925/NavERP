@@ -44,6 +44,6 @@
 - [x] **M6**: Delete Icon Button Styling Consistency. Use `btn-icon btn-outline text-danger` for consistent ghost action buttons.
 - [x] **M7**: Breadcrumb Separator Class. Add `class="sep"` to breadcrumb separators.
 - [x] **M8**: Missing `list_select_related` in Django Admin for `TransformationStepAdmin`, `EtlPipelineVersionAdmin`, and `EtlPipelineRunAdmin`.
-- [ ] **M9**: Semantic Version Duplicate Validation. Check in `EtlPipelineVersionForm.clean()` that `version_number` is not already used on the same pipeline in this tenant.
+- [x] **M9**: Semantic Version Duplicate Validation. Check in `EtlPipelineVersionForm.clean()` that `version_number` is not already used on the same pipeline in this tenant.
 - [ ] **M10**: Active Production Version Deletion Block. In `etl_pipeline_version_delete`, prevent deleting active production version without prior deprecation/reassignment.
 - [ ] **M11**: Add Delete Action Button on Transformation Step and Pipeline Version Detail Views.
