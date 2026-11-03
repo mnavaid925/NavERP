@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
@@ -15,11 +16,19 @@ def data_integration_hub(request):
     cdc_qs = bi_scope(CdcSyncConfig.objects.all(), request)
     runs_qs = bi_scope(IngestionRun.objects.all(), request)
 
-    total_connectors = connectors_qs.count()
-    active_connectors = connectors_qs.filter(status="active").count()
+    connector_stats = connectors_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    total_connectors = connector_stats["total"]
+    active_connectors = connector_stats["active"]
 
-    total_pipelines = pipelines_qs.count()
-    active_pipelines = pipelines_qs.filter(status="active").count()
+    pipeline_stats = pipelines_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    total_pipelines = pipeline_stats["total"]
+    active_pipelines = pipeline_stats["active"]
 
     cdc_streams_count = cdc_qs.count()
     total_runs = runs_qs.count()
