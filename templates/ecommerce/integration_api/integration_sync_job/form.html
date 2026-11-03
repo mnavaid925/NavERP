@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Sync Job {{ sync_job.number }}{% else %}Trigger Sync Job{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:integrationsyncjob_list' %}">Sync Jobs</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ sync_job.number }}{% else %}Trigger{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Sync Execution: {{ sync_job.number }}{% else %}Trigger Synchronization Execution{% endif %}</h1>
+        <p class="text-secondary text-sm">Initiate an on-demand data exchange batch between NavERP and external connectors</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:integrationsyncjob_detail' sync_job.pk %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% else %}
+        <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Job Target &amp; Flow Parameters</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.connector.id_for_label }}">
+                        Target Integration Connector <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.connector }}
+                    {% if form.connector.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.connector.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.sync_entity.id_for_label }}">
+                        Data Entity Domain <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.sync_entity }}
+                    {% if form.sync_entity.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.sync_entity.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.direction.id_for_label }}">
+                        Sync Direction <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.direction }}
+                    {% if form.direction.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.direction.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.trigger_type.id_for_label }}">
+                        Trigger Origin <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.trigger_type }}
+                    {% if form.trigger_type.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.trigger_type.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.batch_id.id_for_label }}">
+                        Batch / Correlation ID
+                    </label>
+                    {{ form.batch_id }}
+                    {% if form.batch_id.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.batch_id.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Leave blank to auto-generate a random UUID</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.max_retries.id_for_label }}">
+                        Maximum Retries
+                    </label>
+                    {{ form.max_retries }}
+                    {% if form.max_retries.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.max_retries.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Payload &amp; Diagnostic Details</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.payload_preview.id_for_label }}">
+                    Payload Summary / Query Filter JSON
+                </label>
+                {{ form.payload_preview }}
+                {% if form.payload_preview.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payload_preview.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.error_summary.id_for_label }}">
+                    Error Summary / Diagnostic Trace
+                </label>
+                {{ form.error_summary }}
+                {% if form.error_summary.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.error_summary.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Execute Synchronization Job{% endif %}</span>
+        </button>
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:integrationsyncjob_detail' sync_job.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+        <a href="{% url 'ecommerce:integrationsyncjob_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
