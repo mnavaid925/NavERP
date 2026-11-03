@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Webhook {{ webhook.number }}{% else %}New Webhook Subscription{% endif %} — NavERP eCommerce{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'ecommerce:integration_api_hub' %}">Integration &amp; API</a>
+            <span>/</span>
+            <a href="{% url 'ecommerce:webhooksubscription_list' %}">Webhooks</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ webhook.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Webhook Subscription: {{ webhook.name }}{% else %}Register Outbound Webhook Subscription{% endif %}</h1>
+        <p class="text-secondary text-sm">Subscribe external endpoints to receive real-time order, inventory, customer, or catalog event notifications</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:webhooksubscription_detail' webhook.pk %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% else %}
+        <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Subscriber &amp; Destination Endpoint</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.name.id_for_label }}">
+                        Subscription Name <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.event_topic.id_for_label }}">
+                        Subscribed Event Topic <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.event_topic }}
+                    {% if form.event_topic.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.event_topic.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label font-medium" for="{{ form.target_url.id_for_label }}">
+                        Destination Endpoint URL <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.target_url }}
+                    {% if form.target_url.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.target_url.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Must be an HTTPS endpoint reachable over the internet or private network</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.status.id_for_label }}">
+                        Subscription Status <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.payload_format.id_for_label }}">
+                        Content-Type Format <span class="text-red-500">*</span>
+                    </label>
+                    {{ form.payload_format }}
+                    {% if form.payload_format.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.payload_format.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="flex items-center gap-2 cursor-pointer pt-2">
+                    {{ form.is_verify_ssl }}
+                    <span class="text-sm font-medium text-slate-800">Enforce Strict TLS / SSL Certificate Verification (Recommended)</span>
+                </label>
+                {% if form.is_verify_ssl.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.is_verify_ssl.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Security &amp; Circuit Breaker Limits</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.secret_key.id_for_label }}">
+                        HMAC-SHA256 Secret Key
+                    </label>
+                    {{ form.secret_key }}
+                    {% if form.secret_key.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.secret_key.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Used to compute the X-NavERP-Signature header. Leave blank to auto-generate.</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label font-medium" for="{{ form.max_consecutive_failures.id_for_label }}">
+                        Circuit Breaker Failure Threshold
+                    </label>
+                    {{ form.max_consecutive_failures }}
+                    {% if form.max_consecutive_failures.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.max_consecutive_failures.errors }}</div>{% endif %}
+                    <span class="text-xs text-muted">Number of consecutive 5xx/4xx errors before tripping circuit breaker to disabled</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.custom_headers.id_for_label }}">
+                    Custom Request Headers (JSON dictionary)
+                </label>
+                {{ form.custom_headers }}
+                {% if form.custom_headers.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.custom_headers.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label font-medium" for="{{ form.description.id_for_label }}">
+                    Internal Notes &amp; Description
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error text-xs text-red-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Webhook Subscription{% endif %}</span>
+        </button>
+        {% if is_edit %}
+        <a href="{% url 'ecommerce:webhooksubscription_detail' webhook.pk %}" class="btn btn-outline">Cancel</a>
+        {% else %}
+        <a href="{% url 'ecommerce:webhooksubscription_list' %}" class="btn btn-outline">Cancel</a>
+        {% endif %}
+    </div>
+</form>
+{% endblock %}
