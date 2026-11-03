@@ -44,4 +44,4 @@
 - [x] **M7**: `apps/bi/views/DataIntegration/IngestionPipelines.py:50` & `IngestionRuns.py:49` — **Defer heavy JSON fields in dropdown querysets**: Use `.only("id", "name")` when loading connector/pipeline dropdown options. Fixed in `17de00c0`, `b36e65a6`.
 - [x] **M8**: `apps/bi/models/DataIntegration/DataSourceConnectors.py` & `IngestionPipelines.py` — **Missing composite ordering indexes**: Add `(tenant, -created_at)` indexes `idx_bdsc_ten_created` and `idx_bing_ten_created`. Fixed in `13eadaf5`, `87f679f9`, `2e0601a4`.
 - [x] **M9**: `apps/bi/admin.py:24` — **Missing readonly_fields for webhook_secret in Django Admin**: Add `"webhook_secret"` to `readonly_fields`. Fixed in `bfe97af9`.
-- [ ] **M10**: `apps/bi/views/DataIntegration/IngestionPipelines.py:164` — **Missing status guard on pipeline trigger**: Check if `pipeline.status == 'paused'` before triggering manual run.
+- [x] **M10**: `apps/bi/views/DataIntegration/IngestionPipelines.py:164` — **Missing status guard on pipeline trigger**: Check if `pipeline.status == 'paused'` before triggering manual run. Fixed in `7deec984`.
