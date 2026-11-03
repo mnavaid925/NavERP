@@ -46,6 +46,7 @@ def api_credential_list(request):
     revoked_count = stats["revoked_count"]
 
     paginator = Paginator(qs, 15)
+    paginator._count = total_count
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
