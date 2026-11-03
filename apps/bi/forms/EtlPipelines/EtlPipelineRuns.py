@@ -30,7 +30,7 @@ class EtlPipelineRunForm(TenantUniqueMixin, forms.ModelForm):
         self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant)
+            self.fields["pipeline"].queryset = EtlPipeline.objects.filter(tenant=self.tenant).only("id", "name", "number")
             self.fields["version"].queryset = EtlPipelineVersion.objects.filter(tenant=self.tenant)
 
     def clean(self):
