@@ -82,8 +82,8 @@ def deployment_pipeline_detail(request, pk):
 def deployment_pipeline_create(request):
     initial = {}
     environment_id = request.GET.get("environment")
-    if environment_id:
-        initial["environment"] = environment_id
+    if environment_id and environment_id.isdigit():
+        initial["environment"] = int(environment_id)
 
     if request.method == "POST":
         form = DeploymentPipelineForm(request.POST, tenant=request.tenant)
