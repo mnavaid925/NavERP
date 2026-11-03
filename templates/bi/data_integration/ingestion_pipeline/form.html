@@ -131,13 +131,6 @@
                             {% if form.mapping_template.errors %}<div class="form-error">{{ form.mapping_template.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="{{ form.webhook_secret.id_for_label }}">Webhook Shared Secret / HMAC Key</label>
-                        {{ form.webhook_secret }}
-                        <p class="text-xs text-secondary mt-1">Optional shared secret key for validating inbound streaming webhook payloads.</p>
-                        {% if form.webhook_secret.errors %}<div class="form-error">{{ form.webhook_secret.errors.0 }}</div>{% endif %}
-                    </div>
                 </div>
 
                 <div class="mt-8 pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
