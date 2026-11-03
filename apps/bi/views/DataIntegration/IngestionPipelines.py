@@ -93,13 +93,7 @@ def ingestion_pipeline_create(request):
         form = IngestionPipelineForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             pipeline = form.save()
-            write_audit_log(
-                request,
-                action="create",
-                model_name="IngestionPipeline",
-                object_id=pipeline.pk,
-                description=f"Created Ingestion Pipeline {pipeline.number} ({pipeline.name})",
-            )
+            write_audit_log(request.user, pipeline, "create", tenant=request.tenant)
             messages.success(request, f"Ingestion Pipeline {pipeline.number} created successfully.")
             return redirect("bi:ingestion_pipeline_detail", pk=pipeline.pk)
     else:
@@ -120,13 +114,7 @@ def ingestion_pipeline_edit(request, pk):
         form = IngestionPipelineForm(request.POST, instance=pipeline, tenant=request.tenant)
         if form.is_valid():
             pipeline = form.save()
-            write_audit_log(
-                request,
-                action="update",
-                model_name="IngestionPipeline",
-                object_id=pipeline.pk,
-                description=f"Updated Ingestion Pipeline {pipeline.number} ({pipeline.name})",
-            )
+            write_audit_log(request.user, pipeline, "update", tenant=request.tenant)
             messages.success(request, f"Ingestion Pipeline {pipeline.number} updated successfully.")
             return redirect("bi:ingestion_pipeline_detail", pk=pipeline.pk)
     else:
@@ -147,14 +135,8 @@ def ingestion_pipeline_delete(request, pk):
     pipeline = bi_object(request, IngestionPipeline, pk)
     number = pipeline.number
     name = pipeline.name
+    write_audit_log(request.user, pipeline, "delete", tenant=request.tenant)
     pipeline.delete()
-    write_audit_log(
-        request,
-        action="delete",
-        model_name="IngestionPipeline",
-        object_id=pk,
-        description=f"Deleted Ingestion Pipeline {number} ({name})",
-    )
     messages.success(request, f"Ingestion Pipeline {number} deleted successfully.")
     return redirect("bi:ingestion_pipeline_list")
 
@@ -185,12 +167,6 @@ def ingestion_pipeline_trigger(request, pk):
     pipeline.last_run_at = now
     pipeline.save(update_fields=["last_run_at", "updated_at"])
 
-    write_audit_log(
-        request,
-        action="execute_pipeline",
-        model_name="IngestionPipeline",
-        object_id=pipeline.pk,
-        description=f"Triggered manual run {run.number} for pipeline {pipeline.number}",
-    )
+    write_audit_log(request.user, pipeline, "trigger", changes={"run_number": run.number}, tenant=request.tenant)
     messages.success(request, f"Pipeline {pipeline.number} executed successfully. Run {run.number} recorded.")
     return redirect("bi:ingestion_run_detail", pk=run.pk)
