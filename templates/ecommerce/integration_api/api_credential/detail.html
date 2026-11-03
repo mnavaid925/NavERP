@@ -109,7 +109,7 @@
                     <div class="md:col-span-2">
                         <div class="text-xs text-muted uppercase font-semibold mb-1">Granted Permission Scopes</div>
                         <div class="flex flex-wrap gap-1.5 mt-1">
-                            {% for scope in credential.scopes.split %}
+                            {% for scope in credential.scopes_list %}
                             <span class="badge badge-info font-mono text-xs">{{ scope }}</span>
                             {% empty %}
                             <span class="text-muted text-sm italic">No specific scopes defined</span>
