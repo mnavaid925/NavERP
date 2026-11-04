@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}{{ data_mart.name }} — Data Marts — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_mart_list' %}">Data Marts</a>
+            <span class="sep">/</span>
+            <span>{{ data_mart.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ data_mart.name }}</h1>
+            {% if data_mart.certification_status == 'certified' %}
+            <span class="badge badge-green">{{ data_mart.get_certification_status_display }}</span>
+            {% elif data_mart.certification_status == 'in_review' %}
+            <span class="badge badge-info">{{ data_mart.get_certification_status_display }}</span>
+            {% elif data_mart.certification_status == 'draft' %}
+            <span class="badge badge-amber">{{ data_mart.get_certification_status_display }}</span>
+            {% else %}
+            <span class="badge badge-muted">{{ data_mart.get_certification_status_display }}</span>
+            {% endif %}
+            {% if not data_mart.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ data_mart.number }} · {{ data_mart.code }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_mart_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Marts</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:data_mart_edit' pk=data_mart.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Mart</span>
+        </a>
+        <form method="post" action="{% url 'bi:data_mart_delete' pk=data_mart.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete data mart {{ data_mart.name|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Overview Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Domain Info Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">Domain &amp; Access Specification</h2>
+            <span class="text-xs text-muted">ID: {{ data_mart.number }}</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Subject Area</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ data_mart.get_subject_area_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Access Tier</div>
+                    <div class="text-sm font-medium mt-1">
+                        {% if data_mart.access_tier == 'public' %}
+                        <span class="badge badge-green">{{ data_mart.get_access_tier_display }}</span>
+                        {% elif data_mart.access_tier == 'department' %}
+                        <span class="badge badge-info">{{ data_mart.get_access_tier_display }}</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ data_mart.get_access_tier_display }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Refresh Cadence</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ data_mart.get_refresh_cadence_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Active Status</div>
+                    <div class="text-sm font-medium mt-1">
+                        {% if data_mart.is_active %}
+                        <span class="badge badge-green">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if data_mart.description %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Description &amp; Purpose</div>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ data_mart.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stewardship Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-sm font-semibold text-slate-800">Governance &amp; Stewardship</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Organizational Unit</div>
+                <div class="text-sm font-medium text-slate-900 mt-1">
+                    {% if data_mart.org_unit %}{{ data_mart.org_unit.name }}{% else %}<span class="text-muted">No Department Bound</span>{% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Business Domain Owner</div>
+                <div class="text-sm font-medium text-slate-900 mt-1">
+                    {% if data_mart.owner %}{{ data_mart.owner.get_full_name|default:data_mart.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                </div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Technical Data Steward</div>
+                <div class="text-sm font-medium text-slate-900 mt-1">
+                    {% if data_mart.steward %}{{ data_mart.steward.get_full_name|default:data_mart.steward.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100 text-xs text-muted space-y-1">
+                <div>Created: {{ data_mart.created_at|date:"Y-m-d H:i" }}</div>
+                <div>Updated: {{ data_mart.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Associated Tables Card -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-sm font-semibold text-slate-800">Assigned Analytical Tables</h2>
+            <p class="text-xs text-muted">Fact, dimension, and aggregate tables published in this data mart</p>
+        </div>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_table_create' %}?data_mart={{ data_mart.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i>
+            <span>Add Table</span>
+        </a>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Table Name</th>
+                    <th>Type</th>
+                    <th>Schema</th>
+                    <th>Zone</th>
+                    <th>Grain</th>
+                    <th class="text-right">Rows</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in tables %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="text-primary hover:underline">
+                            {{ table.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ table.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ table.table_name }}</div>
+                    </td>
+                    <td>
+                        {% if table.table_type == 'fact' %}
+                        <span class="badge badge-info">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'dimension' %}
+                        <span class="badge badge-green">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'aggregate' %}
+                        <span class="badge badge-purple">{{ table.get_table_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs text-slate-700">{{ table.get_schema_type_display }}</span></td>
+                    <td><span class="badge badge-slate">{{ table.lakehouse_zone.name }}</span></td>
+                    <td><span class="text-xs text-slate-600">{{ table.get_grain_display }}</span></td>
+                    <td class="text-right font-mono text-xs text-slate-700">{{ table.row_count }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="btn-icon btn-outline" title="View Table">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-6">
+                            <i data-lucide="table" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No tables assigned to this mart</div>
+                            <p class="empty-state-text">Publish fact or dimension tables to this subject mart to populate reporting queries.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
