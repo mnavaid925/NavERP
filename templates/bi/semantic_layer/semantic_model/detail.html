@@ -1,0 +1,414 @@
+{% extends "base.html" %}
+
+{% block title %}{{ model.name }} ({{ model.number }}) — Semantic Model — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_model_list' %}">Semantic Models</a>
+            <span class="sep">/</span>
+            <span>{{ model.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ model.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ model.number }}</span>
+            {% if model.certification_status == 'certified' %}
+            <span class="badge badge-green">
+                <i data-lucide="check-circle" class="w-3 h-3 inline mr-1"></i>Certified
+            </span>
+            {% elif model.certification_status == 'in_review' %}
+            <span class="badge badge-amber">In Review</span>
+            {% elif model.certification_status == 'deprecated' %}
+            <span class="badge badge-red">Deprecated</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+            {% if model.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ model.description|default:"No description provided for this semantic model." }}</p>
+    </div>
+    <div class="page-actions">
+        {% if model.warehouse_table %}
+        <form method="post" action="{% url 'bi:semantic_model_introspect' model.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Re-sync columns and verify fingerprint from warehouse table">
+                <i data-lucide="refresh-cw"></i>
+                <span>Introspect Schema</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'bi:calculated_measure_create' %}?model={{ model.pk }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Add Measure</span>
+        </a>
+        <a href="{% url 'bi:drill_hierarchy_create' %}?model={{ model.pk }}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i>
+            <span>Add Hierarchy</span>
+        </a>
+        <a href="{% url 'bi:semantic_model_edit' model.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:semantic_model_delete' model.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete semantic model {{ model.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Model Configuration Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Model Architecture & Granularity</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Identifier Code</span>
+                        <span class="font-mono font-medium text-slate-800">{{ model.code }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Model Classification</span>
+                        <span class="font-medium text-slate-800">{{ model.get_model_type_display }}</span>
+                        {% if model.is_conformed_dimension %}
+                        <span class="badge badge-green text-xs ml-1">Conformed</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Grain Description</span>
+                        <span class="text-slate-700">{{ model.grain_description|default:"Not specified" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Slowly Changing Dimension (SCD)</span>
+                        <span class="font-medium text-slate-800">{{ model.get_scd_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Primary Key Column</span>
+                        <span class="font-mono text-slate-800">{{ model.primary_key_column|default:"id" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Natural Business Keys</span>
+                        <span class="font-mono text-slate-800">{{ model.natural_key_columns|default:"None defined" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Underlying Warehouse Table</span>
+                        {% if model.warehouse_table %}
+                        <a href="{% url 'bi:warehouse_table_detail' model.warehouse_table.pk %}" class="text-primary hover:underline font-mono">
+                            {{ model.warehouse_table.name }} ({{ model.warehouse_table.table_name }})
+                        </a>
+                        {% elif model.is_virtual_view %}
+                        <span class="text-muted italic">Virtual Query (No physical table)</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Bound Data Mart</span>
+                        {% if model.data_mart %}
+                        <a href="{% url 'bi:data_mart_detail' model.data_mart.pk %}" class="text-primary hover:underline">
+                            {{ model.data_mart.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Enterprise (Cross-Mart)</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Access Tier</span>
+                        <span class="font-medium text-slate-800">{{ model.get_access_tier_display }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if model.is_virtual_view or model.sql_definition %}
+        <!-- SQL View Definition -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Virtual Analytical SQL Expression</h2>
+            </div>
+            <div class="card-body p-0">
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded-b text-xs font-mono overflow-x-auto leading-relaxed">{{ model.sql_definition|default:"-- No custom SQL query defined." }}</pre>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Calculated Measures Table -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold">Calculated Measures ({{ measures.count }})</h2>
+                    <p class="text-xs text-muted">Centrally authored KPIs, aggregations, ratios, and time-intelligence metrics</p>
+                </div>
+                <a href="{% url 'bi:calculated_measure_create' %}?model={{ model.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Add Measure</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Measure Name</th>
+                            <th>Aggregation</th>
+                            <th>Formula / Source</th>
+                            <th>Time Intelligence</th>
+                            <th>Format</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cm in measures %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:calculated_measure_detail' cm.pk %}" class="text-primary hover:underline">
+                                    {{ cm.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ cm.name }}</div>
+                                <div class="text-xs text-muted font-mono">{{ cm.code }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ cm.get_aggregation_type_display }}</span>
+                            </td>
+                            <td class="font-mono text-xs text-slate-700">
+                                {% if cm.formula_expression %}
+                                <span class="bg-slate-100 px-1.5 py-0.5 rounded">{{ cm.formula_expression|truncatechars:35 }}</span>
+                                {% elif cm.source_column %}
+                                <span class="text-slate-600">{{ cm.source_column }}</span>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if cm.time_intelligence != 'none' %}
+                                <span class="badge badge-amber text-xs">{{ cm.get_time_intelligence_display }}</span>
+                                {% else %}
+                                <span class="text-xs text-muted">Standard</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-xs font-medium text-slate-700">{{ cm.get_format_string_display }}</span>
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'bi:calculated_measure_detail' cm.pk %}" class="btn btn-icon" title="View Measure">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:calculated_measure_edit' cm.pk %}" class="btn btn-icon" title="Edit Measure">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="py-6 text-center text-muted text-sm">
+                                No calculated measures bound to this model. Click "Add Measure" to create one.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Drill Hierarchies -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold">Drill Hierarchies ({{ drill_hierarchies.count }})</h2>
+                    <p class="text-xs text-muted">Multi-level dimensional drill paths for self-service analytics</p>
+                </div>
+                <a href="{% url 'bi:drill_hierarchy_create' %}?model={{ model.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Add Hierarchy</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Hierarchy Name</th>
+                            <th>Type</th>
+                            <th>Levels</th>
+                            <th>Primary Path</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dh in drill_hierarchies %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="text-primary hover:underline">
+                                    {{ dh.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ dh.name }}</div>
+                                <div class="text-xs text-muted font-mono">{{ dh.code }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate">{{ dh.get_hierarchy_type_display }}</span>
+                            </td>
+                            <td>
+                                <span class="text-xs font-medium text-slate-700">{{ dh.levels_json|length }} levels</span>
+                            </td>
+                            <td>
+                                {% if dh.primary_drill_path %}
+                                <span class="badge badge-green text-xs">Primary</span>
+                                {% else %}
+                                <span class="text-xs text-muted">Secondary</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="btn btn-icon" title="View Hierarchy">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:drill_hierarchy_edit' dh.pk %}" class="btn btn-icon" title="Edit Hierarchy">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-6 text-center text-muted text-sm">
+                                No drill hierarchies configured for this model. Click "Add Hierarchy" to define one.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (1 col) -->
+    <div class="space-y-6">
+        <!-- Certification Governance Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Governance & Certification</h3>
+            </div>
+            <div class="card-body">
+                <div class="space-y-3">
+                    <div>
+                        <span class="text-xs text-muted uppercase font-medium block">Current Status</span>
+                        <div class="mt-1">
+                            {% if model.certification_status == 'certified' %}
+                            <span class="badge badge-green">
+                                <i data-lucide="check-circle" class="w-3 h-3 inline mr-1"></i>Certified Corporate Truth
+                            </span>
+                            {% elif model.certification_status == 'in_review' %}
+                            <span class="badge badge-amber">Under Review</span>
+                            {% elif model.certification_status == 'deprecated' %}
+                            <span class="badge badge-red">Deprecated</span>
+                            {% else %}
+                            <span class="badge badge-slate">Draft Model</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if model.certified_by %}
+                    <div>
+                        <span class="text-xs text-muted uppercase font-medium block">Certified By</span>
+                        <span class="text-sm font-medium text-slate-800">{{ model.certified_by.get_full_name|default:model.certified_by.username }}</span>
+                        {% if model.certified_at %}
+                        <span class="text-xs text-muted block">{{ model.certified_at|date:"M d, Y H:i" }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% if model.certification_notes %}
+                    <div>
+                        <span class="text-xs text-muted uppercase font-medium block">Certification Notes</span>
+                        <p class="text-xs text-slate-700 bg-slate-50 p-2 rounded mt-1">{{ model.certification_notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="border-t border-slate-100 pt-4 mt-4">
+                    <h4 class="text-xs font-semibold uppercase text-muted mb-2">Update Certification Status</h4>
+                    <form method="post" action="{% url 'bi:semantic_model_certify' model.pk %}" class="space-y-3">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="form-label text-xs">New Status</label>
+                            {{ certify_form.certification_status }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs">Sign-off Notes</label>
+                            {{ certify_form.certification_notes }}
+                        </div>
+                        <button type="submit" class="btn btn-outline btn-sm w-full">
+                            <i data-lucide="shield-check"></i>
+                            <span>Update Certification</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schema Introspection Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Metadata Introspection</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Schema Fingerprint</span>
+                    <span class="font-mono text-xs font-semibold text-slate-800">{{ model.source_fingerprint|default:"Not introspected" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Last Introspected</span>
+                    <span class="text-slate-700 text-xs">{{ model.last_introspected_at|date:"M d, Y H:i"|default:"Never" }}</span>
+                </div>
+                {% if model.warehouse_table %}
+                <div class="pt-2">
+                    <form method="post" action="{% url 'bi:semantic_model_introspect' model.pk %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline btn-sm w-full">
+                            <i data-lucide="refresh-cw"></i>
+                            <span>Run Introspection Now</span>
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Audit & Stewardship -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Stewardship & Audit</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Owner / Author</span>
+                    <span class="font-medium text-slate-800">{{ model.owner.get_full_name|default:model.owner.username|default:"Unassigned" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Created</span>
+                    <span class="text-slate-700 text-xs">{{ model.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Last Updated</span>
+                    <span class="text-slate-700 text-xs">{{ model.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
