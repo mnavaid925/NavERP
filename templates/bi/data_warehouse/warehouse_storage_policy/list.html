@@ -216,7 +216,7 @@
                     <td colspan="9">
                         <div class="empty-state">
                             <i data-lucide="archive" class="empty-state-icon"></i>
-                            <div class="empty-state-title">No storage policies configured</div>
+                            <h3 class="empty-state-title">No storage policies configured</h3>
                             <p class="empty-state-text">Create partition, compression, and lifecycle rules to optimize analytical query speed and storage costs.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'bi:warehouse_storage_policy_create' %}" class="btn btn-primary mt-4">
