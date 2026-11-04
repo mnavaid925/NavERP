@@ -61,7 +61,10 @@ class MdmReferenceCodeForm(TenantUniqueMixin, TenantModelForm):
             superseded_qs = MdmReferenceCode.objects.filter(tenant=self.tenant)
             if self.instance and self.instance.pk:
                 superseded_qs = superseded_qs.exclude(pk=self.instance.pk)
-            self.fields["superseded_by"].queryset = superseded_qs.order_by("code_set", "canonical_code")
+            self.fields["superseded_by"].queryset = (
+                superseded_qs.only("id", "code_set", "canonical_code", "canonical_name", "source_system", "source_code")
+                .order_by("code_set", "canonical_code")
+            )
 
     def clean_attributes_text(self):
         data = self.cleaned_data.get("attributes_text", "").strip()
