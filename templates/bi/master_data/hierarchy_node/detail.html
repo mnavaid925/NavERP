@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}{{ node.number }} — {{ node.name }} — Hierarchy Nodes — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_hierarchy_node_list' %}">Hierarchy Nodes</a>
+            <span class="sep">/</span>
+            <span>{{ node.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ node.name }}</h1>
+            {% if node.is_active %}
+            <span class="badge badge-green text-xs">Active</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">Inactive</span>
+            {% endif %}
+            <span class="badge badge-info text-xs">{{ node.get_hierarchy_type_display }}</span>
+            <span class="badge badge-slate text-xs font-mono">Level {{ node.level }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Code: {{ node.code }} · Path: {{ node.path|default:"Root" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_hierarchy_node_edit' node.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Node</span>
+        </a>
+        <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Nodes</span>
+        </a>
+    </div>
+</div>
+
+<!-- Ancestor Tree Breadcrumb Trail -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-900 text-sm">Hierarchy Rollup Path</h3>
+    </div>
+    <div class="card-body">
+        <div class="flex flex-wrap items-center gap-2 text-sm">
+            <a href="{% url 'bi:mdm_hierarchy_node_list' %}?hierarchy_type={{ node.hierarchy_type }}" class="font-semibold text-primary hover:underline">
+                {{ node.get_hierarchy_type_display }}
+            </a>
+            {% for ancestor in ancestors %}
+            <span class="text-slate-400">/</span>
+            <a href="{% url 'bi:mdm_hierarchy_node_detail' ancestor.pk %}" class="text-slate-700 hover:text-primary">
+                {{ ancestor.name }} (L{{ ancestor.level }})
+            </a>
+            {% endfor %}
+            <span class="text-slate-400">/</span>
+            <span class="font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
+                {{ node.name }} (Current)
+            </span>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Node Details & Child Nodes -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Node Details Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Node Specification & Properties</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Relationship Semantic</dt>
+                        <dd class="font-medium text-slate-800">{{ node.relationship_kind }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Sort Order</dt>
+                        <dd class="font-mono text-slate-800">{{ node.sort_order }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Valid Effective From</dt>
+                        <dd class="text-slate-800">{{ node.valid_from|date:"M d, Y"|default:"Open-ended" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Valid Effective To</dt>
+                        <dd class="text-slate-800">{{ node.valid_to|date:"M d, Y"|default:"Active indefinitely" }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs text-muted">Description</dt>
+                        <dd class="text-slate-700 whitespace-pre-line">{{ node.description|default:"No description recorded." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Immediate Child Nodes -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Subordinate Child Nodes</h3>
+                <span class="text-xs text-muted">{{ children.count }} Immediate Children</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Child Node Name</th>
+                            <th>Code</th>
+                            <th>Order</th>
+                            <th>Status</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for child in children %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'bi:mdm_hierarchy_node_detail' child.pk %}" class="text-primary hover:underline">
+                                    {{ child.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm font-medium text-slate-900">{{ child.name }}</td>
+                            <td class="font-mono text-xs text-muted">{{ child.code }}</td>
+                            <td class="font-mono text-xs">{{ child.sort_order }}</td>
+                            <td>
+                                {% if child.is_active %}
+                                <span class="badge badge-green text-xs">Active</span>
+                                {% else %}
+                                <span class="badge badge-muted text-xs">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:mdm_hierarchy_node_detail' child.pk %}" class="btn btn-icon" title="View Child">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-xs text-muted">
+                                This node is currently a leaf node (no child branches).
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Spine Linkages & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Associated Master Entities</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                {% if node.golden_record %}
+                <div>
+                    <span class="text-muted block">Linked Golden Master:</span>
+                    <a href="{% url 'bi:mdm_golden_record_detail' node.golden_record.pk %}" class="font-semibold text-primary hover:underline">
+                        {{ node.golden_record.name }}
+                    </a>
+                    <span class="text-muted block font-mono">{{ node.golden_record.number }}</span>
+                </div>
+                {% endif %}
+                {% if node.party %}
+                <div>
+                    <span class="text-muted block">Core Party Entity:</span>
+                    <span class="font-semibold text-slate-800">{{ node.party.name }}</span>
+                    <span class="text-muted block font-mono">Party #{{ node.party.pk }}</span>
+                </div>
+                {% endif %}
+                {% if node.org_unit %}
+                <div>
+                    <span class="text-muted block">Organizational Unit:</span>
+                    <span class="font-semibold text-slate-800">{{ node.org_unit.name }}</span>
+                    <span class="text-muted block font-mono">OrgUnit #{{ node.org_unit.pk }}</span>
+                </div>
+                {% endif %}
+                {% if node.item_category %}
+                <div>
+                    <span class="text-muted block">Product Taxonomy Category:</span>
+                    <span class="font-semibold text-slate-800">{{ node.item_category.name }}</span>
+                </div>
+                {% endif %}
+                {% if not node.golden_record and not node.party and not node.org_unit and not node.item_category %}
+                <p class="text-muted">Pure organizational grouping node without direct entity reference.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Node Actions</h3>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'bi:mdm_hierarchy_node_edit' node.pk %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Hierarchy Node</span>
+                </a>
+                <form method="post" action="{% url 'bi:mdm_hierarchy_node_delete' node.pk %}" onsubmit="return confirm('Delete hierarchy node {{ node.number }} and its subordinate tree relationships?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 w-full justify-center">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Node</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
