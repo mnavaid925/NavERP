@@ -59,4 +59,8 @@ class WarehouseStoragePolicyForm(TenantUniqueMixin, TenantModelForm):
         if strategy and strategy != "none" and not key:
             self.add_error("partition_key", "A partition key column must be specified when partition strategy is not None.")
 
+        time_travel = cleaned_data.get("time_travel_days")
+        if time_travel is not None and (time_travel < 0 or time_travel > 90):
+            self.add_error("time_travel_days", "Time travel retention must be between 0 and 90 days.")
+
         return cleaned_data
