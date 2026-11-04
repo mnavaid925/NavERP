@@ -116,6 +116,10 @@ class DataQualityException(TenantNumbered):
             models.Index(fields=["tenant", "severity"], name="idx_bdqe_ten_sev"),
             models.Index(fields=["tenant", "exception_type"], name="idx_bdqe_ten_etype"),
             models.Index(fields=["tenant", "rule"], name="idx_bdqe_ten_rule"),
+            models.Index(fields=["tenant", "profile"], name="idx_bdqe_ten_prof"),
+            models.Index(fields=["tenant", "assigned_steward"], name="idx_bdqe_ten_stew"),
+            models.Index(fields=["tenant", "warehouse_table"], name="idx_bdqe_ten_wtbl"),
+            models.Index(fields=["tenant", "semantic_model"], name="idx_bdqe_ten_smdl"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdqe_ten_active"),
             models.Index(fields=["tenant", "-created_at"], name="idx_bdqe_ten_created"),
         ]
