@@ -60,7 +60,7 @@ class MdmGoldenRecordForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["party_role"].queryset = PartyRole.objects.filter(tenant=self.tenant).order_by("role_type")
+            self.fields["party_role"].queryset = PartyRole.objects.filter(tenant=self.tenant).order_by("role")
             self.fields["item"].queryset = Item.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["asset"].queryset = Asset.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["warehouse_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant).order_by("name")
