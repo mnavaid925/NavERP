@@ -12,7 +12,7 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.2 ETL/ELT & Data Pipelines**: Visual DAG pipeline designer, transformation steps (joins, aggregates, pivots, casts), version promotion, and run execution logs.
 - **10.3 Data Warehouse & Lakehouse Management**: Star/snowflake schemas, facts & dimensions, storage tiers, partition pruning.
 - **10.4 Semantic Layer & Metrics Store**: Reusable metrics, calculated KPIs, dimensions, business glossary, and virtual views.
-- **10.5 Self-Service Data Discovery & Preparation**: Data wrangling recipes, profiling, catalog search, dataset sharing.
+- **10.5 Data Quality & Cleansing**: Automated profiling, declarative validation rules, steward exception remediation queues, executive Data Trust Index (DTI) scorecards.
 - **10.6 Ad-hoc Query & SQL Studio**: Interactive SQL editor, query history, permission-governed result sets, pushdown query runner.
 - **10.7 Metadata & Data Catalog**: Enterprise catalog, automated schema discovery, data classification, and end-to-end lineage graph.
 - **10.8 Master Data Management (MDM) Analytics**: Golden record resolution, survivorship rules, entity matching.
@@ -333,5 +333,86 @@ In `apps/core/navigation.py`:
 - **Virtual View SQL Requirement**: `SemanticModelForm.clean()` enforces non-empty `sql_definition` when `is_virtual_view` is true.
 - **Audit Logging Protocol**: All mutating operations invoke `write_audit_log(request.user, instance, "<action>", tenant=request.tenant)`. Delete views log before calling `instance.delete()`.
 - **Queryset Pre-evaluation**: Reverse relation counts in detail headers evaluate via `list()` in view and use `|length` in templates to eliminate duplicate counting queries.
+
+---
+
+## Sub-module 10.5: Data Quality & Cleansing
+
+### Models
+1. **`DataQualityProfile`** (`apps/bi/models/DataQuality/DataQualityProfiles.py`)
+   - Prefix: `BDQP-` (`BDQP-00001`)
+   - Fields: `name`, `target_type` (`warehouse_table`, `semantic_model`), `warehouse_table` (`bi.WarehouseTable`, `CASCADE`), `semantic_model` (`bi.SemanticModel`, `CASCADE`), `status` (`pending`, `running`, `completed`, `failed`), `total_row_count`, `total_column_count`, `completeness_score`, `validity_score`, `uniqueness_score`, `consistency_score`, `timeliness_score`, `column_profiles_json`, `profiled_by` (`auth.User`, `SET_NULL`), `profiled_at`, `duration_seconds`, `error_message`, `notes`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, number)`. Composite indexes on `(tenant, status)`, `(tenant, target_type)`, `(tenant, warehouse_table)`, `(tenant, semantic_model)`, `(tenant, -created_at)`.
+
+2. **`DataQualityRule`** (`apps/bi/models/DataQuality/DataQualityRules.py`)
+   - Prefix: `BDQR-` (`BDQR-00001`)
+   - Fields: `name`, `code` (slug), `rule_category` (`validation`, `anomaly_detection`, `uniqueness`, `standardization`, `custom_sql`), `dimension` (`completeness`, `accuracy`, `consistency`, `timeliness`, `uniqueness`, `validity`), `target_type` (`warehouse_table`, `semantic_model`), `warehouse_table` (`bi.WarehouseTable`, `CASCADE`), `semantic_model` (`bi.SemanticModel`, `CASCADE`), `target_column`, `rule_type` (`not_null`, `unique`, `range_between`, `regex_pattern`, `set_membership`, `referential_integrity`, `date_freshness`, `string_standardization`, `duplicate_cluster`, `custom_sql`), `parameters_json`, `severity` (`info`, `warning`, `critical`, `fatal`), `failure_tolerance_pct`, `last_run_at`, `last_status` (`passed`, `warning`, `failed`, `error`), `pass_rate_pct`, `records_evaluated`, `records_passed`, `records_failed`, `steward` (`auth.User`, `SET_NULL`), `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`. Composite indexes on `(tenant, dimension)`, `(tenant, rule_type)`, `(tenant, severity)`, `(tenant, last_status)`, `(tenant, warehouse_table)`, `(tenant, semantic_model)`, `(tenant, -last_run_at)`.
+
+3. **`DataQualityException`** (`apps/bi/models/DataQuality/DataQualityExceptions.py`)
+   - Prefix: `BDQE-` (`BDQE-00001`)
+   - Fields: `profile` (`bi.DataQualityProfile`, `SET_NULL`), `rule` (`bi.DataQualityRule`, `SET_NULL`), `target_type` (`warehouse_table`, `semantic_model`), `warehouse_table` (`bi.WarehouseTable`, `SET_NULL`), `semantic_model` (`bi.SemanticModel`, `SET_NULL`), `target_column`, `record_identifier`, `exception_type` (`null_value`, `duplicate_key`, `range_violation`, `pattern_mismatch`, `fk_orphan`, `freshness_lag`, `format_error`, `schema_drift`, `fuzzy_duplicate`), `invalid_value`, `expected_condition`, `severity` (`info`, `warning`, `critical`, `fatal`), `status` (`open`, `investigating`, `remediated`, `suppressed_false_positive`, `accepted_risk`, `rejected`), `remediation_action` (`none`, `investigate`, `enrich_data`, `correct_value`, `suppress`, `delete_record`, `quarantine`), `proposed_value`, `remediated_value`, `resolution_notes`, `assigned_steward` (`auth.User`, `SET_NULL`), `resolved_by` (`auth.User`, `SET_NULL`), `resolved_at`.
+   - Constraints & Indexes: Unique constraint on `(tenant, number)`. Composite indexes on `(tenant, status)`, `(tenant, severity)`, `(tenant, exception_type)`, `(tenant, profile)`, `(tenant, assigned_steward)`, `(tenant, warehouse_table)`, `(tenant, semantic_model)`, `(tenant, -created_at)`.
+
+4. **`DataQualityScorecard`** (`apps/bi/models/DataQuality/DataQualityScorecards.py`)
+   - Prefix: `BDQS-` (`BDQS-00001`)
+   - Fields: `name`, `code` (slug), `scope_type` (`tenant_wide`, `warehouse_table`, `semantic_model`, `data_mart`, `department`), `warehouse_table` (`bi.WarehouseTable`, `SET_NULL`), `semantic_model` (`bi.SemanticModel`, `SET_NULL`), `data_mart` (`bi.DataMart`, `SET_NULL`), `org_unit` (`core.OrgUnit`, `SET_NULL`), `evaluation_period` (`real_time`, `daily`, `weekly`, `monthly`, `quarterly`), `overall_quality_score`, `target_sla_pct`, `grade` (`A`, `B`, `C`, `D`, `F`), `health_status` (`healthy`, `needs_attention`, `critical`, `failing`), `meets_sla`, `completeness_score`, `accuracy_score`, `consistency_score`, `timeliness_score`, `uniqueness_score`, `validity_score`, `total_rules_evaluated`, `passed_rules_count`, `failed_rules_count`, `open_exceptions_count`, `critical_exceptions_count`, `last_calculated_at`, `steward` (`auth.User`, `SET_NULL`), `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`. Composite indexes on `(tenant, scope_type)`, `(tenant, grade)`, `(tenant, health_status)`, `(tenant, meets_sla)`, `(tenant, -created_at)`.
+
+### URLs & Routes
+- Master Quality Overview Dashboard: `bi:quality_overview` (`/bi/data-quality/`)
+- Data Quality Profiles:
+  - `bi:data_quality_profile_list` (`/bi/data-quality/profiles/`)
+  - `bi:data_quality_profile_create` (`/bi/data-quality/profiles/create/`)
+  - `bi:data_quality_profile_detail` (`/bi/data-quality/profiles/<int:pk>/`)
+  - `bi:data_quality_profile_edit` (`/bi/data-quality/profiles/<int:pk>/edit/`)
+  - `bi:data_quality_profile_delete` (`/bi/data-quality/profiles/<int:pk>/delete/`)
+  - `bi:data_quality_profile_run` (`/bi/data-quality/profiles/<int:pk>/run/`)
+- Data Quality Rules:
+  - `bi:data_quality_rule_list` (`/bi/data-quality/rules/`)
+  - `bi:data_quality_rule_create` (`/bi/data-quality/rules/create/`)
+  - `bi:data_quality_rule_detail` (`/bi/data-quality/rules/<int:pk>/`)
+  - `bi:data_quality_rule_edit` (`/bi/data-quality/rules/<int:pk>/edit/`)
+  - `bi:data_quality_rule_delete` (`/bi/data-quality/rules/<int:pk>/delete/`)
+  - `bi:data_quality_rule_run` (`/bi/data-quality/rules/<int:pk>/run/`)
+- Data Quality Exceptions:
+  - `bi:data_quality_exception_list` (`/bi/data-quality/exceptions/`)
+  - `bi:data_quality_exception_create` (`/bi/data-quality/exceptions/create/`)
+  - `bi:data_quality_exception_detail` (`/bi/data-quality/exceptions/<int:pk>/`)
+  - `bi:data_quality_exception_edit` (`/bi/data-quality/exceptions/<int:pk>/edit/`)
+  - `bi:data_quality_exception_delete` (`/bi/data-quality/exceptions/<int:pk>/delete/`)
+  - `bi:data_quality_exception_remediate` (`/bi/data-quality/exceptions/<int:pk>/remediate/`)
+- Data Quality Scorecards:
+  - `bi:data_quality_scorecard_list` (`/bi/data-quality/scorecards/`)
+  - `bi:data_quality_scorecard_create` (`/bi/data-quality/scorecards/create/`)
+  - `bi:data_quality_scorecard_detail` (`/bi/data-quality/scorecards/<int:pk>/`)
+  - `bi:data_quality_scorecard_edit` (`/bi/data-quality/scorecards/<int:pk>/edit/`)
+  - `bi:data_quality_scorecard_delete` (`/bi/data-quality/scorecards/<int:pk>/delete/`)
+  - `bi:data_quality_scorecard_recalculate` (`/bi/data-quality/scorecards/<int:pk>/recalculate/`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/data_quality/`:
+  - `quality_overview.html` (Enterprise Data Trust Command Center with 6 ISO dimension gauges, rules requiring attention, exception queue, executive scorecards, recent profiling)
+  - `data_quality_profile/` (`list.html`, `detail.html`, `form.html`)
+  - `data_quality_rule/` (`list.html`, `detail.html`, `form.html`)
+  - `data_quality_exception/` (`list.html`, `detail.html`, `form.html` with interactive steward remediation workbench)
+  - `data_quality_scorecard/` (`list.html`, `detail.html`, `form.html` with visual dimension SLA radar)
+- Design System: Colour-named badges only (`.badge-info`, `.badge-slate`, `.badge-green`, `.badge-amber`, `.badge-red`). Icon action buttons include accessible `title` and `aria-label` attributes.
+- Detail pages include "Back to List" navigation in `.page-actions`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant demo data for Sub-module 10.5:
+  - 4 Profiles (Acme Invoices Fact Profiling, Acme Customers Conformed Profiling, Acme Sales Model Profile, Globex Orders Fact Profiling)
+  - 6 Rules (Invoice Amount Positive Check, Customer Email Format Check, Sales Order Reference Integrity, Order Line Quantity Positive, Delivery Date Timeliness SLA, Globex Order Total Positive)
+  - 5 Exceptions (Negative invoice amount, malformed customer email, orphan invoice customer FK, stale unfulfilled shipment, Globex negative order total)
+  - 4 Scorecards (Enterprise Data Trust Index, Sales & Distribution DTI, Customer 360 Master Trust, Globex Executive Operations Trust)
+- 100% idempotent; `--flush` clears Sub-module 10.5 records in reverse dependency order without integrity errors.
+
+### Key Conventions
+- **ISO/DAMA 6-Dimension Model**: Profiling and scorecards compute scores across Completeness, Accuracy, Consistency, Timeliness, Uniqueness, and Validity.
+- **Audit Logging Protocol**: Every mutating action invokes `write_audit_log(request.user, instance, "<action>", tenant=request.tenant)`. Delete views log before calling `instance.delete()`.
+- **Atomic Tenant Numbering**: Automatic generation of `BDQP-#####`, `BDQR-#####`, `BDQE-#####`, `BDQS-#####` using `TenantNumbered`.
+- **Sidebar Wiring**: Live links mapped under `apps/core/navigation.py` via `LIVE_LINKS["10.5"]`.
+
 
 
