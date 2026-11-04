@@ -206,7 +206,7 @@ def mdm_golden_record_merge(request, pk):
         messages.error(request, "Cannot merge candidate records into an already absorbed master record.")
         return redirect("bi:mdm_golden_record_detail", pk=primary_record.pk)
 
-    form = MdmGoldenRecordMergeForm(request.tenant, primary_record, request.POST)
+    form = MdmGoldenRecordMergeForm(request.POST, tenant=request.tenant, primary_record=primary_record)
 
     if form.is_valid():
         secondary_record = form.cleaned_data["secondary_record"]
