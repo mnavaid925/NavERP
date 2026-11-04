@@ -66,7 +66,7 @@ def semantic_model_list(request):
         queryset = queryset.filter(is_active=False)
 
     total_count = queryset.count()
-    paginator = Paginator(queryset, 25)
+    paginator = Paginator(queryset.order_by("-created_at"), 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     data_marts = bi_scope(DataMart.objects.all(), request).order_by("name")
