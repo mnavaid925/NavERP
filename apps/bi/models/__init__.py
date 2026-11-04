@@ -3,6 +3,10 @@ from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
 from apps.bi.models.DataIntegration.DataSourceConnectors import DataSourceConnector
 from apps.bi.models.DataIntegration.IngestionPipelines import IngestionPipeline
 from apps.bi.models.DataIntegration.IngestionRuns import IngestionRun
+from apps.bi.models.DataWarehouse.DataMarts import DataMart
+from apps.bi.models.DataWarehouse.LakehouseZones import LakehouseZone
+from apps.bi.models.DataWarehouse.WarehouseStoragePolicies import WarehouseStoragePolicy
+from apps.bi.models.DataWarehouse.WarehouseTables import WarehouseTable
 from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
@@ -19,4 +23,8 @@ __all__ = [
     "TransformationStep",
     "EtlPipelineVersion",
     "EtlPipelineRun",
+    "DataMart",
+    "LakehouseZone",
+    "WarehouseStoragePolicy",
+    "WarehouseTable",
 ]
