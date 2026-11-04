@@ -252,7 +252,6 @@ def warehouse_table_ddl_preview(request, pk):
             "warehouse_table": tbl,
             "table": tbl,
             "ddl_sql": ddl_sql,
-            "show_ddl_tab": True,
         },
     )
 
