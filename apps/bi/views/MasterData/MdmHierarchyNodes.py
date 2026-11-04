@@ -88,10 +88,11 @@ def mdm_hierarchy_node_create(request):
             node.tenant = request.tenant
             node.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=node,
+                request.user,
+                node,
+                "create",
                 changes=f"Created hierarchy node {node.number} ({node.name})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Hierarchy node '{node.name}' created successfully.")
             return redirect("bi:mdm_hierarchy_node_detail", pk=node.pk)
@@ -115,10 +116,11 @@ def mdm_hierarchy_node_edit(request, pk):
         if form.is_valid():
             saved_node = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=saved_node,
+                request.user,
+                saved_node,
+                "update",
                 changes=f"Updated hierarchy node {saved_node.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Hierarchy node '{saved_node.name}' updated successfully.")
             return redirect("bi:mdm_hierarchy_node_detail", pk=saved_node.pk)
@@ -141,10 +143,11 @@ def mdm_hierarchy_node_delete(request, pk):
     node_name = node.name
 
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=node,
+        request.user,
+        node,
+        "delete",
         changes=f"Deleted hierarchy node {node_number} ({node_name})",
+        tenant=request.tenant,
     )
     node.delete()
     messages.success(request, f"Hierarchy node {node_number} deleted successfully.")
