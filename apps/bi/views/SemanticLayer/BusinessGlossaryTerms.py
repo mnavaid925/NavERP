@@ -49,7 +49,7 @@ def business_glossary_term_list(request):
         queryset = queryset.filter(is_active=False)
 
     total_count = queryset.count()
-    paginator = Paginator(queryset.order_by("domain_category", "name"), 25)
+    paginator = Paginator(queryset.order_by("domain_category", "name"), 15)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     context = {
