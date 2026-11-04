@@ -43,6 +43,10 @@
         </p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Exceptions</span>
+        </a>
         <a href="{% url 'bi:data_quality_exception_edit' exception.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit Exception</span>
