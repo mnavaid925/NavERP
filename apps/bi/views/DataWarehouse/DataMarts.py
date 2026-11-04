@@ -16,7 +16,7 @@ from apps.core.utils import write_audit_log
 def data_mart_list(request):
     queryset = bi_scope(DataMart.objects.all(), request).select_related("org_unit", "owner", "steward")
 
-    q = request.GET.get("q", "").strip()
+    q = request.GET.get("q", "").strip()[:100]
     if q:
         queryset = queryset.filter(
             Q(name__icontains=q)
