@@ -56,16 +56,16 @@
 ---
 
 ## 10.6-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO live external paid commercial registry API sync (D&B Direct+, GLEIF)** — Entity resolution operates on internal tenant data, staging crosswalks, and configured lookup tables.
-- [ ] **NO heavy black-box AI/LLM vector embedding clustering daemons (e.g. external CLAIRE/FERN runtime)** — Matching logic is powered by deterministic exact matching, standard string distance (Levenshtein, Jaro-Winkler), and declarative survivorship rules.
-- [ ] **NO live bidirectional reverse-ETL streaming sync daemons into third-party operational databases** — Syndication is handled through warehouse views, API endpoints, and scheduled export jobs (deferred to 10.19).
-- [ ] **NO multi-tier financial signing authority Change Request subsystem (`MdmChangeRequest`)** — Stewardship lifecycle (`draft` -> `pending_review` -> `approved` -> `in_dispute` -> `merged`) is managed directly on `MdmGoldenRecord` with complete audit trails.
+- [x] **NO live external paid commercial registry API sync (D&B Direct+, GLEIF)** — Entity resolution operates on internal tenant data, staging crosswalks, and configured lookup tables.
+- [x] **NO heavy black-box AI/LLM vector embedding clustering daemons (e.g. external CLAIRE/FERN runtime)** — Matching logic is powered by deterministic exact matching, standard string distance (Levenshtein, Jaro-Winkler), and declarative survivorship rules.
+- [x] **NO live bidirectional reverse-ETL streaming sync daemons into third-party operational databases** — Syndication is handled through warehouse views, API endpoints, and scheduled export jobs (deferred to 10.19).
+- [x] **NO multi-tier financial signing authority Change Request subsystem (`MdmChangeRequest`)** — Stewardship lifecycle (`draft` -> `pending_review` -> `approved` -> `in_dispute` -> `merged`) is managed directly on `MdmGoldenRecord` with complete audit trails.
 
 ---
 
 ## Models (4 models in `apps/bi/models/MasterData/`)
 
-- [ ] **`MdmGoldenRecord`** [Prefix: `BMGR-`] (`apps/bi/models/MasterData/MdmGoldenRecords.py`)
+- [x] **`MdmGoldenRecord`** [Prefix: `BMGR-`] (`apps/bi/models/MasterData/MdmGoldenRecords.py`)
   - **Purpose**: Authoritative single-version-of-truth master entity consolidating customer, vendor, product, asset, personnel, and account profiles across disparate feeder systems with attribute-level provenance, source crosswalks (XREF), confidence scoring, trust tiers, and stewardship lifecycle states.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -99,7 +99,7 @@
   - **Form Excludes**: `tenant`, `number`, `merged_into_record`, `merged_at`, `reviewed_by`, `reviewed_at`, `source_record_count`, `golden_attributes_json`, `source_crosswalks_json`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'domain', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain']), models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'trust_tier']), models.Index(fields=['tenant', 'party']), models.Index(fields=['tenant', 'item']), models.Index(fields=['tenant', 'tax_id'])]`
 
-- [ ] **`MdmSurvivorshipRule`** [Prefix: `BMSR-`] (`apps/bi/models/MasterData/MdmSurvivorshipRules.py`)
+- [x] **`MdmSurvivorshipRule`** [Prefix: `BMSR-`] (`apps/bi/models/MasterData/MdmSurvivorshipRules.py`)
   - **Purpose**: Declarative attribute-level and entity-level survivorship policies, source system authority matrices, matching algorithms, similarity thresholds, and automated merge criteria.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -121,7 +121,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain']), models.Index(fields=['tenant', 'target_field']), models.Index(fields=['tenant', 'survivorship_strategy']), models.Index(fields=['tenant', 'priority_order'])]`
 
-- [ ] **`MdmHierarchyNode`** [Prefix: `BMHR-`] (`apps/bi/models/MasterData/MdmHierarchyNodes.py`)
+- [x] **`MdmHierarchyNode`** [Prefix: `BMHR-`] (`apps/bi/models/MasterData/MdmHierarchyNodes.py`)
   - **Purpose**: Recursive multi-domain hierarchy tree structures (corporate legal subsidiaries, sales account groupings, product taxonomies, org reporting, cost center rollups, asset locations) with materialized paths and temporal effective validity dates.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -146,7 +146,7 @@
   - **Form Excludes**: `tenant`, `number`, `level`, `path`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'hierarchy_type', 'code')]`, `indexes = [models.Index(fields=['tenant', 'hierarchy_type']), models.Index(fields=['tenant', 'parent']), models.Index(fields=['tenant', 'path']), models.Index(fields=['tenant', 'golden_record'])]`
 
-- [ ] **`MdmReferenceCode`** [Prefix: `BMRD-`] (`apps/bi/models/MasterData/MdmReferenceCodes.py`)
+- [x] **`MdmReferenceCode`** [Prefix: `BMRD-`] (`apps/bi/models/MasterData/MdmReferenceCodes.py`)
   - **Purpose**: Centralized reference data code sets, canonical lookup tables, and cross-system translation mappings (e.g. ISO Country, ISO Currency, UOM, Incoterms, Payment Terms, Tax Categories) with deprecation lifecycle and superseding pointers.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -173,49 +173,49 @@
 ## Backend Packages (`apps/bi/{models,forms,views,urls}/MasterData/`)
 
 ### Models (`apps/bi/models/MasterData/`)
-- [ ] `apps/bi/models/MasterData/__init__.py`
-- [ ] `apps/bi/models/MasterData/MdmGoldenRecords.py` (`MdmGoldenRecord`)
-- [ ] `apps/bi/models/MasterData/MdmSurvivorshipRules.py` (`MdmSurvivorshipRule`)
-- [ ] `apps/bi/models/MasterData/MdmHierarchyNodes.py` (`MdmHierarchyNode`)
-- [ ] `apps/bi/models/MasterData/MdmReferenceCodes.py` (`MdmReferenceCode`)
-- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
+- [x] `apps/bi/models/MasterData/__init__.py`
+- [x] `apps/bi/models/MasterData/MdmGoldenRecords.py` (`MdmGoldenRecord`)
+- [x] `apps/bi/models/MasterData/MdmSurvivorshipRules.py` (`MdmSurvivorshipRule`)
+- [x] `apps/bi/models/MasterData/MdmHierarchyNodes.py` (`MdmHierarchyNode`)
+- [x] `apps/bi/models/MasterData/MdmReferenceCodes.py` (`MdmReferenceCode`)
+- [x] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
 
 ### Forms (`apps/bi/forms/MasterData/`)
-- [ ] `apps/bi/forms/MasterData/__init__.py`
-- [ ] `apps/bi/forms/MasterData/MdmGoldenRecordForms.py` (`MdmGoldenRecordForm`, `MdmGoldenRecordMergeForm`, `MdmGoldenRecordAttributeOverrideForm`)
-- [ ] `apps/bi/forms/MasterData/MdmSurvivorshipRuleForms.py` (`MdmSurvivorshipRuleForm`)
-- [ ] `apps/bi/forms/MasterData/MdmHierarchyNodeForms.py` (`MdmHierarchyNodeForm`)
-- [ ] `apps/bi/forms/MasterData/MdmReferenceCodeForms.py` (`MdmReferenceCodeForm`, `MdmReferenceCodeLookupForm`)
-- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
+- [x] `apps/bi/forms/MasterData/__init__.py`
+- [x] `apps/bi/forms/MasterData/MdmGoldenRecordForms.py` (`MdmGoldenRecordForm`, `MdmGoldenRecordMergeForm`, `MdmGoldenRecordAttributeOverrideForm`)
+- [x] `apps/bi/forms/MasterData/MdmSurvivorshipRuleForms.py` (`MdmSurvivorshipRuleForm`)
+- [x] `apps/bi/forms/MasterData/MdmHierarchyNodeForms.py` (`MdmHierarchyNodeForm`)
+- [x] `apps/bi/forms/MasterData/MdmReferenceCodeForms.py` (`MdmReferenceCodeForm`, `MdmReferenceCodeLookupForm`)
+- [x] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
 
 ### Views (`apps/bi/views/MasterData/`)
-- [ ] `apps/bi/views/MasterData/__init__.py`
-- [ ] `apps/bi/views/MasterData/MdmGoldenRecords.py` (`mdm_golden_record_list`, `mdm_golden_record_create`, `mdm_golden_record_detail`, `mdm_golden_record_edit`, `mdm_golden_record_delete`, `mdm_golden_record_merge`, `mdm_golden_record_unmerge`, `mdm_golden_record_approve`)
-- [ ] `apps/bi/views/MasterData/MdmSurvivorshipRules.py` (`mdm_survivorship_rule_list`, `mdm_survivorship_rule_create`, `mdm_survivorship_rule_detail`, `mdm_survivorship_rule_edit`, `mdm_survivorship_rule_delete`, `mdm_survivorship_rule_test`)
-- [ ] `apps/bi/views/MasterData/MdmHierarchyNodes.py` (`mdm_hierarchy_node_list`, `mdm_hierarchy_node_create`, `mdm_hierarchy_node_detail`, `mdm_hierarchy_node_edit`, `mdm_hierarchy_node_delete`, `mdm_hierarchy_tree_view`)
-- [ ] `apps/bi/views/MasterData/MdmReferenceCodes.py` (`mdm_reference_code_list`, `mdm_reference_code_create`, `mdm_reference_code_detail`, `mdm_reference_code_edit`, `mdm_reference_code_delete`, `mdm_reference_code_translate`)
-- [ ] `apps/bi/views/MasterData/MdmOverviewViews.py` (`mdm_overview` command center)
-- [ ] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
+- [x] `apps/bi/views/MasterData/__init__.py`
+- [x] `apps/bi/views/MasterData/MdmGoldenRecords.py` (`mdm_golden_record_list`, `mdm_golden_record_create`, `mdm_golden_record_detail`, `mdm_golden_record_edit`, `mdm_golden_record_delete`, `mdm_golden_record_merge`, `mdm_golden_record_unmerge`, `mdm_golden_record_approve`)
+- [x] `apps/bi/views/MasterData/MdmSurvivorshipRules.py` (`mdm_survivorship_rule_list`, `mdm_survivorship_rule_create`, `mdm_survivorship_rule_detail`, `mdm_survivorship_rule_edit`, `mdm_survivorship_rule_delete`, `mdm_survivorship_rule_test`)
+- [x] `apps/bi/views/MasterData/MdmHierarchyNodes.py` (`mdm_hierarchy_node_list`, `mdm_hierarchy_node_create`, `mdm_hierarchy_node_detail`, `mdm_hierarchy_node_edit`, `mdm_hierarchy_node_delete`, `mdm_hierarchy_tree_view`)
+- [x] `apps/bi/views/MasterData/MdmReferenceCodes.py` (`mdm_reference_code_list`, `mdm_reference_code_create`, `mdm_reference_code_detail`, `mdm_reference_code_edit`, `mdm_reference_code_delete`, `mdm_reference_code_translate`)
+- [x] `apps/bi/views/MasterData/MdmOverviewViews.py` (`mdm_overview` command center)
+- [x] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
 
 ### URLs (`apps/bi/urls/MasterData/`)
-- [ ] `apps/bi/urls/MasterData/__init__.py` (aggregates and re-exports `urlpatterns`)
-- [ ] `apps/bi/urls/MasterData/MdmGoldenRecordUrls.py`
-- [ ] `apps/bi/urls/MasterData/MdmSurvivorshipRuleUrls.py`
-- [ ] `apps/bi/urls/MasterData/MdmHierarchyNodeUrls.py`
-- [ ] `apps/bi/urls/MasterData/MdmReferenceCodeUrls.py`
-- [ ] `apps/bi/urls/MasterData/MdmOverviewUrls.py`
-- [ ] Update `apps/bi/urls/__init__.py` to include `MasterData` routes
+- [x] `apps/bi/urls/MasterData/__init__.py` (aggregates and re-exports `urlpatterns`)
+- [x] `apps/bi/urls/MasterData/MdmGoldenRecordUrls.py`
+- [x] `apps/bi/urls/MasterData/MdmSurvivorshipRuleUrls.py`
+- [x] `apps/bi/urls/MasterData/MdmHierarchyNodeUrls.py`
+- [x] `apps/bi/urls/MasterData/MdmReferenceCodeUrls.py`
+- [x] `apps/bi/urls/MasterData/MdmOverviewUrls.py`
+- [x] Update `apps/bi/urls/__init__.py` to include `MasterData` routes
 
 ### Admin & Integration
-- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.6"]` mapping NavERP.md feature bullets to views
-- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.6 (golden records across customer/vendor/item, survivorship rules, multi-tier hierarchy trees, and reference code sets)
+- [x] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.6"]` mapping NavERP.md feature bullets to views
+- [x] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.6 (golden records across customer/vendor/item, survivorship rules, multi-tier hierarchy trees, and reference code sets)
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+- [x] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
   ```python
   "10.6": {
       "Golden Record Management": "bi:mdm_golden_record_list",
@@ -236,33 +236,33 @@
 
 ## Templates (`templates/bi/master_data/`)
 
-- [ ] `templates/bi/master_data/mdm_overview.html` (Master Data command center: Golden record distribution by domain, trust tier breakdown, stewardship queue counts, match/merge activity, active hierarchy tree depths, and reference code sets)
-- [ ] `templates/bi/master_data/golden_record/list.html` (filters: domain, status, trust_tier; search: name, code, tax_id, email; confidence progress bar, action buttons)
-- [ ] `templates/bi/master_data/golden_record/detail.html` (Golden record header with trust tier badge, source crosswalks table, attribute-level provenance JSON/cards, hierarchy node associations, merge/unmerge actions, stewardship notes)
-- [ ] `templates/bi/master_data/golden_record/form.html`
-- [ ] `templates/bi/master_data/survivorship_rule/list.html` (filters: domain, survivorship_strategy, match_algorithm; search: name, code, target_field; thresholds)
-- [ ] `templates/bi/master_data/survivorship_rule/detail.html` (Strategy definition, source precedence ordered list, similarity thresholds, steward info)
-- [ ] `templates/bi/master_data/survivorship_rule/form.html`
-- [ ] `templates/bi/master_data/hierarchy_node/list.html` (filters: hierarchy_type, level; search: name, code, path; tree indents, sort order)
-- [ ] `templates/bi/master_data/hierarchy_node/detail.html` (Node details, parent-child breadcrumbs, linked golden record / party / item / org_unit card, effective dates)
-- [ ] `templates/bi/master_data/hierarchy_node/form.html`
-- [ ] `templates/bi/master_data/reference_code/list.html` (filters: code_set, status, source_system; search: canonical_code, canonical_name, source_code)
-- [ ] `templates/bi/master_data/reference_code/detail.html` (Canonical standard details, source crosswalk translation, deprecation pointer, metadata attributes)
-- [ ] `templates/bi/master_data/reference_code/form.html`
+- [x] `templates/bi/master_data/mdm_overview.html` (Master Data command center: Golden record distribution by domain, trust tier breakdown, stewardship queue counts, match/merge activity, active hierarchy tree depths, and reference code sets)
+- [x] `templates/bi/master_data/golden_record/list.html` (filters: domain, status, trust_tier; search: name, code, tax_id, email; confidence progress bar, action buttons)
+- [x] `templates/bi/master_data/golden_record/detail.html` (Golden record header with trust tier badge, source crosswalks table, attribute-level provenance JSON/cards, hierarchy node associations, merge/unmerge actions, stewardship notes)
+- [x] `templates/bi/master_data/golden_record/form.html`
+- [x] `templates/bi/master_data/survivorship_rule/list.html` (filters: domain, survivorship_strategy, match_algorithm; search: name, code, target_field; thresholds)
+- [x] `templates/bi/master_data/survivorship_rule/detail.html` (Strategy definition, source precedence ordered list, similarity thresholds, steward info)
+- [x] `templates/bi/master_data/survivorship_rule/form.html`
+- [x] `templates/bi/master_data/hierarchy_node/list.html` (filters: hierarchy_type, level; search: name, code, path; tree indents, sort order)
+- [x] `templates/bi/master_data/hierarchy_node/detail.html` (Node details, parent-child breadcrumbs, linked golden record / party / item / org_unit card, effective dates)
+- [x] `templates/bi/master_data/hierarchy_node/form.html`
+- [x] `templates/bi/master_data/reference_code/list.html` (filters: code_set, status, source_system; search: canonical_code, canonical_name, source_code)
+- [x] `templates/bi/master_data/reference_code/detail.html` (Canonical standard details, source crosswalk translation, deprecation pointer, metadata attributes)
+- [x] `templates/bi/master_data/reference_code/form.html`
 
 ---
 
 ## Verification & Close-out
 
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0014_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_6.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.6.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_masterdata_models.py`, `test_masterdata_forms.py`, `test_masterdata_views.py`, `test_masterdata_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.6 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.6.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0014_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_6.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.6.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_masterdata_models.py`, `test_masterdata_forms.py`, `test_masterdata_views.py`, `test_masterdata_security.py`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.6 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.6.md`
 
 ## Later passes / deferred
 - External D&B Direct+ / GLEIF API third-party corporate registry enrichment -> External enrichment adapter
@@ -272,8 +272,33 @@
 - Searchable Data Catalog & Column-Level Lineage Graph -> Sub-module 10.7 Data Catalog, Lineage & Governance
 - Interactive 360-degree Customer & Product Dashboards -> Sub-module 10.8 Interactive Dashboards
 
-## Review notes
-(to be populated during Phase 4–6)
+## Review notes (close-out 2026-11-05)
+
+- **Sub-module**: 10.6 Master Data Management (MDM) (`apps/bi`)
+- **Base SHA**: `bdddf111e168a926f9d666c5784c89ceedfdebdd`
+- **Head SHA**: HEAD
+- **Review passes completed**:
+  - `code-reviewer`: pass 1 -> 1 Critical, 6 Important, 6 Minor findings
+  - `explorer`: pass 2 -> 6 Important, 5 Minor findings
+  - `frontend-reviewer`: pass 3 -> 2 Important, 5 Minor findings
+  - `performance-reviewer`: pass 4 -> 4 Important, 3 Minor findings
+  - `qa-smoke-tester`: pass 5 -> 1 Critical (verified runtime write_audit_log crash on all POST mutations)
+  - `security-reviewer`: pass 6 -> 1 Critical, 6 Important, 3 Minor findings
+- **Findings resolution**: All 27 deduplicated findings (1 Critical, 15 Important, 11 Minor) fully fixed and verified in Phase 5 by `code-fixer` agent. See `.claude/tasks/review-bi-10.6.md`.
+- **Migrations applied**:
+  - `apps/bi/migrations/0016_mdmgoldenrecord_mdmhierarchynode_mdmreferencecode_and_more.py`
+  - `apps/bi/migrations/0017_idx_bmsr_ten_alg_idx_bmhr_ten_htype_lvl_and_more.py`
+  - `apps/bi/migrations/0018_alter_mdmgoldenrecord_confidence_score_and_more.py`
+- **Seeder verification**: `seed_bi` executed cleanly and verified 100% idempotent (all 10.6 records skipped without error on second run).
+- **Test suite**: 246 dedicated tests across 4 modules:
+  - `apps/bi/tests/test_masterdata_models.py` (48 tests)
+  - `apps/bi/tests/test_masterdata_forms.py` (57 tests)
+  - `apps/bi/tests/test_masterdata_views.py` (93 tests)
+  - `apps/bi/tests/test_masterdata_security.py` (48 tests)
+  - Full unfiltered `apps/bi` test suite: **1,003 passed, 0 failed** in 302s.
+- **Skill update**: `.claude/skills/bi/SKILL.md` updated with full 10.6 model, route, template, and seeder catalog.
+- **README update**: `README.md` updated marking 10.6 complete.
+- **Gaps**: None.
 ---
 # Sub-module 10.5: Data Quality & Cleansing (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.5.md` (2026-11-04)
 
