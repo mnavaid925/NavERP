@@ -270,6 +270,10 @@ def mdm_golden_record_unmerge(request, pk):
 @require_POST
 def mdm_golden_record_approve(request, pk):
     golden_record = bi_object(request, MdmGoldenRecord, pk)
+    if golden_record.status == "merged":
+        messages.error(request, "Merged records cannot be certified directly. Unmerge the record before approval.")
+        return redirect("bi:mdm_golden_record_detail", pk=golden_record.pk)
+
     golden_record.status = "approved"
     golden_record.reviewed_by = request.user
     golden_record.reviewed_at = timezone.now()
