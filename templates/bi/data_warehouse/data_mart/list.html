@@ -226,7 +226,7 @@
                     <td colspan="9">
                         <div class="empty-state">
                             <i data-lucide="layers" class="empty-state-icon"></i>
-                            <div class="empty-state-title">No data marts found</div>
+                            <h3 class="empty-state-title">No data marts found</h3>
                             <p class="empty-state-text">Create subject data marts to organize facts and dimensions by departmental domains.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'bi:data_mart_create' %}" class="btn btn-primary mt-4">
