@@ -123,6 +123,9 @@ class DataQualityRule(TenantNumbered):
             models.Index(fields=["tenant", "dimension"], name="idx_bdqr_ten_dim"),
             models.Index(fields=["tenant", "last_status"], name="idx_bdqr_ten_lstat"),
             models.Index(fields=["tenant", "severity"], name="idx_bdqr_ten_sev"),
+            models.Index(fields=["tenant", "warehouse_table"], name="idx_bdqr_ten_wtbl"),
+            models.Index(fields=["tenant", "semantic_model"], name="idx_bdqr_ten_smdl"),
+            models.Index(fields=["tenant", "-last_run_at"], name="idx_bdqr_ten_lrun"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdqr_ten_active"),
             models.Index(fields=["tenant", "-created_at"], name="idx_bdqr_ten_created"),
         ]
