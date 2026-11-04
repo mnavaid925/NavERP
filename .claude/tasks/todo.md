@@ -306,17 +306,17 @@
 ---
 
 ## 10.5-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO cross-system Golden Record merge/survivorship engine** — Master Data Management (MDM) Golden Records across Parties, Vendors, and Items is the core scope of Sub-module 10.6 MDM.
-- [ ] **NO automated Great Expectations CLI daemon / Soda Core background subprocess runners** — Execution is internal Django ORM/SQL calculation and scheduled pipeline steps.
-- [ ] **NO commercial paid external address API integrations (SmartyStreets, Google Maps Geocoding)** — Standardization relies on local regex, trimming, case normalization, and dictionary reference lookups.
-- [ ] **NO distributed Apache Spark / Trino / DuckDB distributed cluster orchestration** — Analytics run directly on SQL warehouse tables and semantic query engines.
-- [ ] **NO LLM-based natural language rule generation** — Deferred to 10.15 Natural Language & Conversational BI.
+- [x] **NO cross-system Golden Record merge/survivorship engine** — Master Data Management (MDM) Golden Records across Parties, Vendors, and Items is the core scope of Sub-module 10.6 MDM.
+- [x] **NO automated Great Expectations CLI daemon / Soda Core background subprocess runners** — Execution is internal Django ORM/SQL calculation and scheduled pipeline steps.
+- [x] **NO commercial paid external address API integrations (SmartyStreets, Google Maps Geocoding)** — Standardization relies on local regex, trimming, case normalization, and dictionary reference lookups.
+- [x] **NO distributed Apache Spark / Trino / DuckDB distributed cluster orchestration** — Analytics run directly on SQL warehouse tables and semantic query engines.
+- [x] **NO LLM-based natural language rule generation** — Deferred to 10.15 Natural Language & Conversational BI.
 
 ---
 
 ## Models (4 models in `apps/bi/models/DataQuality/`)
 
-- [ ] **`DataQualityProfile`** [Prefix: `BDQP-`] (`apps/bi/models/DataQuality/DataQualityProfiles.py`)
+- [x] **`DataQualityProfile`** [Prefix: `BDQP-`] (`apps/bi/models/DataQuality/DataQualityProfiles.py`)
   - **Purpose**: Statistical metadata and data health profiling across physical warehouse tables and analytical semantic models (row/column counts, null frequencies, distinct ratios, min/max/mean, pattern masks, and completeness/uniqueness/validity scores).
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -342,7 +342,7 @@
   - **Form Excludes**: `tenant`, `number`, `total_row_count`, `total_column_count`, `completeness_score`, `uniqueness_score`, `validity_score`, `column_profiles_json`, `profiled_by`, `profiled_at`, `duration_seconds`, `error_message`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'target_type']), models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'warehouse_table']), models.Index(fields=['tenant', 'semantic_model'])]`
 
-- [ ] **`DataQualityRule`** [Prefix: `BDQR-`] (`apps/bi/models/DataQuality/DataQualityRules.py`)
+- [x] **`DataQualityRule`** [Prefix: `BDQR-`] (`apps/bi/models/DataQuality/DataQualityRules.py`)
   - **Purpose**: Configurable declarative assertions (Not Null, Uniqueness, Range Boundaries, Regex, Enums, Referential Integrity, Freshness, Custom SQL, Standardization, and Fuzzy Duplicate Clustering) with failure tolerance and execution tracking.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -371,7 +371,7 @@
   - **Form Excludes**: `tenant`, `number`, `last_run_at`, `last_status`, `passed_records_count`, `failed_records_count`, `pass_rate_pct`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'rule_category']), models.Index(fields=['tenant', 'dimension']), models.Index(fields=['tenant', 'last_status']), models.Index(fields=['tenant', 'severity'])]`
 
-- [ ] **`DataQualityException`** [Prefix: `BDQE-`] (`apps/bi/models/DataQuality/DataQualityExceptions.py`)
+- [x] **`DataQualityException`** [Prefix: `BDQE-`] (`apps/bi/models/DataQuality/DataQualityExceptions.py`)
   - **Purpose**: Operational queue and workbench recording rule violations, anomalous records, potential duplicate candidates, and tracking data steward investigation, remediation actions, and resolution audit trails.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -399,7 +399,7 @@
   - **Form Excludes**: `tenant`, `number`, `resolved_by`, `resolved_at`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'severity']), models.Index(fields=['tenant', 'exception_type']), models.Index(fields=['tenant', 'rule'])]`
 
-- [ ] **`DataQualityScorecard`** [Prefix: `BDQS-`] (`apps/bi/models/DataQuality/DataQualityScorecards.py`)
+- [x] **`DataQualityScorecard`** [Prefix: `BDQS-`] (`apps/bi/models/DataQuality/DataQualityScorecards.py`)
   - **Purpose**: Multi-dimensional quality scorecards aggregating data health across 6 ISO/DAMA dimensions (Completeness, Accuracy, Consistency, Timeliness, Uniqueness, Validity), calculating overall Data Trust Index (0-100%), assigning executive letter grades (A-F), and tracking corporate SLA compliance.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -441,73 +441,85 @@
 ## Backend Packages & Files (`apps/bi/`)
 
 ### Models (`apps/bi/models/DataQuality/`)
-- [ ] `apps/bi/models/DataQuality/__init__.py` (re-exports `DataQualityProfile`, `DataQualityRule`, `DataQualityException`, `DataQualityScorecard`)
-- [ ] `apps/bi/models/DataQuality/DataQualityProfiles.py`
-- [ ] `apps/bi/models/DataQuality/DataQualityRules.py`
-- [ ] `apps/bi/models/DataQuality/DataQualityExceptions.py`
-- [ ] `apps/bi/models/DataQuality/DataQualityScorecards.py`
-- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models
+- [x] `apps/bi/models/DataQuality/__init__.py` (re-exports `DataQualityProfile`, `DataQualityRule`, `DataQualityException`, `DataQualityScorecard`)
+- [x] `apps/bi/models/DataQuality/DataQualityProfiles.py`
+- [x] `apps/bi/models/DataQuality/DataQualityRules.py`
+- [x] `apps/bi/models/DataQuality/DataQualityExceptions.py`
+- [x] `apps/bi/models/DataQuality/DataQualityScorecards.py`
+- [x] Update `apps/bi/models/__init__.py` to re-export the 4 models
 
 ### Forms (`apps/bi/forms/DataQuality/`)
-- [ ] `apps/bi/forms/DataQuality/__init__.py`
-- [ ] `apps/bi/forms/DataQuality/DataQualityProfileForms.py` (`DataQualityProfileForm`)
-- [ ] `apps/bi/forms/DataQuality/DataQualityRuleForms.py` (`DataQualityRuleForm`)
-- [ ] `apps/bi/forms/DataQuality/DataQualityExceptionForms.py` (`DataQualityExceptionForm`, `DataQualityExceptionRemediationForm`)
-- [ ] `apps/bi/forms/DataQuality/DataQualityScorecardForms.py` (`DataQualityScorecardForm`)
-- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms
+- [x] `apps/bi/forms/DataQuality/__init__.py`
+- [x] `apps/bi/forms/DataQuality/DataQualityProfileForms.py` (`DataQualityProfileForm`)
+- [x] `apps/bi/forms/DataQuality/DataQualityRuleForms.py` (`DataQualityRuleForm`)
+- [x] `apps/bi/forms/DataQuality/DataQualityExceptionForms.py` (`DataQualityExceptionForm`, `DataQualityExceptionRemediationForm`)
+- [x] `apps/bi/forms/DataQuality/DataQualityScorecardForms.py` (`DataQualityScorecardForm`)
+- [x] Update `apps/bi/forms/__init__.py` to re-export the forms
 
 ### Views (`apps/bi/views/DataQuality/`)
-- [ ] `apps/bi/views/DataQuality/__init__.py`
-- [ ] `apps/bi/views/DataQuality/DataQualityProfiles.py` (list, create, detail, edit, delete, run_profile)
-- [ ] `apps/bi/views/DataQuality/DataQualityRules.py` (list, create, detail, edit, delete, run_rule)
-- [ ] `apps/bi/views/DataQuality/DataQualityExceptions.py` (list, create, detail, edit, delete, remediate, assign_steward)
-- [ ] `apps/bi/views/DataQuality/DataQualityScorecards.py` (list, create, detail, edit, delete, recalculate)
-- [ ] `apps/bi/views/DataQuality/QualityOverviewViews.py` (`quality_overview` command center)
-- [ ] Update `apps/bi/views/__init__.py` to re-export view functions
+- [x] `apps/bi/views/DataQuality/__init__.py`
+- [x] `apps/bi/views/DataQuality/DataQualityProfiles.py` (list, create, detail, edit, delete, run_profile)
+- [x] `apps/bi/views/DataQuality/DataQualityRules.py` (list, create, detail, edit, delete, run_rule)
+- [x] `apps/bi/views/DataQuality/DataQualityExceptions.py` (list, create, detail, edit, delete, remediate, assign_steward)
+- [x] `apps/bi/views/DataQuality/DataQualityScorecards.py` (list, create, detail, edit, delete, recalculate)
+- [x] `apps/bi/views/DataQuality/QualityOverviewViews.py` (`quality_overview` command center)
+- [x] Update `apps/bi/views/__init__.py` to re-export view functions
 
 ### URLs (`apps/bi/urls/DataQuality/`)
-- [ ] `apps/bi/urls/DataQuality/__init__.py` (re-exports `urlpatterns`)
-- [ ] `apps/bi/urls/DataQuality/DataQualityProfileUrls.py`
-- [ ] `apps/bi/urls/DataQuality/DataQualityRuleUrls.py`
-- [ ] `apps/bi/urls/DataQuality/DataQualityExceptionUrls.py`
-- [ ] `apps/bi/urls/DataQuality/DataQualityScorecardUrls.py`
-- [ ] `apps/bi/urls/DataQuality/QualityOverviewUrls.py`
-- [ ] Update `apps/bi/urls/__init__.py` to include `DataQuality` routes
+- [x] `apps/bi/urls/DataQuality/__init__.py` (re-exports `urlpatterns`)
+- [x] `apps/bi/urls/DataQuality/DataQualityProfileUrls.py`
+- [x] `apps/bi/urls/DataQuality/DataQualityRuleUrls.py`
+- [x] `apps/bi/urls/DataQuality/DataQualityExceptionUrls.py`
+- [x] `apps/bi/urls/DataQuality/DataQualityScorecardUrls.py`
+- [x] `apps/bi/urls/DataQuality/QualityOverviewUrls.py`
+- [x] Update `apps/bi/urls/__init__.py` to include `DataQuality` routes
 
 ### Admin & Integration
-- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.5"]` mapping NavERP.md feature bullets to views
-- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.5 (profiles, rules, exceptions, and scorecards)
+- [x] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.5"]` mapping NavERP.md feature bullets to views
+- [x] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.5 (profiles, rules, exceptions, and scorecards)
 
 ---
 
 ## Templates (`templates/bi/data_quality/`)
-- [ ] `templates/bi/data_quality/quality_overview.html` (Command center dashboard: Data Trust Index gauge, ISO/DAMA 6-dimension health breakdown, rule pass rates, open exceptions queue summary, recent profiling runs, quick actions)
-- [ ] `templates/bi/data_quality/data_quality_profile/list.html`
-- [ ] `templates/bi/data_quality/data_quality_profile/detail.html`
-- [ ] `templates/bi/data_quality/data_quality_profile/form.html`
-- [ ] `templates/bi/data_quality/data_quality_rule/list.html`
-- [ ] `templates/bi/data_quality/data_quality_rule/detail.html`
-- [ ] `templates/bi/data_quality/data_quality_rule/form.html`
-- [ ] `templates/bi/data_quality/data_quality_exception/list.html`
-- [ ] `templates/bi/data_quality/data_quality_exception/detail.html`
-- [ ] `templates/bi/data_quality/data_quality_exception/form.html`
-- [ ] `templates/bi/data_quality/data_quality_scorecard/list.html`
-- [ ] `templates/bi/data_quality/data_quality_scorecard/detail.html`
-- [ ] `templates/bi/data_quality/data_quality_scorecard/form.html`
+- [x] `templates/bi/data_quality/quality_overview.html` (Command center dashboard: Data Trust Index gauge, ISO/DAMA 6-dimension health breakdown, rule pass rates, open exceptions queue summary, recent profiling runs, quick actions)
+- [x] `templates/bi/data_quality/data_quality_profile/list.html`
+- [x] `templates/bi/data_quality/data_quality_profile/detail.html`
+- [x] `templates/bi/data_quality/data_quality_profile/form.html`
+- [x] `templates/bi/data_quality/data_quality_rule/list.html`
+- [x] `templates/bi/data_quality/data_quality_rule/detail.html`
+- [x] `templates/bi/data_quality/data_quality_rule/form.html`
+- [x] `templates/bi/data_quality/data_quality_exception/list.html`
+- [x] `templates/bi/data_quality/data_quality_exception/detail.html`
+- [x] `templates/bi/data_quality/data_quality_exception/form.html`
+- [x] `templates/bi/data_quality/data_quality_scorecard/list.html`
+- [x] `templates/bi/data_quality/data_quality_scorecard/detail.html`
+- [x] `templates/bi/data_quality/data_quality_scorecard/form.html`
 
 ---
 
 ## Verification & Close-out
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0013_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_5.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.5.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dataquality_models.py`, `test_dataquality_forms.py`, `test_dataquality_views.py`, `test_dataquality_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.5 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.5.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0013_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_5.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.5.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_dataquality_models.py`, `test_dataquality_forms.py`, `test_dataquality_views.py`, `test_dataquality_security.py`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.5 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.5.md`
+
+## Review & Close-out (2026-11-04)
+- **Status:** Complete & Shipped.
+- **Models:** 4 models (DataQualityProfile, DataQualityRule, DataQualityException, DataQualityScorecard) with prefixes BDQP-, BDQR-, BDQE-, BDQS-.
+- **Routes:** 21 routes under /bi/data-quality/ (Command overview dashboard, 4 complete CRUDs + Run, Remediate, Recalculate actions).
+- **Templates:** 13 templates under templates/bi/data_quality/ adhering strictly to color-named badge classes and accessibility guidelines.
+- **Database Migrations:** 0013, 0014, 0015 applied cleanly to database.
+- **Demo Data:** seed_bi extended with multi-tenant profiles, rules, exceptions, and scorecards for both Acme and Globex; tested 100% idempotent.
+- **Review Passes:** All 6 reviewer passes completed (code-reviewer, explorer, frontend-reviewer, performance-reviewer, qa-smoke-tester, security-reviewer); all 23 findings resolved by code-fixer with individual commits.
+- **Tests:** 4 test modules (test_dataquality_models.py, _forms.py, _views.py, _security.py) containing 252 dedicated tests; full apps/bi suite runs 757 tests green (0 failures).
+- **Skill & Documentation:** .claude/skills/bi/SKILL.md and README.md updated.
+- **Gaps:** None.
 
 ## Later passes / deferred
 - Automated Great Expectations Checkpoint / Soda Core CLI daemon runner -> Advanced orchestration integration
