@@ -126,14 +126,33 @@
                 <form method="post" action="{% url 'bi:data_quality_exception_remediate' exception.pk %}" class="space-y-4">
                     {% csrf_token %}
 
+                    {% if remediation_form.errors %}
+                        <div class="alert alert-error mb-4">
+                            <p class="font-semibold text-sm">Please correct the following errors:</p>
+                            <ul class="text-xs list-disc list-inside mt-1">
+                                {% for field, errors in remediation_form.errors.items %}
+                                    {% for error in errors %}
+                                        <li>{{ field|title }}: {{ error }}</li>
+                                    {% endfor %}
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="form-group">
                             <label class="form-label" for="{{ remediation_form.status.id_for_label }}">Triage Lifecycle Status</label>
                             {{ remediation_form.status }}
+                            {% if remediation_form.status.errors %}
+                                <p class="form-error">{{ remediation_form.status.errors.0 }}</p>
+                            {% endif %}
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="{{ remediation_form.remediation_action.id_for_label }}">Remediation Action Applied</label>
                             {{ remediation_form.remediation_action }}
+                            {% if remediation_form.remediation_action.errors %}
+                                <p class="form-error">{{ remediation_form.remediation_action.errors.0 }}</p>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -141,21 +160,33 @@
                         <div class="form-group">
                             <label class="form-label" for="{{ remediation_form.proposed_value.id_for_label }}">Proposed Cleansed Value</label>
                             {{ remediation_form.proposed_value }}
+                            {% if remediation_form.proposed_value.errors %}
+                                <p class="form-error">{{ remediation_form.proposed_value.errors.0 }}</p>
+                            {% endif %}
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="{{ remediation_form.remediated_value.id_for_label }}">Final Remediated Value</label>
                             {{ remediation_form.remediated_value }}
+                            {% if remediation_form.remediated_value.errors %}
+                                <p class="form-error">{{ remediation_form.remediated_value.errors.0 }}</p>
+                            {% endif %}
                         </div>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label" for="{{ remediation_form.assigned_steward.id_for_label }}">Assigned Data Steward</label>
                         {{ remediation_form.assigned_steward }}
+                        {% if remediation_form.assigned_steward.errors %}
+                            <p class="form-error">{{ remediation_form.assigned_steward.errors.0 }}</p>
+                        {% endif %}
                     </div>
 
                     <div class="form-group">
                         <label class="form-label" for="{{ remediation_form.resolution_notes.id_for_label }}">Resolution Audit Notes</label>
                         {{ remediation_form.resolution_notes }}
+                        {% if remediation_form.resolution_notes.errors %}
+                            <p class="form-error">{{ remediation_form.resolution_notes.errors.0 }}</p>
+                        {% endif %}
                     </div>
 
                     <div class="flex justify-end pt-2">
