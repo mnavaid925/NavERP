@@ -2922,6 +2922,21 @@ LIVE_LINKS = {
         "Warehouse Overview": "bi:warehouse_overview",
     },
 
+    # 10.4 Data Modeling & Semantic Layer
+    "10.4": {
+        "Dimensional Modeling": "bi:semantic_model_list",
+        "Semantic Layer & Business Glossary": "bi:business_glossary_term_list",
+        "Calculated Measures & Hierarchies": "bi:calculated_measure_list",
+        "Reusable Datasets & Views": "bi:semantic_model_list",
+        "Metadata-Driven Modeling": "bi:semantic_overview",
+        # Extra live leaves
+        "Semantic Models": "bi:semantic_model_list",
+        "Business Glossary": "bi:business_glossary_term_list",
+        "Calculated Measures": "bi:calculated_measure_list",
+        "Drill Hierarchies": "bi:drill_hierarchy_list",
+        "Semantic Overview": "bi:semantic_overview",
+    },
+
 
 
 
