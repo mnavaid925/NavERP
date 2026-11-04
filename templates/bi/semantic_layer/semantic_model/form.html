@@ -138,11 +138,6 @@
                     <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Governance & Stewardship</h3>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div class="form-group">
-                            <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status</label>
-                            {{ form.certification_status }}
-                            {% if form.certification_status.errors %}<div class="form-error">{{ form.certification_status.errors }}</div>{% endif %}
-                        </div>
-                        <div class="form-group">
                             <label class="form-label" for="{{ form.owner.id_for_label }}">Assigned Owner</label>
                             {{ form.owner }}
                             {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
