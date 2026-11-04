@@ -15,6 +15,9 @@ from apps.bi.urls.DataIntegration.IngestionRuns import (
 from apps.bi.urls.DataWarehouse import (
     urlpatterns as warehouse_urlpatterns,
 )
+from apps.bi.urls.SemanticLayer import (
+    urlpatterns as semantic_urlpatterns,
+)
 from apps.bi.urls.EtlPipelines.EtlPipelineRuns import (
     urlpatterns as etl_runs_urlpatterns,
 )
@@ -45,4 +48,5 @@ urlpatterns = (
     + etl_versions_urlpatterns
     + etl_runs_urlpatterns
     + warehouse_urlpatterns
+    + semantic_urlpatterns
 )
