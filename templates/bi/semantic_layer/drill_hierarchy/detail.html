@@ -30,6 +30,10 @@
         <p class="text-muted text-sm">{{ hierarchy.description|default:"No description provided for this drill hierarchy." }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:drill_hierarchy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Drill Hierarchies</span>
+        </a>
         <a href="{% url 'bi:semantic_model_detail' hierarchy.semantic_model.pk %}" class="btn btn-outline">
             <i data-lucide="database"></i>
             <span>Parent Model</span>
