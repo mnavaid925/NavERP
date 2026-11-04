@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from django.db.models import Q
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.DataWarehouse.DataMarts import DataMart
@@ -60,15 +61,26 @@ class WarehouseTableForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
+            zone_filter = Q(is_active=True)
+            mart_filter = Q(is_active=True)
+            policy_filter = Q(is_active=True)
+            if self.instance and self.instance.pk:
+                if self.instance.lakehouse_zone_id:
+                    zone_filter |= Q(pk=self.instance.lakehouse_zone_id)
+                if self.instance.data_mart_id:
+                    mart_filter |= Q(pk=self.instance.data_mart_id)
+                if self.instance.storage_policy_id:
+                    policy_filter |= Q(pk=self.instance.storage_policy_id)
+
             self.fields["lakehouse_zone"].queryset = LakehouseZone.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("zone_type", "name")
+                tenant=self.tenant
+            ).filter(zone_filter).order_by("zone_type", "name")
             self.fields["data_mart"].queryset = DataMart.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("name")
+                tenant=self.tenant
+            ).filter(mart_filter).order_by("name")
             self.fields["storage_policy"].queryset = WarehouseStoragePolicy.objects.filter(
-                tenant=self.tenant, is_active=True
-            ).order_by("name")
+                tenant=self.tenant
+            ).filter(policy_filter).order_by("name")
 
         if self.instance and self.instance.pk and self.instance.schema_definition:
             self.fields["schema_definition_raw"].initial = json.dumps(
