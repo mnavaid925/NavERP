@@ -189,7 +189,7 @@
                             </td>
                             <td class="font-mono text-xs font-semibold">{{ rule.pass_rate_pct }}%</td>
                             <td class="text-right">
-                                <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon" title="View Quality Rule" aria-label="View Quality Rule">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -250,7 +250,7 @@
                                 {% if exc.assigned_steward %}{{ exc.assigned_steward.get_full_name|default:exc.assigned_steward.username }}{% else %}Unassigned{% endif %}
                             </td>
                             <td class="text-right">
-                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon" title="View Quality Exception" aria-label="View Quality Exception">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -322,7 +322,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-right">
-                                <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="btn btn-icon" title="View Quality Scorecard" aria-label="View Quality Scorecard">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -383,7 +383,7 @@
                             <td class="font-mono text-xs font-semibold text-emerald-600">{{ prof.completeness_score }}%</td>
                             <td class="text-xs font-mono">{{ prof.total_row_count }}</td>
                             <td class="text-right">
-                                <a href="{% url 'bi:data_quality_profile_detail' prof.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:data_quality_profile_detail' prof.pk %}" class="btn btn-icon" title="View Quality Profile" aria-label="View Quality Profile">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
