@@ -29,7 +29,7 @@ from apps.core.models import Tenant
 
 
 class Command(BaseCommand):
-    help = "Seed demo data for Business Intelligence (BI) Module 10 (10.1 Ingestion, 10.2 ETL/ELT Pipelines, 10.3 Data Warehouse & Storage, and 10.4 Data Modeling & Semantic Layer)."
+    help = "Seed demo data for Business Intelligence (BI) Module 10 (10.1 Ingestion, 10.2 ETL/ELT Pipelines, 10.3 Data Warehouse & Storage, 10.4 Data Modeling & Semantic Layer, and 10.5 Data Quality & Cleansing)."
 
     def add_arguments(self, parser):
         parser.add_argument(
