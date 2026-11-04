@@ -31,7 +31,7 @@ def calculated_measure_list(request):
         )
 
     model_filter = request.GET.get("model", "").strip()
-    if model_filter:
+    if model_filter.isdigit():
         queryset = queryset.filter(semantic_model_id=model_filter)
 
     aggregation_filter = request.GET.get("aggregation", "").strip()
