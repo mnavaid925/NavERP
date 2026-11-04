@@ -135,6 +135,7 @@ class CalculatedMeasure(TenantNumbered):
             models.Index(fields=["tenant", "aggregation_type"], name="idx_bcms_ten_agg"),
             models.Index(fields=["tenant", "time_intelligence"], name="idx_bcms_ten_ti"),
             models.Index(fields=["tenant", "is_active"], name="idx_bcms_ten_active"),
+            models.Index(fields=["tenant", "glossary_term"], name="idx_bcms_ten_glossary"),
         ]
 
     def __str__(self):
