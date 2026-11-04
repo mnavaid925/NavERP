@@ -15,6 +15,10 @@ from apps.bi.models.DataQuality.DataQualityExceptions import DataQualityExceptio
 from apps.bi.models.DataQuality.DataQualityProfiles import DataQualityProfile
 from apps.bi.models.DataQuality.DataQualityRules import DataQualityRule
 from apps.bi.models.DataQuality.DataQualityScorecards import DataQualityScorecard
+from apps.bi.models.MasterData.MdmGoldenRecords import MdmGoldenRecord
+from apps.bi.models.MasterData.MdmHierarchyNodes import MdmHierarchyNode
+from apps.bi.models.MasterData.MdmReferenceCodes import MdmReferenceCode
+from apps.bi.models.MasterData.MdmSurvivorshipRules import MdmSurvivorshipRule
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -43,4 +47,8 @@ __all__ = [
     "DataQualityRule",
     "DataQualityException",
     "DataQualityScorecard",
+    "MdmGoldenRecord",
+    "MdmSurvivorshipRule",
+    "MdmHierarchyNode",
+    "MdmReferenceCode",
 ]
