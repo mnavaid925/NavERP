@@ -23,7 +23,7 @@
             {% elif lakehouse_zone.zone_type == 'gold' %}
             <span class="badge badge-green">{{ lakehouse_zone.get_zone_type_display }}</span>
             {% else %}
-            <span class="badge badge-purple">{{ lakehouse_zone.get_zone_type_display }}</span>
+            <span class="badge badge-slate">{{ lakehouse_zone.get_zone_type_display }}</span>
             {% endif %}
             {% if not lakehouse_zone.is_active %}
             <span class="badge badge-muted">Inactive</span>
@@ -175,7 +175,7 @@
                         {% elif table.table_type == 'dimension' %}
                         <span class="badge badge-green">{{ table.get_table_type_display }}</span>
                         {% elif table.table_type == 'aggregate' %}
-                        <span class="badge badge-purple">{{ table.get_table_type_display }}</span>
+                        <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
                         {% else %}
                         <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
                         {% endif %}
