@@ -52,7 +52,11 @@ class MdmHierarchyNodeForm(TenantUniqueMixin, TenantModelForm):
             if self.instance and self.instance.pk:
                 parent_qs = parent_qs.exclude(pk=self.instance.pk)
             self.fields["parent"].queryset = parent_qs.order_by("hierarchy_type", "level", "name")
-            self.fields["golden_record"].queryset = MdmGoldenRecord.objects.filter(tenant=self.tenant).order_by("name")
+            self.fields["golden_record"].queryset = (
+                MdmGoldenRecord.objects.filter(tenant=self.tenant)
+                .only("id", "number", "name", "domain")
+                .order_by("name")
+            )
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["item_category"].queryset = ItemCategory.objects.filter(tenant=self.tenant).order_by("name")
