@@ -104,14 +104,7 @@ def data_quality_scorecard_create(request):
             scorecard = form.save(commit=False)
             scorecard.tenant = request.tenant
             scorecard.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "CREATE",
-                "DataQualityScorecard",
-                scorecard.pk,
-                f"Created DataQualityScorecard {scorecard.name} ({scorecard.code})",
-            )
+            write_audit_log(request.user, scorecard, "create", tenant=request.tenant)
             messages.success(request, f"Quality scorecard '{scorecard.name}' created successfully.")
             return redirect("bi:data_quality_scorecard_detail", pk=scorecard.pk)
     else:
@@ -132,14 +125,7 @@ def data_quality_scorecard_edit(request, pk):
         form = DataQualityScorecardForm(request.POST, instance=scorecard, tenant=request.tenant)
         if form.is_valid():
             scorecard = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "UPDATE",
-                "DataQualityScorecard",
-                scorecard.pk,
-                f"Updated DataQualityScorecard {scorecard.name} ({scorecard.code})",
-            )
+            write_audit_log(request.user, scorecard, "update", tenant=request.tenant)
             messages.success(request, f"Quality scorecard '{scorecard.name}' updated successfully.")
             return redirect("bi:data_quality_scorecard_detail", pk=scorecard.pk)
     else:
@@ -158,16 +144,8 @@ def data_quality_scorecard_edit(request, pk):
 def data_quality_scorecard_delete(request, pk):
     scorecard = bi_object(request, DataQualityScorecard, pk)
     sc_name = scorecard.name
-    sc_number = scorecard.number
+    write_audit_log(request.user, scorecard, "delete", tenant=request.tenant)
     scorecard.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "DELETE",
-        "DataQualityScorecard",
-        pk,
-        f"Deleted DataQualityScorecard {sc_name} ({sc_number})",
-    )
     messages.success(request, f"Quality scorecard '{sc_name}' deleted successfully.")
     return redirect("bi:data_quality_scorecard_list")
 
@@ -251,12 +229,11 @@ def data_quality_scorecard_recalculate(request, pk):
     scorecard.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "EXECUTE",
-        "DataQualityScorecard",
-        scorecard.pk,
-        f"Recalculated scorecard {scorecard.name}: Trust Index {scorecard.overall_quality_score}% (Grade {scorecard.grade})",
+        scorecard,
+        "recalculate",
+        changes={"score": str(scorecard.overall_quality_score), "grade": scorecard.grade},
+        tenant=request.tenant,
     )
     messages.success(request, f"Scorecard '{scorecard.name}' recalculated: Data Trust Index {scorecard.overall_quality_score}% (Grade {scorecard.grade}).")
     return redirect("bi:data_quality_scorecard_detail", pk=scorecard.pk)
