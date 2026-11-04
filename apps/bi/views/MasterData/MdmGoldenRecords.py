@@ -255,8 +255,13 @@ def mdm_golden_record_unmerge(request, pk):
         messages.warning(request, "Record is not merged into any master record.")
         return redirect("bi:mdm_golden_record_detail", pk=absorbed_record.pk)
 
+    if surviving_record.tenant_id != request.tenant.id:
+        messages.error(request, "Cross-tenant unmerge operation forbidden.")
+        return redirect("bi:mdm_golden_record_detail", pk=absorbed_record.pk)
+
     with transaction.atomic():
-        absorbed_record.status = "approved"
+        absorbed_count = absorbed_record.source_record_count
+        absorbed_record.status = "pending_review"
         absorbed_record.merged_into_record = None
         absorbed_record.merged_at = None
         absorbed_record.stewardship_notes = (
@@ -264,9 +269,8 @@ def mdm_golden_record_unmerge(request, pk):
         )
         absorbed_record.save()
 
-        if surviving_record.source_record_count > 1:
-            surviving_record.source_record_count = max(1, surviving_record.source_record_count - 1)
-            surviving_record.save()
+        surviving_record.source_record_count = max(1, surviving_record.source_record_count - absorbed_count)
+        surviving_record.save()
 
         write_audit_log(
             request.user,
