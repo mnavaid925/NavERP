@@ -101,5 +101,6 @@ class MdmGoldenRecordMergeForm(forms.Form):
             MdmGoldenRecord.objects.filter(tenant=tenant, domain=primary_record.domain)
             .exclude(pk=primary_record.pk)
             .exclude(status="merged")
+            .only("id", "number", "name", "domain")
             .order_by("name")
         )
