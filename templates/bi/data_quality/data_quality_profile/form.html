@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ profile.name }}{% else %}New Quality Profile{% endif %} — Data Quality — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_profile_list' %}">Quality Profiles</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ profile.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Quality Profile: {{ profile.name }}{% else %}Configure New Quality Profile{% endif %}</h1>
+        <p class="text-muted text-sm">Target warehouse tables or semantic models for automated statistics and completeness profiling</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_quality_profile_detail' profile.pk %}{% else %}{% url 'bi:data_quality_profile_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-3xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Quality Profile Specification</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Profile Identity -->
+                <div class="space-y-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Profile Configuration</h3>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Profile Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_type.id_for_label }}">Target Scope</label>
+                            {{ form.target_type }}
+                            {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">If targeting physical warehouse table</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">If targeting business semantic model</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Scope Notes & Objectives</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex items-center gap-2 pt-2">
+                        {{ form.is_active }}
+                        <label class="form-label mb-0" for="{{ form.is_active.id_for_label }}">Active Profile</label>
+                        {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <a href="{% if is_edit %}{% url 'bi:data_quality_profile_detail' profile.pk %}{% else %}{% url 'bi:data_quality_profile_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Quality Profile{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
