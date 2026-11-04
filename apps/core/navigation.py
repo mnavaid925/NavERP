@@ -2937,6 +2937,21 @@ LIVE_LINKS = {
         "Semantic Overview": "bi:semantic_overview",
     },
 
+    # 10.5 Data Quality & Cleansing
+    "10.5": {
+        "Data Profiling": "bi:data_quality_profile_list",
+        "Validation & Quality Rules": "bi:data_quality_rule_list",
+        "Deduplication & Matching": "bi:data_quality_rule_list",
+        "Standardization & Enrichment": "bi:data_quality_rule_list",
+        "Quality Scorecards & Remediation": "bi:data_quality_scorecard_list",
+        # Extra live leaves
+        "Quality Profiles": "bi:data_quality_profile_list",
+        "Quality Rules": "bi:data_quality_rule_list",
+        "Quality Exceptions": "bi:data_quality_exception_list",
+        "Quality Scorecards": "bi:data_quality_scorecard_list",
+        "Quality Overview": "bi:quality_overview",
+    },
+
 
 
 
