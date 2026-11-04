@@ -4,7 +4,7 @@
 - **Module:** 10 Business Intelligence (`apps/bi`)
 - **Review Date:** 2026-11-04
 - **Changeset:** `0e8727a2393473bbcb65013c79c53f02c9081036...75d1a1d2f6b549c4d3df40c30afb2f99bc62bcfe`
-- **Review Passes In Progress:** Pass 3/6 Completed (`code-reviewer`, `explorer`, `frontend-reviewer`)
+- **Review Passes In Progress:** Pass 4/6 Completed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`)
 
 ---
 
@@ -58,3 +58,21 @@
 - [ ] **FR-M1**: Undefined utility class `text-primary` for navigation links. Replace with `text-brand` or `text-blue-600`.
 - [ ] **FR-M2**: Empty state heading typography: use semantic `<h3>` inside `.empty-state` container for consistency with `theme.css`.
 - [ ] **FR-M3**: Native browser `alert()` in SQL DDL copy button. Replace with non-blocking feedback or label toggle.
+
+---
+
+## Pass 4: `performance-reviewer`
+
+### Critical Findings
+- [ ] **PF-C1**: Unbounded full-table scans and memory bloat loading all system users in `DataMartForm`. In `apps/bi/forms/DataWarehouse/DataMarts.py` (L39-L43), `owner` and `steward` User querysets are left unscoped to tenant, executing `User.objects.all()` twice across all tenants. Scope `owner` and `steward` querysets with `get_user_model().objects.filter(tenant=self.tenant).order_by("username")`.
+
+### Important Findings
+- [ ] **PF-I1**: Missing composite index on `(tenant, storage_policy)` on `WarehouseTable`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L106-L111), add `models.Index(fields=["tenant", "storage_policy"], name="idx_bdwt_ten_policy")` to optimize reverse lookup from `WarehouseStoragePolicy`.
+- [ ] **PF-I2**: Missing composite index on `(tenant, name)` on ordered models `DataMart` and `WarehouseStoragePolicy`. In `apps/bi/models/DataWarehouse/DataMarts.py` (L81-L85) and `apps/bi/models/DataWarehouse/WarehouseStoragePolicies.py` (L107-L111), add `(tenant, name)` indexes to avoid database filesorts.
+- [ ] **PF-I3**: Missing composite index on `(tenant, -created_at)` on `WarehouseTable`. In `apps/bi/models/DataWarehouse/WarehouseTables.py`, add `models.Index(fields=["tenant", "-created_at"], name="idx_bdwt_ten_created")` to optimize recent tables query on overview dashboard.
+- [ ] **PF-I4**: Unbounded `marts` query and DOM generation on `warehouse_overview` dashboard. In `apps/bi/views/DataWarehouse/WarehouseOverview.py` (L36-L40), slice `marts` queryset to top 8 items (`[:8]`) to avoid rendering unbounded lists.
+
+### Minor Findings
+- [ ] **PF-M1**: Redundant `SELECT COUNT(*)` query before queryset iteration in detail templates (`lakehouse_zone/detail.html:112`, `warehouse_storage_policy/detail.html:159`). Use `{{ tables|length }}` instead of `{{ tables.count }}` to leverage result cache.
+- [ ] **PF-M2**: Large unused `schema_definition` JSONField loaded in list and overview queries (`WarehouseOverview.py:30-34`, `WarehouseTables.py:22-24`). Add `.defer("schema_definition")` to querysets in list and overview views.
+- [ ] **PF-M3**: Non-atomic multi-table delete in `seed_bi --flush` (`apps/bi/management/commands/seed_bi.py:36-50`). Wrap deletion block in `with transaction.atomic():`.
