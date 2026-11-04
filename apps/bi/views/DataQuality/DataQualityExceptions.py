@@ -187,5 +187,6 @@ def data_quality_exception_remediate(request, pk):
         )
         messages.success(request, f"Remediation update saved for exception '{exc.number}'.")
     else:
-        messages.error(request, "Failed to update exception remediation. Please check form errors.")
+        err_msg = "; ".join(f"{f}: {', '.join(e)}" for f, e in form.errors.items())
+        messages.error(request, f"Failed to update exception remediation: {err_msg}")
     return redirect("bi:data_quality_exception_detail", pk=exception.pk)
