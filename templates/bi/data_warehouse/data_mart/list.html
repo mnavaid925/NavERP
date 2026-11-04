@@ -73,7 +73,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
             <div class="form-group">
                 <label class="form-label" for="search-input">Search</label>
                 <div class="relative">
@@ -104,6 +104,15 @@
                     <option value="">All Tiers</option>
                     {% for code, label in access_tier_choices %}
                     <option value="{{ code }}" {% if request.GET.access_tier == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="active-filter">Status</label>
+                <select id="active-filter" name="is_active" class="form-select">
+                    <option value="">All</option>
+                    {% for val, label in active_choices %}
+                    <option value="{{ val }}" {% if request.GET.is_active == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
