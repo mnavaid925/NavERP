@@ -2952,6 +2952,21 @@ LIVE_LINKS = {
         "Quality Overview": "bi:quality_overview",
     },
 
+    # 10.6 Master Data Management (MDM)
+    "10.6": {
+        "Golden Record Management": "bi:mdm_golden_record_list",
+        "Match, Merge & Survivorship": "bi:mdm_survivorship_rule_list",
+        "Hierarchy & Relationship Management": "bi:mdm_hierarchy_node_list",
+        "Reference Data Management": "bi:mdm_reference_code_list",
+        "Data Stewardship Workflows": "bi:mdm_golden_record_list",
+        # Extra live leaves
+        "Golden Records": "bi:mdm_golden_record_list",
+        "Survivorship Rules": "bi:mdm_survivorship_rule_list",
+        "Hierarchy Nodes": "bi:mdm_hierarchy_node_list",
+        "Reference Codes": "bi:mdm_reference_code_list",
+        "Master Data Overview": "bi:mdm_overview",
+    },
+
 
 
 
