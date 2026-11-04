@@ -2908,6 +2908,20 @@ LIVE_LINKS = {
         "Execution Runs": "bi:etl_pipeline_run_list",
     },
 
+    # 10.3 Data Warehouse & Storage
+    "10.3": {
+        "Centralized Data Warehouse": "bi:warehouse_table_list",
+        "Data Marts": "bi:data_mart_list",
+        "Data Lake & Lakehouse": "bi:lakehouse_zone_list",
+        "Partitioning & Compression": "bi:warehouse_storage_policy_list",
+        "Archival & Retention": "bi:warehouse_storage_policy_list",
+        # Extra live leaves
+        "Warehouse Tables": "bi:warehouse_table_list",
+        "Storage Policies": "bi:warehouse_storage_policy_list",
+        "Lakehouse Zones": "bi:lakehouse_zone_list",
+        "Warehouse Overview": "bi:warehouse_overview",
+    },
+
 
 
 
