@@ -79,6 +79,7 @@ class DataMart(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bdmt_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "name"], name="idx_bdmt_ten_name"),
             models.Index(fields=["tenant", "subject_area"], name="idx_bdmt_ten_subj"),
             models.Index(fields=["tenant", "certification_status"], name="idx_bdmt_ten_cert"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdmt_ten_active"),
