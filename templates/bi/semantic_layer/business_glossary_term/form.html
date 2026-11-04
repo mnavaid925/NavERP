@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ term.name }}{% else %}New Glossary Term{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:business_glossary_term_list' %}">Business Glossary</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ term.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Term: {{ term.name }}{% else %}Author New Glossary Term{% endif %}</h1>
+        <p class="text-muted text-sm">Define canonical vocabulary definitions, calculation rules, synonyms, and stewardship</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:business_glossary_term_detail' term.pk %}{% else %}{% url 'bi:business_glossary_term_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Business Term Specification</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Basic Identification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Term Identification</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Term Name <span class="text-red-500">*</span></label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.code.id_for_label }}">Identifier Slug / Code <span class="text-red-500">*</span></label>
+                            {{ form.code }}
+                            {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.domain_category.id_for_label }}">Domain Category</label>
+                            {{ form.domain_category }}
+                            {% if form.domain_category.errors %}<div class="form-error">{{ form.domain_category.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.synonyms.id_for_label }}">Synonyms & Acronyms</label>
+                            {{ form.synonyms }}
+                            {% if form.synonyms.errors %}<div class="form-error">{{ form.synonyms.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Definitions -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Definitions & Calculation Narrative</h3>
+                    <div class="space-y-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.short_definition.id_for_label }}">Executive Summary Definition <span class="text-red-500">*</span></label>
+                            {{ form.short_definition }}
+                            {% if form.short_definition.errors %}<div class="form-error">{{ form.short_definition.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.full_definition.id_for_label }}">Comprehensive Corporate Definition</label>
+                            {{ form.full_definition }}
+                            {% if form.full_definition.errors %}<div class="form-error">{{ form.full_definition.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.calculation_rule.id_for_label }}">Calculation Rule / Formula Narrative</label>
+                            {{ form.calculation_rule }}
+                            {% if form.calculation_rule.errors %}<div class="form-error">{{ form.calculation_rule.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stewardship & Governance -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Stewardship & Governance</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.steward.id_for_label }}">Assigned Data Steward</label>
+                            {{ form.steward }}
+                            {% if form.steward.errors %}<div class="form-error">{{ form.steward.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.org_unit.id_for_label }}">Owning Department / Org Unit</label>
+                            {{ form.org_unit }}
+                            {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status</label>
+                            {{ form.certification_status }}
+                            {% if form.certification_status.errors %}<div class="form-error">{{ form.certification_status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.certification_notes.id_for_label }}">Certification Notes</label>
+                            {{ form.certification_notes }}
+                            {% if form.certification_notes.errors %}<div class="form-error">{{ form.certification_notes.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label" for="{{ form.related_terms.id_for_label }}">Related Glossary Terms</label>
+                            {{ form.related_terms }}
+                            {% if form.related_terms.errors %}<div class="form-error">{{ form.related_terms.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Hold Ctrl (or Cmd) to select multiple related terms.</p>
+                        </div>
+                        <div class="form-group flex items-center">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-800">Term is Active</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:business_glossary_term_detail' term.pk %}{% else %}{% url 'bi:business_glossary_term_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Term{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
