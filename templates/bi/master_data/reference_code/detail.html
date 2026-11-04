@@ -111,7 +111,7 @@
         {% endif %}
 
         <!-- Deprecation & Superseding Chain -->
-        {% if superseded_by or superseding_codes.exists %}
+        {% if superseded_by or superseding_codes %}
         <div class="card">
             <div class="card-header">
                 <h3 class="font-semibold text-slate-900 text-sm">Standards Evolution & Deprecation Pointers</h3>
@@ -126,7 +126,7 @@
                 </div>
                 {% endif %}
 
-                {% if superseding_codes.exists %}
+                {% if superseding_codes %}
                 <div>
                     <span class="font-semibold text-slate-800 block mb-2">Prior Standards Replaced by this Code:</span>
                     <ul class="space-y-1">
