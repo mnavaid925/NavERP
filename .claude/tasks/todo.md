@@ -286,16 +286,16 @@
 ---
 
 ## 10.4-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO live distributed OLAP cube query runtime (MDX/XMLA)** — Deferred to 10.12 OLAP & Multidimensional Cubes; 10.4 manages declarative semantic definitions, calculations, and relationships.
-- [ ] **NO live external Git sync with dbt Cloud / MetricFlow APIs** — External SaaS integration sync is reserved for 10.19 / advanced integration tiers.
-- [ ] **NO custom arbitrary Python/R script runtime execution in formulas** — Formulas are expressed via safe declarative mathematical expressions and standard SQL aggregations.
-- [ ] **NO natural-language-to-SQL LLM chatbot query generation** — Deferred to 10.15 Natural Language & Conversational BI.
+- [x] **NO live distributed OLAP cube query runtime (MDX/XMLA)** — Deferred to 10.12 OLAP & Multidimensional Cubes; 10.4 manages declarative semantic definitions, calculations, and relationships.
+- [x] **NO live external Git sync with dbt Cloud / MetricFlow APIs** — External SaaS integration sync is reserved for 10.19 / advanced integration tiers.
+- [x] **NO custom arbitrary Python/R script runtime execution in formulas** — Formulas are expressed via safe declarative mathematical expressions and standard SQL aggregations.
+- [x] **NO natural-language-to-SQL LLM chatbot query generation** — Deferred to 10.15 Natural Language & Conversational BI.
 
 ---
 
 ## Models (4 models in `apps/bi/models/SemanticLayer/`)
 
-- [ ] **`SemanticModel`** [Prefix: `BSMD-`] (`apps/bi/models/SemanticLayer/SemanticModels.py`)
+- [x] **`SemanticModel`** [Prefix: `BSMD-`] (`apps/bi/models/SemanticLayer/SemanticModels.py`)
   - **Purpose**: Governed business entity representing analytical facts, dimensions, virtual views, and certified reusable datasets with modeling grain, SCD policy, and warehouse table linkage.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -326,7 +326,7 @@
   - **Form Excludes**: `tenant`, `number`, `certified_by`, `certified_at`, `source_fingerprint`, `last_introspected_at`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'model_type']), models.Index(fields=['tenant', 'certification_status']), models.Index(fields=['tenant', 'warehouse_table'])]`
 
-- [ ] **`BusinessGlossaryTerm`** [Prefix: `BGLO-`] (`apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`)
+- [x] **`BusinessGlossaryTerm`** [Prefix: `BGLO-`] (`apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`)
   - **Purpose**: Canonical corporate business vocabulary dictionary establishing standardized definitions, acronyms, calculation narratives, synonyms, stewardship, and governance certification.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -350,7 +350,7 @@
   - **Form Excludes**: `tenant`, `number`, `certified_by`, `certified_at`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain_category']), models.Index(fields=['tenant', 'certification_status'])]`
 
-- [ ] **`CalculatedMeasure`** [Prefix: `BCMS-`] (`apps/bi/models/SemanticLayer/CalculatedMeasures.py`)
+- [x] **`CalculatedMeasure`** [Prefix: `BCMS-`] (`apps/bi/models/SemanticLayer/CalculatedMeasures.py`)
   - **Purpose**: Centrally authored reusable business metrics, KPIs, aggregations, ratios, and time-intelligence expressions with display formatting and target/alert thresholds.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -375,7 +375,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'semantic_model', 'code')]`, `indexes = [models.Index(fields=['tenant', 'aggregation_type']), models.Index(fields=['tenant', 'time_intelligence'])]`
 
-- [ ] **`DrillHierarchy`** [Prefix: `BDHI-`] (`apps/bi/models/SemanticLayer/DrillHierarchies.py`)
+- [x] **`DrillHierarchy`** [Prefix: `BDHI-`] (`apps/bi/models/SemanticLayer/DrillHierarchies.py`)
   - **Purpose**: Defines governed multi-level navigation and aggregation drill paths (Time, Geography, Organization, Product, Custom) with ordered levels for ad-hoc slicing.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -397,73 +397,73 @@
 ## Backend Packages & Files (`apps/bi/`)
 
 ### Models (`apps/bi/models/SemanticLayer/`)
-- [ ] `apps/bi/models/SemanticLayer/__init__.py` (re-exports `SemanticModel`, `BusinessGlossaryTerm`, `CalculatedMeasure`, `DrillHierarchy`)
-- [ ] `apps/bi/models/SemanticLayer/SemanticModels.py`
-- [ ] `apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`
-- [ ] `apps/bi/models/SemanticLayer/CalculatedMeasures.py`
-- [ ] `apps/bi/models/SemanticLayer/DrillHierarchies.py`
-- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models
+- [x] `apps/bi/models/SemanticLayer/__init__.py` (re-exports `SemanticModel`, `BusinessGlossaryTerm`, `CalculatedMeasure`, `DrillHierarchy`)
+- [x] `apps/bi/models/SemanticLayer/SemanticModels.py`
+- [x] `apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`
+- [x] `apps/bi/models/SemanticLayer/CalculatedMeasures.py`
+- [x] `apps/bi/models/SemanticLayer/DrillHierarchies.py`
+- [x] Update `apps/bi/models/__init__.py` to re-export the 4 models
 
 ### Forms (`apps/bi/forms/SemanticLayer/`)
-- [ ] `apps/bi/forms/SemanticLayer/__init__.py`
-- [ ] `apps/bi/forms/SemanticLayer/SemanticModelForms.py` (`SemanticModelForm`, `SemanticModelCertificationForm`)
-- [ ] `apps/bi/forms/SemanticLayer/BusinessGlossaryTermForms.py` (`BusinessGlossaryTermForm`, `BusinessGlossaryTermCertificationForm`)
-- [ ] `apps/bi/forms/SemanticLayer/CalculatedMeasureForms.py` (`CalculatedMeasureForm`)
-- [ ] `apps/bi/forms/SemanticLayer/DrillHierarchyForms.py` (`DrillHierarchyForm`)
-- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms
+- [x] `apps/bi/forms/SemanticLayer/__init__.py`
+- [x] `apps/bi/forms/SemanticLayer/SemanticModelForms.py` (`SemanticModelForm`, `SemanticModelCertificationForm`)
+- [x] `apps/bi/forms/SemanticLayer/BusinessGlossaryTermForms.py` (`BusinessGlossaryTermForm`, `BusinessGlossaryTermCertificationForm`)
+- [x] `apps/bi/forms/SemanticLayer/CalculatedMeasureForms.py` (`CalculatedMeasureForm`)
+- [x] `apps/bi/forms/SemanticLayer/DrillHierarchyForms.py` (`DrillHierarchyForm`)
+- [x] Update `apps/bi/forms/__init__.py` to re-export the forms
 
 ### Views (`apps/bi/views/SemanticLayer/`)
-- [ ] `apps/bi/views/SemanticLayer/__init__.py`
-- [ ] `apps/bi/views/SemanticLayer/SemanticModelViews.py` (list, create, detail, edit, delete, certify, introspect)
-- [ ] `apps/bi/views/SemanticLayer/BusinessGlossaryTermViews.py` (list, create, detail, edit, delete, certify)
-- [ ] `apps/bi/views/SemanticLayer/CalculatedMeasureViews.py` (list, create, detail, edit, delete)
-- [ ] `apps/bi/views/SemanticLayer/DrillHierarchyViews.py` (list, create, detail, edit, delete)
-- [ ] `apps/bi/views/SemanticLayer/SemanticOverviewViews.py` (`semantic_overview` command center)
-- [ ] Update `apps/bi/views/__init__.py` to re-export view functions
+- [x] `apps/bi/views/SemanticLayer/__init__.py`
+- [x] `apps/bi/views/SemanticLayer/SemanticModelViews.py` (list, create, detail, edit, delete, certify, introspect)
+- [x] `apps/bi/views/SemanticLayer/BusinessGlossaryTermViews.py` (list, create, detail, edit, delete, certify)
+- [x] `apps/bi/views/SemanticLayer/CalculatedMeasureViews.py` (list, create, detail, edit, delete)
+- [x] `apps/bi/views/SemanticLayer/DrillHierarchyViews.py` (list, create, detail, edit, delete)
+- [x] `apps/bi/views/SemanticLayer/SemanticOverviewViews.py` (`semantic_overview` command center)
+- [x] Update `apps/bi/views/__init__.py` to re-export view functions
 
 ### URLs (`apps/bi/urls/SemanticLayer/`)
-- [ ] `apps/bi/urls/SemanticLayer/__init__.py` (re-exports `urlpatterns`)
-- [ ] `apps/bi/urls/SemanticLayer/SemanticModelUrls.py`
-- [ ] `apps/bi/urls/SemanticLayer/BusinessGlossaryTermUrls.py`
-- [ ] `apps/bi/urls/SemanticLayer/CalculatedMeasureUrls.py`
-- [ ] `apps/bi/urls/SemanticLayer/DrillHierarchyUrls.py`
-- [ ] `apps/bi/urls/SemanticLayer/SemanticOverviewUrls.py`
-- [ ] Update `apps/bi/urls/__init__.py` to include `SemanticLayer` routes
+- [x] `apps/bi/urls/SemanticLayer/__init__.py` (re-exports `urlpatterns`)
+- [x] `apps/bi/urls/SemanticLayer/SemanticModelUrls.py`
+- [x] `apps/bi/urls/SemanticLayer/BusinessGlossaryTermUrls.py`
+- [x] `apps/bi/urls/SemanticLayer/CalculatedMeasureUrls.py`
+- [x] `apps/bi/urls/SemanticLayer/DrillHierarchyUrls.py`
+- [x] `apps/bi/urls/SemanticLayer/SemanticOverviewUrls.py`
+- [x] Update `apps/bi/urls/__init__.py` to include `SemanticLayer` routes
 
 ### Admin & Integration
-- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.4"]` mapping NavERP.md feature bullets to views
-- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.4 (Finance, Sales, HR semantic models, glossary terms, measures, hierarchies)
+- [x] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.4"]` mapping NavERP.md feature bullets to views
+- [x] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.4 (Finance, Sales, HR semantic models, glossary terms, measures, hierarchies)
 
 ---
 
 ## Templates (`templates/bi/semantic_layer/`)
-- [ ] `templates/bi/semantic_layer/semantic_overview.html` (Command center dashboard: total models, certified terms, calculated measures, hierarchies, quick actions)
-- [ ] `templates/bi/semantic_layer/semantic_model/list.html`
-- [ ] `templates/bi/semantic_layer/semantic_model/detail.html`
-- [ ] `templates/bi/semantic_layer/semantic_model/form.html`
-- [ ] `templates/bi/semantic_layer/business_glossary_term/list.html`
-- [ ] `templates/bi/semantic_layer/business_glossary_term/detail.html`
-- [ ] `templates/bi/semantic_layer/business_glossary_term/form.html`
-- [ ] `templates/bi/semantic_layer/calculated_measure/list.html`
-- [ ] `templates/bi/semantic_layer/calculated_measure/detail.html`
-- [ ] `templates/bi/semantic_layer/calculated_measure/form.html`
-- [ ] `templates/bi/semantic_layer/drill_hierarchy/list.html`
-- [ ] `templates/bi/semantic_layer/drill_hierarchy/detail.html`
-- [ ] `templates/bi/semantic_layer/drill_hierarchy/form.html`
+- [x] `templates/bi/semantic_layer/semantic_overview.html` (Command center dashboard: total models, certified terms, calculated measures, hierarchies, quick actions)
+- [x] `templates/bi/semantic_layer/semantic_model/list.html`
+- [x] `templates/bi/semantic_layer/semantic_model/detail.html`
+- [x] `templates/bi/semantic_layer/semantic_model/form.html`
+- [x] `templates/bi/semantic_layer/business_glossary_term/list.html`
+- [x] `templates/bi/semantic_layer/business_glossary_term/detail.html`
+- [x] `templates/bi/semantic_layer/business_glossary_term/form.html`
+- [x] `templates/bi/semantic_layer/calculated_measure/list.html`
+- [x] `templates/bi/semantic_layer/calculated_measure/detail.html`
+- [x] `templates/bi/semantic_layer/calculated_measure/form.html`
+- [x] `templates/bi/semantic_layer/drill_hierarchy/list.html`
+- [x] `templates/bi/semantic_layer/drill_hierarchy/detail.html`
+- [x] `templates/bi/semantic_layer/drill_hierarchy/form.html`
 
 ---
 
 ## Verification & Close-out
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0011_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_4.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.4.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_semanticlayer_models.py`, `test_semanticlayer_forms.py`, `test_semanticlayer_views.py`, `test_semanticlayer_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.4 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.4.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0011_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_4.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.4.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_semanticlayer_models.py`, `test_semanticlayer_forms.py`, `test_semanticlayer_views.py`, `test_semanticlayer_security.py`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.4 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.4.md`
 
 ## Later passes / deferred
 - Live bi-directional dbt Semantic Layer MetricFlow synchronization via Git/API -> Enterprise Analytics integration
@@ -474,8 +474,24 @@
 - Master Data Management (MDM) Golden Records -> Sub-module 10.6 Master Data Management
 - Enterprise Data Catalog & Column-Level Lineage -> Sub-module 10.7 Data Catalog, Lineage & Governance
 
-## Review notes
-(to be populated during Phase 4–6)
+## Review & Completion Summary (2026-11-04)
+- **Deliverables**: Sub-module 10.4 Data Modeling & Semantic Layer fully built, integrated, reviewed by 6 serial reviewers, fixed, and verified with 100% green tests.
+- **Models**:
+  - `SemanticModel` (`BSMD-`)
+  - `BusinessGlossaryTerm` (`BGLO-`)
+  - `CalculatedMeasure` (`BCMS-`)
+  - `DrillHierarchy` (`BDHI-`)
+- **Routes & Views**: 24 distinct URL routes and views under `bi:` namespace (`bi:semantic_overview`, `bi:semantic_model_*`, `bi:business_glossary_term_*`, `bi:calculated_measure_*`, `bi:drill_hierarchy_*`).
+- **Templates**: 13 Tailwind + HTMX templates in `templates/bi/semantic_layer/` complying with design system, color-named badges, and accessibility.
+- **Admin**: All 4 models registered with search, list_filter, and readonly tenant fields in `apps/bi/admin.py`.
+- **Navigation**: `LIVE_LINKS["10.4"]` in `apps/core/navigation.py` wired to all 5 feature bullets from `NavERP.md`.
+- **Seeder**: `seed_bi` extended with multi-tenant data for Acme and Globex; verified 100% idempotent.
+- **Migrations**: `0011_businessglossaryterm_semanticmodel_drillhierarchy_and_more.py` and `0012_businessglossaryterm_idx_bglo_ten_domain_name_and_more.py` applied cleanly.
+- **Review Passes**: 6 serial reviewers executed (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`); all 26 findings documented in `.claude/tasks/review-bi-10.4.md` and 100% resolved in Phase 5.
+- **Tests**: 233 dedicated unit/form/view/security tests in `test_semanticlayer_models.py` (26), `test_semanticlayer_forms.py` (55), `test_semanticlayer_views.py` (106), `test_semanticlayer_security.py` (46). Full BI suite (505 tests) runs 100% green.
+- **Review Findings File**: `.claude/tasks/review-bi-10.4.md`
+- **Gaps**: None (all features, contract specifications, and review findings resolved).
+
 
 ---
 # Sub-module 10.3: Data Warehouse & Storage (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.3.md` (2026-11-04)
