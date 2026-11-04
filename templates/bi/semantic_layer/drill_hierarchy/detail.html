@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{{ hierarchy.name }} ({{ hierarchy.number }}) — Drill Hierarchy — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:drill_hierarchy_list' %}">Drill Hierarchies</a>
+            <span class="sep">/</span>
+            <span>{{ hierarchy.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ hierarchy.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ hierarchy.number }}</span>
+            <span class="badge badge-info">{{ hierarchy.get_hierarchy_type_display }}</span>
+            {% if hierarchy.primary_drill_path %}
+            <span class="badge badge-green">Primary Drill Path</span>
+            {% endif %}
+            {% if hierarchy.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ hierarchy.description|default:"No description provided for this drill hierarchy." }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:semantic_model_detail' hierarchy.semantic_model.pk %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Parent Model</span>
+        </a>
+        <a href="{% url 'bi:drill_hierarchy_edit' hierarchy.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:drill_hierarchy_delete' hierarchy.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete hierarchy {{ hierarchy.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Visual Stepper Drill Path -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Ordered Drill Path ({{ hierarchy.levels_json|length }} Levels)</h2>
+            </div>
+            <div class="card-body">
+                {% if hierarchy.levels_json %}
+                <div class="space-y-4">
+                    {% for lvl in hierarchy.levels_json %}
+                    <div class="flex items-start gap-4 p-3 bg-slate-50 border border-slate-200 rounded">
+                        <div class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                            {{ lvl.level|default:forloop.counter }}
+                        </div>
+                        <div class="flex-grow">
+                            <div class="font-semibold text-slate-900 text-sm">{{ lvl.name }}</div>
+                            <div class="text-xs text-muted font-mono mt-0.5">Physical Column: <span class="text-slate-800 font-semibold">{{ lvl.column }}</span></div>
+                        </div>
+                        {% if not forloop.last %}
+                        <div class="text-slate-400 self-center">
+                            <i data-lucide="arrow-down" class="w-4 h-4"></i>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-muted">No levels defined in this hierarchy. Click Edit to define levels JSON.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Hierarchy Properties Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Hierarchy Specifications</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Identifier Code</span>
+                        <span class="font-mono text-slate-800">{{ hierarchy.code }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Hierarchy Dimension Type</span>
+                        <span class="font-medium text-slate-800">{{ hierarchy.get_hierarchy_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Parent Semantic Model</span>
+                        <a href="{% url 'bi:semantic_model_detail' hierarchy.semantic_model.pk %}" class="text-primary hover:underline font-medium">
+                            {{ hierarchy.semantic_model.name }} ({{ hierarchy.semantic_model.number }})
+                        </a>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Primary Model Drill Path</span>
+                        <span class="font-medium text-slate-800">{% if hierarchy.primary_drill_path %}Yes (Default Slicing Path){% else %}No (Secondary Path){% endif %}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (1 col) -->
+    <div class="space-y-6">
+        <!-- Parent Model Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Semantic Model</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Model Name</span>
+                    <a href="{% url 'bi:semantic_model_detail' hierarchy.semantic_model.pk %}" class="text-primary hover:underline font-medium text-base">
+                        {{ hierarchy.semantic_model.name }}
+                    </a>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Model Type</span>
+                    <span class="badge badge-slate mt-1">{{ hierarchy.semantic_model.get_model_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Grain</span>
+                    <span class="text-xs text-slate-700">{{ hierarchy.semantic_model.grain_description|default:"Not specified" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit & Metadata -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Audit & Timestamps</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Created</span>
+                    <span class="text-slate-700 text-xs">{{ hierarchy.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Last Updated</span>
+                    <span class="text-slate-700 text-xs">{{ hierarchy.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
