@@ -56,7 +56,7 @@ def semantic_model_list(request):
         queryset = queryset.filter(scd_type=scd_type_filter)
 
     mart_filter = request.GET.get("data_mart", "").strip()
-    if mart_filter:
+    if mart_filter.isdigit():
         queryset = queryset.filter(data_mart_id=mart_filter)
 
     is_active_filter = request.GET.get("is_active", "").strip()
