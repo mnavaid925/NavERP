@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Scorecards — Data Quality & Cleansing — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <span>Quality Scorecards</span>
+        </div>
+        <h1 class="page-title">Executive Quality Scorecards</h1>
+        <p class="text-muted text-sm">Aggregated health scorecards measuring the 6 ISO/DAMA dimensions, Data Trust Index, and corporate SLA compliance</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:quality_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Quality Overview</span>
+        </a>
+        <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Quality Rules</span>
+        </a>
+        <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-triangle"></i>
+            <span>Exceptions Queue</span>
+        </a>
+        <a href="{% url 'bi:data_quality_scorecard_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Quality Scorecard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Scorecards</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="star"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Grade A (Excellent)</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ grade_a_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">SLA Breached</div>
+            <div class="text-2xl font-bold text-red-600">{{ sla_breached_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="check-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Target Threshold</div>
+            <div class="text-2xl font-bold text-indigo-600">&ge; 95.00%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search Scorecards</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, code, number, description..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-scope">Scope</label>
+                <select id="filter-scope" name="scope_type" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for val, label in scope_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.scope_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-grade">Grade</label>
+                <select id="filter-grade" name="grade" class="form-select">
+                    <option value="">All Grades</option>
+                    {% for val, label in grade_choices %}
+                    <option value="{{ val }}" {% if request.GET.grade == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-health">Health Status</label>
+                <select id="filter-health" name="health_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in health_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.health_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_quality_scorecard_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Scorecards Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Scorecard & Code</th>
+                        <th>Scope Domain</th>
+                        <th>Data Trust Index</th>
+                        <th>Grade</th>
+                        <th>Health Status</th>
+                        <th>SLA Status</th>
+                        <th>Rules / Exceptions</th>
+                        <th>Last Calculated</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sc in scorecards %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900 dark:text-slate-100">
+                                <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="hover:text-primary-600 transition-colors">
+                                    {{ sc.name }}
+                                </a>
+                            </div>
+                            <div class="text-xs font-mono text-muted">{{ sc.number }} &middot; {{ sc.code }}</div>
+                        </td>
+                        <td>
+                            <div class="text-xs font-medium">{{ sc.get_scope_type_display }}</div>
+                            {% if sc.warehouse_table %}
+                            <div class="text-xs font-mono text-muted">{{ sc.warehouse_table.name }}</div>
+                            {% elif sc.semantic_model %}
+                            <div class="text-xs font-mono text-muted">{{ sc.semantic_model.name }}</div>
+                            {% elif sc.data_mart %}
+                            <div class="text-xs font-mono text-muted">{{ sc.data_mart.name }}</div>
+                            {% else %}
+                            <div class="text-xs text-muted">Tenant-Wide Enterprise</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-sm {% if sc.overall_quality_score >= 95 %}text-emerald-600{% elif sc.overall_quality_score >= 85 %}text-blue-600{% elif sc.overall_quality_score >= 75 %}text-amber-600{% else %}text-red-600{% endif %}">
+                                    {{ sc.overall_quality_score }}%
+                                </span>
+                            </div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-1">
+                                <div class="{% if sc.overall_quality_score >= 95 %}bg-emerald-500{% elif sc.overall_quality_score >= 85 %}bg-blue-500{% elif sc.overall_quality_score >= 75 %}bg-amber-500{% else %}bg-red-500{% endif %} h-1.5 rounded-full" style="width: {{ sc.overall_quality_score }}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if sc.grade == 'A' %}
+                            <span class="badge badge-green font-bold">Grade A</span>
+                            {% elif sc.grade == 'B' %}
+                            <span class="badge badge-info font-bold">Grade B</span>
+                            {% elif sc.grade == 'C' %}
+                            <span class="badge badge-amber font-bold">Grade C</span>
+                            {% else %}
+                            <span class="badge badge-red font-bold">Grade {{ sc.grade }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sc.health_status == 'healthy' %}
+                            <span class="badge badge-green">Healthy</span>
+                            {% elif sc.health_status == 'needs_attention' %}
+                            <span class="badge badge-amber">Needs Attention</span>
+                            {% elif sc.health_status == 'critical' %}
+                            <span class="badge badge-red">Critical</span>
+                            {% else %}
+                            <span class="badge badge-slate">Failing</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if sc.meets_sla %}
+                            <span class="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium">
+                                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                                Meets SLA (&ge;{{ sc.target_quality_score }}%)
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                                Breached (&lt;{{ sc.target_quality_score }}%)
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs">
+                            <span class="font-mono text-emerald-600 font-medium">{{ sc.rules_passed_count }}</span> / <span class="font-mono">{{ sc.total_rules_evaluated }}</span> rules passed<br>
+                            <span class="font-mono {% if sc.open_exceptions_count > 0 %}text-amber-600 font-semibold{% else %}text-muted{% endif %}">{{ sc.open_exceptions_count }} open exceptions</span>
+                        </td>
+                        <td class="text-xs text-muted">
+                            {% if sc.last_calculated_at %}
+                            {{ sc.last_calculated_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            <span class="text-slate-400">Never</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <form method="post" action="{% url 'bi:data_quality_scorecard_recalculate' sc.pk %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-700" title="Recalculate Trust Index Now">
+                                        <i data-lucide="refresh-cw"></i>
+                                    </button>
+                                </form>
+                                <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="btn btn-icon" title="View Scorecard">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:data_quality_scorecard_edit' sc.pk %}" class="btn btn-icon" title="Edit Scorecard">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'bi:data_quality_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete scorecard {{ sc.name }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Scorecard">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="p-8 text-center">
+                            <div class="empty-state">
+                                <div class="empty-icon text-slate-300 dark:text-slate-600 mb-2">
+                                    <i data-lucide="award" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100">No Quality Scorecards Configured</h3>
+                                <p class="text-muted text-sm max-w-sm mx-auto mt-1 mb-4">Create executive data trust scorecards to track ISO/DAMA data quality dimensions and corporate SLA compliance.</p>
+                                <a href="{% url 'bi:data_quality_scorecard_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Quality Scorecard</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer border-t border-slate-100 dark:border-slate-800 p-4">
+        <div class="pagination flex items-center justify-between">
+            <span class="text-xs text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} scorecards</span>
+            <div class="flex gap-2">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope_type %}&scope_type={{ request.GET.scope_type }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.health_status %}&health_status={{ request.GET.health_status }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+                {% endif %}
+                <span class="btn btn-outline text-xs active">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope_type %}&scope_type={{ request.GET.scope_type }}{% endif %}{% if request.GET.grade %}&grade={{ request.GET.grade }}{% endif %}{% if request.GET.health_status %}&health_status={{ request.GET.health_status }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
