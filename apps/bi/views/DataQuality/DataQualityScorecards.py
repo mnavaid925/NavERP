@@ -44,9 +44,14 @@ def data_quality_scorecard_list(request):
     if health_status_filter:
         queryset = queryset.filter(health_status=health_status_filter)
 
-    total_count = bi_scope(DataQualityScorecard.objects.all(), request).count()
-    grade_a_count = bi_scope(DataQualityScorecard.objects.all(), request).filter(grade="A").count()
-    sla_breached_count = bi_scope(DataQualityScorecard.objects.all(), request).filter(meets_sla=False).count()
+    stat_counts = bi_scope(DataQualityScorecard.objects.all(), request).aggregate(
+        total=Count("id"),
+        grade_a=Count("id", filter=Q(grade="A")),
+        sla_breached=Count("id", filter=Q(meets_sla=False)),
+    )
+    total_count = stat_counts["total"]
+    grade_a_count = stat_counts["grade_a"]
+    sla_breached_count = stat_counts["sla_breached"]
 
     paginator = Paginator(queryset, 15)
     page_number = request.GET.get("page", 1)
