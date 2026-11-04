@@ -245,14 +245,14 @@ def data_quality_scorecard_recalculate(request, pk):
         scorecard.grade = "F"
 
     scorecard.meets_sla = (scorecard.overall_quality_score >= scorecard.target_quality_score)
-    if scorecard.meets_sla and critical_exceptions == 0:
-        scorecard.health_status = "healthy"
+    if scorecard.overall_quality_score < Decimal("60.00") or scorecard.grade == "F":
+        scorecard.health_status = "failing"
     elif critical_exceptions > 0:
         scorecard.health_status = "critical"
     elif not scorecard.meets_sla:
         scorecard.health_status = "needs_attention"
     else:
-        scorecard.health_status = "failing"
+        scorecard.health_status = "healthy"
 
     scorecard.total_rules_evaluated = total_rules
     scorecard.rules_passed_count = passed_rules
