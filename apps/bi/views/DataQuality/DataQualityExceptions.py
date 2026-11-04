@@ -108,14 +108,7 @@ def data_quality_exception_create(request):
             exc = form.save(commit=False)
             exc.tenant = request.tenant
             exc.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "CREATE",
-                "DataQualityException",
-                exc.pk,
-                f"Created DataQualityException {exc.number} ({exc.record_identifier})",
-            )
+            write_audit_log(request.user, exc, "create", tenant=request.tenant)
             messages.success(request, f"Quality exception '{exc.number}' created successfully.")
             return redirect("bi:data_quality_exception_detail", pk=exc.pk)
     else:
@@ -136,14 +129,7 @@ def data_quality_exception_edit(request, pk):
         form = DataQualityExceptionForm(request.POST, instance=exception, tenant=request.tenant)
         if form.is_valid():
             exception = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "UPDATE",
-                "DataQualityException",
-                exception.pk,
-                f"Updated DataQualityException {exception.number}",
-            )
+            write_audit_log(request.user, exception, "update", tenant=request.tenant)
             messages.success(request, f"Quality exception '{exception.number}' updated successfully.")
             return redirect("bi:data_quality_exception_detail", pk=exception.pk)
     else:
@@ -162,15 +148,8 @@ def data_quality_exception_edit(request, pk):
 def data_quality_exception_delete(request, pk):
     exception = bi_object(request, DataQualityException, pk)
     exc_number = exception.number
+    write_audit_log(request.user, exception, "delete", tenant=request.tenant)
     exception.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "DELETE",
-        "DataQualityException",
-        pk,
-        f"Deleted DataQualityException {exc_number}",
-    )
     messages.success(request, f"Quality exception '{exc_number}' deleted successfully.")
     return redirect("bi:data_quality_exception_list")
 
@@ -188,12 +167,11 @@ def data_quality_exception_remediate(request, pk):
         exc.save()
 
         write_audit_log(
-            request.tenant,
             request.user,
-            "UPDATE",
-            "DataQualityException",
-            exc.pk,
-            f"Remediated exception {exc.number}: status {exc.status}, action {exc.remediation_action}",
+            exc,
+            "remediate",
+            changes={"status": exc.status, "remediation_action": exc.remediation_action},
+            tenant=request.tenant,
         )
         messages.success(request, f"Remediation update saved for exception '{exc.number}'.")
     else:
