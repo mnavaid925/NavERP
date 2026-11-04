@@ -20,11 +20,11 @@
 
 - [x] **I1**: `WarehouseTableForm` excludes inactive FK references on edit, blocking updates to existing tables. In `apps/bi/forms/DataWarehouse/WarehouseTables.py` (L62-L72), `lakehouse_zone`, `data_mart`, and `storage_policy` querysets filter strictly on `is_active=True`. When editing an existing instance, permit the currently bound foreign key ID even if inactive (`Q(is_active=True) | Q(pk=self.instance.<fk_id>)`). fixed — fix(bi): permit currently bound foreign keys on edit in WarehouseTableForm
 - [x] **I2**: `lakehouse_zone_delete` writes audit log before `ProtectedError` check, leaving a phantom deletion record. In `apps/bi/views/DataWarehouse/LakehouseZones.py` (L181-L194), wrap `zone.delete()` and `write_audit_log` inside `transaction.atomic()` or log only after successful deletion. fixed — fix(bi): wrap lakehouse zone deletion and audit logging in transaction.atomic
-- [ ] **I3**: Key filter dropdown controls omitted from list templates despite view context support:
+- [x] **I3**: Key filter dropdown controls omitted from list templates despite view context support:
   - In `templates/bi/data_warehouse/warehouse_table/list.html`, add `<select>` dropdowns for `data_mart`, `grain`, and `is_active`.
   - In `templates/bi/data_warehouse/data_mart/list.html`, add `<select>` dropdown for `is_active`.
   - In `templates/bi/data_warehouse/lakehouse_zone/list.html`, add `<select>` dropdown for `is_active`.
-  - In `templates/bi/data_warehouse/warehouse_storage_policy/list.html`, add `<select>` dropdown for `is_active`.
+  - In `templates/bi/data_warehouse/warehouse_storage_policy/list.html`, add `<select>` dropdown for `is_active`. fixed — feat(bi): add missing filter dropdowns across warehouse list templates
 - [ ] **I4**: Unsupported theme badge class `.badge-purple` used across 5 templates (`warehouse_table/detail.html`, `warehouse_table/list.html`, `lakehouse_zone/detail.html`, `lakehouse_zone/list.html`, `warehouse_storage_policy/detail.html`, `data_mart/detail.html`). Replace all `.badge-purple` occurrences with valid design system classes `.badge-info` or `.badge-slate`.
 - [ ] **I5**: `warehouse_overview.html` omits rendering the pinned context metric `total_compressed_bytes`. Display `total_compressed_bytes` formatted alongside `total_rows`.
 - [ ] **I6**: Missing composite index on `(tenant, storage_policy)` on `WarehouseTable`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L106-L111), add `models.Index(fields=["tenant", "storage_policy"], name="idx_bdwt_ten_policy")` to optimize reverse lookup from `WarehouseStoragePolicy`.
