@@ -171,6 +171,9 @@ def business_glossary_term_certify(request, pk):
         if new_status == "certified":
             term.certified_by = request.user
             term.certified_at = timezone.now()
+        else:
+            term.certified_by = None
+            term.certified_at = None
         term.save(update_fields=["certification_status", "certification_notes", "certified_by", "certified_at", "updated_at"])
         write_audit_log(request.user, term, "certify", tenant=request.tenant)
         messages.success(request, f"Certification status updated to '{term.get_certification_status_display()}'.")
