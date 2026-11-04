@@ -5,7 +5,7 @@
 - **Target app:** `apps/bi`
 - **Review date:** 2026-11-04
 - **Base SHA:** `069fb344d5ed505ef7ef4373b47d5ed6938ce6ed`
-- **Status:** In Progress (Pass 4/6 complete)
+- **Status:** In Progress (Pass 5/6 complete)
 
 ---
 
@@ -186,3 +186,26 @@
   - `apps/bi/views/SemanticLayer/CalculatedMeasures.py:52`
   - `apps/bi/views/SemanticLayer/DrillHierarchies.py:46`
   - Fix: Change `25` to `15` to match NavERP standard `per_page=15`.
+
+---
+
+## Pass 5: qa-smoke-tester Findings
+
+### Critical
+- **[QA-CRIT-1]** `write_audit_log` call signature mismatch crashes ALL 15 POST mutations across Semantic Layer with HTTP 500:
+  - Runtime verification with test client confirmed `TypeError: write_audit_log() takes from 3 to 5 positional arguments but 6 were given` on all 15 POST mutation endpoints:
+    - SemanticModel: create, edit, delete, certify, introspect
+    - BusinessGlossaryTerm: create, edit, delete, certify
+    - CalculatedMeasure: create, edit, delete
+    - DrillHierarchy: create, edit, delete
+  - Fix: Update all 15 call sites in `apps/bi/views/SemanticLayer/*.py` to `write_audit_log(request.user, instance, action, tenant=request.tenant)`. On delete views, call before `instance.delete()`.
+
+### Important
+- **[QA-IMP-1]** Unvalidated string query parameters on Foreign Key ID filters cause HTTP 500 (`ValueError`):
+  - In `SemanticModels.py:L60` (`?data_mart=invalid`), `CalculatedMeasures.py:L35` (`?model=invalid`), and `DrillHierarchies.py:L33` (`?model=invalid`), non-numeric strings cause `ValueError: Field 'id' expected a number but got ...`.
+  - Fix: Guard with `if mart_filter.isdigit():` and `if model_filter.isdigit():`.
+
+### Pass Verifications
+- Zero comment leaks (`{#`) across all 11 Semantic Layer templates and rendered output.
+- Data rendering (no silent blanks) verified across all 17 GET views with real seeded attributes.
+- Cross-tenant IDOR protection 100% verified (all 8 GET and 7 POST cross-tenant requests returned HTTP 404).
