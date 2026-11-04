@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Golden Record: {{ golden_record.number }}{% else %}New Golden Record{% endif %} — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_golden_record_list' %}">Golden Records</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Record{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Golden Record: {{ golden_record.name }}{% else %}Create Golden Master Record{% endif %}</h1>
+        <p class="text-muted text-sm">Authoritative single-source-of-truth master entity definition</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:mdm_golden_record_detail' golden_record.pk %}{% else %}{% url 'bi:mdm_golden_record_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900 text-sm">Master Record Details</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_name">Master Entity Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <div class="form-error">{{ form.name.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_code">Canonical Code <span class="text-red-500">*</span></label>
+                        {{ form.code }}
+                        {% if form.code.errors %}
+                        <div class="form-error">{{ form.code.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_domain">Domain <span class="text-red-500">*</span></label>
+                        {{ form.domain }}
+                        {% if form.domain.errors %}
+                        <div class="form-error">{{ form.domain.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_status">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_trust_tier">Trust Tier</label>
+                        {{ form.trust_tier }}
+                        {% if form.trust_tier.errors %}
+                        <div class="form-error">{{ form.trust_tier.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_confidence_score">Confidence Score (%)</label>
+                        {{ form.confidence_score }}
+                        {% if form.confidence_score.errors %}
+                        <div class="form-error">{{ form.confidence_score.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_tax_id">Tax / Registration ID</label>
+                        {{ form.tax_id }}
+                        {% if form.tax_id.errors %}
+                        <div class="form-error">{{ form.tax_id.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_primary_email">Primary Email</label>
+                        {{ form.primary_email }}
+                        {% if form.primary_email.errors %}
+                        <div class="form-error">{{ form.primary_email.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_primary_phone">Primary Phone</label>
+                        {{ form.primary_phone }}
+                        {% if form.primary_phone.errors %}
+                        <div class="form-error">{{ form.primary_phone.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_primary_address">Primary Address</label>
+                        {{ form.primary_address }}
+                        {% if form.primary_address.errors %}
+                        <div class="form-error">{{ form.primary_address.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-200 pt-4 mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-700 mb-3">Core ERP Spine Links</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="id_party">Core Party Reference</label>
+                            {{ form.party }}
+                            {% if form.party.errors %}
+                            <div class="form-error">{{ form.party.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="id_party_role">Party Role</label>
+                            {{ form.party_role }}
+                            {% if form.party_role.errors %}
+                            <div class="form-error">{{ form.party_role.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="id_item">Inventory Item (SCM)</label>
+                            {{ form.item }}
+                            {% if form.item.errors %}
+                            <div class="form-error">{{ form.item.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="id_asset">CMMS Asset (SCM)</label>
+                            {{ form.asset }}
+                            {% if form.asset.errors %}
+                            <div class="form-error">{{ form.asset.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label text-xs" for="id_warehouse_table">Warehouse Dimension Feeder</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}
+                            <div class="form-error">{{ form.warehouse_table.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-200 pt-4 mt-4">
+                    <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-700 mb-3">Stewardship & Governance</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div class="form-group">
+                            <label class="form-label text-xs" for="id_assigned_steward">Assigned Data Steward</label>
+                            {{ form.assigned_steward }}
+                            {% if form.assigned_steward.errors %}
+                            <div class="form-error">{{ form.assigned_steward.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group flex items-center pt-5">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-xs font-medium text-slate-700">Record Active in Master Registry</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label text-xs" for="id_stewardship_notes">Stewardship Audit Notes</label>
+                            {{ form.stewardship_notes }}
+                            {% if form.stewardship_notes.errors %}
+                            <div class="form-error">{{ form.stewardship_notes.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <a href="{% if is_edit %}{% url 'bi:mdm_golden_record_detail' golden_record.pk %}{% else %}{% url 'bi:mdm_golden_record_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Golden Record{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
