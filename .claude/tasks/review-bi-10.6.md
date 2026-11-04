@@ -27,7 +27,7 @@
 
 ### Important Findings
 
-- [ ] **[I1] `mdm_golden_record_approve` lacks status guard for merged duplicate records**
+- [x] **[I1] `mdm_golden_record_approve` lacks status guard for merged duplicate records** — fixed in `cd4003f3`
   - **Found by:** explorer, security-reviewer
   - **Location:** `apps/bi/views/MasterData/MdmGoldenRecords.py:266`
   - **Description:** Directly approving an absorbed record (`golden_record.status = "approved"`) without clearing merge metadata revives it as an active certified master record, creating duplicate conflicting golden records.
@@ -38,7 +38,7 @@
         return redirect("bi:mdm_golden_record_detail", pk=golden_record.pk)
     ```
 
-- [ ] **[I2] `mdm_golden_record_merge` allows merging into already merged records and lacks candidate re-check**
+- [x] **[I2] `mdm_golden_record_merge` allows merging into already merged records and lacks candidate re-check** — fixed in `83806dc8`
   - **Found by:** code-reviewer, explorer, security-reviewer
   - **Location:** `apps/bi/views/MasterData/MdmGoldenRecords.py:187-227`
   - **Description:** No validation ensures `primary_record.status != "merged"`. An attacker or steward could merge candidate records into an already absorbed record, creating circular or nested merge chains.
@@ -52,7 +52,7 @@
         return redirect("bi:mdm_golden_record_detail", pk=primary_record.pk)
     ```
 
-- [ ] **[I3] Mass assignment: `status="merged"` exposed in manual Golden Record create/edit forms**
+- [x] **[I3] Mass assignment: `status="merged"` exposed in manual Golden Record create/edit forms** — fixed in `fe31b2ce`
   - **Found by:** security-reviewer
   - **Location:** `apps/bi/forms/MasterData/MdmGoldenRecordForms.py:15-37`
   - **Description:** Exposes `merged` in `status` choices on `MdmGoldenRecordForm`, allowing users to manually set `status="merged"` without a surviving record, creating orphaned merged records that cannot be unmerged.
@@ -61,7 +61,7 @@
     self.fields["status"].choices = [c for c in MdmGoldenRecord.STATUS_CHOICES if c[0] != "merged"]
     ```
 
-- [ ] **[I4] Deletion of surviving master record leaves absorbed records in orphaned "merged" state**
+- [x] **[I4] Deletion of surviving master record leaves absorbed records in orphaned "merged" state** — fixed in `07babd36`
   - **Found by:** security-reviewer
   - **Location:** `apps/bi/views/MasterData/MdmGoldenRecords.py:168-183`
   - **Description:** Because `merged_into_record` is `SET_NULL`, deleting an active golden record holding absorbed duplicates clears their `merged_into_record_id` while leaving `status="merged"`, stranding them permanently where they can never be unmerged.
@@ -72,67 +72,67 @@
         return redirect("bi:mdm_golden_record_detail", pk=golden_record.pk)
     ```
 
-- [ ] **[I5] `mdm_golden_record_unmerge` source record count decrement asymmetry and unconditional `'approved'` promotion**
+- [x] **[I5] `mdm_golden_record_unmerge` source record count decrement asymmetry and unconditional `'approved'` promotion** — fixed in `4fde6217`
   - **Found by:** code-reviewer, explorer, security-reviewer
   - **Location:** `apps/bi/views/MasterData/MdmGoldenRecords.py:241-251`
   - **Description:** Unmerging decrements by 1 instead of restoring absorbed count, and unconditionally sets status to `'approved'` even if the record was previously in `'draft'` or `'pending_review'`.
   - **Fix:** Deduct `absorbed_record.source_record_count` (`surviving_record.source_record_count = max(1, surviving_record.source_record_count - absorbed_record.source_record_count)`) and set `absorbed_record.status = "pending_review"` for steward verification. Also defensively assert `surviving_record.tenant_id == request.tenant.id`.
 
-- [ ] **[I6] `mdm_golden_record_merge` does not consolidate `source_crosswalks_json`**
+- [x] **[I6] `mdm_golden_record_merge` does not consolidate `source_crosswalks_json`** — fixed in `790d4cf3`
   - **Found by:** code-reviewer, security-reviewer
   - **Location:** `apps/bi/views/MasterData/MdmGoldenRecords.py:195-212`
   - **Description:** When merging duplicate records, `secondary_record.source_crosswalks_json` is not appended to `primary_record.source_crosswalks_json`. Feeder system identifier crosswalks are lost from the active golden record.
   - **Fix:** Append secondary crosswalks to primary crosswalk list inside `transaction.atomic()`.
 
-- [ ] **[I7] `MdmHierarchyNodeForm` does not validate matching `hierarchy_type` between parent and child**
+- [x] **[I7] `MdmHierarchyNodeForm` does not validate matching `hierarchy_type` between parent and child** — fixed in `bc79797e`
   - **Found by:** code-reviewer, explorer
   - **Location:** `apps/bi/forms/MasterData/MdmHierarchyNodeForms.py:60-74`
   - **Description:** Allows cross-hierarchy parent assignments (e.g. product category inside legal entity tree).
   - **Fix:** Validate `parent.hierarchy_type == cleaned.get("hierarchy_type")` in form `clean()`.
 
-- [ ] **[I8] Materialized `path` and `level` are not cascaded to child descendants on parent update**
+- [x] **[I8] Materialized `path` and `level` are not cascaded to child descendants on parent update** — fixed in `b23aa252`
   - **Found by:** explorer
   - **Location:** `apps/bi/models/MasterData/MdmHierarchyNodes.py:100`
   - **Description:** When a node's parent changes, child descendants retain stale path/level.
   - **Fix:** Cascade descendant paths and levels recursively when `parent_id` changes.
 
-- [ ] **[I9] `MdmSurvivorshipRuleForm` lacks threshold logic validation (`auto_merge_threshold_pct >= match_threshold_pct`)**
+- [x] **[I9] `MdmSurvivorshipRuleForm` lacks threshold logic validation (`auto_merge_threshold_pct >= match_threshold_pct`)** — fixed in `76293e1f`
   - **Found by:** code-reviewer, security-reviewer
   - **Location:** `apps/bi/forms/MasterData/MdmSurvivorshipRuleForms.py:84-88`
   - **Description:** Auto-merge threshold can be configured lower than manual review threshold.
   - **Fix:** Add validation in form `clean()` that `auto_merge_threshold_pct >= match_threshold_pct`.
 
-- [ ] **[I10] Subpackage `__init__.py` files in `MasterData/` missing re-exports**
+- [x] **[I10] Subpackage `__init__.py` files in `MasterData/` missing re-exports** — fixed in `0a8e7a9b`, `7f68265f`, `8289d270`
   - **Found by:** code-reviewer, explorer
   - **Locations:** `apps/bi/models/MasterData/__init__.py:1`, `apps/bi/forms/MasterData/__init__.py:1`, `apps/bi/views/MasterData/__init__.py:1`
   - **Description:** Placeholder comments only, no imports or `__all__`.
   - **Fix:** Re-export all models, forms, and views with explicit `__all__` lists in each `MasterData/__init__.py`.
 
-- [ ] **[I11] Missing standard POST Delete action on Golden Record Detail view**
+- [x] **[I11] Missing standard POST Delete action on Golden Record Detail view** — fixed in `19c76aa6`
   - **Found by:** frontend-reviewer, explorer, code-reviewer
   - **Location:** `templates/bi/master_data/golden_record/detail.html:41-60`
   - **Description:** Detail templates in NavERP must provide Edit, Back to List, and a POST Delete action with CSRF and confirm prompt.
   - **Fix:** Add standard POST delete form/button in `golden_record/detail.html`.
 
-- [ ] **[I12] Missing alert banner linking to surviving master record on absorbed duplicate records**
+- [x] **[I12] Missing alert banner linking to surviving master record on absorbed duplicate records** — fixed in `7705377f`
   - **Found by:** frontend-reviewer
   - **Location:** `templates/bi/master_data/golden_record/detail.html:17-40`
   - **Description:** When inspecting an absorbed record (`status == 'merged'`), no link or alert banner guides the user to the surviving master record (`golden_record.merged_into_record`).
   - **Fix:** Add alert banner linking to `golden_record.merged_into_record` when `status == 'merged'`.
 
-- [ ] **[I13] Unconsolidated Stat Card Queries Across Overview and List Views**
+- [x] **[I13] Unconsolidated Stat Card Queries Across Overview and List Views** — fixed in `0bef50e7`, `24223ebf`, `f19bd214`, `d1d69b44`, `37182205`
   - **Found by:** performance-reviewer
   - **Locations:** `apps/bi/views/MasterData/MdmOverviewViews.py:19-25`, `MdmGoldenRecords.py:51-56`, `MdmSurvivorshipRules.py:43-46`, `MdmHierarchyNodes.py:39-42`, `MdmReferenceCodes.py:40-43`
   - **Description:** Multiple separate `COUNT(*)` queries on every list/overview load.
   - **Fix:** Consolidate into single conditional `.aggregate(Count('id', filter=Q(...)))` calls.
 
-- [ ] **[I14] Heavy JSON & Full-Row Over-fetching in ModelChoiceField Dropdowns**
+- [x] **[I14] Heavy JSON & Full-Row Over-fetching in ModelChoiceField Dropdowns** — fixed in `435af804`, `766236ba`, `bdc61ceb`
   - **Found by:** performance-reviewer
   - **Locations:** `apps/bi/forms/MasterData/MdmGoldenRecordForms.py:98-103`, `apps/bi/forms/MasterData/MdmHierarchyNodeForms.py:55`, `apps/bi/forms/MasterData/MdmReferenceCodeForms.py:64`
   - **Description:** Form dropdown querysets load all columns and large JSON fields into Python memory.
   - **Fix:** Add `.only(...)` to project only the fields needed by select widgets.
 
-- [ ] **[I15] Missing Composite Database Indexes for Hot Filtered/Sorted Columns**
+- [x] **[I15] Missing Composite Database Indexes for Hot Filtered/Sorted Columns** — fixed in `f63a88d8`, `11179876`, `562987d5`, `ae75d8c2`
   - **Found by:** performance-reviewer
   - **Locations:** `apps/bi/models/MasterData/MdmSurvivorshipRules.py`, `MdmHierarchyNodes.py`, `MdmGoldenRecords.py`
   - **Description:** Missing composite indexes on `(tenant, match_algorithm)` in MdmSurvivorshipRule, `(tenant, hierarchy_type, level)` in MdmHierarchyNode, and `(tenant, -created_at)` in MdmGoldenRecord.
