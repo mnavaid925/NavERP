@@ -128,7 +128,15 @@ def data_quality_exception_edit(request, pk):
     if request.method == "POST":
         form = DataQualityExceptionForm(request.POST, instance=exception, tenant=request.tenant)
         if form.is_valid():
-            exception = form.save()
+            exception = form.save(commit=False)
+            if exception.status == "remediated":
+                if not exception.resolved_at:
+                    exception.resolved_by = request.user
+                    exception.resolved_at = timezone.now()
+            else:
+                exception.resolved_by = None
+                exception.resolved_at = None
+            exception.save()
             write_audit_log(request.user, exception, "update", tenant=request.tenant)
             messages.success(request, f"Quality exception '{exception.number}' updated successfully.")
             return redirect("bi:data_quality_exception_detail", pk=exception.pk)
@@ -161,9 +169,13 @@ def data_quality_exception_remediate(request, pk):
     form = DataQualityExceptionRemediationForm(request.POST, instance=exception, tenant=request.tenant)
     if form.is_valid():
         exc = form.save(commit=False)
-        if exc.status == "remediated" and not exc.resolved_at:
-            exc.resolved_by = request.user
-            exc.resolved_at = timezone.now()
+        if exc.status == "remediated":
+            if not exc.resolved_at:
+                exc.resolved_by = request.user
+                exc.resolved_at = timezone.now()
+        else:
+            exc.resolved_by = None
+            exc.resolved_at = None
         exc.save()
 
         write_audit_log(
