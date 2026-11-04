@@ -213,6 +213,10 @@ def semantic_model_introspect(request, pk):
         return redirect("bi:semantic_model_detail", pk=model.pk)
 
     table = model.warehouse_table
+    if table.tenant_id != request.tenant.pk:
+        messages.error(request, "Warehouse table belongs to another workspace.")
+        return redirect("bi:semantic_model_detail", pk=model.pk)
+
     schema_def = table.schema_definition or []
     payload = json.dumps(schema_def, sort_keys=True).encode("utf-8")
     fingerprint = hashlib.sha256(payload).hexdigest()[:16]
