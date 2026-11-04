@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ storage_policy.name }}{% else %}New Storage Policy{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_storage_policy_list' %}">Storage Policies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Storage Policy: {{ storage_policy.name }}{% else %}Create Storage &amp; Lifecycle Policy{% endif %}</h1>
+        <p class="text-muted text-sm">Configure table partitioning strategies, columnar compression codecs, and multi-tier retention rules</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:warehouse_storage_policy_detail' pk=storage_policy.pk %}{% else %}{% url 'bi:warehouse_storage_policy_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-sm font-semibold text-slate-800">Partition &amp; Lifecycle Rules</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Policy Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <!-- Partitioning Block -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded mb-4">
+                <h3 class="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-3">Partitioning &amp; Query Optimization</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.partition_strategy.id_for_label }}">Partition Strategy</label>
+                        {{ form.partition_strategy }}
+                        {% if form.partition_strategy.errors %}<div class="form-error">{{ form.partition_strategy.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.partition_key.id_for_label }}">Partition Key Column</label>
+                        {{ form.partition_key }}
+                        {% if form.partition_key.errors %}<div class="form-error">{{ form.partition_key.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.partition_granularity.id_for_label }}">Granularity</label>
+                        {{ form.partition_granularity }}
+                        {% if form.partition_granularity.errors %}<div class="form-error">{{ form.partition_granularity.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.compression_codec.id_for_label }}">Columnar Compression Codec</label>
+                        {{ form.compression_codec }}
+                        {% if form.compression_codec.errors %}<div class="form-error">{{ form.compression_codec.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.vacuum_cadence.id_for_label }}">Vacuum &amp; Compaction Cadence</label>
+                        {{ form.vacuum_cadence }}
+                        {% if form.vacuum_cadence.errors %}<div class="form-error">{{ form.vacuum_cadence.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.enable_zone_maps }}
+                        <span class="text-sm text-slate-800 font-medium">Enable Zone Maps &amp; Block Min/Max Statistics</span>
+                    </label>
+                    <div class="text-xs text-muted">Allows query engines to skip unneeded storage blocks without full partition scans.</div>
+                </div>
+            </div>
+
+            <!-- Lifecycle Block -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded mb-4">
+                <h3 class="text-xs font-semibold text-slate-800 uppercase tracking-wider mb-3">Multi-Tier Lifecycle &amp; Retention (Days)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.hot_tier_days.id_for_label }}">Hot Storage (Days)</label>
+                        {{ form.hot_tier_days }}
+                        <div class="text-xs text-muted">High-performance SSD cache.</div>
+                        {% if form.hot_tier_days.errors %}<div class="form-error">{{ form.hot_tier_days.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.warm_tier_days.id_for_label }}">Warm Storage (Days)</label>
+                        {{ form.warm_tier_days }}
+                        <div class="text-xs text-muted">Standard object storage.</div>
+                        {% if form.warm_tier_days.errors %}<div class="form-error">{{ form.warm_tier_days.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cold_tier_days.id_for_label }}">Cold Archive (Days)</label>
+                        {{ form.cold_tier_days }}
+                        <div class="text-xs text-muted">Deep statutory archive.</div>
+                        {% if form.cold_tier_days.errors %}<div class="form-error">{{ form.cold_tier_days.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.time_travel_days.id_for_label }}">Time-Travel CDP Window (Days)</label>
+                        {{ form.time_travel_days }}
+                        <div class="text-xs text-muted">Continuous historical query rollback retention (0 to 90 days).</div>
+                        {% if form.time_travel_days.errors %}<div class="form-error">{{ form.time_travel_days.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group flex flex-col justify-center">
+                        <label class="flex items-center gap-2 cursor-pointer mt-4">
+                            {{ form.auto_purge_enabled }}
+                            <span class="text-sm text-slate-800 font-medium">Enable Automated Partition Purging</span>
+                        </label>
+                        <div class="text-xs text-muted">Automatically drop partitions past cold retention limit.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Policy Notes &amp; Governance Rules</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_default }}
+                        <span class="text-sm text-slate-800 font-medium">Default Policy for New Tables</span>
+                    </label>
+                    <div class="text-xs text-muted">Automatically applied when no policy is explicitly assigned.</div>
+                </div>
+                <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm text-slate-800 font-medium">Active Policy</span>
+                    </label>
+                    <div class="text-xs text-muted">Available for table assignment.</div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:warehouse_storage_policy_detail' pk=storage_policy.pk %}{% else %}{% url 'bi:warehouse_storage_policy_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Storage Policy{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
