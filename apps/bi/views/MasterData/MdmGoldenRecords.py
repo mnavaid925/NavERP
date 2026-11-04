@@ -23,7 +23,7 @@ from apps.core.utils import write_audit_log
 def mdm_golden_record_list(request):
     queryset = (
         bi_scope(MdmGoldenRecord.objects.all(), request)
-        .select_related("party", "party_role", "item", "asset", "warehouse_table", "assigned_steward")
+        .select_related("assigned_steward")
     )
 
     q = request.GET.get("q", "").strip()[:100]
