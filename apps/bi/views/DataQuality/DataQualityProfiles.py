@@ -4,7 +4,7 @@ import random
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -50,9 +50,14 @@ def data_quality_profile_list(request):
     if model_filter.isdigit():
         queryset = queryset.filter(semantic_model_id=model_filter)
 
-    total_count = bi_scope(DataQualityProfile.objects.all(), request).count()
-    completed_count = bi_scope(DataQualityProfile.objects.all(), request).filter(status="completed").count()
-    failed_count = bi_scope(DataQualityProfile.objects.all(), request).filter(status="failed").count()
+    stat_counts = bi_scope(DataQualityProfile.objects.all(), request).aggregate(
+        total=Count("id"),
+        completed=Count("id", filter=Q(status="completed")),
+        failed=Count("id", filter=Q(status="failed")),
+    )
+    total_count = stat_counts["total"]
+    completed_count = stat_counts["completed"]
+    failed_count = stat_counts["failed"]
 
     paginator = Paginator(queryset, 15)
     page_number = request.GET.get("page", 1)
