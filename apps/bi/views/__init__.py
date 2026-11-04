@@ -56,6 +56,37 @@ from apps.bi.views.EtlPipelines.EtlPipelineVersions import (
     etl_pipeline_version_list,
     etl_pipeline_version_promote,
 )
+from apps.bi.views.DataWarehouse.DataMarts import (
+    data_mart_create,
+    data_mart_delete,
+    data_mart_detail,
+    data_mart_edit,
+    data_mart_list,
+)
+from apps.bi.views.DataWarehouse.LakehouseZones import (
+    lakehouse_zone_create,
+    lakehouse_zone_delete,
+    lakehouse_zone_detail,
+    lakehouse_zone_edit,
+    lakehouse_zone_list,
+)
+from apps.bi.views.DataWarehouse.WarehouseOverview import warehouse_overview
+from apps.bi.views.DataWarehouse.WarehouseStoragePolicies import (
+    warehouse_storage_policy_create,
+    warehouse_storage_policy_delete,
+    warehouse_storage_policy_detail,
+    warehouse_storage_policy_edit,
+    warehouse_storage_policy_list,
+)
+from apps.bi.views.DataWarehouse.WarehouseTables import (
+    warehouse_table_analyze,
+    warehouse_table_create,
+    warehouse_table_ddl_preview,
+    warehouse_table_delete,
+    warehouse_table_detail,
+    warehouse_table_edit,
+    warehouse_table_list,
+)
 from apps.bi.views.EtlPipelines.TransformationSteps import (
     transformation_step_create,
     transformation_step_delete,
@@ -112,4 +143,27 @@ __all__ = [
     "etl_pipeline_version_promote",
     "etl_pipeline_run_list",
     "etl_pipeline_run_detail",
+    "data_mart_list",
+    "data_mart_detail",
+    "data_mart_create",
+    "data_mart_edit",
+    "data_mart_delete",
+    "lakehouse_zone_list",
+    "lakehouse_zone_detail",
+    "lakehouse_zone_create",
+    "lakehouse_zone_edit",
+    "lakehouse_zone_delete",
+    "warehouse_storage_policy_list",
+    "warehouse_storage_policy_detail",
+    "warehouse_storage_policy_create",
+    "warehouse_storage_policy_edit",
+    "warehouse_storage_policy_delete",
+    "warehouse_table_list",
+    "warehouse_table_detail",
+    "warehouse_table_create",
+    "warehouse_table_edit",
+    "warehouse_table_delete",
+    "warehouse_table_ddl_preview",
+    "warehouse_table_analyze",
+    "warehouse_overview",
 ]
