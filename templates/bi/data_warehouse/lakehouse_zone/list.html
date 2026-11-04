@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Lakehouse Storage Zones — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <span>Lakehouse Zones</span>
+        </div>
+        <h1 class="page-title">Lakehouse Storage Zones</h1>
+        <p class="text-muted text-sm">Medallion architecture tiers (Bronze, Silver, Gold, Sandbox), storage backends, and serialization formats</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Warehouse Overview</span>
+        </a>
+        <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline">
+            <i data-lucide="table"></i>
+            <span>Warehouse Tables</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:lakehouse_zone_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Lakehouse Zone</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Zones</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon slate">
+                <i data-lucide="database"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Bronze (Raw)</div>
+                <div class="text-2xl font-bold mt-1 text-amber-700">{{ bronze_count }}</div>
+            </div>
+            <div class="stat-icon orange">
+                <i data-lucide="hard-drive"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Silver (Curated)</div>
+                <div class="text-2xl font-bold mt-1 text-blue-600">{{ silver_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="filter"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Gold (Analytics)</div>
+                <div class="text-2xl font-bold mt-1 text-yellow-600">{{ gold_count }}</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="award"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <div class="form-group">
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ search_query }}" placeholder="Name, code, number, URI..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="zone-type-filter">Zone Tier</label>
+                <select id="zone-type-filter" name="zone_type" class="form-select">
+                    <option value="">All Medallion Zones</option>
+                    {% for code, label in zone_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.zone_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="backend-filter">Storage Backend</label>
+                <select id="backend-filter" name="storage_backend" class="form-select">
+                    <option value="">All Backends</option>
+                    {% for code, label in storage_backend_choices %}
+                    <option value="{{ code }}" {% if request.GET.storage_backend == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="format-filter">Default Format</label>
+                <select id="format-filter" name="default_format" class="form-select">
+                    <option value="">All Formats</option>
+                    {% for code, label in default_format_choices %}
+                    <option value="{{ code }}" {% if request.GET.default_format == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:lakehouse_zone_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                <a href="?{% for key, val in request.GET.items %}{% if key != 'export' %}{{ key }}={{ val }}&{% endif %}{% endfor %}export=csv" class="btn btn-outline" title="Export CSV">
+                    <i data-lucide="download"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Zone Name</th>
+                    <th>Medallion Tier</th>
+                    <th>Storage Backend</th>
+                    <th>Serialization Format</th>
+                    <th>Base URI Endpoint</th>
+                    <th>Protection</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for zone in lakehouse_zones %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:lakehouse_zone_detail' pk=zone.pk %}" class="text-primary hover:underline">
+                            {{ zone.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ zone.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ zone.code }}</div>
+                    </td>
+                    <td>
+                        {% if zone.zone_type == 'bronze' %}
+                        <span class="badge badge-amber">{{ zone.get_zone_type_display }}</span>
+                        {% elif zone.zone_type == 'silver' %}
+                        <span class="badge badge-info">{{ zone.get_zone_type_display }}</span>
+                        {% elif zone.zone_type == 'gold' %}
+                        <span class="badge badge-green">{{ zone.get_zone_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-purple">{{ zone.get_zone_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium text-slate-700">{{ zone.get_storage_backend_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700 font-mono">{{ zone.get_default_format_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-muted font-mono max-w-xs truncate" title="{{ zone.base_uri_path }}">
+                            {{ zone.base_uri_path|default:"internal://" }}
+                        </div>
+                    </td>
+                    <td>
+                        {% if zone.is_read_only %}
+                        <span class="badge badge-amber">Read-Only</span>
+                        {% else %}
+                        <span class="badge badge-green">Read/Write</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'bi:lakehouse_zone_detail' pk=zone.pk %}" class="btn-icon btn-outline" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:lakehouse_zone_edit' pk=zone.pk %}" class="btn-icon btn-outline" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:lakehouse_zone_delete' pk=zone.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete zone {{ zone.name|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon btn-outline text-danger" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="database" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No lakehouse zones registered</div>
+                            <p class="empty-state-text">Create medallion architecture tiers (Bronze, Silver, Gold) to govern storage endpoints.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:lakehouse_zone_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>New Lakehouse Zone</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} zones
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="text-xs px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
