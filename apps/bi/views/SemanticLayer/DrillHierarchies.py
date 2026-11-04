@@ -29,7 +29,7 @@ def drill_hierarchy_list(request):
         )
 
     model_filter = request.GET.get("model", "").strip()
-    if model_filter:
+    if model_filter.isdigit():
         queryset = queryset.filter(semantic_model_id=model_filter)
 
     hierarchy_type_filter = request.GET.get("hierarchy_type", "").strip()
