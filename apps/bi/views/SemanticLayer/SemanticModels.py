@@ -193,6 +193,9 @@ def semantic_model_certify(request, pk):
         if new_status == "certified":
             model.certified_by = request.user
             model.certified_at = timezone.now()
+        else:
+            model.certified_by = None
+            model.certified_at = None
         model.save(update_fields=["certification_status", "certification_notes", "certified_by", "certified_at", "updated_at"])
         write_audit_log(request.user, model, "certify", tenant=request.tenant)
         messages.success(request, f"Certification status updated to '{model.get_certification_status_display()}'.")
