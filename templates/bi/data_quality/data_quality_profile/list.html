@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Profiles — Data Quality & Cleansing — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <span>Quality Profiles</span>
+        </div>
+        <h1 class="page-title">Data Quality Profiles</h1>
+        <p class="text-muted text-sm">Automated statistical indicators, value distributions, pattern detection, and completeness scoring</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:quality_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Quality Overview</span>
+        </a>
+        <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Quality Rules</span>
+        </a>
+        <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-triangle"></i>
+            <span>Exception Queue</span>
+        </a>
+        <a href="{% url 'bi:data_quality_profile_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Quality Profile</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-bar-chart"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Profiles</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Completed Runs</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Failed Runs</div>
+            <div class="text-2xl font-bold text-amber-600">{{ failed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Quality Scorecards</div>
+            <div class="text-2xl font-bold text-indigo-600">Active</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search Profiles</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, table, model..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Run Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-target-type">Target Scope</label>
+                <select id="filter-target-type" name="target_type" class="form-select">
+                    <option value="">All Targets</option>
+                    {% for val, label in target_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-table">Warehouse Table</label>
+                <select id="filter-table" name="warehouse_table" class="form-select">
+                    <option value="">All Tables</option>
+                    {% for tbl in warehouse_tables %}
+                    <option value="{{ tbl.pk|stringformat:'d' }}" {% if request.GET.warehouse_table == tbl.pk|stringformat:'d' %}selected{% endif %}>{{ tbl.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_quality_profile_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Profiles Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Profile & Number</th>
+                        <th>Target Dataset</th>
+                        <th>Status</th>
+                        <th>Completeness</th>
+                        <th>Uniqueness</th>
+                        <th>Validity</th>
+                        <th>Rows / Cols</th>
+                        <th>Profiled At</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for profile in profiles %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900 dark:text-slate-100">
+                                <a href="{% url 'bi:data_quality_profile_detail' profile.pk %}" class="hover:text-primary-600 transition-colors">
+                                    {{ profile.name }}
+                                </a>
+                            </div>
+                            <div class="text-xs font-mono text-muted">{{ profile.number }}</div>
+                        </td>
+                        <td>
+                            {% if profile.target_type == 'warehouse_table' and profile.warehouse_table %}
+                            <span class="inline-flex items-center gap-1 text-xs font-mono text-slate-700 dark:text-slate-300">
+                                <i data-lucide="table" class="w-3.5 h-3.5 text-blue-500"></i>
+                                {{ profile.warehouse_table.name }}
+                            </span>
+                            {% elif profile.target_type == 'semantic_model' and profile.semantic_model %}
+                            <span class="inline-flex items-center gap-1 text-xs font-mono text-slate-700 dark:text-slate-300">
+                                <i data-lucide="layers" class="w-3.5 h-3.5 text-purple-500"></i>
+                                {{ profile.semantic_model.name }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted text-xs">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if profile.status == 'completed' %}
+                            <span class="badge badge-green">Completed</span>
+                            {% elif profile.status == 'profiling' %}
+                            <span class="badge badge-amber">In Progress</span>
+                            {% elif profile.status == 'failed' %}
+                            <span class="badge badge-red">Failed</span>
+                            {% else %}
+                            <span class="badge badge-slate">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-medium text-xs">{{ profile.completeness_score }}%</div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-0.5">
+                                <div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ profile.completeness_score }}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="font-medium text-xs">{{ profile.uniqueness_score }}%</div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-0.5">
+                                <div class="bg-blue-500 h-1.5 rounded-full" style="width: {{ profile.uniqueness_score }}%"></div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="font-medium text-xs">{{ profile.validity_score }}%</div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-0.5">
+                                <div class="bg-indigo-500 h-1.5 rounded-full" style="width: {{ profile.validity_score }}%"></div>
+                            </div>
+                        </td>
+                        <td class="text-xs">
+                            <span class="font-mono">{{ profile.total_row_count }}</span> rows<br>
+                            <span class="text-muted font-mono">{{ profile.total_column_count }}</span> cols
+                        </td>
+                        <td class="text-xs text-muted">
+                            {% if profile.profiled_at %}
+                            {{ profile.profiled_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            <span class="text-slate-400">Never</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <form method="post" action="{% url 'bi:data_quality_profile_run' profile.pk %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-700" title="Run Profiling Now">
+                                        <i data-lucide="play"></i>
+                                    </button>
+                                </form>
+                                <a href="{% url 'bi:data_quality_profile_detail' profile.pk %}" class="btn btn-icon" title="View Profile">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:data_quality_profile_edit' profile.pk %}" class="btn btn-icon" title="Edit Profile">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'bi:data_quality_profile_delete' profile.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete profile {{ profile.name }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Profile">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="p-8 text-center">
+                            <div class="empty-state">
+                                <div class="empty-icon text-slate-300 dark:text-slate-600 mb-2">
+                                    <i data-lucide="file-bar-chart" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100">No Quality Profiles Found</h3>
+                                <p class="text-muted text-sm max-w-sm mx-auto mt-1 mb-4">Profile warehouse tables and semantic models to inspect null rates, distinct distributions, and data validity.</p>
+                                <a href="{% url 'bi:data_quality_profile_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Quality Profile</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer border-t border-slate-100 dark:border-slate-800 p-4">
+        <div class="pagination flex items-center justify-between">
+            <span class="text-xs text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} profiles</span>
+            <div class="flex gap-2">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+                {% endif %}
+                <span class="btn btn-outline text-xs active">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
