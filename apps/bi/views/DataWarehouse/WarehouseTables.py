@@ -19,8 +19,10 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def warehouse_table_list(request):
-    queryset = bi_scope(WarehouseTable.objects.all(), request).select_related(
-        "lakehouse_zone", "data_mart", "storage_policy"
+    queryset = (
+        bi_scope(WarehouseTable.objects.all(), request)
+        .select_related("lakehouse_zone", "data_mart", "storage_policy")
+        .defer("schema_definition")
     )
 
     q = request.GET.get("q", "").strip()
