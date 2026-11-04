@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ rule.name }}{% else %}New Quality Rule{% endif %} — Data Quality — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_rule_list' %}">Quality Rules</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ rule.code }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Quality Rule: {{ rule.name }}{% else %}Configure New Quality Rule{% endif %}</h1>
+        <p class="text-muted text-sm">Define assertions, uniqueness, regex checks, and freshness SLAs across warehouse datasets</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_quality_rule_detail' rule.pk %}{% else %}{% url 'bi:data_quality_rule_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Rule Definition & Parameters</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Identification -->
+                <div class="space-y-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Rule Identification</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Rule Name <span class="text-red-500">*</span></label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.code.id_for_label }}">Rule Code / Slug <span class="text-red-500">*</span></label>
+                            {{ form.code }}
+                            {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.rule_category.id_for_label }}">Rule Category</label>
+                            {{ form.rule_category }}
+                            {% if form.rule_category.errors %}<div class="form-error">{{ form.rule_category.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.dimension.id_for_label }}">ISO/DAMA Quality Dimension</label>
+                            {{ form.dimension }}
+                            {% if form.dimension.errors %}<div class="form-error">{{ form.dimension.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Target Dataset -->
+                <div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Target Dataset & Column</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_type.id_for_label }}">Target Scope</label>
+                            {{ form.target_type }}
+                            {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.rule_type.id_for_label }}">Assertion Type</label>
+                            {{ form.rule_type }}
+                            {% if form.rule_type.errors %}<div class="form-error">{{ form.rule_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_column.id_for_label }}">Target Column</label>
+                            {{ form.target_column }}
+                            {% if form.target_column.errors %}<div class="form-error">{{ form.target_column.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Leave empty for whole-table assertions</p>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.parameters_json.id_for_label }}">Assertion Configuration (JSON)</label>
+                        {{ form.parameters_json }}
+                        {% if form.parameters_json.errors %}<div class="form-error">{{ form.parameters_json.errors }}</div>{% endif %}
+                        <p class="text-xs text-muted mt-1">Specify assertion parameters such as min_value, max_value, regex, allowed_values, sql_condition</p>
+                    </div>
+                </div>
+
+                <!-- Governance & Severity -->
+                <div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Governance & Tolerance</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.severity.id_for_label }}">Failure Severity</label>
+                            {{ form.severity }}
+                            {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.failure_tolerance_pct.id_for_label }}">Failure Tolerance (%)</label>
+                            {{ form.failure_tolerance_pct }}
+                            {% if form.failure_tolerance_pct.errors %}<div class="form-error">{{ form.failure_tolerance_pct.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.steward.id_for_label }}">Data Steward</label>
+                            {{ form.steward }}
+                            {% if form.steward.errors %}<div class="form-error">{{ form.steward.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex items-center gap-2 pt-2">
+                        {{ form.is_active }}
+                        <label class="form-label mb-0" for="{{ form.is_active.id_for_label }}">Active Rule Assertion</label>
+                        {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <a href="{% if is_edit %}{% url 'bi:data_quality_rule_detail' rule.pk %}{% else %}{% url 'bi:data_quality_rule_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Quality Rule{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
