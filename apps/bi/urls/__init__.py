@@ -18,6 +18,9 @@ from apps.bi.urls.DataQuality import (
 from apps.bi.urls.DataWarehouse import (
     urlpatterns as warehouse_urlpatterns,
 )
+from apps.bi.urls.MasterData import (
+    urlpatterns as master_data_urlpatterns,
+)
 from apps.bi.urls.SemanticLayer import (
     urlpatterns as semantic_urlpatterns,
 )
@@ -53,4 +56,5 @@ urlpatterns = (
     + warehouse_urlpatterns
     + semantic_urlpatterns
     + data_quality_urlpatterns
+    + master_data_urlpatterns
 )
