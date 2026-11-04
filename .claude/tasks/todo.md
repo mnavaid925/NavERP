@@ -7,6 +7,227 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.3: Data Warehouse & Storage (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.3.md` (2026-11-04)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-module 10.1 (Data Integration & Ingestion) and Sub-module 10.2 (ETL/ELT & Data Pipelines).
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0006_etlpipelineversion_idx_bpvr_ten_created_desc.py`, so **10.3 claims `0007`** (or next available).
+> Plan written from `.claude/tasks/research-bi-10.3.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/DataWarehouse/`
+> Template folder name: `templates/bi/data_warehouse/{data_mart,lakehouse_zone,warehouse_storage_policy,warehouse_table}/` + `warehouse_overview.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Data Warehouse & Lakehouse Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Departmental Ownership: `DataMart.org_unit` links to verified `core.OrgUnit` (Module 0.1 Org Units).
+  - Business Ownership & Stewardship: `DataMart.owner` and `DataMart.steward` link to `settings.AUTH_USER_MODEL`.
+  - Lakehouse Zone Containment: `WarehouseTable.lakehouse_zone` links to `bi.LakehouseZone` (Protected delete).
+  - Domain Governance: `WarehouseTable.data_mart` links to `bi.DataMart` (Set null on delete).
+  - Storage & Lifecycle Policy: `WarehouseTable.storage_policy` links to `bi.WarehouseStoragePolicy` (Set null on delete).
+  - Operational Boundary: 10.3 owns *centralized analytical star/snowflake dimensional schemas, facts (`fact_*`), dimensions (`dim_*`), pre-aggregated rollups (`agg_*`), bridge disambiguation tables (`brg_*`), subject-specific data marts, lakehouse medallion storage zones (Bronze/Silver/Gold/Sandbox), columnar compression encodings (ZSTD/Snappy/LZ4/Gzip), and lifecycle retention/tiering policies (hot/warm/cold, time-travel, partition purge)*. Upstream 10.2 pipelines load into 10.3 tables; downstream 10.4 semantic models abstract 10.3 tables into business metrics. It does not alter operational transactional ledgers (Module 2 Accounting, Module 4 SCM, Module 8 Sales).
+  - Audit logging: Administrative actions (mart certification changes, storage policy updates, table schema changes, table analysis runs) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Sibling Boundaries (10.1 vs. 10.2 vs. 10.3 vs. 10.4 vs. 10.5 vs. 10.7)**:
+  - 10.1 (`DataIntegration`): Source connectors, batch/real-time ingestion schedules, CDC delta capture, webhook gateway, file imports, staging landing tables (`stg_*`).
+  - 10.2 (`EtlPipelines`): Visual DAG pipeline designer, transformation node library (joins, aggregations, pivots), orchestration dependency chaining, execution runs.
+  - 10.3 (`DataWarehouse`): Consolidated star/snowflake warehouse tables, subject data marts, medallion zones, partition strategies, columnar compression, lifecycle tiering.
+  - 10.4 (`SemanticLayer`): Business glossary, friendly metric definitions, reusable calculated measures, drill-down hierarchies, governed virtual datasets.
+  - 10.5 (`DataQuality`): Automated profiling metrics, duplicate entity resolution, fuzzy matching, steward exception queues.
+  - 10.7 (`DataCatalog`): Enterprise search catalog, PII/regulatory tags, end-to-end column-level visual lineage graphs.
+  - 0.8 (`Compliance`): Statutory legal/GDPR retention schedules (`apps/core/models/Retention.py`).
+  - 0.16 (`DisasterRecovery`): Operational database disaster-recovery backup catalog (`apps/core/models/Backup.py`).
+- **Prefix Collision Sweep**: `BDMT` (DataMart), `BLHZ` (LakehouseZone), `BWSP` (WarehouseStoragePolicy), `BDWT` (WarehouseTable) verified 100% collision-free across the entire repository.
+
+---
+
+## 10.3-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO dedicated Apache Spark / EMR / Trino cluster provisioning** — Warehouse tables and schemas are represented cleanly via relational structures, PostgreSQL analytical tables, and DDL generators; external multi-node distributed compute engines are not required in tests or local setups.
+- [ ] **NO live C-level Parquet / PyArrow cloud object storage writer network sockets** — Storage backend configurations (AWS S3, Azure Blob, GCS, local) and Parquet/Delta formats are governed via declarative configuration metadata without opening live remote network sockets during unit test execution.
+- [ ] **NO dynamic automated online partition mutation or background micro-clustering daemons** — Table partition strategies and clustering keys are declared and tracked as schema governance metadata rather than executing non-standard database daemon routines.
+- [ ] **NO cross-tenant cryptographic data clean rooms** — Multi-tenant data clean room syndication is deferred to Module 10 advanced governance (10.19 / future tiers).
+
+---
+
+## Models (4 models in `apps/bi/models/DataWarehouse/`)
+
+- [ ] **`DataMart`** [Prefix: `BDMT-`] (`apps/bi/models/DataWarehouse/DataMarts.py`)
+  - **Purpose**: Represents subject-specific analytical data marts (Finance, Sales, HR, Inventory, Procurement, Manufacturing, Executive) enabling departmental self-service BI and domain-level governance.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Finance & Accounting Mart", "Sales & CRM Mart")
+    - `code`: `SlugField(max_length=50)` (e.g. "finance", "sales", "hr", "supply_chain")
+    - `subject_area`: `CharField(max_length=30, choices=[('finance', 'Finance & Accounting'), ('sales', 'Sales & Customer Relationship'), ('hr', 'Human Resources & Workforce'), ('supply_chain', 'Supply Chain & Logistics'), ('procurement', 'Procurement & Purchasing'), ('manufacturing', 'Manufacturing & Production'), ('executive', 'Executive & Cross-Functional')], default='finance')` (driver: 10.3-DM-01)
+    - `org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="data_marts", help_text="Departmental organizational unit owner")` (driver: 10.3-DM-02)
+    - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_data_marts", help_text="Primary business owner")` (driver: 10.3-DM-03)
+    - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="stewarded_data_marts", help_text="Technical data steward")` (driver: 10.3-DM-03)
+    - `access_tier`: `CharField(max_length=25, choices=[('public', 'Public (Tenant-Wide)'), ('department', 'Departmental Only'), ('restricted', 'Restricted / Confidential')], default='department')` (driver: 10.3-DM-04)
+    - `certification_status`: `CharField(max_length=25, choices=[('draft', 'Draft / In Development'), ('in_review', 'Under Review & Validation'), ('certified', 'Certified Single Source of Truth'), ('deprecated', 'Deprecated / Sunset Pending')], default='draft')` (driver: 10.3-DM-05)
+    - `refresh_cadence`: `CharField(max_length=25, choices=[('real_time', 'Real-Time / Streaming'), ('hourly', 'Hourly Micro-Batch'), ('daily', 'Daily Overnight Batch'), ('weekly', 'Weekly Snapshot'), ('on_demand', 'On-Demand Only')], default='daily')` (driver: 10.3-DM-06)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'subject_area']), models.Index(fields=['tenant', 'certification_status'])]`
+
+- [ ] **`LakehouseZone`** [Prefix: `BLHZ-`] (`apps/bi/models/DataWarehouse/LakehouseZones.py`)
+  - **Purpose**: Defines Medallion lakehouse tiers (Bronze, Silver, Gold, Sandbox) for physical and logical data tiering, storage backend provider settings, and default table serialization formats.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Bronze Raw Ingestion Zone", "Curated Silver Master", "Enterprise Gold Analytics")
+    - `code`: `SlugField(max_length=50)` (e.g. "bronze", "silver", "gold", "sandbox")
+    - `zone_type`: `CharField(max_length=25, choices=[('bronze', 'Bronze (Raw Ingestion / Append-Only Landing)'), ('silver', 'Silver (Curated / Cleaned / Conformed Master)'), ('gold', 'Gold (Aggregated / Dimensional Star Schemas / Business-Ready)'), ('sandbox', 'Sandbox (Ad-Hoc Exploration / Data Science)')], default='bronze')` (driver: 10.3-LH-01)
+    - `storage_backend`: `CharField(max_length=30, choices=[('internal_db', 'Internal Relational Database'), ('aws_s3', 'Amazon Web Services S3'), ('azure_blob', 'Microsoft Azure Blob / ADLS Gen2'), ('gcs', 'Google Cloud Storage'), ('local_filesystem', 'Local Dedicated Shared Storage')], default='internal_db')` (driver: 10.3-LH-02)
+    - `default_format`: `CharField(max_length=25, choices=[('relational_table', 'Relational Table / View'), ('parquet', 'Apache Parquet Columnar File'), ('delta_lake', 'Delta Lake (Delta-Parquet + Log)'), ('iceberg', 'Apache Iceberg Table Format'), ('csv_compressed', 'Compressed CSV / Gzip')], default='relational_table')` (driver: 10.3-LH-03)
+    - `base_uri_path`: `CharField(max_length=500, blank=True, help_text="Base storage URI endpoint or bucket path prefix")` (driver: 10.3-LH-04)
+    - `is_read_only`: `BooleanField(default=False, help_text="Immutable write protection for raw landing layers")` (driver: 10.3-LH-05)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'zone_type'])]`
+
+- [ ] **`WarehouseStoragePolicy`** [Prefix: `BWSP-`] (`apps/bi/models/DataWarehouse/WarehouseStoragePolicies.py`)
+  - **Purpose**: Governs table partitioning strategies, columnar compression codecs, multi-tier hot/warm/cold lifecycle thresholds, time-travel snapshot retention, and automated partition purging.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Financial Statutory 7-Year Retention", "High-Throughput Timeseries Policy")
+    - `partition_strategy`: `CharField(max_length=30, choices=[('none', 'None (Unpartitioned Flat Table)'), ('range_time', 'Range / Time-Based (Date/Timestamp)'), ('range_numeric', 'Numeric Range (Integer Buckets)'), ('hash', 'Hash / Slices (Distributed Keys)'), ('list_category', 'List / Categorical (Region/Branch/Status)')], default='range_time')` (driver: 10.3-PC-01)
+    - `partition_key`: `CharField(max_length=100, blank=True, help_text="Column name used as partition key (e.g. posting_date, created_at)")`
+    - `partition_granularity`: `CharField(max_length=25, choices=[('hour', 'Hourly'), ('day', 'Daily'), ('month', 'Monthly'), ('quarter', 'Quarterly'), ('year', 'Yearly')], default='month')` (driver: 10.3-PC-02)
+    - `compression_codec`: `CharField(max_length=25, choices=[('none', 'None (Uncompressed)'), ('snappy', 'Snappy (Fast Decompression)'), ('zstd', 'Zstandard (ZSTD Balanced High Ratio)'), ('lz4', 'LZ4 (Ultra-Low Latency)'), ('gzip', 'Gzip (Maximum Compression Ratio)')], default='zstd')` (driver: 10.3-PC-03)
+    - `enable_zone_maps`: `BooleanField(default=True, help_text="Track min/max column statistics for block skipping")` (driver: 10.3-PC-04)
+    - `hot_tier_days`: `PositiveIntegerField(default=90, help_text="Days retained in high-performance NVMe/SSD storage")` (driver: 10.3-AR-01)
+    - `warm_tier_days`: `PositiveIntegerField(default=365, help_text="Days retained in standard warm storage before cooling")` (driver: 10.3-AR-01)
+    - `cold_tier_days`: `PositiveIntegerField(default=2555, help_text="Days retained in deep cold archive (2555 = 7 years statutory)")` (driver: 10.3-AR-01)
+    - `time_travel_days`: `PositiveIntegerField(default=7, help_text="Historical snapshot retention window for time-travel queries (0-90 days)")` (driver: 10.3-AR-02)
+    - `auto_purge_enabled`: `BooleanField(default=False, help_text="Automatically drop partitions older than cold retention threshold")` (driver: 10.3-AR-03)
+    - `vacuum_cadence`: `CharField(max_length=25, choices=[('daily', 'Daily Vacuum & Compaction'), ('weekly', 'Weekly Vacuum & Compaction'), ('monthly', 'Monthly Cleanup'), ('manual', 'Manual Trigger Only')], default='weekly')` (driver: 10.3-AR-04)
+    - `is_default`: `BooleanField(default=False, help_text="Default policy applied to newly registered warehouse tables")`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'partition_strategy']), models.Index(fields=['tenant', 'is_default'])]`
+
+- [ ] **`WarehouseTable`** [Prefix: `BDWT-`] (`apps/bi/models/DataWarehouse/WarehouseTables.py`)
+  - **Purpose**: Central analytical entity representing consolidated Fact tables, Dimension tables, Aggregate rollups, and Bridge tables across data marts and lakehouse zones, complete with grain declaration, surrogate keys, conformed tags, column schema definitions, storage telemetry, and SQL DDL generation.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Fact General Ledger Journal Entries", "Dim Customer Master")
+    - `table_name`: `CharField(max_length=100)` (e.g. "fact_gl_journal_entries", "dim_customers", "agg_monthly_revenue")
+    - `table_type`: `CharField(max_length=25, choices=[('fact', 'Fact Table (Transactional / Periodic Metrics)'), ('dimension', 'Dimension Table (Contextual Attributes & Master Data)'), ('aggregate', 'Aggregate Table (Pre-Calculated Summary Rollups)'), ('bridge', 'Bridge Table (Many-to-Many Disambiguation)'), ('staging', 'Staging / Transient Target Table')], default='fact')` (driver: 10.3-DW-01)
+    - `schema_type`: `CharField(max_length=25, choices=[('star', 'Star Schema (Direct Joins)'), ('snowflake', 'Snowflake Schema (Normalized Sub-Dimensions)'), ('flat', 'Flat / Denormalized Wide Table'), ('medallion', 'Medallion Delta Format')], default='star')` (driver: 10.3-DW-02)
+    - `grain`: `CharField(max_length=30, choices=[('transaction', 'Transactional (One row per business event)'), ('daily_snapshot', 'Daily Periodic Snapshot'), ('monthly_snapshot', 'Monthly Periodic Snapshot'), ('accumulating_snapshot', 'Accumulating Milestone Snapshot'), ('entity_state', 'Entity Current State (Dimension)')], default='transaction')` (driver: 10.3-DW-03)
+    - `lakehouse_zone`: `ForeignKey("bi.LakehouseZone", on_delete=models.PROTECT, related_name="tables", help_text="Assigned lakehouse storage zone")`
+    - `data_mart`: `ForeignKey("bi.DataMart", on_delete=models.SET_NULL, null=True, blank=True, related_name="tables", help_text="Optional subject-specific data mart binding")`
+    - `storage_policy`: `ForeignKey("bi.WarehouseStoragePolicy", on_delete=models.SET_NULL, null=True, blank=True, related_name="tables", help_text="Partitioning, compression, and retention policy")`
+    - `primary_key_column`: `CharField(max_length=100, default='id', help_text="Surrogate primary key column name (e.g. entry_sk, customer_sk)")` (driver: 10.3-DW-04)
+    - `natural_key_column`: `CharField(max_length=100, blank=True, help_text="Business natural key column (e.g. journal_number, customer_code)")` (driver: 10.3-DW-04)
+    - `is_conformed_dimension`: `BooleanField(default=False, help_text="Flag indicating this dimension is shared across multiple business processes")` (driver: 10.3-DW-05)
+    - `schema_definition`: `JSONField(default=list, blank=True, help_text="Structured column definitions list: [{'name': '...', 'type': '...', 'nullable': bool, 'description': '...'}]")`
+    - `row_count`: `BigIntegerField(default=0, help_text="Estimated or analyzed row count")` (driver: 10.3-DW-06)
+    - `compressed_bytes`: `BigIntegerField(default=0, help_text="Storage footprint in bytes")` (driver: 10.3-DW-06)
+    - `compression_ratio`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('1.00'), help_text="Effective compression ratio (e.g. 3.45x)")` (driver: 10.3-DW-06)
+    - `last_analyzed_at`: `DateTimeField(null=True, blank=True)`
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `row_count`, `compressed_bytes`, `compression_ratio`, `last_analyzed_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'table_name')]`, `indexes = [models.Index(fields=['tenant', 'table_type']), models.Index(fields=['tenant', 'data_mart']), models.Index(fields=['tenant', 'lakehouse_zone'])]`
+
+---
+
+## Backend (`apps/bi/{models,forms,views,urls}/DataWarehouse/`)
+
+- [ ] `apps/bi/models/DataWarehouse/__init__.py`
+- [ ] `apps/bi/models/DataWarehouse/DataMarts.py`
+- [ ] `apps/bi/models/DataWarehouse/LakehouseZones.py`
+- [ ] `apps/bi/models/DataWarehouse/WarehouseStoragePolicies.py`
+- [ ] `apps/bi/models/DataWarehouse/WarehouseTables.py`
+- [ ] `apps/bi/forms/DataWarehouse/__init__.py`
+- [ ] `apps/bi/forms/DataWarehouse/DataMarts.py`
+- [ ] `apps/bi/forms/DataWarehouse/LakehouseZones.py`
+- [ ] `apps/bi/forms/DataWarehouse/WarehouseStoragePolicies.py`
+- [ ] `apps/bi/forms/DataWarehouse/WarehouseTables.py`
+- [ ] `apps/bi/views/DataWarehouse/__init__.py`
+- [ ] `apps/bi/views/DataWarehouse/DataMarts.py` (CRUD: list, create, detail, edit, delete)
+- [ ] `apps/bi/views/DataWarehouse/LakehouseZones.py` (CRUD: list, create, detail, edit, delete)
+- [ ] `apps/bi/views/DataWarehouse/WarehouseStoragePolicies.py` (CRUD: list, create, detail, edit, delete)
+- [ ] `apps/bi/views/DataWarehouse/WarehouseTables.py` (CRUD + ddl_preview + analyze_table)
+- [ ] `apps/bi/views/DataWarehouse/WarehouseOverview.py` (Consolidated operational dashboard view)
+- [ ] `apps/bi/urls/DataWarehouse/__init__.py`
+- [ ] `apps/bi/urls/DataWarehouse/DataMarts.py`
+- [ ] `apps/bi/urls/DataWarehouse/LakehouseZones.py`
+- [ ] `apps/bi/urls/DataWarehouse/WarehouseStoragePolicies.py`
+- [ ] `apps/bi/urls/DataWarehouse/WarehouseTables.py`
+- [ ] `apps/bi/urls/DataWarehouse/WarehouseOverview.py`
+
+## Integration & Re-exports
+- [ ] Re-export all 4 models in `apps/bi/models/__init__.py` (`DataMart`, `LakehouseZone`, `WarehouseStoragePolicy`, `WarehouseTable`)
+- [ ] Re-export all forms in `apps/bi/forms/__init__.py` (`DataMartForm`, `LakehouseZoneForm`, `WarehouseStoragePolicyForm`, `WarehouseTableForm`)
+- [ ] Re-export all views in `apps/bi/views/__init__.py`
+- [ ] Wire URL routes in `apps/bi/urls/__init__.py` (include `mart_urlpatterns`, `zone_urlpatterns`, `policy_urlpatterns`, `table_urlpatterns`, `overview_urlpatterns`)
+- [ ] Register all 4 models in `apps/bi/admin.py` with search, list_filter, list_display, and readonly fields
+- [ ] Add `LIVE_LINKS["10.3"]` entry in `apps/core/navigation.py`:
+  - `"Centralized Data Warehouse"`: `"bi:warehouse_table_list"`
+  - `"Data Marts"`: `"bi:data_mart_list"`
+  - `"Data Lake & Lakehouse"`: `"bi:lakehouse_zone_list"`
+  - `"Partitioning & Compression"`: `"bi:warehouse_storage_policy_list"`
+  - `"Archival & Retention"`: `"bi:warehouse_storage_policy_list"`
+  - Extra live leaves:
+    - `"Warehouse Tables"`: `"bi:warehouse_table_list"`
+    - `"Storage Policies"`: `"bi:warehouse_storage_policy_list"`
+    - `"Lakehouse Zones"`: `"bi:lakehouse_zone_list"`
+    - `"Warehouse Overview"`: `"bi:warehouse_overview"`
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records for 10.3:
+  - 4 `DataMart` records per tenant (Finance & Accounting, Sales & CRM, Human Resources, Supply Chain & Logistics) bound to OrgUnits and Stewards
+  - 4 `LakehouseZone` records per tenant (Bronze Raw Ingestion, Silver Curated Master, Gold Enterprise Analytics, Sandbox Exploration)
+  - 3 `WarehouseStoragePolicy` records per tenant (Financial Statutory 7-Year Retention, High-Throughput Timeseries Policy, Standard Dimensional Storage)
+  - 6 `WarehouseTable` records per tenant (`fact_gl_journal_entries`, `fact_sales_orders`, `fact_inventory_movements`, `dim_customers`, `dim_accounts`, `dim_dates`) with realistic column definitions JSON, row counts, and compression telemetry
+
+## Templates (`templates/bi/data_warehouse/`)
+- [ ] `templates/bi/data_warehouse/data_mart/list.html` (filter bar for subject_area, certification_status, access_tier, is_active; search; pagination; actions)
+- [ ] `templates/bi/data_warehouse/data_mart/detail.html` (header certification & SLA badges, overview, associated tables grid, stewardship card, actions)
+- [ ] `templates/bi/data_warehouse/data_mart/form.html` (mart code, name, subject area, OrgUnit binding, owner/steward selectors, access tier, refresh cadence)
+- [ ] `templates/bi/data_warehouse/lakehouse_zone/list.html` (filter bar for zone_type, storage_backend, default_format, is_active; search; pagination; actions)
+- [ ] `templates/bi/data_warehouse/lakehouse_zone/detail.html` (zone tier badge, storage backend & URI pathing, tables residing in zone, capacity KPIs)
+- [ ] `templates/bi/data_warehouse/lakehouse_zone/form.html` (zone code, name, zone type, storage backend, default serialization format, base URI, read-only toggle)
+- [ ] `templates/bi/data_warehouse/warehouse_storage_policy/list.html` (filter bar for partition_strategy, compression_codec, is_default, is_active; search; pagination; actions)
+- [ ] `templates/bi/data_warehouse/warehouse_storage_policy/detail.html` (tiering thresholds Hot/Warm/Cold, time-travel days, vacuum cadence, tables governed grid)
+- [ ] `templates/bi/data_warehouse/warehouse_storage_policy/form.html` (policy name, partition strategy & key, compression codec, tiering day thresholds, time-travel days, auto-purge toggle)
+- [ ] `templates/bi/data_warehouse/warehouse_table/list.html` (filter bar for table_type, schema_type, lakehouse_zone, data_mart, is_conformed_dimension, is_active; search; pagination; actions)
+- [ ] `templates/bi/data_warehouse/warehouse_table/detail.html` (table metadata, schema definition columns table, DDL SQL preview tab, storage telemetry KPIs, policy card)
+- [ ] `templates/bi/data_warehouse/warehouse_table/form.html` (table name, table type, schema type, grain, lakehouse zone, data mart, storage policy, PK/NK columns, JSON schema editor)
+- [ ] `templates/bi/data_warehouse/warehouse_overview.html` (consolidated operational dashboard: total tables, storage volume by zone, fact/dim distribution, mart certification statuses, quick actions)
+
+## Verification & Close-out
+- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0007_...` and run `python manage.py migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency
+- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
+- [ ] Execute smoke test (`temp/smoke_bi_10_3.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.3.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_datawarehouse_models.py`, `test_datawarehouse_forms.py`, `test_datawarehouse_views.py`, `test_datawarehouse_security.py`
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.3 models/routes/templates and update `README.md`
+- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.3.md`
+
+## Later passes / deferred
+- Dedicated Apache Spark / EMR / Trino distributed analytical query execution -> Enterprise big data cluster integration
+- Dynamic automated partition rebalancing without table lockouts (Iceberg hidden partition evolution) -> Enterprise lakehouse tier
+- Automated continuous background micro-clustering daemons (Snowflake automatic clustering equivalent) -> Background daemon service tier
+- Live asynchronous PyArrow Parquet streaming writers directly into external customer cloud buckets -> Async Celery worker tasks
+- Multi-tenant cryptographic data clean rooms and external data sharing -> Sub-module 10.19 / Advanced Governance
+- Business Glossary, Metrics & Semantic Layer -> Sub-module 10.4 Data Modeling & Semantic Layer
+- Data Quality Profiling & Exception Remediation -> Sub-module 10.5 Data Quality & Cleansing
+- Master Data Management (MDM) Golden Records -> Sub-module 10.6 Master Data Management
+- Enterprise Data Catalog & Column-Level Lineage -> Sub-module 10.7 Data Catalog, Lineage & Governance
+
+## Review notes
+(to be populated during Phase 4–6)
+
+---
 # Sub-module 10.2: ETL/ELT & Data Pipelines (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.2.md` (2026-11-03)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-module 10.1 (Data Integration & Ingestion).
