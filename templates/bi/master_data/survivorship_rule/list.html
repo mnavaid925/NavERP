@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Survivorship Rules — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <span>Survivorship Rules</span>
+        </div>
+        <h1 class="page-title">Match, Merge & Survivorship Rules</h1>
+        <p class="text-muted text-sm">Entity resolution algorithms, trusted-source precedence rankings, and attribute survivorship policies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>MDM Overview</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Golden Records</span>
+        </a>
+        <a href="{% url 'bi:mdm_survivorship_rule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Survivorship Rule</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-merge"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Rules</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Evaluation Rules</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Supported Strategies</div>
+            <div class="text-2xl font-bold text-indigo-600">6 Precedence Models</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="form-group sm:col-span-2 md:col-span-1">
+                <label class="form-label text-xs" for="filter-q">Search Rules</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, code, field..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-domain">Target Domain</label>
+                <select id="filter-domain" name="domain" class="form-select">
+                    <option value="">All Domains</option>
+                    {% for val, label in domain_choices %}
+                    <option value="{{ val }}" {% if request.GET.domain == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-strategy">Strategy</label>
+                <select id="filter-strategy" name="survivorship_strategy" class="form-select">
+                    <option value="">All Strategies</option>
+                    {% for val, label in strategy_choices %}
+                    <option value="{{ val }}" {% if request.GET.survivorship_strategy == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-algorithm">Match Algorithm</label>
+                <div class="flex gap-2">
+                    <select id="filter-algorithm" name="match_algorithm" class="form-select flex-1">
+                        <option value="">All Algorithms</option>
+                        {% for val, label in match_choices %}
+                        <option value="{{ val }}" {% if request.GET.match_algorithm == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline" title="Filter">
+                        <i data-lucide="filter"></i>
+                    </button>
+                    {% if request.GET.q or request.GET.domain or request.GET.survivorship_strategy or request.GET.match_algorithm %}
+                    <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="btn btn-outline" title="Reset Filters">
+                        <i data-lucide="x"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Rule Number</th>
+                    <th>Rule Name</th>
+                    <th>Domain</th>
+                    <th>Target Field</th>
+                    <th>Strategy</th>
+                    <th>Algorithm</th>
+                    <th>Thresholds</th>
+                    <th>Order</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rule in rules %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:mdm_survivorship_rule_detail' rule.pk %}" class="text-primary hover:underline">
+                            {{ rule.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-900">{{ rule.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ rule.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ rule.get_domain_display }}</span>
+                    </td>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        {{ rule.target_field }}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs">{{ rule.get_survivorship_strategy_display }}</span>
+                    </td>
+                    <td class="text-xs text-muted">
+                        {{ rule.get_match_algorithm_display }}
+                    </td>
+                    <td class="text-xs font-mono">
+                        Review: <span class="font-semibold text-amber-600">{{ rule.match_threshold_pct }}%</span><br>
+                        Auto: <span class="font-semibold text-emerald-600">{{ rule.auto_merge_threshold_pct }}%</span>
+                    </td>
+                    <td class="text-xs font-mono font-medium">{{ rule.priority_order }}</td>
+                    <td>
+                        {% if rule.is_active %}
+                        <span class="badge badge-green">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:mdm_survivorship_rule_detail' rule.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:mdm_survivorship_rule_edit' rule.pk %}" class="btn btn-icon" title="Edit Rule">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:mdm_survivorship_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete survivorship rule {{ rule.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Rule">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state py-8 text-center">
+                            <i data-lucide="git-merge" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Survivorship Rules Found</h3>
+                            <p class="text-sm text-muted mb-4">No match and survivorship rules match the current filters.</p>
+                            <a href="{% url 'bi:mdm_survivorship_rule_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Survivorship Rule</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.domain %}&domain={{ request.GET.domain }}{% endif %}{% if request.GET.survivorship_strategy %}&survivorship_strategy={{ request.GET.survivorship_strategy }}{% endif %}{% if request.GET.match_algorithm %}&match_algorithm={{ request.GET.match_algorithm }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.domain %}&domain={{ request.GET.domain }}{% endif %}{% if request.GET.survivorship_strategy %}&survivorship_strategy={{ request.GET.survivorship_strategy }}{% endif %}{% if request.GET.match_algorithm %}&match_algorithm={{ request.GET.match_algorithm }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
