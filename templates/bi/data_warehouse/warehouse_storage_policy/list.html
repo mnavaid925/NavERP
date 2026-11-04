@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Warehouse Storage Policies — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <span>Storage Policies</span>
+        </div>
+        <h1 class="page-title">Partitioning &amp; Retention Policies</h1>
+        <p class="text-muted text-sm">Table partitioning strategies, columnar compression codecs, and multi-tier lifecycle rules</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Warehouse Overview</span>
+        </a>
+        <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline">
+            <i data-lucide="table"></i>
+            <span>Warehouse Tables</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_storage_policy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Storage Policy</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Configured Policies</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="archive"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Default Policy</div>
+                <div class="text-base font-bold mt-1 text-slate-900 truncate">
+                    {% if default_policy %}{{ default_policy.name }}{% else %}<span class="text-muted">None Set</span>{% endif %}
+                </div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="check-circle-2"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Time-Travel CDP</div>
+                <div class="text-2xl font-bold mt-1 text-purple-600">Active</div>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="history"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <div class="form-group">
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ search_query }}" placeholder="Policy name, key, number..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="strategy-filter">Partition Strategy</label>
+                <select id="strategy-filter" name="partition_strategy" class="form-select">
+                    <option value="">All Strategies</option>
+                    {% for code, label in partition_strategy_choices %}
+                    <option value="{{ code }}" {% if request.GET.partition_strategy == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="codec-filter">Compression Codec</label>
+                <select id="codec-filter" name="compression_codec" class="form-select">
+                    <option value="">All Codecs</option>
+                    {% for code, label in compression_codec_choices %}
+                    <option value="{{ code }}" {% if request.GET.compression_codec == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="vacuum-filter">Vacuum Cadence</label>
+                <select id="vacuum-filter" name="vacuum_cadence" class="form-select">
+                    <option value="">All Cadences</option>
+                    {% for code, label in vacuum_cadence_choices %}
+                    <option value="{{ code }}" {% if request.GET.vacuum_cadence == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:warehouse_storage_policy_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                <a href="?{% for key, val in request.GET.items %}{% if key != 'export' %}{{ key }}={{ val }}&{% endif %}{% endfor %}export=csv" class="btn btn-outline" title="Export CSV">
+                    <i data-lucide="download"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Policy Name</th>
+                    <th>Partition Strategy</th>
+                    <th>Partition Key</th>
+                    <th>Compression</th>
+                    <th>Lifecycle Thresholds (H/W/C)</th>
+                    <th>Time Travel</th>
+                    <th>Default</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for policy in storage_policies %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:warehouse_storage_policy_detail' pk=policy.pk %}" class="text-primary hover:underline">
+                            {{ policy.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ policy.name }}</div>
+                        {% if policy.is_default %}
+                        <span class="badge badge-green text-[10px]">Default Policy</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium text-slate-700">{{ policy.get_partition_strategy_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs font-mono text-slate-700">{{ policy.partition_key|default:"None" }}</span>
+                        {% if policy.partition_key %}
+                        <span class="text-[10px] text-muted block font-mono">({{ policy.get_partition_granularity_display }})</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate uppercase font-mono">{{ policy.get_compression_codec_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs font-mono text-slate-700">
+                            <span class="text-green-600 font-semibold">{{ policy.hot_tier_days }}d</span> /
+                            <span class="text-amber-600 font-semibold">{{ policy.warm_tier_days }}d</span> /
+                            <span class="text-blue-600 font-semibold">{{ policy.cold_tier_days }}d</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600 font-mono">{{ policy.time_travel_days }} days</span>
+                    </td>
+                    <td>
+                        {% if policy.is_default %}
+                        <span class="badge badge-green">Yes</span>
+                        {% else %}
+                        <span class="text-xs text-muted">No</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'bi:warehouse_storage_policy_detail' pk=policy.pk %}" class="btn-icon btn-outline" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:warehouse_storage_policy_edit' pk=policy.pk %}" class="btn-icon btn-outline" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:warehouse_storage_policy_delete' pk=policy.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete policy {{ policy.name|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon btn-outline text-danger" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="archive" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No storage policies configured</div>
+                            <p class="empty-state-text">Create partition, compression, and lifecycle rules to optimize analytical query speed and storage costs.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:warehouse_storage_policy_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>New Storage Policy</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} policies
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="text-xs px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
