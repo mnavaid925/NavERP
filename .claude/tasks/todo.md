@@ -259,16 +259,16 @@
 ---
 
 ## 10.2-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO dedicated Apache Spark / EMR cluster provisioning** — Visual transformation nodes and execution metadata are cleanly modeled; transformations execute natively in Django/Python for in-memory batching or compile pushdown SQL queries directly for PostgreSQL/MySQL/SQLite without requiring external Spark cluster daemons in tests or local setups.
-- [ ] **NO live C-level stream processing daemons (Flink / Kafka Streams)** — Micro-batch pipelines are orchestrated via frequent cadences and webhook triggers; external distributed streaming engines are not spun up during unit test runs.
-- [ ] **NO automated destructive DDL alteration on analytical warehouse target tables** — Schema target definitions and column transformations are recorded in declarative version snapshots rather than running raw unreviewed `ALTER TABLE` DDL on external database warehouses.
-- [ ] **NO bi-directional external Git repository remote push / PR merge webhooks** — The pipeline engine persists declarative, Git-compatible JSON snapshots with changelogs and author signatures; bi-directional external Git provider synchronization is deferred to enterprise developer integrations.
+- [x] **NO dedicated Apache Spark / EMR cluster provisioning** — Visual transformation nodes and execution metadata are cleanly modeled; transformations execute natively in Django/Python for in-memory batching or compile pushdown SQL queries directly for PostgreSQL/MySQL/SQLite without requiring external Spark cluster daemons in tests or local setups.
+- [x] **NO live C-level stream processing daemons (Flink / Kafka Streams)** — Micro-batch pipelines are orchestrated via frequent cadences and webhook triggers; external distributed streaming engines are not spun up during unit test runs.
+- [x] **NO automated destructive DDL alteration on analytical warehouse target tables** — Schema target definitions and column transformations are recorded in declarative version snapshots rather than running raw unreviewed `ALTER TABLE` DDL on external database warehouses.
+- [x] **NO bi-directional external Git repository remote push / PR merge webhooks** — The pipeline engine persists declarative, Git-compatible JSON snapshots with changelogs and author signatures; bi-directional external Git provider synchronization is deferred to enterprise developer integrations.
 
 ---
 
 ## Models (4 models in `apps/bi/models/EtlPipelines/`)
 
-- [ ] **`EtlPipeline`** [Prefix: `BETL-`] (`apps/bi/models/EtlPipelines/EtlPipelines.py`)
+- [x] **`EtlPipeline`** [Prefix: `BETL-`] (`apps/bi/models/EtlPipelines/EtlPipelines.py`)
   - **Purpose**: Top-level ETL/ELT transformation pipeline definition, binding source staging datasets to target analytical facts/dimensions, configuring execution triggers, DAG dependency chaining, retry policies, SLA bounds, and visual canvas layouts.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -301,7 +301,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `active_version`, `last_run_at`, `next_run_due_at`, `canvas_layout`, `created_by`
 
-- [ ] **`TransformationStep`** [Prefix: `BTRN-`] (`apps/bi/models/EtlPipelines/TransformationSteps.py`)
+- [x] **`TransformationStep`** [Prefix: `BTRN-`] (`apps/bi/models/EtlPipelines/TransformationSteps.py`)
   - **Purpose**: Represents a discrete transformation node within the pipeline's DAG (relational join, aggregation, matrix pivot/unpivot, data type casting, row filter, derived calculated expression, master data lookup enrichment, deduplication, or business rule), with topological sequence, upstream step dependencies, configuration parameters, and canvas coordinates.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -320,7 +320,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `canvas_x`, `canvas_y`
 
-- [ ] **`EtlPipelineVersion`** [Prefix: `BPVR-`] (`apps/bi/models/EtlPipelines/EtlPipelineVersions.py`)
+- [x] **`EtlPipelineVersion`** [Prefix: `BPVR-`] (`apps/bi/models/EtlPipelines/EtlPipelineVersions.py`)
   - **Purpose**: Represents an immutable declarative version snapshot of a pipeline's DAG and transformation steps, providing multi-environment promotion (Dev -> Staging -> Production), single-click rollback capabilities, changelog notes, and promotion audit trail.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -339,7 +339,7 @@
     - `created_at` / `updated_at`
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`, `promoted_by`, `promoted_at`, `rollback_source`
 
-- [ ] **`EtlPipelineRun`** [Prefix: `BEXR-`] (`apps/bi/models/EtlPipelines/EtlPipelineRuns.py`)
+- [x] **`EtlPipelineRun`** [Prefix: `BEXR-`] (`apps/bi/models/EtlPipelines/EtlPipelineRuns.py`)
   - **Purpose**: Immutable operational execution telemetry record capturing status, duration, granular step progress, quantitative data throughput (records extracted, transformed, written, rejected, bytes), SLA adherence, backfill parameters, and diagnostic logs.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -372,34 +372,34 @@
 
 ## Backend (`apps/bi/{models,forms,views,urls}/EtlPipelines/`)
 
-- [ ] `apps/bi/models/EtlPipelines/__init__.py`
-- [ ] `apps/bi/models/EtlPipelines/EtlPipelines.py`
-- [ ] `apps/bi/models/EtlPipelines/TransformationSteps.py`
-- [ ] `apps/bi/models/EtlPipelines/EtlPipelineVersions.py`
-- [ ] `apps/bi/models/EtlPipelines/EtlPipelineRuns.py`
-- [ ] `apps/bi/forms/EtlPipelines/__init__.py`
-- [ ] `apps/bi/forms/EtlPipelines/EtlPipelines.py`
-- [ ] `apps/bi/forms/EtlPipelines/TransformationSteps.py`
-- [ ] `apps/bi/forms/EtlPipelines/EtlPipelineVersions.py`
-- [ ] `apps/bi/forms/EtlPipelines/EtlPipelineRuns.py`
-- [ ] `apps/bi/views/EtlPipelines/__init__.py`
-- [ ] `apps/bi/views/EtlPipelines/EtlPipelines.py` (CRUD + trigger_run + canvas_view + backfill)
-- [ ] `apps/bi/views/EtlPipelines/TransformationSteps.py` (CRUD)
-- [ ] `apps/bi/views/EtlPipelines/EtlPipelineVersions.py` (CRUD + promote + rollback)
-- [ ] `apps/bi/views/EtlPipelines/EtlPipelineRuns.py` (List, Detail, Delete, Retry)
-- [ ] `apps/bi/urls/EtlPipelines/__init__.py`
-- [ ] `apps/bi/urls/EtlPipelines/EtlPipelines.py`
-- [ ] `apps/bi/urls/EtlPipelines/TransformationSteps.py`
-- [ ] `apps/bi/urls/EtlPipelines/EtlPipelineVersions.py`
-- [ ] `apps/bi/urls/EtlPipelines/EtlPipelineRuns.py`
+- [x] `apps/bi/models/EtlPipelines/__init__.py`
+- [x] `apps/bi/models/EtlPipelines/EtlPipelines.py`
+- [x] `apps/bi/models/EtlPipelines/TransformationSteps.py`
+- [x] `apps/bi/models/EtlPipelines/EtlPipelineVersions.py`
+- [x] `apps/bi/models/EtlPipelines/EtlPipelineRuns.py`
+- [x] `apps/bi/forms/EtlPipelines/__init__.py`
+- [x] `apps/bi/forms/EtlPipelines/EtlPipelines.py`
+- [x] `apps/bi/forms/EtlPipelines/TransformationSteps.py`
+- [x] `apps/bi/forms/EtlPipelines/EtlPipelineVersions.py`
+- [x] `apps/bi/forms/EtlPipelines/EtlPipelineRuns.py`
+- [x] `apps/bi/views/EtlPipelines/__init__.py`
+- [x] `apps/bi/views/EtlPipelines/EtlPipelines.py` (CRUD + trigger_run + canvas_view + backfill)
+- [x] `apps/bi/views/EtlPipelines/TransformationSteps.py` (CRUD)
+- [x] `apps/bi/views/EtlPipelines/EtlPipelineVersions.py` (CRUD + promote + rollback)
+- [x] `apps/bi/views/EtlPipelines/EtlPipelineRuns.py` (List, Detail, Delete, Retry)
+- [x] `apps/bi/urls/EtlPipelines/__init__.py`
+- [x] `apps/bi/urls/EtlPipelines/EtlPipelines.py`
+- [x] `apps/bi/urls/EtlPipelines/TransformationSteps.py`
+- [x] `apps/bi/urls/EtlPipelines/EtlPipelineVersions.py`
+- [x] `apps/bi/urls/EtlPipelines/EtlPipelineRuns.py`
 
 ## Integration & Re-exports
-- [ ] Re-export all 4 models in `apps/bi/models/__init__.py` (`EtlPipeline`, `TransformationStep`, `EtlPipelineVersion`, `EtlPipelineRun`)
-- [ ] Re-export all forms in `apps/bi/forms/__init__.py` (`EtlPipelineForm`, `TransformationStepForm`, `EtlPipelineVersionForm`, `EtlPipelineRunForm`)
-- [ ] Re-export all views in `apps/bi/views/__init__.py`
-- [ ] Wire URL routes in `apps/bi/urls/__init__.py` (include `etl_urlpatterns`, `step_urlpatterns`, `version_urlpatterns`, `run_urlpatterns`)
-- [ ] Register all 4 models in `apps/bi/admin.py` with search, list_filter, list_display, and readonly fields
-- [ ] Add `LIVE_LINKS["10.2"]` entry in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/bi/models/__init__.py` (`EtlPipeline`, `TransformationStep`, `EtlPipelineVersion`, `EtlPipelineRun`)
+- [x] Re-export all forms in `apps/bi/forms/__init__.py` (`EtlPipelineForm`, `TransformationStepForm`, `EtlPipelineVersionForm`, `EtlPipelineRunForm`)
+- [x] Re-export all views in `apps/bi/views/__init__.py`
+- [x] Wire URL routes in `apps/bi/urls/__init__.py` (include `etl_urlpatterns`, `step_urlpatterns`, `version_urlpatterns`, `run_urlpatterns`)
+- [x] Register all 4 models in `apps/bi/admin.py` with search, list_filter, list_display, and readonly fields
+- [x] Add `LIVE_LINKS["10.2"]` entry in `apps/core/navigation.py`:
   - `"Visual Pipeline Builder"`: `"bi:etl_pipeline_list"`
   - `"Transformation Library"`: `"bi:transformation_step_list"`
   - `"Orchestration & Scheduling"`: `"bi:etl_pipeline_list"`
@@ -410,36 +410,36 @@
     - `"Transformation Steps"`: `"bi:transformation_step_list"`
     - `"Pipeline Versions"`: `"bi:etl_pipeline_version_list"`
     - `"Execution Runs"`: `"bi:etl_pipeline_run_list"`
-- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records for 10.2:
+- [x] Extend `apps/bi/management/commands/seed_bi.py` with idempotent multi-tenant demo records for 10.2:
   - 3 `EtlPipeline` records per tenant (e.g., Finance Invoice Mart Transformation, Sales Opportunity Pipeline ETL, Inventory Valuation ELT Pushdown)
   - 4–6 `TransformationStep` records per pipeline demonstrating joins, aggregations, matrix pivots, type casts, derived columns, and lookup enrichments
   - 2 `EtlPipelineVersion` records per pipeline (v1.0 active in Prod, v1.1 in Dev/Staging)
   - 4 `EtlPipelineRun` records per pipeline with realistic duration, throughput volumes, step progress arrays, SLA status, and one backfill run
 
 ## Templates (`templates/bi/etl_pipelines/`)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline/list.html` (filter bar for pipeline_type, status, trigger_mode; search; pagination; actions)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline/detail.html` (header badges, overview, transformation steps tab, versions tab, execution runs tab, actions)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline/form.html` (pipeline config form with source/target designations, schedule cadence, DAG dependency and SLA inputs)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline/canvas.html` (interactive visual builder DAG canvas with node blocks for steps, status badges, and trigger action)
-- [ ] `templates/bi/etl_pipelines/transformation_step/list.html` (filter bar for pipeline, step_type, is_active; sequence ordering; search; pagination)
-- [ ] `templates/bi/etl_pipelines/transformation_step/detail.html` (step parameters, upstream dependencies, configuration JSON viewer)
-- [ ] `templates/bi/etl_pipelines/transformation_step/form.html` (pipeline selector, step type, sequence, JSON config editor, upstream bindings)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline_version/list.html` (filter bar for pipeline, environment, status; semantic version badges; search; pagination)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline_version/detail.html` (version snapshot viewer, changelog, promote/rollback action buttons)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline_version/form.html` (version number, environment, changelog, snapshot notes)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline_run/list.html` (filter bar for pipeline, status, trigger_type, sla_missed; throughput metrics; search; pagination)
-- [ ] `templates/bi/etl_pipelines/etl_pipeline_run/detail.html` (run status, execution timeline, throughput KPIs, step progress audit table, log console)
+- [x] `templates/bi/etl_pipelines/etl_pipeline/list.html` (filter bar for pipeline_type, status, trigger_mode; search; pagination; actions)
+- [x] `templates/bi/etl_pipelines/etl_pipeline/detail.html` (header badges, overview, transformation steps tab, versions tab, execution runs tab, actions)
+- [x] `templates/bi/etl_pipelines/etl_pipeline/form.html` (pipeline config form with source/target designations, schedule cadence, DAG dependency and SLA inputs)
+- [x] `templates/bi/etl_pipelines/etl_pipeline/canvas.html` (interactive visual builder DAG canvas with node blocks for steps, status badges, and trigger action)
+- [x] `templates/bi/etl_pipelines/transformation_step/list.html` (filter bar for pipeline, step_type, is_active; sequence ordering; search; pagination)
+- [x] `templates/bi/etl_pipelines/transformation_step/detail.html` (step parameters, upstream dependencies, configuration JSON viewer)
+- [x] `templates/bi/etl_pipelines/transformation_step/form.html` (pipeline selector, step type, sequence, JSON config editor, upstream bindings)
+- [x] `templates/bi/etl_pipelines/etl_pipeline_version/list.html` (filter bar for pipeline, environment, status; semantic version badges; search; pagination)
+- [x] `templates/bi/etl_pipelines/etl_pipeline_version/detail.html` (version snapshot viewer, changelog, promote/rollback action buttons)
+- [x] `templates/bi/etl_pipelines/etl_pipeline_version/form.html` (version number, environment, changelog, snapshot notes)
+- [x] `templates/bi/etl_pipelines/etl_pipeline_run/list.html` (filter bar for pipeline, status, trigger_type, sla_missed; throughput metrics; search; pagination)
+- [x] `templates/bi/etl_pipelines/etl_pipeline_run/detail.html` (run status, execution timeline, throughput KPIs, step progress audit table, log console)
 
 ## Verification & Close-out
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0004_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_2.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.2.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_etlpipeline_models.py`, `test_etlpipeline_forms.py`, `test_etlpipeline_views.py`, `test_etlpipeline_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.2 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.2.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0004_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_2.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.2.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_etlpipelines_models.py`, `test_etlpipelines_forms.py`, `test_etlpipelines_views.py`, `test_etlpipelines_security.py` (118 tests, 138 total in bi)
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.2 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.2.md`
 
 ## Later passes / deferred
 - Dedicated Apache Spark / EMR distributed cluster computation daemons -> Enterprise high-volume big data cluster tier
@@ -455,8 +455,22 @@
 - Pre-Built Operational Reports & Pixel-Perfect Exports -> Sub-module 10.9 Standard & Operational Reporting
 - Outbound Reverse-ETL & BI Tool Syndication -> Sub-module 10.19 Integration & API Hub
 
-## Review notes
-(to be populated during Phase 4–6)
+## Review & Completion Summary (2026-11-04)
+- **Deliverables**: Sub-module 10.2 ETL/ELT & Data Pipelines fully built, integrated, reviewed, fixed, and verified with 100% green tests.
+- **Models**:
+  - `EtlPipeline` [`BETL-`]: DAG transformation pipeline definitions, trigger modes, cron schedules, SLA timeouts, retry policies, alert rule bindings, and visual designer coordinates.
+  - `TransformationStep` [`BTRN-`]: DAG execution nodes supporting 10 step types (joins, aggregates, pivots, unpivots, casts, filters, derived columns, lookup enrichments, deduplications, business rules), execution sequence, and blocking controls.
+  - `EtlPipelineVersion` [`BPVR-`]: Immutable declarative JSON DAG snapshots, semantic versioning (`v1.0.0`), multi-environment promotions (Dev -> Staging -> Prod), and instant rollback mechanisms.
+  - `EtlPipelineRun` [`BEXR-`]: Operational execution telemetry tracking duration, row counts (in, transformed, out, rejected), byte throughput, backfill ranges, step audit logs, and SLA adherence.
+- **Views & URLs**: 17 function-based views across 20 distinct URL routes including interactive drag-and-drop DAG canvas designer (`bi:etl_pipeline_canvas`), manual execution trigger with concurrency guard (`bi:etl_pipeline_trigger`), and environment version promotion (`bi:etl_pipeline_version_promote`).
+- **Templates**: 12 responsive templates under `templates/bi/etl_pipelines/` adhering to modern design tokens, color-coded badges, and empty-state guidance.
+- **Navigation & Seeder**: Wired into `apps/core/navigation.py` under `LIVE_LINKS["10.2"] = "bi:etl_pipeline_list"`. Idempotent seeder `python manage.py seed_bi` seeds enterprise pipelines, DAG steps, semantic versions, and execution runs for Acme and Globex.
+- **Database Migrations**: Incremental migrations `0004_...`, `0005_...`, and `0006_...` generated and applied with composite indexes on `(tenant, status, trigger_type)`, `(tenant, target_layer)`, `(tenant, name)`, `(tenant, pipeline, sequence)`, `(tenant, step_type, status)`, `(tenant, -created_at)`, `(tenant, pipeline, environment)`, `(tenant, status)`, `(tenant, pipeline, started_at)`, and `(tenant, status, started_at)`.
+- **Review Passes (Phase 4)**: 6 specialist reviewers run serially (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) yielding 26 cataloged findings in `.claude/tasks/review-bi-10.2.md`.
+- **Code Fixes (Phase 5)**: All 26 review findings resolved and verified (`C1` through `C5`, `I1` through `I10`, `M1` through `M11`), with 100% `[x] fixed` status in `.claude/tasks/review-bi-10.2.md`.
+- **Test Suite (Phase 6)**: 118 dedicated unit, form, view, and security tests written across `test_etlpipelines_models.py` (17 tests), `test_etlpipelines_forms.py` (44 tests), `test_etlpipelines_views.py` (32 tests), and `test_etlpipelines_security.py` (25 tests). Full unfiltered test run on `apps/bi/tests/`: **138 passed in 37.12s (100% green)**.
+- **Gaps**: None. All planned pre-build contract features, routes, views, security defenses, and review items were fully built and verified.
+
 
 ---
 # Sub-module 10.1: Data Integration & Ingestion (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.1.md` (2026-11-03)
