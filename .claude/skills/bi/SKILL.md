@@ -255,3 +255,83 @@ In `apps/core/navigation.py`:
 - **Foreign Key Permissiveness on Edit**: Model forms permit currently bound inactive FKs on edit via `Q(is_active=True) | Q(pk=self.instance.<fk_id>)`.
 - **SQL Identifier Validation**: `table_name` and `primary_key_column` are sanitized with regex `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`.
 
+---
+
+## Sub-module 10.4: Data Modeling & Semantic Layer
+
+### Models
+1. **`SemanticModel`** (`apps/bi/models/SemanticLayer/SemanticModels.py`)
+   - Prefix: `BSMD-` (`BSMD-00001`)
+   - Fields: `name`, `code` (slug), `model_type` (`fact`, `dimension`, `bridge`, `virtual_view`, `reusable_dataset`), `warehouse_table` (`bi.WarehouseTable`, `SET_NULL`), `data_mart` (`bi.DataMart`, `SET_NULL`), `primary_key_column`, `natural_key_columns`, `grain_description`, `is_conformed_dimension`, `scd_type` (`type_0`, `type_1`, `type_2`, `type_3`), `is_virtual_view`, `sql_definition`, `access_tier` (`public`, `department`, `restricted`), `certification_status` (`draft`, `in_review`, `certified`, `deprecated`), `certified_by` (`auth.User`, `SET_NULL`), `certified_at`, `certification_notes`, `source_fingerprint`, `last_introspected_at`, `owner` (`auth.User`, `SET_NULL`), `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`. Composite indexes on `(tenant, model_type)`, `(tenant, certification_status)`, `(tenant, warehouse_table)`, `(tenant, is_active)`, `(tenant, -created_at)`, `(tenant, data_mart)`.
+
+2. **`BusinessGlossaryTerm`** (`apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`)
+   - Prefix: `BGLO-` (`BGLO-00001`)
+   - Fields: `name`, `code` (slug), `domain_category` (`finance`, `sales`, `marketing`, `hr`, `supply_chain`, `operations`, `general`), `short_definition`, `full_definition`, `calculation_rule`, `synonyms`, `steward` (`auth.User`, `SET_NULL`), `org_unit` (`core.OrgUnit`, `SET_NULL`), `certification_status` (`draft`, `in_review`, `certified`, `deprecated`), `certified_by` (`auth.User`, `SET_NULL`), `certified_at`, `certification_notes`, `related_terms` (symmetrical M2M to `self`), `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`. Composite indexes on `(tenant, domain_category)`, `(tenant, domain_category, name)`, `(tenant, certification_status)`, `(tenant, is_active)`.
+
+3. **`CalculatedMeasure`** (`apps/bi/models/SemanticLayer/CalculatedMeasures.py`)
+   - Prefix: `BCMS-` (`BCMS-00001`)
+   - Fields: `semantic_model` (`bi.SemanticModel`, `CASCADE`), `glossary_term` (`bi.BusinessGlossaryTerm`, `SET_NULL`), `name`, `code` (slug), `aggregation_type` (`sum`, `avg`, `count`, `count_distinct`, `min`, `max`, `formula`), `source_column`, `formula_expression`, `filter_expression`, `time_intelligence` (`none`, `yoy_growth`, `qtd`, `ytd`, `rolling_30d`, `prior_period`), `format_string` (`currency`, `percentage`, `integer`, `decimal`, `raw`), `display_units` (`auto`, `none`, `thousands`, `millions`, `billions`), `target_value`, `warning_threshold`, `critical_threshold`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, semantic_model, code)` and `(tenant, number)`. Composite indexes on `(tenant, aggregation_type)`, `(tenant, time_intelligence)`, `(tenant, glossary_term)`, `(tenant, is_active)`.
+
+4. **`DrillHierarchy`** (`apps/bi/models/SemanticLayer/DrillHierarchies.py`)
+   - Prefix: `BDHI-` (`BDHI-00001`)
+   - Fields: `semantic_model` (`bi.SemanticModel`, `CASCADE`), `name`, `code` (slug), `hierarchy_type` (`time`, `geography`, `organizational`, `product`, `custom`), `levels_json` (JSON list of level dicts `[{'level': 1, 'name': 'Year', 'column': 'fiscal_year'}, ...]`), `primary_drill_path`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, semantic_model, code)` and `(tenant, number)`. Composite indexes on `(tenant, hierarchy_type)`, `(tenant, is_active)`.
+
+### URLs & Routes
+- Master Semantic Command Center: `bi:semantic_overview` (`/bi/semantic/`)
+- Semantic Models:
+  - `bi:semantic_model_list` (`/bi/semantic/models/`)
+  - `bi:semantic_model_create` (`/bi/semantic/models/create/`)
+  - `bi:semantic_model_detail` (`/bi/semantic/models/<int:pk>/`)
+  - `bi:semantic_model_edit` (`/bi/semantic/models/<int:pk>/edit/`)
+  - `bi:semantic_model_delete` (`/bi/semantic/models/<int:pk>/delete/`)
+  - `bi:semantic_model_certify` (`/bi/semantic/models/<int:pk>/certify/`)
+  - `bi:semantic_model_introspect` (`/bi/semantic/models/<int:pk>/introspect/`)
+- Business Glossary Terms:
+  - `bi:business_glossary_term_list` (`/bi/semantic/glossary/`)
+  - `bi:business_glossary_term_create` (`/bi/semantic/glossary/create/`)
+  - `bi:business_glossary_term_detail` (`/bi/semantic/glossary/<int:pk>/`)
+  - `bi:business_glossary_term_edit` (`/bi/semantic/glossary/<int:pk>/edit/`)
+  - `bi:business_glossary_term_delete` (`/bi/semantic/glossary/<int:pk>/delete/`)
+  - `bi:business_glossary_term_certify` (`/bi/semantic/glossary/<int:pk>/certify/`)
+- Calculated Measures:
+  - `bi:calculated_measure_list` (`/bi/semantic/measures/`)
+  - `bi:calculated_measure_create` (`/bi/semantic/measures/create/`)
+  - `bi:calculated_measure_detail` (`/bi/semantic/measures/<int:pk>/`)
+  - `bi:calculated_measure_edit` (`/bi/semantic/measures/<int:pk>/edit/`)
+  - `bi:calculated_measure_delete` (`/bi/semantic/measures/<int:pk>/delete/`)
+- Drill Hierarchies:
+  - `bi:drill_hierarchy_list` (`/bi/semantic/hierarchies/`)
+  - `bi:drill_hierarchy_create` (`/bi/semantic/hierarchies/create/`)
+  - `bi:drill_hierarchy_detail` (`/bi/semantic/hierarchies/<int:pk>/`)
+  - `bi:drill_hierarchy_edit` (`/bi/semantic/hierarchies/<int:pk>/edit/`)
+  - `bi:drill_hierarchy_delete` (`/bi/semantic/hierarchies/<int:pk>/delete/`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/semantic_layer/`:
+  - `semantic_overview.html` (Command center with KPI stat cards, distribution charts, recent certified models/terms)
+  - `semantic_model/` (`list.html`, `detail.html`, `form.html`)
+  - `business_glossary_term/` (`list.html`, `detail.html`, `form.html`)
+  - `calculated_measure/` (`list.html`, `detail.html`, `form.html`)
+  - `drill_hierarchy/` (`list.html`, `detail.html`, `form.html`)
+- Design System: Colour-named badges only (`.badge-info`, `.badge-slate`, `.badge-green`, `.badge-amber`, `.badge-red`). Icon buttons include accessible `aria-label` attributes.
+- Detail pages include "Back to List" navigation in `.page-actions`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant demo data for:
+  - 4 Semantic Models (Acme Sales Orders Mart Model, Acme Financial Performance Model, Executive ARR & Retention View, Globex Orders Mart Model)
+  - 4 Business Glossary Terms (Net Recurring Revenue, Customer Acquisition Cost, Days Sales Outstanding, Globex Gross Churn)
+  - 4 Calculated Measures (Gross Merchandise Value, Gross Margin %, Rolling 30-Day Moving Revenue, Globex Net Sales)
+  - 3 Drill Hierarchies (Fiscal Calendar Drill, Regional Territory Drill, Globex Customer Geography Drill)
+- 100% idempotent.
+
+### Key Conventions
+- **Dedicated Certification Workflow**: `certification_status` and `certification_notes` are excluded from general CRUD forms and managed strictly via `@require_POST` certify endpoints that enforce user stamping (`certified_by`, `certified_at`) and audit logging.
+- **Virtual View SQL Requirement**: `SemanticModelForm.clean()` enforces non-empty `sql_definition` when `is_virtual_view` is true.
+- **Audit Logging Protocol**: All mutating operations invoke `write_audit_log(request.user, instance, "<action>", tenant=request.tenant)`. Delete views log before calling `instance.delete()`.
+- **Queryset Pre-evaluation**: Reverse relation counts in detail headers evaluate via `list()` in view and use `|length` in templates to eliminate duplicate counting queries.
+
+
