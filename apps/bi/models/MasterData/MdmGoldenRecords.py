@@ -134,6 +134,7 @@ class MdmGoldenRecord(TenantNumbered):
             models.Index(fields=["tenant", "party"], name="idx_bmgr_ten_party"),
             models.Index(fields=["tenant", "item"], name="idx_bmgr_ten_item"),
             models.Index(fields=["tenant", "tax_id"], name="idx_bmgr_ten_taxid"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bmgr_ten_created"),
             models.Index(fields=["tenant", "is_active"], name="idx_bmgr_ten_active"),
         ]
 
