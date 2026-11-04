@@ -189,10 +189,17 @@ def mdm_golden_record_delete(request, pk):
 @require_POST
 def mdm_golden_record_merge(request, pk):
     primary_record = bi_object(request, MdmGoldenRecord, pk)
+    if primary_record.status == "merged":
+        messages.error(request, "Cannot merge candidate records into an already absorbed master record.")
+        return redirect("bi:mdm_golden_record_detail", pk=primary_record.pk)
+
     form = MdmGoldenRecordMergeForm(request.tenant, primary_record, request.POST)
 
     if form.is_valid():
         secondary_record = form.cleaned_data["secondary_record"]
+        if secondary_record.status == "merged":
+            messages.error(request, "Selected candidate record has already been absorbed.")
+            return redirect("bi:mdm_golden_record_detail", pk=primary_record.pk)
         notes = form.cleaned_data.get("stewardship_notes", "")
 
         with transaction.atomic():
