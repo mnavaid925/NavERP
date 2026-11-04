@@ -66,6 +66,28 @@
     </div>
 </div>
 
+{% if golden_record.status == 'merged' and golden_record.merged_into_record %}
+<div class="mb-6 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+        <i data-lucide="info" class="w-5 h-5 text-blue-600 flex-shrink-0"></i>
+        <div>
+            <span class="font-semibold">Absorbed Duplicate Record:</span>
+            <span>This golden record was merged into surviving master record</span>
+            <a href="{% url 'bi:mdm_golden_record_detail' golden_record.merged_into_record.pk %}" class="font-bold underline text-blue-700 hover:text-blue-900">
+                {{ golden_record.merged_into_record.number }} ({{ golden_record.merged_into_record.name }})
+            </a>
+            {% if golden_record.merged_at %}
+            <span class="text-xs text-blue-700 ml-1">on {{ golden_record.merged_at|date:"Y-m-d H:i" }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <a href="{% url 'bi:mdm_golden_record_detail' golden_record.merged_into_record.pk %}" class="btn btn-sm btn-primary">
+        <span>View Surviving Master</span>
+        <i data-lucide="arrow-right" class="w-4 h-4 inline ml-1"></i>
+    </a>
+</div>
+{% endif %}
+
 <!-- Key Metric Cards -->
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
