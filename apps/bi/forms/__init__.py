@@ -11,6 +11,13 @@ from apps.bi.forms.EtlPipelines.EtlPipelineRuns import EtlPipelineRunForm
 from apps.bi.forms.EtlPipelines.EtlPipelines import EtlPipelineForm
 from apps.bi.forms.EtlPipelines.EtlPipelineVersions import EtlPipelineVersionForm
 from apps.bi.forms.EtlPipelines.TransformationSteps import TransformationStepForm
+from apps.bi.forms.DataQuality.DataQualityExceptionForms import (
+    DataQualityExceptionForm,
+    DataQualityExceptionRemediationForm,
+)
+from apps.bi.forms.DataQuality.DataQualityProfileForms import DataQualityProfileForm
+from apps.bi.forms.DataQuality.DataQualityRuleForms import DataQualityRuleForm
+from apps.bi.forms.DataQuality.DataQualityScorecardForms import DataQualityScorecardForm
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -43,4 +50,9 @@ __all__ = [
     "BusinessGlossaryTermCertificationForm",
     "CalculatedMeasureForm",
     "DrillHierarchyForm",
+    "DataQualityProfileForm",
+    "DataQualityRuleForm",
+    "DataQualityExceptionForm",
+    "DataQualityExceptionRemediationForm",
+    "DataQualityScorecardForm",
 ]
