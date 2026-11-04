@@ -99,8 +99,8 @@ def semantic_model_detail(request, pk):
         pk,
         select_related=("warehouse_table", "data_mart", "owner", "certified_by"),
     )
-    measures = model.measures.filter(tenant=request.tenant).select_related("glossary_term")
-    drill_hierarchies = model.drill_hierarchies.filter(tenant=request.tenant)
+    measures = list(model.measures.filter(tenant=request.tenant).select_related("glossary_term"))
+    drill_hierarchies = list(model.drill_hierarchies.filter(tenant=request.tenant))
 
     certify_form = SemanticModelCertificationForm(
         initial={
