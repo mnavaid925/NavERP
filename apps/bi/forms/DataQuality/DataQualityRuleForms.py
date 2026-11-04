@@ -66,9 +66,14 @@ class DataQualityRuleForm(TenantUniqueMixin, TenantModelForm):
             if not val_str:
                 return {}
             try:
-                return json.loads(val_str)
+                parsed = json.loads(val_str)
             except json.JSONDecodeError as exc:
                 raise forms.ValidationError(f"Invalid JSON configuration: {exc}")
+            if not isinstance(parsed, dict):
+                raise forms.ValidationError("Parameters must be a JSON object (dictionary).")
+            return parsed
+        elif val and not isinstance(val, dict):
+            raise forms.ValidationError("Parameters must be a JSON object (dictionary).")
         return val or {}
 
     def clean(self):
