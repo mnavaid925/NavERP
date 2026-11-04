@@ -104,6 +104,7 @@ class BusinessGlossaryTerm(TenantNumbered):
             models.Index(fields=["tenant", "domain_category"], name="idx_bglo_ten_domain"),
             models.Index(fields=["tenant", "certification_status"], name="idx_bglo_ten_cert"),
             models.Index(fields=["tenant", "is_active"], name="idx_bglo_ten_active"),
+            models.Index(fields=["tenant", "domain_category", "name"], name="idx_bglo_ten_domain_name"),
         ]
 
     def __str__(self):
