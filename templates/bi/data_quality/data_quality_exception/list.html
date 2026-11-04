@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Exceptions Queue — Data Quality & Cleansing — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <span>Exceptions Queue</span>
+        </div>
+        <h1 class="page-title">Quality Exceptions & Remediation Queue</h1>
+        <p class="text-muted text-sm">Operational workbench tracking invalid values, duplicate pairs, and steward remediation workflows</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:quality_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Quality Overview</span>
+        </a>
+        <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Rules</span>
+        </a>
+        <a href="{% url 'bi:data_quality_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="award"></i>
+            <span>Scorecards</span>
+        </a>
+        <a href="{% url 'bi:data_quality_exception_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Record Exception</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Exceptions</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Open / In Review</div>
+            <div class="text-2xl font-bold text-amber-600">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Remediated</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ remediated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Critical SLA Impact</div>
+            <div class="text-2xl font-bold text-red-600">{{ critical_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search Exceptions</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search identifier, column, invalid value, notes..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-severity">Severity</label>
+                <select id="filter-severity" name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-type">Exception Type</label>
+                <select id="filter-type" name="exception_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in exception_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.exception_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-steward">Steward</label>
+                <select id="filter-steward" name="assigned_steward" class="form-select">
+                    <option value="">All Stewards</option>
+                    {% for u in stewards %}
+                    <option value="{{ u.pk|stringformat:'d' }}" {% if request.GET.assigned_steward == u.pk|stringformat:'d' %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Exceptions Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Exception & Record</th>
+                        <th>Column & Invalid Value</th>
+                        <th>Type & Rule</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Remediation Action</th>
+                        <th>Assigned Steward</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for exc in exceptions %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900 dark:text-slate-100">
+                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="hover:text-primary-600 transition-colors font-mono">
+                                    {{ exc.record_identifier }}
+                                </a>
+                            </div>
+                            <div class="text-xs font-mono text-muted">{{ exc.number }}</div>
+                        </td>
+                        <td>
+                            <div class="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">{{ exc.target_column|default:"(Whole Record)" }}</div>
+                            <div class="text-xs text-red-600 dark:text-red-400 font-mono truncate max-w-xs" title="{{ exc.invalid_value }}">{{ exc.invalid_value }}</div>
+                        </td>
+                        <td>
+                            <div class="text-xs font-medium">{{ exc.get_exception_type_display }}</div>
+                            {% if exc.rule %}
+                            <div class="text-xs text-muted font-mono truncate max-w-xs">{{ exc.rule.name }}</div>
+                            {% else %}
+                            <div class="text-xs text-muted">Manual / Profile Outlier</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if exc.severity == 'critical' or exc.severity == 'fatal' %}
+                            <span class="badge badge-red">{{ exc.get_severity_display }}</span>
+                            {% elif exc.severity == 'warning' %}
+                            <span class="badge badge-amber">Warning</span>
+                            {% else %}
+                            <span class="badge badge-slate">Info</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if exc.status == 'remediated' %}
+                            <span class="badge badge-green">Remediated</span>
+                            {% elif exc.status == 'investigating' %}
+                            <span class="badge badge-amber">Investigating</span>
+                            {% elif exc.status == 'suppressed_false_positive' %}
+                            <span class="badge badge-slate">Suppressed</span>
+                            {% elif exc.status == 'accepted_risk' %}
+                            <span class="badge badge-info">Accepted Risk</span>
+                            {% elif exc.status == 'rejected' %}
+                            <span class="badge badge-muted">Rejected</span>
+                            {% else %}
+                            <span class="badge badge-red">Open</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs">
+                            <span class="font-medium text-slate-700 dark:text-slate-300">{{ exc.get_remediation_action_display }}</span>
+                        </td>
+                        <td class="text-xs text-muted">
+                            {{ exc.assigned_steward.get_full_name|default:exc.assigned_steward.username|default:"Unassigned" }}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon" title="View & Remediate">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:data_quality_exception_edit' exc.pk %}" class="btn btn-icon" title="Edit Exception">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'bi:data_quality_exception_delete' exc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete exception {{ exc.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Exception">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="p-8 text-center">
+                            <div class="empty-state">
+                                <div class="empty-icon text-slate-300 dark:text-slate-600 mb-2">
+                                    <i data-lucide="check-check" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100">No Quality Exceptions Found</h3>
+                                <p class="text-muted text-sm max-w-sm mx-auto mt-1 mb-4">No data quality rule violations, anomalies, or duplicate record pairs in the queue.</p>
+                                <a href="{% url 'bi:data_quality_exception_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Log Quality Exception</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer border-t border-slate-100 dark:border-slate-800 p-4">
+        <div class="pagination flex items-center justify-between">
+            <span class="text-xs text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} exceptions</span>
+            <div class="flex gap-2">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.exception_type %}&exception_type={{ request.GET.exception_type }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+                {% endif %}
+                <span class="btn btn-outline text-xs active">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.exception_type %}&exception_type={{ request.GET.exception_type }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
