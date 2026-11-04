@@ -23,7 +23,16 @@ def quality_overview(request):
     open_exceptions = exceptions_qs.filter(status__in=["open", "investigating"]).count()
     total_scorecards = scorecards_qs.count()
 
-    avg_trust = scorecards_qs.aggregate(Avg("overall_quality_score"))["overall_quality_score__avg"]
+    sc_aggs = scorecards_qs.aggregate(
+        avg_trust=Avg("overall_quality_score"),
+        avg_completeness=Avg("completeness_score"),
+        avg_accuracy=Avg("accuracy_score"),
+        avg_consistency=Avg("consistency_score"),
+        avg_timeliness=Avg("timeliness_score"),
+        avg_uniqueness=Avg("uniqueness_score"),
+        avg_validity=Avg("validity_score"),
+    )
+    avg_trust = sc_aggs["avg_trust"]
     avg_trust_score = Decimal(str(round(avg_trust, 2))) if avg_trust is not None else Decimal("98.50")
 
     healthy_scorecards_count = scorecards_qs.filter(health_status="healthy").count()
@@ -49,12 +58,12 @@ def quality_overview(request):
 
     # Dimensional scores aggregation across scorecards or defaults
     dimension_scores = {
-        "completeness": Decimal(str(round(scorecards_qs.aggregate(Avg("completeness_score"))["completeness_score__avg"] or 99.20, 2))),
-        "accuracy": Decimal(str(round(scorecards_qs.aggregate(Avg("accuracy_score"))["accuracy_score__avg"] or 98.50, 2))),
-        "consistency": Decimal(str(round(scorecards_qs.aggregate(Avg("consistency_score"))["consistency_score__avg"] or 97.80, 2))),
-        "timeliness": Decimal(str(round(scorecards_qs.aggregate(Avg("timeliness_score"))["timeliness_score__avg"] or 100.00, 2))),
-        "uniqueness": Decimal(str(round(scorecards_qs.aggregate(Avg("uniqueness_score"))["uniqueness_score__avg"] or 99.90, 2))),
-        "validity": Decimal(str(round(scorecards_qs.aggregate(Avg("validity_score"))["validity_score__avg"] or 96.40, 2))),
+        "completeness": Decimal(str(round(sc_aggs["avg_completeness"] if sc_aggs["avg_completeness"] is not None else 99.20, 2))),
+        "accuracy": Decimal(str(round(sc_aggs["avg_accuracy"] if sc_aggs["avg_accuracy"] is not None else 98.50, 2))),
+        "consistency": Decimal(str(round(sc_aggs["avg_consistency"] if sc_aggs["avg_consistency"] is not None else 97.80, 2))),
+        "timeliness": Decimal(str(round(sc_aggs["avg_timeliness"] if sc_aggs["avg_timeliness"] is not None else 100.00, 2))),
+        "uniqueness": Decimal(str(round(sc_aggs["avg_uniqueness"] if sc_aggs["avg_uniqueness"] is not None else 99.90, 2))),
+        "validity": Decimal(str(round(sc_aggs["avg_validity"] if sc_aggs["avg_validity"] is not None else 96.40, 2))),
     }
 
     context = {
