@@ -98,13 +98,38 @@ class MdmHierarchyNode(TenantNumbered):
         return reverse("bi:mdm_hierarchy_node_detail", kwargs={"pk": self.pk})
 
     def save(self, *args, **kwargs):
+        old_path = None
+        if self.pk:
+            existing = MdmHierarchyNode.objects.filter(pk=self.pk).values("path").first()
+            if existing:
+                old_path = existing["path"]
+
         if self.parent:
+            if not self.parent.path:
+                self.parent.save()
             self.level = self.parent.level + 1
         else:
             self.level = 1
         super().save(*args, **kwargs)
+
         # Re-compute materialized path with persisted pk
-        calculated_path = f"{self.parent.path}{self.pk}/" if self.parent and self.parent.path else f"/{self.pk}/"
+        parent_path = self.parent.path if (self.parent and self.parent.path) else ""
+        if self.parent and not parent_path:
+            parent_path = f"/{self.parent.pk}/"
+        calculated_path = f"{parent_path}{self.pk}/" if parent_path else f"/{self.pk}/"
+
+        path_changed = False
         if self.path != calculated_path:
             self.path = calculated_path
             super().save(update_fields=["path"])
+            path_changed = True
+
+        if old_path and (path_changed or old_path != self.path):
+            self._cascade_descendants()
+
+    def _cascade_descendants(self):
+        for child in self.children.all():
+            child.level = self.level + 1
+            child.path = f"{self.path}{child.pk}/"
+            MdmHierarchyNode.objects.filter(pk=child.pk).update(level=child.level, path=child.path)
+            child._cascade_descendants()
