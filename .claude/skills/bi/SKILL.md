@@ -124,6 +124,51 @@ apps/bi/
 ### Sidebar Navigation & Live Links
 In `apps/core/navigation.py`:
 - `LIVE_LINKS["10.1"] = "bi:data_integration_hub"`
+- `LIVE_LINKS["10.2"] = "bi:etl_pipeline_list"`
+
+---
+
+## Sub-module 10.2: ETL/ELT & Data Pipelines
+
+### Models
+1. **`EtlPipeline`** (`apps/bi/models/EtlPipelines/EtlPipelines.py`)
+   - Prefix: `BETL-`
+   - Fields: `name`, `description`, `source_ingestion_pipeline` (`bi.IngestionPipeline`), `source_staging_table`, `target_table`, `target_layer` (staging, warehouse_fact, warehouse_dim, data_mart), `trigger_type` (manual, scheduled_cron, event_on_ingest, dependency_chained), `cron_expression`, `upstream_dependencies` (JSON list), `retry_policy` (JSON dict), `sla_timeout_seconds`, `alert_on_sla_miss`, `alert_rule` (`core.AlertRule`), `status` (draft, active, paused, deprecated, error), `canvas_layout` (JSON dict), `active_version` (`bi.EtlPipelineVersion`), `last_run_at`, `next_run_due_at`, `created_by` (`auth.User`).
+2. **`TransformationStep`** (`apps/bi/models/EtlPipelines/TransformationSteps.py`)
+   - Prefix: `BTRN-`
+   - Fields: `pipeline` (`bi.EtlPipeline`), `name`, `step_type` (join, aggregate, pivot, unpivot, cast, filter, derived_column, lookup_enrichment, deduplicate, business_rule), `sequence`, `upstream_step_ids` (JSON list), `step_config` (JSON dict), `mapping_template` (`core.MappingTemplate`), `status` (active, disabled, draft), `is_blocking`, `canvas_x`, `canvas_y`, `description`.
+3. **`EtlPipelineVersion`** (`apps/bi/models/EtlPipelines/EtlPipelineVersions.py`)
+   - Prefix: `BPVR-`
+   - Fields: `pipeline` (`bi.EtlPipeline`), `version_number`, `environment` (development, staging, production), `status` (draft, published, archived, rolled_back), `environment_instance` (`core.EnvironmentInstance`), `dag_definition` (JSON dict), `changelog`, `rollback_source` (`self`), `promoted_by` (`auth.User`), `promoted_at`.
+4. **`EtlPipelineRun`** (`apps/bi/models/EtlPipelines/EtlPipelineRuns.py`)
+   - Prefix: `BEXR-`
+   - Fields: `pipeline` (`bi.EtlPipeline`), `version` (`bi.EtlPipelineVersion`), `trigger_type` (manual, scheduled, event_upstream, backfill), `status` (pending, queued, running, completed, warning, failed, cancelled, timed_out), `started_at`, `ended_at`, `duration_seconds`, `records_in`, `records_transformed`, `records_out`, `records_rejected`, `bytes_processed`, `sla_missed`, `is_backfill`, `backfill_range_start`, `backfill_range_end`, `retry_count`, `step_progress` (JSON dict), `error_message`, `execution_log`.
+
+### URLs & Routes
+- ETL Pipelines:
+  - `bi:etl_pipeline_list` (`/bi/etl-pipelines/`)
+  - `bi:etl_pipeline_create` (`/bi/etl-pipelines/create/`)
+  - `bi:etl_pipeline_detail` (`/bi/etl-pipelines/<int:pk>/`)
+  - `bi:etl_pipeline_edit` (`/bi/etl-pipelines/<int:pk>/edit/`)
+  - `bi:etl_pipeline_delete` (`/bi/etl-pipelines/<int:pk>/delete/`)
+  - `bi:etl_pipeline_canvas` (`/bi/etl-pipelines/<int:pk>/canvas/`)
+  - `bi:etl_pipeline_trigger` (`/bi/etl-pipelines/<int:pk>/trigger/`)
+- Transformation Steps:
+  - `bi:transformation_step_list` (`/bi/transformation-steps/`)
+  - `bi:transformation_step_create` (`/bi/transformation-steps/create/`)
+  - `bi:transformation_step_detail` (`/bi/transformation-steps/<int:pk>/`)
+  - `bi:transformation_step_edit` (`/bi/transformation-steps/<int:pk>/edit/`)
+  - `bi:transformation_step_delete` (`/bi/transformation-steps/<int:pk>/delete/`)
+- Pipeline Versions:
+  - `bi:etl_pipeline_version_list` (`/bi/pipeline-versions/`)
+  - `bi:etl_pipeline_version_create` (`/bi/pipeline-versions/create/`)
+  - `bi:etl_pipeline_version_detail` (`/bi/pipeline-versions/<int:pk>/`)
+  - `bi:etl_pipeline_version_edit` (`/bi/pipeline-versions/<int:pk>/edit/`)
+  - `bi:etl_pipeline_version_delete` (`/bi/pipeline-versions/<int:pk>/delete/`)
+  - `bi:etl_pipeline_version_promote` (`/bi/pipeline-versions/<int:pk>/promote/`)
+- Pipeline Runs:
+  - `bi:etl_pipeline_run_list` (`/bi/etl-runs/`)
+  - `bi:etl_pipeline_run_detail` (`/bi/etl-runs/<int:pk>/`)
 
 ### Conventions & Development Rules
 - **Multi-Tenancy**: All models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. Every query in views, forms, and actions must filter on `tenant=request.tenant`.
