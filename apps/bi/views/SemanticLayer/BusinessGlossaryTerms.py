@@ -109,14 +109,7 @@ def business_glossary_term_create(request):
                 term.steward = request.user
             term.save()
             form.save_m2m()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                "BusinessGlossaryTerm",
-                term.pk,
-                f"Created business glossary term {term.name} ({term.number})",
-            )
+            write_audit_log(request.user, term, "create", tenant=request.tenant)
             messages.success(request, f"Glossary Term '{term.name}' created successfully.")
             return redirect("bi:business_glossary_term_detail", pk=term.pk)
     else:
@@ -136,14 +129,7 @@ def business_glossary_term_edit(request, pk):
         form = BusinessGlossaryTermForm(request.POST, instance=term, tenant=request.tenant)
         if form.is_valid():
             term = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                "BusinessGlossaryTerm",
-                term.pk,
-                f"Updated business glossary term {term.name} ({term.number})",
-            )
+            write_audit_log(request.user, term, "update", tenant=request.tenant)
             messages.success(request, f"Glossary Term '{term.name}' updated successfully.")
             return redirect("bi:business_glossary_term_detail", pk=term.pk)
     else:
@@ -165,15 +151,8 @@ def business_glossary_term_delete(request, pk):
     term = bi_object(request, BusinessGlossaryTerm, pk)
     name = term.name
     num = term.number
+    write_audit_log(request.user, term, "delete", tenant=request.tenant)
     term.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        "BusinessGlossaryTerm",
-        pk,
-        f"Deleted business glossary term {name} ({num})",
-    )
     messages.success(request, f"Glossary Term '{name}' ({num}) deleted successfully.")
     return redirect("bi:business_glossary_term_list")
 
@@ -193,14 +172,7 @@ def business_glossary_term_certify(request, pk):
             term.certified_by = request.user
             term.certified_at = timezone.now()
         term.save(update_fields=["certification_status", "certification_notes", "certified_by", "certified_at", "updated_at"])
-        write_audit_log(
-            request.tenant,
-            request.user,
-            "certify",
-            "BusinessGlossaryTerm",
-            term.pk,
-            f"Changed certification of glossary term {term.name} from {old_status} to {new_status}",
-        )
+        write_audit_log(request.user, term, "certify", tenant=request.tenant)
         messages.success(request, f"Certification status updated to '{term.get_certification_status_display()}'.")
     else:
         messages.error(request, "Invalid certification status submitted.")
