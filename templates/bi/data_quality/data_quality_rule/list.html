@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Quality Rules — Data Quality & Cleansing — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <span>Quality Rules</span>
+        </div>
+        <h1 class="page-title">Validation & Quality Rules</h1>
+        <p class="text-muted text-sm">Declarative assertions across accuracy, consistency, uniqueness, referential integrity, and freshness SLAs</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:quality_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Quality Overview</span>
+        </a>
+        <a href="{% url 'bi:data_quality_profile_list' %}" class="btn btn-outline">
+            <i data-lucide="file-bar-chart"></i>
+            <span>Profiles</span>
+        </a>
+        <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-triangle"></i>
+            <span>Exceptions</span>
+        </a>
+        <a href="{% url 'bi:data_quality_rule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Quality Rule</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Rules</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Passing Rules</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ passed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Failing / Breached</div>
+            <div class="text-2xl font-bold text-red-600">{{ failed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="sliders"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Rule Dimensions</div>
+            <div class="text-2xl font-bold text-indigo-600">6 ISO/DAMA</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search Rules</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, code, column, description..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-category">Category</label>
+                <select id="filter-category" name="rule_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.rule_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-dimension">Dimension</label>
+                <select id="filter-dimension" name="dimension" class="form-select">
+                    <option value="">All Dimensions</option>
+                    {% for val, label in dimension_choices %}
+                    <option value="{{ val }}" {% if request.GET.dimension == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-severity">Severity</label>
+                <select id="filter-severity" name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="last_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.last_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Rules Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Rule & Code</th>
+                        <th>Target Scope</th>
+                        <th>Category & Dimension</th>
+                        <th>Type & Column</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Pass Rate</th>
+                        <th>Last Evaluated</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr>
+                        <td>
+                            <div class="font-medium text-slate-900 dark:text-slate-100">
+                                <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="hover:text-primary-600 transition-colors">
+                                    {{ rule.name }}
+                                </a>
+                            </div>
+                            <div class="text-xs font-mono text-muted">{{ rule.number }} &middot; {{ rule.code }}</div>
+                        </td>
+                        <td>
+                            {% if rule.target_type == 'warehouse_table' and rule.warehouse_table %}
+                            <span class="inline-flex items-center gap-1 text-xs font-mono text-slate-700 dark:text-slate-300">
+                                <i data-lucide="table" class="w-3.5 h-3.5 text-blue-500"></i>
+                                {{ rule.warehouse_table.name }}
+                            </span>
+                            {% elif rule.target_type == 'semantic_model' and rule.semantic_model %}
+                            <span class="inline-flex items-center gap-1 text-xs font-mono text-slate-700 dark:text-slate-300">
+                                <i data-lucide="layers" class="w-3.5 h-3.5 text-purple-500"></i>
+                                {{ rule.semantic_model.name }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted text-xs">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="text-xs font-medium">{{ rule.get_rule_category_display }}</div>
+                            <span class="badge badge-info text-xs">{{ rule.get_dimension_display }}</span>
+                        </td>
+                        <td class="text-xs">
+                            <div class="font-medium text-slate-800 dark:text-slate-200">{{ rule.get_rule_type_display }}</div>
+                            <div class="text-muted font-mono">{{ rule.target_column|default:"(Table-level)" }}</div>
+                        </td>
+                        <td>
+                            {% if rule.severity == 'critical' or rule.severity == 'fatal' %}
+                            <span class="badge badge-red">{{ rule.get_severity_display }}</span>
+                            {% elif rule.severity == 'warning' %}
+                            <span class="badge badge-amber">Warning</span>
+                            {% else %}
+                            <span class="badge badge-slate">Info</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if rule.last_status == 'passed' %}
+                            <span class="badge badge-green">Passed</span>
+                            {% elif rule.last_status == 'warning' %}
+                            <span class="badge badge-amber">Warning</span>
+                            {% elif rule.last_status == 'failed' %}
+                            <span class="badge badge-red">Failed</span>
+                            {% else %}
+                            <span class="badge badge-slate">{{ rule.get_last_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-medium text-xs">{{ rule.pass_rate_pct }}%</div>
+                            <div class="w-16 bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-0.5">
+                                <div class="{% if rule.pass_rate_pct >= 95 %}bg-emerald-500{% elif rule.pass_rate_pct >= 80 %}bg-amber-500{% else %}bg-red-500{% endif %} h-1.5 rounded-full" style="width: {{ rule.pass_rate_pct }}%"></div>
+                            </div>
+                        </td>
+                        <td class="text-xs text-muted">
+                            {% if rule.last_run_at %}
+                            {{ rule.last_run_at|date:"M d, Y H:i" }}
+                            {% else %}
+                            <span class="text-slate-400">Never</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions justify-end">
+                                <form method="post" action="{% url 'bi:data_quality_rule_run' rule.pk %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-700" title="Evaluate Rule Now">
+                                        <i data-lucide="play"></i>
+                                    </button>
+                                </form>
+                                <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon" title="View Rule">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                                <a href="{% url 'bi:data_quality_rule_edit' rule.pk %}" class="btn btn-icon" title="Edit Rule">
+                                    <i data-lucide="pencil"></i>
+                                </a>
+                                <form method="post" action="{% url 'bi:data_quality_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete rule {{ rule.name }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete Rule">
+                                        <i data-lucide="trash-2"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="p-8 text-center">
+                            <div class="empty-state">
+                                <div class="empty-icon text-slate-300 dark:text-slate-600 mb-2">
+                                    <i data-lucide="shield-check" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-900 dark:text-slate-100">No Quality Rules Configured</h3>
+                                <p class="text-muted text-sm max-w-sm mx-auto mt-1 mb-4">Define assertions, uniqueness constraints, freshness checks, and fuzzy duplicate clusters.</p>
+                                <a href="{% url 'bi:data_quality_rule_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Quality Rule</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer border-t border-slate-100 dark:border-slate-800 p-4">
+        <div class="pagination flex items-center justify-between">
+            <span class="text-xs text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} rules</span>
+            <div class="flex gap-2">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.rule_category %}&rule_category={{ request.GET.rule_category }}{% endif %}{% if request.GET.dimension %}&dimension={{ request.GET.dimension }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.last_status %}&last_status={{ request.GET.last_status }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+                {% endif %}
+                <span class="btn btn-outline text-xs active">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.rule_category %}&rule_category={{ request.GET.rule_category }}{% endif %}{% if request.GET.dimension %}&dimension={{ request.GET.dimension }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.last_status %}&last_status={{ request.GET.last_status }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
