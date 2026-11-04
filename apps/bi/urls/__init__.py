@@ -12,6 +12,9 @@ from apps.bi.urls.DataIntegration.IngestionPipelines import (
 from apps.bi.urls.DataIntegration.IngestionRuns import (
     urlpatterns as run_urlpatterns,
 )
+from apps.bi.urls.DataWarehouse import (
+    urlpatterns as warehouse_urlpatterns,
+)
 from apps.bi.urls.EtlPipelines.EtlPipelineRuns import (
     urlpatterns as etl_runs_urlpatterns,
 )
@@ -28,7 +31,18 @@ from apps.bi.views.DataIntegration.DataIntegrationHub import data_integration_hu
 
 app_name = "bi"
 
-urlpatterns = [
-    path("", data_integration_hub, name="data_integration_hub"),
-    path("hub/", data_integration_hub, name="data_integration_hub_alias"),
-] + connector_urlpatterns + pipeline_urlpatterns + cdc_urlpatterns + run_urlpatterns + etl_pipeline_urlpatterns + etl_steps_urlpatterns + etl_versions_urlpatterns + etl_runs_urlpatterns
+urlpatterns = (
+    [
+        path("", data_integration_hub, name="data_integration_hub"),
+        path("hub/", data_integration_hub, name="data_integration_hub_alias"),
+    ]
+    + connector_urlpatterns
+    + pipeline_urlpatterns
+    + cdc_urlpatterns
+    + run_urlpatterns
+    + etl_pipeline_urlpatterns
+    + etl_steps_urlpatterns
+    + etl_versions_urlpatterns
+    + etl_runs_urlpatterns
+    + warehouse_urlpatterns
+)
