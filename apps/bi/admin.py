@@ -2,13 +2,17 @@ from django.contrib import admin
 
 from apps.bi.models import (
     CdcSyncConfig,
+    DataMart,
     DataSourceConnector,
     EtlPipeline,
     EtlPipelineRun,
     EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
+    LakehouseZone,
     TransformationStep,
+    WarehouseStoragePolicy,
+    WarehouseTable,
 )
 
 
@@ -77,3 +81,37 @@ class EtlPipelineRunAdmin(admin.ModelAdmin):
     list_filter = ("status", "trigger_type", "sla_missed", "is_backfill", "tenant")
     search_fields = ("number", "pipeline__name", "error_message")
     readonly_fields = ("number", "started_at", "ended_at", "created_at")
+
+
+@admin.register(DataMart)
+class DataMartAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "subject_area", "access_tier", "certification_status", "refresh_cadence", "is_active", "tenant")
+    list_select_related = ("org_unit", "owner", "steward")
+    list_filter = ("subject_area", "certification_status", "access_tier", "refresh_cadence", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(LakehouseZone)
+class LakehouseZoneAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "zone_type", "storage_backend", "default_format", "is_read_only", "is_active", "tenant")
+    list_filter = ("zone_type", "storage_backend", "default_format", "is_read_only", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "base_uri_path", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(WarehouseStoragePolicy)
+class WarehouseStoragePolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "partition_strategy", "partition_key", "compression_codec", "hot_tier_days", "warm_tier_days", "cold_tier_days", "is_default", "is_active", "tenant")
+    list_filter = ("partition_strategy", "compression_codec", "vacuum_cadence", "is_default", "is_active", "tenant")
+    search_fields = ("number", "name", "partition_key", "description")
+    readonly_fields = ("number", "created_at", "updated_at")
+
+
+@admin.register(WarehouseTable)
+class WarehouseTableAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "table_name", "table_type", "schema_type", "grain", "lakehouse_zone", "data_mart", "row_count", "is_active", "tenant")
+    list_select_related = ("lakehouse_zone", "data_mart", "storage_policy")
+    list_filter = ("table_type", "schema_type", "grain", "is_conformed_dimension", "is_active", "tenant")
+    search_fields = ("number", "name", "table_name", "primary_key_column", "natural_key_column")
+    readonly_fields = ("number", "row_count", "compressed_bytes", "compression_ratio", "last_analyzed_at", "created_at", "updated_at")
