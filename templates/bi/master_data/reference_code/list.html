@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Reference Codes — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <span>Reference Codes</span>
+        </div>
+        <h1 class="page-title">Reference Data Management (RDM)</h1>
+        <p class="text-muted text-sm">Centralized canonical code sets, lookups, and cross-system translation crosswalks (ISO countries, currencies, UOMs, payment terms)</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>MDM Overview</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Golden Records</span>
+        </a>
+        <a href="{% url 'bi:mdm_reference_code_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Reference Code</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="book-open"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Code Mappings</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Canonical Codes</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="tag"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Managed Code Sets</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ code_sets|length }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="form-group sm:col-span-2 md:col-span-1">
+                <label class="form-label text-xs" for="filter-q">Search Codes</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by code, label, source..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-code-set">Code Set</label>
+                <select id="filter-code-set" name="code_set" class="form-select">
+                    <option value="">All Code Sets</option>
+                    {% for cset in code_sets %}
+                    <option value="{{ cset }}" {% if request.GET.code_set == cset %}selected{% endif %}>{{ cset }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end">
+                <div class="flex gap-2 w-full">
+                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter">
+                        <i data-lucide="filter"></i>
+                        <span>Apply</span>
+                    </button>
+                    {% if request.GET.q or request.GET.code_set or request.GET.status %}
+                    <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline" title="Reset Filters">
+                        <i data-lucide="x"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Code Set</th>
+                    <th>Canonical Code</th>
+                    <th>Standard Display Name</th>
+                    <th>Source Translation</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for code in reference_codes %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:mdm_reference_code_detail' code.pk %}" class="text-primary hover:underline">
+                            {{ code.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs font-mono">{{ code.code_set }}</span>
+                    </td>
+                    <td>
+                        <span class="font-mono font-bold text-sm text-slate-900">{{ code.canonical_code }}</span>
+                    </td>
+                    <td class="text-sm font-medium text-slate-800">
+                        {{ code.canonical_name }}
+                    </td>
+                    <td class="text-xs">
+                        {% if code.source_system %}
+                        <span class="badge badge-slate uppercase font-mono mr-1">{{ code.source_system }}</span>
+                        <span class="font-mono text-slate-700">{{ code.source_code }}</span>
+                        {% else %}
+                        <span class="badge badge-green text-xs">Canonical Master</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-muted">{{ code.category|default:"—" }}</td>
+                    <td>
+                        {% if code.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif code.status == 'deprecated' %}
+                        <span class="badge badge-amber">Deprecated</span>
+                        {% elif code.status == 'superseded' %}
+                        <span class="badge badge-slate">Superseded</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ code.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:mdm_reference_code_detail' code.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:mdm_reference_code_edit' code.pk %}" class="btn btn-icon" title="Edit Code">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:mdm_reference_code_delete' code.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete reference code {{ code.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Code">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8 text-center">
+                            <i data-lucide="book-open" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Reference Codes Found</h3>
+                            <p class="text-sm text-muted mb-4">No reference data entries match the current filter selection.</p>
+                            <a href="{% url 'bi:mdm_reference_code_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Reference Code</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.code_set %}&code_set={{ request.GET.code_set }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.code_set %}&code_set={{ request.GET.code_set }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
