@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}{{ lakehouse_zone.name }} — Lakehouse Zones — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:lakehouse_zone_list' %}">Lakehouse Zones</a>
+            <span class="sep">/</span>
+            <span>{{ lakehouse_zone.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ lakehouse_zone.name }}</h1>
+            {% if lakehouse_zone.zone_type == 'bronze' %}
+            <span class="badge badge-amber">{{ lakehouse_zone.get_zone_type_display }}</span>
+            {% elif lakehouse_zone.zone_type == 'silver' %}
+            <span class="badge badge-info">{{ lakehouse_zone.get_zone_type_display }}</span>
+            {% elif lakehouse_zone.zone_type == 'gold' %}
+            <span class="badge badge-green">{{ lakehouse_zone.get_zone_type_display }}</span>
+            {% else %}
+            <span class="badge badge-purple">{{ lakehouse_zone.get_zone_type_display }}</span>
+            {% endif %}
+            {% if not lakehouse_zone.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ lakehouse_zone.number }} · {{ lakehouse_zone.code }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:lakehouse_zone_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Zones</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:lakehouse_zone_edit' pk=lakehouse_zone.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Zone</span>
+        </a>
+        <form method="post" action="{% url 'bi:lakehouse_zone_delete' pk=lakehouse_zone.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete zone {{ lakehouse_zone.name|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Zone Specifications Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">Storage Architecture Specifications</h2>
+            <span class="text-xs text-muted">ID: {{ lakehouse_zone.number }}</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Medallion Architecture Tier</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ lakehouse_zone.get_zone_type_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Storage Backend Provider</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ lakehouse_zone.get_storage_backend_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Default Serialization Format</div>
+                    <div class="text-sm font-medium font-mono text-slate-900 mt-1">{{ lakehouse_zone.get_default_format_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Immutability Protection</div>
+                    <div class="text-sm font-medium mt-1">
+                        {% if lakehouse_zone.is_read_only %}
+                        <span class="badge badge-amber">Read-Only (Append/Query Only)</span>
+                        {% else %}
+                        <span class="badge badge-green">Read/Write Enabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Base URI Endpoint Path</div>
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-800 break-all">
+                    {{ lakehouse_zone.base_uri_path|default:"internal://default-warehouse-storage" }}
+                </div>
+            </div>
+
+            {% if lakehouse_zone.description %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Zone Notes &amp; Governance Rules</div>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ lakehouse_zone.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Telemetry Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-sm font-semibold text-slate-800">Zone Telemetry &amp; Status</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Tables Residing in Zone</div>
+                <div class="text-2xl font-bold text-slate-900 mt-1">{{ tables.count }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Active Status</div>
+                <div class="mt-1">
+                    {% if lakehouse_zone.is_active %}
+                    <span class="badge badge-green">Active Zone</span>
+                    {% else %}
+                    <span class="badge badge-muted">Inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100 text-xs text-muted space-y-1">
+                <div>Created: {{ lakehouse_zone.created_at|date:"Y-m-d H:i" }}</div>
+                <div>Updated: {{ lakehouse_zone.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tables in Zone -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-sm font-semibold text-slate-800">Warehouse Tables in this Zone</h2>
+            <p class="text-xs text-muted">Analytical datasets physically and logically assigned to this storage tier</p>
+        </div>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_table_create' %}?lakehouse_zone={{ lakehouse_zone.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i>
+            <span>Register Table in Zone</span>
+        </a>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Table Name</th>
+                    <th>Type</th>
+                    <th>Schema</th>
+                    <th>Data Mart</th>
+                    <th>Storage Policy</th>
+                    <th class="text-right">Rows</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in tables %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="text-primary hover:underline">
+                            {{ table.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ table.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ table.table_name }}</div>
+                    </td>
+                    <td>
+                        {% if table.table_type == 'fact' %}
+                        <span class="badge badge-info">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'dimension' %}
+                        <span class="badge badge-green">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'aggregate' %}
+                        <span class="badge badge-purple">{{ table.get_table_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs text-slate-700">{{ table.get_schema_type_display }}</span></td>
+                    <td>
+                        {% if table.data_mart %}
+                        <span class="text-xs text-slate-700">{{ table.data_mart.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if table.storage_policy %}
+                        <span class="text-xs text-slate-700">{{ table.storage_policy.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">Default</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right font-mono text-xs text-slate-700">{{ table.row_count }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="btn-icon btn-outline" title="View Table">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-6">
+                            <i data-lucide="table" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No tables registered in this zone</div>
+                            <p class="empty-state-text">Tables registered with this storage tier will appear here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
