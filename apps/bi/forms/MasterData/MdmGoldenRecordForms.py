@@ -95,12 +95,13 @@ class MdmGoldenRecordMergeForm(forms.Form):
         required=False,
     )
 
-    def __init__(self, tenant, primary_record, *args, **kwargs):
+    def __init__(self, *args, tenant=None, primary_record=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["secondary_record"].queryset = (
-            MdmGoldenRecord.objects.filter(tenant=tenant, domain=primary_record.domain)
-            .exclude(pk=primary_record.pk)
-            .exclude(status="merged")
-            .only("id", "number", "name", "domain")
-            .order_by("name")
-        )
+        if tenant is not None and primary_record is not None:
+            self.fields["secondary_record"].queryset = (
+                MdmGoldenRecord.objects.filter(tenant=tenant, domain=primary_record.domain)
+                .exclude(pk=primary_record.pk)
+                .exclude(status="merged")
+                .only("id", "number", "name", "domain")
+                .order_by("name")
+            )
