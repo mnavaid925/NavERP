@@ -78,7 +78,7 @@ def business_glossary_term_detail(request, pk):
         select_related=("steward", "org_unit", "certified_by"),
         prefetch_related=("related_terms",),
     )
-    related_measures = term.measures.filter(tenant=request.tenant).select_related("semantic_model")
+    related_measures = list(term.measures.filter(tenant=request.tenant).select_related("semantic_model"))
 
     certify_form = BusinessGlossaryTermCertificationForm(
         initial={
