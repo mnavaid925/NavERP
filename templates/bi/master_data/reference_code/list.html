@@ -90,12 +90,12 @@
             </div>
             <div class="form-group flex items-end">
                 <div class="flex gap-2 w-full">
-                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter">
+                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter" aria-label="Filter">
                         <i data-lucide="filter"></i>
                         <span>Apply</span>
                     </button>
                     {% if request.GET.q or request.GET.code_set or request.GET.status %}
-                    <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                         <i data-lucide="x"></i>
                     </a>
                     {% endif %}
@@ -159,15 +159,15 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'bi:mdm_reference_code_detail' code.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'bi:mdm_reference_code_detail' code.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'bi:mdm_reference_code_edit' code.pk %}" class="btn btn-icon" title="Edit Code">
+                        <a href="{% url 'bi:mdm_reference_code_edit' code.pk %}" class="btn btn-icon" title="Edit Code" aria-label="Edit Code">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'bi:mdm_reference_code_delete' code.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete reference code {{ code.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Code">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Code" aria-label="Delete Code">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
