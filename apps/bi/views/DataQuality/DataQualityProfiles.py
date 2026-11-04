@@ -163,7 +163,7 @@ def data_quality_profile_run(request, pk):
     # Introspect or build simulated statistical indicators
     columns = []
     if profile.warehouse_table:
-        cols_meta = profile.warehouse_table.columns_metadata_json or []
+        cols_meta = profile.warehouse_table.schema_definition or []
         for col in cols_meta[:10]:
             col_name = col.get("name", "col")
             col_type = col.get("type", "VARCHAR")
