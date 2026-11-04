@@ -27,6 +27,7 @@ class MdmSurvivorshipRule(TenantNumbered):
         ("manual_pick", "Manual Data Steward Selection"),
         ("oldest_original", "Oldest Original Value (Earliest Created)"),
     ]
+    STRATEGY_CHOICES = SURVIVORSHIP_STRATEGY_CHOICES
 
     MATCH_ALGORITHM_CHOICES = [
         ("exact", "Exact Deterministic Match"),
@@ -36,6 +37,7 @@ class MdmSurvivorshipRule(TenantNumbered):
         ("token_set_ratio", "Token Set Ratio (Order Independent)"),
         ("rule_expression", "Custom Rule Expression"),
     ]
+    MATCH_ALGO_CHOICES = MATCH_ALGORITHM_CHOICES
 
     name = models.CharField(max_length=150)
     code = models.SlugField(max_length=60)
@@ -98,8 +100,27 @@ class MdmSurvivorshipRule(TenantNumbered):
             models.Index(fields=["tenant", "is_active"], name="idx_bmsr_ten_active"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if "source_precedence_list" in kwargs and "source_priority_list_json" not in kwargs:
+            kwargs["source_priority_list_json"] = kwargs.pop("source_precedence_list")
+        super().__init__(*args, **kwargs)
+
+    @property
+    def source_precedence_list(self):
+        return self.source_priority_list_json
+
+    @source_precedence_list.setter
+    def source_precedence_list(self, value):
+        self.source_priority_list_json = value
+
     def __str__(self):
         return f"{self.number} - {self.name} ({self.get_survivorship_strategy_display()})"
 
     def get_absolute_url(self):
         return reverse("bi:mdm_survivorship_rule_detail", kwargs={"pk": self.pk})
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            from django.utils.text import slugify
+            self.code = slugify(self.name)[:60]
+        return super().save(*args, **kwargs)
