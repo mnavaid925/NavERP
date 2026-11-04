@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -37,8 +37,12 @@ def mdm_hierarchy_node_list(request):
         queryset = queryset.filter(level=int(level_filter))
 
     all_tenant_nodes = bi_scope(MdmHierarchyNode.objects.all(), request)
-    total_count = all_tenant_nodes.count()
-    root_nodes_count = all_tenant_nodes.filter(parent__isnull=True).count()
+    counts = all_tenant_nodes.aggregate(
+        total=Count("id"),
+        root=Count("id", filter=Q(parent__isnull=True)),
+    )
+    total_count = counts["total"]
+    root_nodes_count = counts["root"]
 
     paginator = Paginator(queryset.order_by("hierarchy_type", "level", "sort_order", "name"), 15)
     page_number = request.GET.get("page")
