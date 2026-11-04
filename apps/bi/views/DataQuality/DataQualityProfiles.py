@@ -58,8 +58,8 @@ def data_quality_profile_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    warehouse_tables = bi_scope(WarehouseTable.objects.all(), request).order_by("name")
-    semantic_models = bi_scope(SemanticModel.objects.all(), request).order_by("name")
+    warehouse_tables = bi_scope(WarehouseTable.objects.only("id", "name"), request).order_by("name")
+    semantic_models = bi_scope(SemanticModel.objects.only("id", "name"), request).order_by("name")
 
     context = {
         "page_obj": page_obj,
