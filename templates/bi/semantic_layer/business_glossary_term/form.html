@@ -102,16 +102,6 @@
                             {{ form.org_unit }}
                             {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
                         </div>
-                        <div class="form-group">
-                            <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status</label>
-                            {{ form.certification_status }}
-                            {% if form.certification_status.errors %}<div class="form-error">{{ form.certification_status.errors }}</div>{% endif %}
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label" for="{{ form.certification_notes.id_for_label }}">Certification Notes</label>
-                            {{ form.certification_notes }}
-                            {% if form.certification_notes.errors %}<div class="form-error">{{ form.certification_notes.errors }}</div>{% endif %}
-                        </div>
                         <div class="form-group sm:col-span-2">
                             <label class="form-label" for="{{ form.related_terms.id_for_label }}">Related Glossary Terms</label>
                             {{ form.related_terms }}
