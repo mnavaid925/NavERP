@@ -31,7 +31,7 @@
 - [x] **I7**: Missing composite index on `(tenant, name)` on ordered models `DataMart` and `WarehouseStoragePolicy`. In `apps/bi/models/DataWarehouse/DataMarts.py` (L81-L85) and `apps/bi/models/DataWarehouse/WarehouseStoragePolicies.py` (L107-L111), add `(tenant, name)` indexes to avoid database filesorts. fixed — perf(bi): add composite index on (tenant, name) for DataMart and WarehouseStoragePolicy
 - [x] **I8**: Missing composite index on `(tenant, -created_at)` on `WarehouseTable`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L106-L111), add `models.Index(fields=["tenant", "-created_at"], name="idx_bdwt_ten_created")` to optimize recent tables query on overview dashboard. fixed — perf(bi): add composite index idx_bdwt_ten_created on WarehouseTable
 - [x] **I9**: Unbounded `marts` query and DOM generation on `warehouse_overview` dashboard. In `apps/bi/views/DataWarehouse/WarehouseOverview.py` (L36-L40), slice `marts` queryset to top 8 items (`[:8]`) to avoid rendering unbounded lists. fixed — perf(bi): limit marts query to top 8 items on warehouse_overview
-- [ ] **I10**: Missing SQL identifier validation in `WarehouseTableForm` for table and column metadata. In `apps/bi/forms/DataWarehouse/WarehouseTables.py`, validate `table_name` and `primary_key_column` against `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`.
+- [x] **I10**: Missing SQL identifier validation in `WarehouseTableForm` for table and column metadata. In `apps/bi/forms/DataWarehouse/WarehouseTables.py`, validate `table_name` and `primary_key_column` against `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`. fixed — feat(bi): validate SQL identifiers for table and column names in WarehouseTableForm
 
 ---
 
