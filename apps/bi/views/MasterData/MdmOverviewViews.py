@@ -40,10 +40,7 @@ def mdm_overview(request):
         for d in domain_counts_raw
     ]
 
-    recent_golden_records = (
-        all_golden.select_related("party", "assigned_steward")
-        .order_by("-created_at")[:6]
-    )
+    recent_golden_records = all_golden.order_by("-created_at")[:6]
 
     survivorship_rules = all_rules.order_by("priority_order")[:5]
 
