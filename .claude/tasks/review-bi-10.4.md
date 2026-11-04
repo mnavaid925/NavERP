@@ -5,7 +5,7 @@
 - **Target app:** `apps/bi`
 - **Review date:** 2026-11-04
 - **Base SHA:** `069fb344d5ed505ef7ef4373b47d5ed6938ce6ed`
-- **Status:** In Progress (Pass 3/6 complete)
+- **Status:** In Progress (Pass 4/6 complete)
 
 ---
 
@@ -148,3 +148,41 @@
   - `templates/bi/semantic_layer/business_glossary_term/list.html:131`
   - `templates/bi/semantic_layer/business_glossary_term/detail.html:259`
   - Fix: Wrap with explicit `{% if model.owner %}...{% else %}Unassigned{% endif %}` check (rule L10).
+
+---
+
+## Pass 4: performance-reviewer Findings
+
+### Critical
+- **[PERF-CRIT-1]** Missing Compound Foreign Key Index for Reverse Lookup on `CalculatedMeasure` (`tenant`, `glossary_term`):
+  - `apps/bi/models/SemanticLayer/CalculatedMeasures.py:135-138`
+  - In `business_glossary_term_detail`, reverse query filters by `(tenant, glossary_term)`. Missing compound index forces sequential table scan across tenant records.
+  - Fix: Add `models.Index(fields=["tenant", "glossary_term"], name="idx_bcms_ten_glossary")` to `CalculatedMeasure.Meta.indexes`.
+
+### Important
+- **[PERF-IMP-1]** Missing Compound Indexes for Ordering & Filtering on `SemanticModel` and `BusinessGlossaryTerm`:
+  - `apps/bi/models/SemanticLayer/SemanticModels.py:139-144`: missing `["tenant", "-created_at"]` (`idx_bsmd_ten_created`) and `["tenant", "data_mart"]` (`idx_bsmd_ten_mart`).
+  - `apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py:103-107`: missing `["tenant", "domain_category", "name"]` (`idx_bglo_ten_domain_name`).
+  - Fix: Add these indexes to Meta.indexes and generate migration.
+- **[PERF-IMP-2]** Unnecessary Double-Join Cartesian Product in `semantic_model_list`:
+  - `apps/bi/views/SemanticLayer/SemanticModels.py:29-32`
+  - `hierarchy_count=Count("drill_hierarchies", distinct=True)` forces extra table join and cartesian expansion, but is never rendered in list template.
+  - Fix: Remove `hierarchy_count` from `annotate()`.
+- **[PERF-IMP-3]** Unused M2M `prefetch_related("related_terms")` on Glossary List View:
+  - `apps/bi/views/SemanticLayer/BusinessGlossaryTerms.py:23`
+  - Executes extra SQL query per list view request for a field not rendered in list template.
+  - Fix: Remove `.prefetch_related("related_terms")` from glossary list view.
+- **[PERF-IMP-4]** Duplicate Query Triggered by `{{ queryset.count }}` in Template Header Before Table Loop:
+  - `templates/bi/semantic_layer/semantic_model/detail.html:154, 234` & `apps/bi/views/SemanticLayer/SemanticModels.py:103-104`
+  - `templates/bi/semantic_layer/business_glossary_term/detail.html:110` & `apps/bi/views/SemanticLayer/BusinessGlossaryTerms.py:82`
+  - Calling `.count` then `{% for %}` fires COUNT(*) then SELECT.
+  - Fix: Evaluate to `list()` in view, use `{{ measures|length }}` in template.
+- **[PERF-IMP-5]** Six Sequential `.count()` Queries in `semantic_overview` Instead of Conditional Aggregation:
+  - `apps/bi/views/SemanticLayer/SemanticOverviewViews.py:19-24`
+  - Fix: Combine total and certified counts with `Count("id", filter=Q(certification_status="certified"))`.
+- **[PERF-IMP-6]** Non-standard Pagination Page Size (25 instead of 15) Across All Four List Views:
+  - `apps/bi/views/SemanticLayer/SemanticModels.py:69`
+  - `apps/bi/views/SemanticLayer/BusinessGlossaryTerms.py:53`
+  - `apps/bi/views/SemanticLayer/CalculatedMeasures.py:52`
+  - `apps/bi/views/SemanticLayer/DrillHierarchies.py:46`
+  - Fix: Change `25` to `15` to match NavERP standard `per_page=15`.
