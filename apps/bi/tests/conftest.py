@@ -10,6 +10,10 @@ from apps.bi.models import (
     CalculatedMeasure,
     CdcSyncConfig,
     DataMart,
+    DataQualityException,
+    DataQualityProfile,
+    DataQualityRule,
+    DataQualityScorecard,
     DataSourceConnector,
     DrillHierarchy,
     EtlPipeline,
@@ -585,6 +589,163 @@ def drill_hierarchy_b(db, tenant_b, semantic_model_b):
         primary_drill_path=True,
         is_active=True,
     )
+
+
+@pytest.fixture
+def dq_profile_a(db, tenant_a, warehouse_table_a, admin_user):
+    return DataQualityProfile.objects.create(
+        tenant=tenant_a,
+        name="Acme Invoice Profile",
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_a,
+        status="completed",
+        total_row_count=1500,
+        completeness_score=Decimal("99.40"),
+        validity_score=Decimal("98.70"),
+        uniqueness_score=Decimal("100.00"),
+        consistency_score=Decimal("97.50"),
+        timeliness_score=Decimal("99.00"),
+        profiled_by=admin_user,
+        profiled_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def dq_rule_a(db, tenant_a, warehouse_table_a, admin_user):
+    return DataQualityRule.objects.create(
+        tenant=tenant_a,
+        name="Invoice Amount Must Be Positive",
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_a,
+        target_column="total_amount",
+        dimension="validity",
+        rule_type="range_check",
+        parameters_json={"min_val": 0.01},
+        severity="critical",
+        failure_tolerance_pct=Decimal("0.00"),
+        last_status="passed",
+        pass_rate_pct=Decimal("100.00"),
+        steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def dq_exception_a(db, tenant_a, dq_profile_a, dq_rule_a, warehouse_table_a, admin_user):
+    return DataQualityException.objects.create(
+        tenant=tenant_a,
+        profile=dq_profile_a,
+        rule=dq_rule_a,
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_a,
+        target_column="total_amount",
+        record_identifier="INV-2026-9999",
+        exception_type="range_violation",
+        invalid_value="-45.00",
+        expected_condition="amount > 0",
+        severity="critical",
+        status="open",
+        remediation_action="investigate",
+        assigned_steward=admin_user,
+    )
+
+
+@pytest.fixture
+def dq_scorecard_a(db, tenant_a, warehouse_table_a, admin_user):
+    return DataQualityScorecard.objects.create(
+        tenant=tenant_a,
+        name="Core Financials Data Trust",
+        code="core_fin_dti",
+        scope_type="warehouse_table",
+        warehouse_table=warehouse_table_a,
+        evaluation_period="monthly",
+        target_sla_pct=Decimal("95.00"),
+        overall_quality_score=Decimal("98.50"),
+        grade="A",
+        health_status="healthy",
+        meets_sla=True,
+        steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def dq_profile_b(db, tenant_b, warehouse_table_b, admin_user_b):
+    return DataQualityProfile.objects.create(
+        tenant=tenant_b,
+        name="Globex Customer Profile",
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_b,
+        status="completed",
+        total_row_count=500,
+        completeness_score=Decimal("95.00"),
+        validity_score=Decimal("92.00"),
+        uniqueness_score=Decimal("90.00"),
+        consistency_score=Decimal("91.00"),
+        timeliness_score=Decimal("94.00"),
+        profiled_by=admin_user_b,
+        profiled_at=timezone.now(),
+    )
+
+
+@pytest.fixture
+def dq_rule_b(db, tenant_b, warehouse_table_b, admin_user_b):
+    return DataQualityRule.objects.create(
+        tenant=tenant_b,
+        name="Globex Customer Email Not Null",
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_b,
+        target_column="email",
+        dimension="completeness",
+        rule_type="not_null",
+        parameters_json={},
+        severity="warning",
+        failure_tolerance_pct=Decimal("5.00"),
+        last_status="passed",
+        pass_rate_pct=Decimal("98.00"),
+        steward=admin_user_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def dq_exception_b(db, tenant_b, dq_profile_b, dq_rule_b, warehouse_table_b, admin_user_b):
+    return DataQualityException.objects.create(
+        tenant=tenant_b,
+        profile=dq_profile_b,
+        rule=dq_rule_b,
+        target_type="warehouse_table",
+        warehouse_table=warehouse_table_b,
+        target_column="email",
+        record_identifier="CUST-GLOBEX-101",
+        exception_type="null_value",
+        invalid_value="NULL",
+        expected_condition="email IS NOT NULL",
+        severity="warning",
+        status="open",
+        remediation_action="enrich_data",
+        assigned_steward=admin_user_b,
+    )
+
+
+@pytest.fixture
+def dq_scorecard_b(db, tenant_b, warehouse_table_b, admin_user_b):
+    return DataQualityScorecard.objects.create(
+        tenant=tenant_b,
+        name="Globex Operations Scorecard",
+        code="globex_ops_scorecard",
+        scope_type="warehouse_table",
+        warehouse_table=warehouse_table_b,
+        evaluation_period="weekly",
+        target_sla_pct=Decimal("90.00"),
+        overall_quality_score=Decimal("88.00"),
+        grade="B",
+        health_status="needs_attention",
+        meets_sla=False,
+        steward=admin_user_b,
+        is_active=True,
+    )
+
 
 
 
