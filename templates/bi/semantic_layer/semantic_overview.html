@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}Semantic Layer Command Center — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Semantic Layer</span>
+        </div>
+        <h1 class="page-title">Semantic Layer & Business Glossary</h1>
+        <p class="text-muted text-sm">Unified business vocabulary, governed dimensional modeling, reusable metric formulas, and drill hierarchies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_overview' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Data Warehouse</span>
+        </a>
+        <a href="{% url 'bi:semantic_model_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Model</span>
+        </a>
+        <a href="{% url 'bi:business_glossary_term_create' %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i>
+            <span>New Glossary Term</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Semantic Models</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_models }}</div>
+                <div class="text-xs text-muted mt-1">{{ total_certified_models }} certified standard</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="database"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Glossary Terms</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_glossary_terms }}</div>
+                <div class="text-xs text-muted mt-1">{{ total_certified_terms }} approved definitions</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="book-open"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Calculated Measures</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_measures }}</div>
+                <div class="text-xs text-muted mt-1">Central metric formulas</div>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="calculator"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Drill Hierarchies</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_hierarchies }}</div>
+                <div class="text-xs text-muted mt-1">Multi-level navigation paths</div>
+            </div>
+            <div class="stat-icon orange">
+                <i data-lucide="git-merge"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Domain Navigation Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <a href="{% url 'bi:semantic_model_list' %}" class="card hover:shadow-md transition p-4 flex flex-col justify-between">
+        <div>
+            <div class="flex items-center gap-2 mb-2 text-primary font-semibold">
+                <i data-lucide="table-2" class="w-5 h-5"></i>
+                <span>Dimensional Models</span>
+            </div>
+            <p class="text-xs text-muted leading-relaxed">
+                Facts, dimensions, bridge entities, virtual analytical views, and conformed master dimensions with SCD versioning.
+            </p>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-xs text-primary font-medium">
+            <span>Explore Models</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </div>
+    </a>
+
+    <a href="{% url 'bi:business_glossary_term_list' %}" class="card hover:shadow-md transition p-4 flex flex-col justify-between">
+        <div>
+            <div class="flex items-center gap-2 mb-2 text-primary font-semibold">
+                <i data-lucide="book" class="w-5 h-5"></i>
+                <span>Business Glossary</span>
+            </div>
+            <p class="text-xs text-muted leading-relaxed">
+                Standardized enterprise terminology, synonyms, acronyms, calculation narratives, and designated steward ownership.
+            </p>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-xs text-primary font-medium">
+            <span>Browse Vocabulary</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </div>
+    </a>
+
+    <a href="{% url 'bi:calculated_measure_list' %}" class="card hover:shadow-md transition p-4 flex flex-col justify-between">
+        <div>
+            <div class="flex items-center gap-2 mb-2 text-primary font-semibold">
+                <i data-lucide="activity" class="w-5 h-5"></i>
+                <span>Calculated Measures</span>
+            </div>
+            <p class="text-xs text-muted leading-relaxed">
+                Centralized formula engine with standard aggregations, time intelligence (YoY, QTD, YTD), and alert threshold indicators.
+            </p>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-xs text-primary font-medium">
+            <span>Manage Measures</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </div>
+    </a>
+
+    <a href="{% url 'bi:drill_hierarchy_list' %}" class="card hover:shadow-md transition p-4 flex flex-col justify-between">
+        <div>
+            <div class="flex items-center gap-2 mb-2 text-primary font-semibold">
+                <i data-lucide="network" class="w-5 h-5"></i>
+                <span>Drill Hierarchies</span>
+            </div>
+            <p class="text-xs text-muted leading-relaxed">
+                Governed hierarchical paths for multi-level drill-down exploration across Time, Geography, Org Units, and Products.
+            </p>
+        </div>
+        <div class="mt-4 flex items-center justify-between text-xs text-primary font-medium">
+            <span>Configure Paths</span>
+            <i data-lucide="chevron-right" class="w-4 h-4"></i>
+        </div>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Recent Assets (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Recent Models -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold">Recently Updated Models</h2>
+                <a href="{% url 'bi:semantic_model_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Warehouse Table</th>
+                            <th>Certification</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sm in recent_models %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="text-primary hover:underline">
+                                    {{ sm.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ sm.name }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate text-xs">{{ sm.get_model_type_display }}</span>
+                            </td>
+                            <td class="text-xs text-slate-600 font-mono">
+                                {{ sm.warehouse_table.name|default:"Virtual View" }}
+                            </td>
+                            <td>
+                                {% if sm.certification_status == 'certified' %}
+                                <span class="badge badge-green text-xs">Certified</span>
+                                {% elif sm.certification_status == 'in_review' %}
+                                <span class="badge badge-amber text-xs">In Review</span>
+                                {% else %}
+                                <span class="badge badge-slate text-xs">Draft</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-4 text-center text-muted text-sm">
+                                No semantic models defined yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Glossary Terms -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold">Standard Glossary Terms</h2>
+                <a href="{% url 'bi:business_glossary_term_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Term Name</th>
+                            <th>Domain</th>
+                            <th>Definition</th>
+                            <th>Certification</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for term in recent_terms %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:business_glossary_term_detail' term.pk %}" class="text-primary hover:underline">
+                                    {{ term.number }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ term.name }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-info text-xs">{{ term.get_domain_category_display }}</span>
+                            </td>
+                            <td class="text-xs text-slate-700 max-w-xs truncate">
+                                {{ term.short_definition }}
+                            </td>
+                            <td>
+                                {% if term.certification_status == 'certified' %}
+                                <span class="badge badge-green text-xs">Certified</span>
+                                {% else %}
+                                <span class="badge badge-slate text-xs">{{ term.get_certification_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'bi:business_glossary_term_detail' term.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-4 text-center text-muted text-sm">
+                                No business glossary terms registered yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (1 col) -->
+    <div class="space-y-6">
+        <!-- Models by Classification -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Model Classifications</h3>
+            </div>
+            <div class="card-body">
+                <div class="space-y-2">
+                    {% for item in model_type_counts %}
+                    <div class="flex items-center justify-between text-sm py-1 border-b border-slate-50 last:border-0">
+                        <span class="text-slate-700 uppercase text-xs font-semibold">{{ item.model_type }}</span>
+                        <span class="font-mono font-bold text-slate-900">{{ item.count }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-muted">No models yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Glossary by Domain -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Glossary by Business Domain</h3>
+            </div>
+            <div class="card-body">
+                <div class="space-y-2">
+                    {% for item in domain_term_counts %}
+                    <div class="flex items-center justify-between text-sm py-1 border-b border-slate-50 last:border-0">
+                        <span class="text-slate-700 capitalize text-xs font-medium">{{ item.domain_category }}</span>
+                        <span class="font-mono font-bold text-slate-900">{{ item.count }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-muted">No glossary terms yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Connected Layers Navigation -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Connected Architecture</h3>
+            </div>
+            <div class="card-body text-xs space-y-3">
+                <a href="{% url 'bi:data_integration_hub' %}" class="block p-2.5 rounded bg-slate-50 hover:bg-slate-100 transition border border-slate-100">
+                    <div class="font-semibold text-slate-900">10.1 Data Integration & Ingestion</div>
+                    <div class="text-muted mt-0.5">Source connectors, batch/streaming syncs, CDC capture</div>
+                </a>
+                <a href="{% url 'bi:etl_pipeline_list' %}" class="block p-2.5 rounded bg-slate-50 hover:bg-slate-100 transition border border-slate-100">
+                    <div class="font-semibold text-slate-900">10.2 ETL/ELT & Data Pipelines</div>
+                    <div class="text-muted mt-0.5">Visual DAG pipelines, transformation node library</div>
+                </a>
+                <a href="{% url 'bi:warehouse_overview' %}" class="block p-2.5 rounded bg-slate-50 hover:bg-slate-100 transition border border-slate-100">
+                    <div class="font-semibold text-slate-900">10.3 Data Warehouse & Lakehouse</div>
+                    <div class="text-muted mt-0.5">Physical tables, medallion storage zones, data marts</div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
