@@ -84,6 +84,13 @@ def data_quality_scorecard_detail(request, pk):
     elif scorecard.scope_type == "semantic_model" and scorecard.semantic_model:
         evaluated_rules = rules_qs.filter(semantic_model=scorecard.semantic_model)
         related_exceptions = exceptions_qs.filter(semantic_model=scorecard.semantic_model)[:15]
+    elif scorecard.scope_type == "data_mart" and scorecard.data_mart:
+        evaluated_rules = rules_qs.filter(
+            Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
+        )
+        related_exceptions = exceptions_qs.filter(
+            Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
+        )[:15]
     else:
         evaluated_rules = rules_qs[:15]
         related_exceptions = exceptions_qs[:15]
@@ -166,6 +173,13 @@ def data_quality_scorecard_recalculate(request, pk):
     elif scorecard.scope_type == "semantic_model" and scorecard.semantic_model:
         rules_qs = rules_qs.filter(semantic_model=scorecard.semantic_model)
         exceptions_qs = exceptions_qs.filter(semantic_model=scorecard.semantic_model)
+    elif scorecard.scope_type == "data_mart" and scorecard.data_mart:
+        rules_qs = rules_qs.filter(
+            Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
+        )
+        exceptions_qs = exceptions_qs.filter(
+            Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
+        )
 
     total_rules = rules_qs.count()
     passed_rules = rules_qs.filter(last_status="passed").count()
