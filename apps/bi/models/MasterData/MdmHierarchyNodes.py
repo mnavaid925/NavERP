@@ -127,7 +127,7 @@ class MdmHierarchyNode(TenantNumbered):
                 self.parent.save()
             self.level = self.parent.level + 1
         else:
-            self.level = 1
+            self.level = 0
         super().save(*args, **kwargs)
 
         # Re-compute materialized path with persisted pk
