@@ -149,3 +149,9 @@ class MdmGoldenRecord(TenantNumbered):
 
     def get_absolute_url(self):
         return reverse("bi:mdm_golden_record_detail", kwargs={"pk": self.pk})
+
+    def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            from django.utils.text import slugify
+            self.code = slugify(self.name)[:80]
+        return super().save(*args, **kwargs)
