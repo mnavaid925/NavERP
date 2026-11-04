@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}{{ storage_policy.name }} — Storage Policies — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_storage_policy_list' %}">Storage Policies</a>
+            <span class="sep">/</span>
+            <span>{{ storage_policy.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ storage_policy.name }}</h1>
+            {% if storage_policy.is_default %}
+            <span class="badge badge-green">Default Policy</span>
+            {% endif %}
+            {% if not storage_policy.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ storage_policy.number }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_storage_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_storage_policy_edit' pk=storage_policy.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Policy</span>
+        </a>
+        <form method="post" action="{% url 'bi:warehouse_storage_policy_delete' pk=storage_policy.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete policy {{ storage_policy.name|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Specifications Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Partitioning & Compression Card -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">Partitioning &amp; Compression Rules</h2>
+            <span class="text-xs text-muted">ID: {{ storage_policy.number }}</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Partition Strategy</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ storage_policy.get_partition_strategy_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Partition Key Column</div>
+                    <div class="text-sm font-medium font-mono text-slate-900 mt-1">{{ storage_policy.partition_key|default:"None (Unpartitioned)" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Partition Granularity</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ storage_policy.get_partition_granularity_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Compression Codec</div>
+                    <div class="text-sm font-medium uppercase font-mono text-slate-900 mt-1">{{ storage_policy.get_compression_codec_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Zone Maps &amp; Block Skipping</div>
+                    <div class="text-sm font-medium mt-1">
+                        {% if storage_policy.enable_zone_maps %}
+                        <span class="badge badge-green">Enabled (Min/Max Stats)</span>
+                        {% else %}
+                        <span class="badge badge-muted">Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Vacuum &amp; Compaction</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ storage_policy.get_vacuum_cadence_display }}</div>
+                </div>
+            </div>
+
+            {% if storage_policy.description %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Policy Description</div>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ storage_policy.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Lifecycle & Tiering Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-sm font-semibold text-slate-800">Multi-Tier Lifecycle &amp; Retention</h2>
+        </div>
+        <div class="card-body">
+            <div class="space-y-4">
+                <div class="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded">
+                    <div>
+                        <div class="text-xs font-semibold text-green-900 uppercase">Hot Performance Tier</div>
+                        <div class="text-xs text-green-700">High-speed NVMe flash storage for frequent reporting queries</div>
+                    </div>
+                    <div class="text-lg font-bold text-green-800 font-mono">{{ storage_policy.hot_tier_days }} days</div>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded">
+                    <div>
+                        <div class="text-xs font-semibold text-amber-900 uppercase">Warm Balanced Tier</div>
+                        <div class="text-xs text-amber-700">Standard cloud object/block storage for ad-hoc queries</div>
+                    </div>
+                    <div class="text-lg font-bold text-amber-800 font-mono">{{ storage_policy.warm_tier_days }} days</div>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded">
+                    <div>
+                        <div class="text-xs font-semibold text-blue-900 uppercase">Cold Statutory Archive</div>
+                        <div class="text-xs text-blue-700">Deep archive tier for legal/statutory compliance</div>
+                    </div>
+                    <div class="text-lg font-bold text-blue-800 font-mono">{{ storage_policy.cold_tier_days }} days</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-wider text-muted">Time-Travel CDP Window</div>
+                        <div class="text-sm font-medium font-mono text-slate-900 mt-1">{{ storage_policy.time_travel_days }} days history</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold uppercase tracking-wider text-muted">Automated Purging</div>
+                        <div class="text-sm font-medium mt-1">
+                            {% if storage_policy.auto_purge_enabled %}
+                            <span class="badge badge-amber">Auto-Drop Enabled</span>
+                            {% else %}
+                            <span class="badge badge-slate">Manual Only</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Governed Tables Card -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-sm font-semibold text-slate-800">Governed Warehouse Tables</h2>
+            <p class="text-xs text-muted">Analytical tables partitioned and retained under this policy</p>
+        </div>
+        <span class="badge badge-slate">{{ tables.count }} Tables Assigned</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Table Name</th>
+                    <th>Type</th>
+                    <th>Schema</th>
+                    <th>Zone</th>
+                    <th>Data Mart</th>
+                    <th class="text-right">Rows</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in tables %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="text-primary hover:underline">
+                            {{ table.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ table.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ table.table_name }}</div>
+                    </td>
+                    <td>
+                        {% if table.table_type == 'fact' %}
+                        <span class="badge badge-info">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'dimension' %}
+                        <span class="badge badge-green">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'aggregate' %}
+                        <span class="badge badge-purple">{{ table.get_table_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs text-slate-700">{{ table.get_schema_type_display }}</span></td>
+                    <td><span class="badge badge-slate">{{ table.lakehouse_zone.name }}</span></td>
+                    <td>
+                        {% if table.data_mart %}
+                        <span class="text-xs text-slate-700">{{ table.data_mart.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right font-mono text-xs text-slate-700">{{ table.row_count }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="btn-icon btn-outline" title="View Table">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-6">
+                            <i data-lucide="archive" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No tables currently assigned to this policy</div>
+                            <p class="empty-state-text">Select this policy when creating or editing warehouse tables.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
