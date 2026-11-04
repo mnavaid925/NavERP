@@ -73,6 +73,26 @@ None.
 1. `templates/bi/data_quality/data_quality_profile/detail.html:34-54`, `rule/detail.html:35-55`, `exception/detail.html:45-58`, `scorecard/detail.html:45-65` — Missing "Back to List" action button in detail view header toolbars. Fix: Add standard `<a href="{% url 'bi:...' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i><span>Back to ...</span></a>`.
 2. `templates/bi/data_quality/quality_overview.html:192, 253, 325, 386`, `profile/detail.html:210`, `rule/detail.html:180`, `scorecard/detail.html:215, 272` — Missing `title` or `aria-label` on icon-only table action buttons.
 
+---
+
+### Pass 4: performance-reviewer
+
+#### Critical
+None.
+
+#### Important
+1. `apps/bi/views/DataQuality/QualityOverviewViews.py:26, 51-58` — Redundant 7-Query Aggregation: Issues 7 separate sequential SQL queries on every dashboard load instead of a single `.aggregate()`. Fix: Combine all 7 metric averages into a single `.aggregate()` call.
+2. `apps/bi/views/DataQuality/DataQualityScorecards.py:192-209` — 11 Sequential Queries on Scorecard Recalculate: Recalculation runs 5 count queries and 6 separate dimension average queries in a loop. Fix: Use single grouped query `rules_qs.values_list("dimension").annotate(avg_pass=Avg("pass_rate_pct"))` and conditional counts `Count("id", filter=Q(...))`.
+3. `apps/bi/views/DataQuality/DataQualityScorecards.py:81-89` — Un-sliced Queryset in Scorecard Detail View: `evaluated_rules` is un-sliced for warehouse_table and semantic_model scopes. Fix: Slice with `[:25]`.
+4. `apps/bi/models/DataQuality/DataQualityRules.py:121-128` — Missing Composite Indexes on `DataQualityRule`: Missing `(tenant, warehouse_table)`, `(tenant, semantic_model)`, and `(tenant, -last_run_at)` indexes. Fix: Add to `Meta.indexes`.
+5. `apps/bi/models/DataQuality/DataQualityExceptions.py:114-121` — Missing Composite Indexes on `DataQualityException`: Missing `(tenant, profile)`, `(tenant, assigned_steward)`, `(tenant, warehouse_table)`, and `(tenant, semantic_model)` indexes. Fix: Add to `Meta.indexes`.
+
+#### Minor
+1. `apps/bi/views/DataQuality/DataQualityProfiles.py:61-62`, `DataQualityRules.py:70-71`, `DataQualityExceptions.py:67-68` — Large JSON fields loaded unnecessarily for filter dropdowns. Fix: Use `.only("id", "name")`.
+2. `apps/bi/views/DataQuality/` (all list views) — Stat cards issue multiple single count queries instead of combined conditional aggregation.
+3. `apps/bi/models/DataQuality/DataQualityScorecards.py:129-135` — Missing composite index on `(tenant, meets_sla)`.
+
+
 
 
 
