@@ -72,7 +72,7 @@ class DataQualityExceptionForm(TenantUniqueMixin, TenantModelForm):
         return cleaned
 
 
-class DataQualityExceptionRemediationForm(forms.ModelForm):
+class DataQualityExceptionRemediationForm(TenantModelForm):
     class Meta:
         model = DataQualityException
         fields = [
@@ -93,11 +93,15 @@ class DataQualityExceptionRemediationForm(forms.ModelForm):
         }
 
     def __init__(self, *args, tenant=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tenant = tenant
+        super().__init__(*args, tenant=tenant, **kwargs)
         if self.tenant is not None:
             user_qs = get_user_model().objects.filter(tenant=self.tenant)
             steward_filter = Q(is_active=True)
             if self.instance and self.instance.pk and self.instance.assigned_steward_id:
                 steward_filter |= Q(pk=self.instance.assigned_steward_id)
             self.fields["assigned_steward"].queryset = user_qs.filter(steward_filter).order_by("first_name", "username")
+
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["assigned_steward"])
+        return cleaned
