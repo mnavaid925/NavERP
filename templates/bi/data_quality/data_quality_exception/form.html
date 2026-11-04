@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ exception.number }}{% else %}Log New Exception{% endif %} — Data Quality — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_exception_list' %}">Exceptions Queue</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ exception.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Quality Exception: {{ exception.number }}{% else %}Log Quality Exception / Outlier{% endif %}</h1>
+        <p class="text-muted text-sm">Capture broken values, duplicate entity candidates, and assign to data stewards</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_quality_exception_detail' exception.pk %}{% else %}{% url 'bi:data_quality_exception_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Exception Details & Triage</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-400 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Origin & Target -->
+                <div class="space-y-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Origin & Target Dataset</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.rule.id_for_label }}">Associated Quality Rule</label>
+                            {{ form.rule }}
+                            {% if form.rule.errors %}<div class="form-error">{{ form.rule.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.profile.id_for_label }}">Associated Quality Profile</label>
+                            {{ form.profile }}
+                            {% if form.profile.errors %}<div class="form-error">{{ form.profile.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Violation Details -->
+                <div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Offending Record & Condition</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.record_identifier.id_for_label }}">Record Identifier <span class="text-red-500">*</span></label>
+                            {{ form.record_identifier }}
+                            {% if form.record_identifier.errors %}<div class="form-error">{{ form.record_identifier.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_column.id_for_label }}">Target Column</label>
+                            {{ form.target_column }}
+                            {% if form.target_column.errors %}<div class="form-error">{{ form.target_column.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.invalid_value.id_for_label }}">Offending / Invalid Value Captured</label>
+                        {{ form.invalid_value }}
+                        {% if form.invalid_value.errors %}<div class="form-error">{{ form.invalid_value.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.expected_condition.id_for_label }}">Expected Value / Business Assertion</label>
+                        {{ form.expected_condition }}
+                        {% if form.expected_condition.errors %}<div class="form-error">{{ form.expected_condition.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Triage & Remediation -->
+                <div class="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">Triage & Remediation Workflow</h3>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.exception_type.id_for_label }}">Exception Type</label>
+                            {{ form.exception_type }}
+                            {% if form.exception_type.errors %}<div class="form-error">{{ form.exception_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.severity.id_for_label }}">Severity</label>
+                            {{ form.severity }}
+                            {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.remediation_action.id_for_label }}">Remediation Action</label>
+                            {{ form.remediation_action }}
+                            {% if form.remediation_action.errors %}<div class="form-error">{{ form.remediation_action.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.assigned_steward.id_for_label }}">Assigned Data Steward</label>
+                            {{ form.assigned_steward }}
+                            {% if form.assigned_steward.errors %}<div class="form-error">{{ form.assigned_steward.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.proposed_value.id_for_label }}">Proposed Cleansed Value</label>
+                            {{ form.proposed_value }}
+                            {% if form.proposed_value.errors %}<div class="form-error">{{ form.proposed_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.remediated_value.id_for_label }}">Final Remediated Value Applied</label>
+                            {{ form.remediated_value }}
+                            {% if form.remediated_value.errors %}<div class="form-error">{{ form.remediated_value.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.resolution_notes.id_for_label }}">Resolution Notes & Audit</label>
+                        {{ form.resolution_notes }}
+                        {% if form.resolution_notes.errors %}<div class="form-error">{{ form.resolution_notes.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex items-center gap-2 pt-2">
+                        {{ form.is_active }}
+                        <label class="form-label mb-0" for="{{ form.is_active.id_for_label }}">Active Record</label>
+                        {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <a href="{% if is_edit %}{% url 'bi:data_quality_exception_detail' exception.pk %}{% else %}{% url 'bi:data_quality_exception_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Log Quality Exception{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
