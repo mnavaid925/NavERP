@@ -4,7 +4,7 @@
 - **Module:** 10 Business Intelligence (`apps/bi`)
 - **Review Date:** 2026-11-04
 - **Changeset:** `0e8727a2393473bbcb65013c79c53f02c9081036...75d1a1d2f6b549c4d3df40c30afb2f99bc62bcfe`
-- **Review Passes In Progress:** Pass 2/6 Completed (`code-reviewer`, `explorer`)
+- **Review Passes In Progress:** Pass 3/6 Completed (`code-reviewer`, `explorer`, `frontend-reviewer`)
 
 ---
 
@@ -41,3 +41,20 @@
 ### Minor Findings
 - [ ] **EX-M1**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`).
 - [ ] **EX-M2**: Unscoped `owner` and `steward` User querysets in `DataMartForm.__init__`. Scope User dropdown querysets to users belonging to `self.tenant`.
+
+---
+
+## Pass 3: `frontend-reviewer`
+
+### Critical Findings
+*None.*
+
+### Important Findings
+- [ ] **FR-I1**: Invalid theme badge class `badge-purple` (7 occurrences across 5 templates). Replace `badge-purple` with `.badge-info` or `.badge-slate`.
+- [ ] **FR-I2**: Missing `data_mart`, `grain`, and `is_active` filter dropdowns in list templates. Add `<select>` dropdowns with `|stringformat:"d"` for FKs and matching GET query persistence.
+- [ ] **FR-I3**: Missing `is_active` filter dropdown across all 4 list templates (`data_mart/list.html`, `lakehouse_zone/list.html`, `warehouse_storage_policy/list.html`, `warehouse_table/list.html`).
+
+### Minor Findings
+- [ ] **FR-M1**: Undefined utility class `text-primary` for navigation links. Replace with `text-brand` or `text-blue-600`.
+- [ ] **FR-M2**: Empty state heading typography: use semantic `<h3>` inside `.empty-state` container for consistency with `theme.css`.
+- [ ] **FR-M3**: Native browser `alert()` in SQL DDL copy button. Replace with non-blocking feedback or label toggle.
