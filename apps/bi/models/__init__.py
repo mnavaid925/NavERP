@@ -11,6 +11,10 @@ from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
 from apps.bi.models.EtlPipelines.TransformationSteps import TransformationStep
+from apps.bi.models.DataQuality.DataQualityExceptions import DataQualityException
+from apps.bi.models.DataQuality.DataQualityProfiles import DataQualityProfile
+from apps.bi.models.DataQuality.DataQualityRules import DataQualityRule
+from apps.bi.models.DataQuality.DataQualityScorecards import DataQualityScorecard
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -35,4 +39,8 @@ __all__ = [
     "BusinessGlossaryTerm",
     "CalculatedMeasure",
     "DrillHierarchy",
+    "DataQualityProfile",
+    "DataQualityRule",
+    "DataQualityException",
+    "DataQualityScorecard",
 ]
