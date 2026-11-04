@@ -326,7 +326,11 @@
                 {% if scorecard.data_mart %}
                 <div>
                     <div class="text-xs text-muted">Data Mart Domain</div>
-                    <div class="font-mono text-xs mt-0.5">{{ scorecard.data_mart.name }}</div>
+                    <div class="font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:data_mart_detail' scorecard.data_mart.pk %}" class="text-primary-600 hover:underline">
+                            {{ scorecard.data_mart.name }}
+                        </a>
+                    </div>
                 </div>
                 {% endif %}
                 {% if scorecard.org_unit %}
