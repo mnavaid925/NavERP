@@ -229,7 +229,7 @@
             <h2 class="text-sm font-semibold text-slate-800">Generated SQL DDL Script</h2>
             <p class="text-xs text-muted">Standard ANSI SQL table creation and partition script</p>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('ddl-content').innerText); alert('SQL copied to clipboard!');">
+        <button type="button" class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('ddl-content').innerText); const span = this.querySelector('span'); const orig = span.textContent; span.textContent = 'Copied!'; setTimeout(() => span.textContent = orig, 2000);">
             <i data-lucide="copy"></i>
             <span>Copy SQL</span>
         </button>
