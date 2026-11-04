@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
@@ -20,8 +21,6 @@ class BusinessGlossaryTermForm(TenantUniqueMixin, TenantModelForm):
             "synonyms",
             "steward",
             "org_unit",
-            "certification_status",
-            "certification_notes",
             "related_terms",
             "is_active",
         ]
@@ -35,8 +34,6 @@ class BusinessGlossaryTermForm(TenantUniqueMixin, TenantModelForm):
             "synonyms": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. NRR, Net Retention Rate"}),
             "steward": forms.Select(attrs={"class": "form-select"}),
             "org_unit": forms.Select(attrs={"class": "form-select"}),
-            "certification_status": forms.Select(attrs={"class": "form-select"}),
-            "certification_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
             "related_terms": forms.SelectMultiple(attrs={"class": "form-select", "size": "4"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
@@ -44,16 +41,24 @@ class BusinessGlossaryTermForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["steward"].queryset = get_user_model().objects.filter(is_active=True)
-            self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
-            term_qs = BusinessGlossaryTerm.objects.filter(tenant=self.tenant)
+            user_qs = get_user_model().objects.filter(tenant=self.tenant)
+            steward_filter = Q(is_active=True)
+            if self.instance and self.instance.pk and self.instance.steward_id:
+                steward_filter |= Q(pk=self.instance.steward_id)
+            self.fields["steward"].queryset = user_qs.filter(steward_filter).order_by("username")
+            self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
+            term_qs = BusinessGlossaryTerm.objects.filter(tenant=self.tenant).order_by("name")
             if self.instance and self.instance.pk:
                 term_qs = term_qs.exclude(pk=self.instance.pk)
             self.fields["related_terms"].queryset = term_qs
+        else:
+            self.fields["steward"].queryset = get_user_model().objects.none()
+            self.fields["org_unit"].queryset = OrgUnit.objects.none()
+            self.fields["related_terms"].queryset = BusinessGlossaryTerm.objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["org_unit", "related_terms"])
+        reject_foreign(self, cleaned_data, ["org_unit", "related_terms", "steward"])
         return cleaned_data
 
 
