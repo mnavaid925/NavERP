@@ -86,10 +86,11 @@ def mdm_survivorship_rule_create(request):
             rule.tenant = request.tenant
             rule.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=rule,
+                request.user,
+                rule,
+                "create",
                 changes=f"Created survivorship rule {rule.number} ({rule.name})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Survivorship rule '{rule.name}' created successfully.")
             return redirect("bi:mdm_survivorship_rule_detail", pk=rule.pk)
@@ -113,10 +114,11 @@ def mdm_survivorship_rule_edit(request, pk):
         if form.is_valid():
             saved_rule = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=saved_rule,
+                request.user,
+                saved_rule,
+                "update",
                 changes=f"Updated survivorship rule {saved_rule.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Survivorship rule '{saved_rule.name}' updated successfully.")
             return redirect("bi:mdm_survivorship_rule_detail", pk=saved_rule.pk)
@@ -139,10 +141,11 @@ def mdm_survivorship_rule_delete(request, pk):
     rule_name = rule.name
 
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=rule,
+        request.user,
+        rule,
+        "delete",
         changes=f"Deleted survivorship rule {rule_number} ({rule_name})",
+        tenant=request.tenant,
     )
     rule.delete()
     messages.success(request, f"Survivorship rule {rule_number} deleted successfully.")
