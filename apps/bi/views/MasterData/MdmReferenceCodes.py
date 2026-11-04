@@ -83,10 +83,11 @@ def mdm_reference_code_create(request):
             code_obj.tenant = request.tenant
             code_obj.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=code_obj,
+                request.user,
+                code_obj,
+                "create",
                 changes=f"Created reference code {code_obj.number} ({code_obj.code_set}:{code_obj.canonical_code})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Reference code '{code_obj.canonical_code}' created successfully.")
             return redirect("bi:mdm_reference_code_detail", pk=code_obj.pk)
@@ -110,10 +111,11 @@ def mdm_reference_code_edit(request, pk):
         if form.is_valid():
             saved_code = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=saved_code,
+                request.user,
+                saved_code,
+                "update",
                 changes=f"Updated reference code {saved_code.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Reference code '{saved_code.canonical_code}' updated successfully.")
             return redirect("bi:mdm_reference_code_detail", pk=saved_code.pk)
@@ -136,10 +138,11 @@ def mdm_reference_code_delete(request, pk):
     code_label = f"{reference_code.code_set}:{reference_code.canonical_code}"
 
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=reference_code,
+        request.user,
+        reference_code,
+        "delete",
         changes=f"Deleted reference code {code_number} ({code_label})",
+        tenant=request.tenant,
     )
     reference_code.delete()
     messages.success(request, f"Reference code {code_number} deleted successfully.")
