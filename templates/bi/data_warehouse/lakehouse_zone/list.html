@@ -222,7 +222,7 @@
                     <td colspan="8">
                         <div class="empty-state">
                             <i data-lucide="database" class="empty-state-icon"></i>
-                            <div class="empty-state-title">No lakehouse zones registered</div>
+                            <h3 class="empty-state-title">No lakehouse zones registered</h3>
                             <p class="empty-state-text">Create medallion architecture tiers (Bronze, Silver, Gold) to govern storage endpoints.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'bi:lakehouse_zone_create' %}" class="btn btn-primary mt-4">
