@@ -17,6 +17,10 @@ from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
 from apps.bi.models.EtlPipelines.TransformationSteps import TransformationStep
+from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
+from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
+from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
+from apps.bi.models.SemanticLayer.SemanticModels import SemanticModel
 from apps.core.models import Tenant
 
 
@@ -36,6 +40,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                DrillHierarchy.objects.all().delete()
+                CalculatedMeasure.objects.all().delete()
+                BusinessGlossaryTerm.objects.all().delete()
+                SemanticModel.objects.all().delete()
                 WarehouseTable.objects.all().delete()
                 WarehouseStoragePolicy.objects.all().delete()
                 LakehouseZone.objects.all().delete()
@@ -842,5 +850,359 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Warehouse for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Data Warehouse already seeded for tenant: {tenant.name}")
+
+            # --- 10.4 Data Modeling & Semantic Layer Seeding ---
+            if not SemanticModel.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    # Retrieve 10.3 warehouse tables and marts
+                    tbl_sales = WarehouseTable.objects.filter(tenant=tenant, table_name="fact_sales_orders").first()
+                    tbl_gl = WarehouseTable.objects.filter(tenant=tenant, table_name="fact_gl_journal_entries").first()
+                    tbl_customers = WarehouseTable.objects.filter(tenant=tenant, table_name="dim_customers").first()
+                    tbl_dates = WarehouseTable.objects.filter(tenant=tenant, table_name="dim_dates").first()
+
+                    mart_finance = DataMart.objects.filter(tenant=tenant, code="finance_accounting").first()
+                    mart_sales = DataMart.objects.filter(tenant=tenant, code="sales_commercial").first()
+
+                    # 1. Semantic Models
+                    sm_sales, _ = SemanticModel.objects.get_or_create(
+                        tenant=tenant,
+                        code="sales_performance_model",
+                        defaults={
+                            "name": "Sales Performance Model",
+                            "model_type": "fact",
+                            "warehouse_table": tbl_sales,
+                            "data_mart": mart_sales,
+                            "primary_key_column": "order_sk",
+                            "natural_key_columns": "order_number",
+                            "grain_description": "One row per confirmed customer sales order line item",
+                            "is_conformed_dimension": False,
+                            "scd_type": "type_1",
+                            "access_tier": "department",
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "certification_notes": "Validated and approved by Sales Operations & Finance teams.",
+                            "source_fingerprint": "a1b2c3d4e5f67890",
+                            "last_introspected_at": now,
+                            "owner": admin_user,
+                            "description": "Governed sales fact model tracking customer orders, gross margins, and fulfillment volumes.",
+                            "is_active": True,
+                        },
+                    )
+
+                    sm_gl, _ = SemanticModel.objects.get_or_create(
+                        tenant=tenant,
+                        code="gl_financials_model",
+                        defaults={
+                            "name": "General Ledger Financial Model",
+                            "model_type": "fact",
+                            "warehouse_table": tbl_gl,
+                            "data_mart": mart_finance,
+                            "primary_key_column": "entry_sk",
+                            "natural_key_columns": "journal_number, line_no",
+                            "grain_description": "One row per posted double-entry GL transaction line",
+                            "is_conformed_dimension": False,
+                            "scd_type": "type_1",
+                            "access_tier": "restricted",
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "certification_notes": "Statutory audit certified single source of financial truth.",
+                            "source_fingerprint": "f6e5d4c3b2a10987",
+                            "last_introspected_at": now,
+                            "owner": admin_user,
+                            "description": "Statutory balanced financial ledger entries for trial balance and P&L analysis.",
+                            "is_active": True,
+                        },
+                    )
+
+                    sm_customers, _ = SemanticModel.objects.get_or_create(
+                        tenant=tenant,
+                        code="customer_dimension_model",
+                        defaults={
+                            "name": "Customer Analytical Master",
+                            "model_type": "dimension",
+                            "warehouse_table": tbl_customers,
+                            "data_mart": mart_sales,
+                            "primary_key_column": "customer_sk",
+                            "natural_key_columns": "customer_code",
+                            "grain_description": "One row per commercial account entity state",
+                            "is_conformed_dimension": True,
+                            "scd_type": "type_2",
+                            "access_tier": "public",
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "certification_notes": "Conformed customer master verified across CRM and Accounting.",
+                            "source_fingerprint": "1234567890abcdef",
+                            "last_introspected_at": now,
+                            "owner": admin_user,
+                            "description": "Conformed customer dimension supporting historical SCD Type 2 tracking.",
+                            "is_active": True,
+                        },
+                    )
+
+                    sm_dates, _ = SemanticModel.objects.get_or_create(
+                        tenant=tenant,
+                        code="fiscal_calendar_dimension",
+                        defaults={
+                            "name": "Fiscal Calendar & Time Dimension",
+                            "model_type": "dimension",
+                            "warehouse_table": tbl_dates,
+                            "data_mart": None,
+                            "primary_key_column": "date_sk",
+                            "natural_key_columns": "calendar_date",
+                            "grain_description": "One row per calendar day",
+                            "is_conformed_dimension": True,
+                            "scd_type": "type_0",
+                            "access_tier": "public",
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "certification_notes": "Enterprise-wide corporate fiscal calendar standard.",
+                            "source_fingerprint": "fedcba0987654321",
+                            "last_introspected_at": now,
+                            "owner": admin_user,
+                            "description": "Universal calendar dimension governing fiscal periods, quarters, and time-intelligence rollups.",
+                            "is_active": True,
+                        },
+                    )
+
+                    sm_arr_view, _ = SemanticModel.objects.get_or_create(
+                        tenant=tenant,
+                        code="arr_executive_view",
+                        defaults={
+                            "name": "Executive ARR & Retention View",
+                            "model_type": "virtual_view",
+                            "warehouse_table": None,
+                            "data_mart": mart_finance,
+                            "primary_key_column": "customer_name",
+                            "natural_key_columns": "customer_name",
+                            "grain_description": "One row per customer annualized subscription cohort",
+                            "is_conformed_dimension": False,
+                            "scd_type": "type_1",
+                            "is_virtual_view": True,
+                            "sql_definition": "SELECT c.customer_name, SUM(s.net_amount) AS annualized_arr, COUNT(s.order_sk) AS total_orders FROM fact_sales_orders s JOIN dim_customers c ON s.customer_sk = c.customer_sk GROUP BY c.customer_name",
+                            "access_tier": "restricted",
+                            "certification_status": "in_review",
+                            "certification_notes": "Under review by FP&A director.",
+                            "owner": admin_user,
+                            "description": "Virtual analytical SQL view computing annualized customer recurring revenue on the fly.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 2. Business Glossary Terms
+                    term_nrr, _ = BusinessGlossaryTerm.objects.get_or_create(
+                        tenant=tenant,
+                        code="net_recurring_revenue",
+                        defaults={
+                            "name": "Net Recurring Revenue (NRR)",
+                            "domain_category": "finance",
+                            "short_definition": "Percentage of recurring revenue retained from existing customers over a period, factoring expansions, contractions, and churn.",
+                            "full_definition": "Net Recurring Revenue (also known as Net Retention Rate) measures the net change in annualized recurring revenue from an existing cohort of customers over a 12-month period. A rate exceeding 100% indicates organic expansion without new customer acquisition.",
+                            "calculation_rule": "(Starting ARR + Expansion ARR - Contraction ARR - Churn ARR) / Starting ARR * 100",
+                            "synonyms": "NRR, Net Revenue Retention, Net Dollar Retention (NDR)",
+                            "steward": admin_user,
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "certification_notes": "SaaS and contractual billing KPI standard.",
+                            "is_active": True,
+                        },
+                    )
+
+                    term_arr, _ = BusinessGlossaryTerm.objects.get_or_create(
+                        tenant=tenant,
+                        code="annual_recurring_revenue",
+                        defaults={
+                            "name": "Annual Recurring Revenue (ARR)",
+                            "domain_category": "finance",
+                            "short_definition": "The annualized monetary value of recurring subscription contracts active at the close of the reporting period.",
+                            "full_definition": "Normalized annual value of active recurring software or subscription service commitments, excluding one-time professional services or non-recurring setup fees.",
+                            "calculation_rule": "SUM(Monthly Recurring Revenue * 12)",
+                            "synonyms": "ARR, Annual Contract Value",
+                            "steward": admin_user,
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "is_active": True,
+                        },
+                    )
+
+                    term_gp, _ = BusinessGlossaryTerm.objects.get_or_create(
+                        tenant=tenant,
+                        code="gross_profit_margin",
+                        defaults={
+                            "name": "Gross Profit Margin %",
+                            "domain_category": "finance",
+                            "short_definition": "Gross profit expressed as a percentage of total net revenue.",
+                            "full_definition": "The proportion of money left over from commercial revenues after accounting for the direct cost of goods sold (COGS) and service fulfillment.",
+                            "calculation_rule": "(Total Invoiced Revenue - COGS) / Total Invoiced Revenue * 100",
+                            "synonyms": "GP %, Gross Margin",
+                            "steward": admin_user,
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "is_active": True,
+                        },
+                    )
+
+                    term_cust, _ = BusinessGlossaryTerm.objects.get_or_create(
+                        tenant=tenant,
+                        code="active_commercial_customer",
+                        defaults={
+                            "name": "Active Commercial Customer",
+                            "domain_category": "sales",
+                            "short_definition": "An enterprise account with at least one active order or paid invoice within the rolling 90-day window.",
+                            "full_definition": "Accounts that have transacted or maintained an active contract agreement within the last 90 calendar days.",
+                            "calculation_rule": "COUNT(DISTINCT customer_id) WHERE last_activity_date >= TODAY - 90 DAYS",
+                            "synonyms": "Active Account, Transacting Client",
+                            "steward": admin_user,
+                            "certification_status": "certified",
+                            "certified_by": admin_user,
+                            "certified_at": now,
+                            "is_active": True,
+                        },
+                    )
+
+                    term_nrr.related_terms.add(term_arr)
+
+                    # 3. Calculated Measures
+                    CalculatedMeasure.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_sales,
+                        code="total_sales_revenue",
+                        defaults={
+                            "name": "Total Sales Revenue",
+                            "glossary_term": None,
+                            "aggregation_type": "sum",
+                            "source_column": "net_amount",
+                            "time_intelligence": "none",
+                            "format_string": "currency",
+                            "display_units": "auto",
+                            "target_value": Decimal("1000000.0000"),
+                            "warning_threshold": Decimal("800000.0000"),
+                            "critical_threshold": Decimal("600000.0000"),
+                            "description": "Total net monetary value of all booked sales orders.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CalculatedMeasure.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_sales,
+                        code="sales_gross_margin_pct",
+                        defaults={
+                            "name": "Sales Gross Margin %",
+                            "glossary_term": term_gp,
+                            "aggregation_type": "formula",
+                            "formula_expression": "([total_sales_revenue] - [cost_amount]) / [total_sales_revenue] * 100",
+                            "time_intelligence": "none",
+                            "format_string": "percentage",
+                            "display_units": "none",
+                            "target_value": Decimal("45.0000"),
+                            "warning_threshold": Decimal("35.0000"),
+                            "critical_threshold": Decimal("25.0000"),
+                            "description": "Calculated percentage gross profit on booked sales.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CalculatedMeasure.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_sales,
+                        code="completed_order_count",
+                        defaults={
+                            "name": "Completed Orders Count",
+                            "glossary_term": None,
+                            "aggregation_type": "count",
+                            "filter_expression": "order_status = 'completed'",
+                            "time_intelligence": "none",
+                            "format_string": "integer",
+                            "display_units": "auto",
+                            "description": "Count of successfully fulfilled and closed orders.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CalculatedMeasure.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_sales,
+                        code="revenue_yoy_growth",
+                        defaults={
+                            "name": "YoY Revenue Growth %",
+                            "glossary_term": None,
+                            "aggregation_type": "sum",
+                            "source_column": "net_amount",
+                            "time_intelligence": "yoy_growth",
+                            "format_string": "percentage",
+                            "display_units": "none",
+                            "target_value": Decimal("15.0000"),
+                            "warning_threshold": Decimal("5.0000"),
+                            "critical_threshold": Decimal("0.0000"),
+                            "description": "Year-over-Year revenue expansion rate compared to same prior fiscal period.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CalculatedMeasure.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_gl,
+                        code="net_ledger_balance",
+                        defaults={
+                            "name": "Net GL Ledger Balance",
+                            "glossary_term": None,
+                            "aggregation_type": "sum",
+                            "source_column": "amount",
+                            "time_intelligence": "none",
+                            "format_string": "currency",
+                            "display_units": "auto",
+                            "description": "Sum of net posted debit and credit GL journal line amounts.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. Drill Hierarchies
+                    DrillHierarchy.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_dates,
+                        code="fiscal_calendar_drill_path",
+                        defaults={
+                            "name": "Fiscal Calendar Drill Path",
+                            "hierarchy_type": "time",
+                            "levels_json": [
+                                {"level": 1, "name": "Fiscal Year", "column": "fiscal_year"},
+                                {"level": 2, "name": "Fiscal Quarter", "column": "fiscal_quarter"},
+                                {"level": 3, "name": "Fiscal Month", "column": "month_name"},
+                                {"level": 4, "name": "Date", "column": "calendar_date"},
+                            ],
+                            "primary_drill_path": True,
+                            "description": "Standard temporal drill path from fiscal year down to daily granularity.",
+                            "is_active": True,
+                        },
+                    )
+
+                    DrillHierarchy.objects.get_or_create(
+                        tenant=tenant,
+                        semantic_model=sm_sales,
+                        code="sales_order_time_path",
+                        defaults={
+                            "name": "Sales Order Time Path",
+                            "hierarchy_type": "time",
+                            "levels_json": [
+                                {"level": 1, "name": "Order Year", "column": "order_year"},
+                                {"level": 2, "name": "Order Quarter", "column": "order_quarter"},
+                                {"level": 3, "name": "Order Month", "column": "order_month"},
+                            ],
+                            "primary_drill_path": True,
+                            "description": "Temporal drill path for sales order volume analysis.",
+                            "is_active": True,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Semantic Layer for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Semantic Layer already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
