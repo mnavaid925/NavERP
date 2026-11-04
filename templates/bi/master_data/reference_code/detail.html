@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ reference_code.canonical_code }} — {{ reference_code.code_set }} — Reference Codes — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_reference_code_list' %}">Reference Codes</a>
+            <span class="sep">/</span>
+            <span>{{ reference_code.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ reference_code.canonical_code }} — {{ reference_code.canonical_name }}</h1>
+            {% if reference_code.status == 'active' %}
+            <span class="badge badge-green text-xs">Active Canonical</span>
+            {% elif reference_code.status == 'deprecated' %}
+            <span class="badge badge-amber text-xs">Deprecated</span>
+            {% elif reference_code.status == 'superseded' %}
+            <span class="badge badge-slate text-xs">Superseded</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">{{ reference_code.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-info text-xs font-mono">{{ reference_code.code_set }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Number: {{ reference_code.number }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_reference_code_edit' reference_code.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Code</span>
+        </a>
+        <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Codes</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Code Details & Metadata -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Reference Code Specification</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Canonical Enterprise Code</dt>
+                        <dd class="font-mono font-bold text-base text-slate-900">{{ reference_code.canonical_code }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Standard Official Label</dt>
+                        <dd class="font-semibold text-slate-800">{{ reference_code.canonical_name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Code Set Grouping</dt>
+                        <dd class="font-mono text-slate-700">{{ reference_code.code_set }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Sub-Category</dt>
+                        <dd class="text-slate-700">{{ reference_code.category|default:"General" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Source Feeder System</dt>
+                        <dd class="font-mono text-slate-700">{{ reference_code.source_system|default:"ISO / Enterprise Standard" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Source System Original Code</dt>
+                        <dd class="font-mono text-slate-700">{{ reference_code.source_code|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Effective From</dt>
+                        <dd class="text-slate-700">{{ reference_code.effective_from|date:"M d, Y"|default:"Open-ended" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Effective To</dt>
+                        <dd class="text-slate-700">{{ reference_code.effective_to|date:"M d, Y"|default:"Active indefinitely" }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs text-muted">Description & Standards Mapping Notes</dt>
+                        <dd class="text-slate-700 whitespace-pre-line">{{ reference_code.description|default:"No description recorded." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Supplementary Attributes JSON -->
+        {% if reference_code.attributes_json %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Supplementary Metadata Attributes</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {% for key, val in reference_code.attributes_json.items %}
+                    <div class="p-2 bg-slate-50 border border-slate-200 rounded">
+                        <dt class="text-muted font-mono uppercase">{{ key }}</dt>
+                        <dd class="font-semibold text-slate-800 font-mono mt-1">{{ val }}</dd>
+                    </div>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Deprecation & Superseding Chain -->
+        {% if superseded_by or superseding_codes.exists %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Standards Evolution & Deprecation Pointers</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                {% if superseded_by %}
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800">
+                    <span class="font-semibold block">Superseded by Newer Standard:</span>
+                    <a href="{% url 'bi:mdm_reference_code_detail' superseded_by.pk %}" class="font-mono underline text-amber-900 font-bold">
+                        {{ superseded_by.canonical_code }} — {{ superseded_by.canonical_name }}
+                    </a>
+                </div>
+                {% endif %}
+
+                {% if superseding_codes.exists %}
+                <div>
+                    <span class="font-semibold text-slate-800 block mb-2">Prior Standards Replaced by this Code:</span>
+                    <ul class="space-y-1">
+                        {% for prior in superseding_codes %}
+                        <li class="font-mono text-slate-700">
+                            • <a href="{% url 'bi:mdm_reference_code_detail' prior.pk %}" class="text-primary hover:underline">
+                                {{ prior.canonical_code }} ({{ prior.canonical_name }})
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Metadata & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Governance & Timestamps</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                <div>
+                    <span class="text-muted block">System Number:</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ reference_code.number }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block">Created Date:</span>
+                    <span class="text-slate-700">{{ reference_code.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block">Last Updated:</span>
+                    <span class="text-slate-700">{{ reference_code.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Code Actions</h3>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'bi:mdm_reference_code_edit' reference_code.pk %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Mapping</span>
+                </a>
+                <form method="post" action="{% url 'bi:mdm_reference_code_delete' reference_code.pk %}" onsubmit="return confirm('Delete reference code mapping {{ reference_code.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 w-full justify-center">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Code</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
