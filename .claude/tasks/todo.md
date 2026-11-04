@@ -7,6 +7,274 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.6: Master Data Management (MDM) (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.6.md` (2026-11-04)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, 10.4, and 10.5.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0013_dataqualityprofile_dataqualityrule_and_more.py`, so **10.6 claims `0014`** (or next available).
+> Plan written from `.claude/tasks/research-bi-10.6.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/MasterData/`
+> Template folder name: `templates/bi/master_data/{golden_record,survivorship_rule,hierarchy_node,reference_code}/` + `mdm_overview.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Master Data Management Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical & Operational Target Scoping:
+    - `MdmGoldenRecord`:
+      - `party`: Links to verified `core.Party` (`apps/core/models/Party.py`, set null on delete) for customer, vendor, supplier, or employee domains.
+      - `party_role`: Links to verified `core.PartyRole` (`apps/core/models/PartyRole.py`, set null on delete).
+      - `item`: Links to verified `scm.Item` (`apps/scm/models/InventoryManagement/Items.py`, set null on delete) for product/material domain.
+      - `asset`: Links to verified `scm.Asset` (`apps/scm/models/AssetManagement/Assets.py`, set null on delete) for physical equipment/facility domain.
+      - `warehouse_table`: Links to verified `bi.WarehouseTable` (Sub-module 10.3, set null on delete) for feeder analytical dimension tables.
+      - `merged_into_record`: Self-referential `ForeignKey('self')` pointer for records absorbed during deduplication/merging.
+      - `assigned_steward` / `reviewed_by`: Links to `settings.AUTH_USER_MODEL` (`accounts.User`).
+    - `MdmSurvivorshipRule`:
+      - Governs attribute-level survivorship policies, source precedence rankings (`source_priority_list_json`), matching algorithms (exact, Levenshtein, Jaro-Winkler, Soundex), and match vs auto-merge thresholds.
+      - `steward`: Links to `settings.AUTH_USER_MODEL`.
+    - `MdmHierarchyNode`:
+      - Self-referential tree hierarchy (`parent` -> self, CASCADE) with materialized `path` (`/1/4/12/`) and tree depth `level` for $O(1)$ subtree rollups.
+      - `golden_record`: Links to `bi.MdmGoldenRecord` (set null on delete).
+      - `party`: Links to `core.Party` (set null on delete).
+      - `org_unit`: Links to verified `core.OrgUnit` (`apps/core/models/OrgUnit.py`, set null on delete).
+      - `item_category`: Links to verified `scm.ItemCategory` (`apps/scm/models/InventoryManagement/Items.py`, set null on delete).
+    - `MdmReferenceCode`:
+      - Central enterprise code set registry (`code_set`, `canonical_code`, `canonical_name`), external system crosswalk translations (`source_system`, `source_code`), and deprecation pointers (`superseded_by` -> self, set null on delete).
+  - Operational Boundary: 10.6 owns *authoritative single-version-of-truth golden records with attribute-level provenance and source crosswalks (XREF), configurable match/merge and survivorship rule engine (source priority, timestamp recency, completeness, majority vote, manual pick), multi-domain parent-child hierarchies (corporate legal, account groupings, product taxonomies, org reporting, asset locations) with effective dates, centralized reference data management (RDM code sets and crosswalk lookups), and role-based data stewardship workbench with merge/unmerge and attribute override workflows*.
+  - Sibling Hand-offs & Boundaries:
+    - 10.1 (`DataIntegration`): Staged entity fragments from connectors, CDC, and external feeds.
+    - 10.2 (`EtlPipelines`): Runs transformation steps and pipeline DAGs.
+    - 10.3 (`DataWarehouse`): Analytical dimension tables (`dim_customer`, `dim_vendor`, `dim_item`).
+    - 10.4 (`SemanticLayer`): Governed semantic models, dimensions, and glossary terms.
+    - 10.5 (`DataQuality`): Duplicate candidate pairs (`DataQualityException`, `exception_type='duplicate_candidate'`) feed MDM entity resolution.
+    - 10.6 (`MasterData` — THIS SUB-MODULE): Authoritative golden records, survivorship rules, hierarchies, reference data, and stewardship.
+    - 10.7 (`DataCatalog` — NEXT SUB-MODULE): Searchable data catalog, lineage graph, PII tags, and certification indicators.
+    - 10.8 (`InteractiveDashboards`): Visual 360-degree customer and product dashboards.
+    - Operational ERP modules (`apps/crm`, `apps/scm`, `apps/accounting`): Clean golden master records syndicated downstream.
+  - Audit logging: Administrative, merge, unmerge, attribute override, and steward actions write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BMGR` (MdmGoldenRecord), `BMSR` (MdmSurvivorshipRule), `BMHR` (MdmHierarchyNode), `BMRD` (MdmReferenceCode) verified 100% collision-free repository-wide.
+
+---
+
+## 10.6-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO live external paid commercial registry API sync (D&B Direct+, GLEIF)** — Entity resolution operates on internal tenant data, staging crosswalks, and configured lookup tables.
+- [ ] **NO heavy black-box AI/LLM vector embedding clustering daemons (e.g. external CLAIRE/FERN runtime)** — Matching logic is powered by deterministic exact matching, standard string distance (Levenshtein, Jaro-Winkler), and declarative survivorship rules.
+- [ ] **NO live bidirectional reverse-ETL streaming sync daemons into third-party operational databases** — Syndication is handled through warehouse views, API endpoints, and scheduled export jobs (deferred to 10.19).
+- [ ] **NO multi-tier financial signing authority Change Request subsystem (`MdmChangeRequest`)** — Stewardship lifecycle (`draft` -> `pending_review` -> `approved` -> `in_dispute` -> `merged`) is managed directly on `MdmGoldenRecord` with complete audit trails.
+
+---
+
+## Models (4 models in `apps/bi/models/MasterData/`)
+
+- [ ] **`MdmGoldenRecord`** [Prefix: `BMGR-`] (`apps/bi/models/MasterData/MdmGoldenRecords.py`)
+  - **Purpose**: Authoritative single-version-of-truth master entity consolidating customer, vendor, product, asset, personnel, and account profiles across disparate feeder systems with attribute-level provenance, source crosswalks (XREF), confidence scoring, trust tiers, and stewardship lifecycle states.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=255)` (Consolidated authoritative entity name, e.g. "Acme Global Industries Inc.", "Titanium Drill Bit #4")
+    - `code`: `SlugField(max_length=80)` (Unique canonical master identifier)
+    - `domain`: `CharField(max_length=30, choices=[('customer', 'Customer Master'), ('vendor', 'Vendor / Supplier Master'), ('product', 'Product / Material Master'), ('asset', 'Asset / Facility Master'), ('employee', 'Employee / Personnel Master'), ('account', 'General Ledger Account Master'), ('custom', 'Custom Domain Master')], default='customer')` (driver: 10.6-GR-01)
+    - `status`: `CharField(max_length=30, choices=[('draft', 'Draft / Staging'), ('pending_review', 'Pending Steward Review'), ('approved', 'Approved / Certified Active'), ('in_dispute', 'In Dispute / Exception Flagged'), ('merged', 'Merged / Consolidated'), ('superseded', 'Superseded'), ('archived', 'Archived')], default='approved')` (driver: 10.6-GR-02)
+    - `trust_tier`: `CharField(max_length=20, choices=[('gold', 'Gold Tier (Certified, Complete)'), ('silver', 'Silver Tier (Standard Confidence)'), ('bronze', 'Bronze Tier (Partial / Unverified)')], default='silver')` (driver: 10.6-GR-03)
+    - `confidence_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'), help_text="Consolidation confidence score (0.00% - 100.00%)")` (driver: 10.6-GR-03)
+    - `tax_id`: `CharField(max_length=64, blank=True, help_text="Canonical Tax / VAT / Registration number")` (driver: 10.6-GR-04)
+    - `primary_email`: `EmailField(blank=True)` (driver: 10.6-GR-04)
+    - `primary_phone`: `CharField(max_length=40, blank=True)` (driver: 10.6-GR-04)
+    - `primary_address`: `TextField(blank=True)` (driver: 10.6-GR-04)
+    - `party`: `ForeignKey('core.Party', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_golden_records', help_text="Spine party reference for customer/vendor/employee domains")` (driver: 10.6-GR-05)
+    - `party_role`: `ForeignKey('core.PartyRole', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_golden_records')` (driver: 10.6-GR-05)
+    - `item`: `ForeignKey('scm.Item', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_golden_records', help_text="Spine item reference for product/material domain")` (driver: 10.6-GR-05)
+    - `asset`: `ForeignKey('scm.Asset', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_golden_records', help_text="Spine asset reference for equipment/facility domain")` (driver: 10.6-GR-05)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_golden_records', help_text="Feeder warehouse dimension table")` (driver: 10.6-GR-05)
+    - `source_record_count`: `PositiveIntegerField(default=1, help_text="Number of distinct source records consolidated into this golden record")` (driver: 10.6-GR-06)
+    - `golden_attributes_json`: `JSONField(default=dict, help_text="Consolidated attribute dictionary with value and provenance: {field_name: {'value': X, 'source_system': Y, 'confidence': Z, 'survivorship_rule': W, 'updated_at': T}}")` (driver: 10.6-GR-07)
+    - `source_crosswalks_json`: `JSONField(default=list, help_text="List of source system records: [{'source_system': 'crm', 'source_record_id': '1042', 'match_confidence': 98.5, 'ingested_at': '...'}, ...]")` (driver: 10.6-GR-08)
+    - `merged_into_record`: `ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='absorbed_records', help_text="Pointer to surviving golden record if this record was merged")` (driver: 10.6-GR-09)
+    - `merged_at`: `DateTimeField(null=True, blank=True)` (driver: 10.6-GR-09)
+    - `assigned_steward`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='assigned_golden_records')` (driver: 10.6-GR-10)
+    - `reviewed_by`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')`
+    - `reviewed_at`: `DateTimeField(null=True, blank=True)`
+    - `stewardship_notes`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `merged_into_record`, `merged_at`, `reviewed_by`, `reviewed_at`, `source_record_count`, `golden_attributes_json`, `source_crosswalks_json`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'domain', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain']), models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'trust_tier']), models.Index(fields=['tenant', 'party']), models.Index(fields=['tenant', 'item']), models.Index(fields=['tenant', 'tax_id'])]`
+
+- [ ] **`MdmSurvivorshipRule`** [Prefix: `BMSR-`] (`apps/bi/models/MasterData/MdmSurvivorshipRules.py`)
+  - **Purpose**: Declarative attribute-level and entity-level survivorship policies, source system authority matrices, matching algorithms, similarity thresholds, and automated merge criteria.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Customer Legal Name ERP Precedence", "Primary Phone Most Recent Wins", "Vendor Tax ID Exact Match")
+    - `code`: `SlugField(max_length=60)`
+    - `domain`: `CharField(max_length=30, choices=[('all', 'All Domains'), ('customer', 'Customer Master'), ('vendor', 'Vendor Master'), ('product', 'Product Master'), ('asset', 'Asset Master'), ('employee', 'Employee Master')], default='all')` (driver: 10.6-SR-01)
+    - `target_field`: `CharField(max_length=100, default='*', help_text="Specific attribute name evaluated (e.g. 'tax_id', 'phone', 'address', 'name') or '*' for entity-level merge")` (driver: 10.6-SR-02)
+    - `survivorship_strategy`: `CharField(max_length=30, choices=[('source_priority', 'Source System Trust Precedence'), ('most_recent', 'Most Recently Updated Timestamp'), ('highest_completeness', 'Highest Completeness / Quality Score'), ('most_frequent', 'Most Frequent Value (Majority Vote)'), ('manual_pick', 'Manual Data Steward Selection'), ('oldest_original', 'Oldest Original Value (Earliest Created)')], default='source_priority')` (driver: 10.6-SR-03)
+    - `match_algorithm`: `CharField(max_length=30, choices=[('exact', 'Exact Deterministic Match'), ('fuzzy_levenshtein', 'Fuzzy Levenshtein Distance'), ('fuzzy_jaro_winkler', 'Fuzzy Jaro-Winkler Similarity'), ('phonetic_soundex', 'Phonetic Soundex / Metaphone'), ('token_set_ratio', 'Token Set Ratio (Order Independent)'), ('rule_expression', 'Custom Rule Expression')], default='exact')` (driver: 10.6-SR-04)
+    - `match_threshold_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('80.00'), help_text="Minimum similarity score required to flag candidate duplicate pairs for steward review")` (driver: 10.6-SR-05)
+    - `auto_merge_threshold_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('95.00'), help_text="Similarity score threshold at or above which records are automatically merged")` (driver: 10.6-SR-05)
+    - `source_priority_list_json`: `JSONField(default=list, help_text="Ordered list of trusted source systems from highest to lowest: e.g. ['erp_core', 'crm_sales', 'billing_app', 'web_portal']")` (driver: 10.6-SR-06)
+    - `priority_order`: `PositiveIntegerField(default=10, help_text="Rule evaluation precedence order (lower numbers evaluated first)")` (driver: 10.6-SR-07)
+    - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='stewarded_mdm_rules')` (driver: 10.6-SR-08)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain']), models.Index(fields=['tenant', 'target_field']), models.Index(fields=['tenant', 'survivorship_strategy']), models.Index(fields=['tenant', 'priority_order'])]`
+
+- [ ] **`MdmHierarchyNode`** [Prefix: `BMHR-`] (`apps/bi/models/MasterData/MdmHierarchyNodes.py`)
+  - **Purpose**: Recursive multi-domain hierarchy tree structures (corporate legal subsidiaries, sales account groupings, product taxonomies, org reporting, cost center rollups, asset locations) with materialized paths and temporal effective validity dates.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=200)` (e.g. "Global Holding Enterprise", "North American Operations", "Industrial Machinery Division", "Audio & Electronics")
+    - `code`: `SlugField(max_length=80)`
+    - `hierarchy_type`: `CharField(max_length=30, choices=[('corporate_legal', 'Corporate & Legal Subsidiary Tree'), ('account_group', 'Sales & Account Grouping Hierarchy'), ('product_taxonomy', 'Product Category & SKU Taxonomy'), ('org_reporting', 'Organizational & Departmental Hierarchy'), ('cost_center_rollup', 'Financial Cost Center Rollup'), ('asset_location', 'Physical Facility & Asset Location Tree')], default='corporate_legal')` (driver: 10.6-HR-01)
+    - `parent`: `ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='children', help_text="Parent node in the hierarchy tree (null for root nodes)")` (driver: 10.6-HR-02)
+    - `level`: `PositiveIntegerField(default=1, help_text="Depth level in tree: 1=Root, 2=Child, 3=Grandchild...")` (driver: 10.6-HR-02)
+    - `path`: `CharField(max_length=500, blank=True, db_index=True, help_text="Materialized path for fast recursive querying, e.g. /1/4/12/")` (driver: 10.6-HR-03)
+    - `golden_record`: `ForeignKey('bi.MdmGoldenRecord', null=True, blank=True, on_delete=models.SET_NULL, related_name='hierarchy_nodes', help_text="Optional link to an authoritative Golden Record")` (driver: 10.6-HR-04)
+    - `party`: `ForeignKey('core.Party', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_hierarchy_nodes', help_text="Optional link to core Party (customer, vendor, subsidiary)")` (driver: 10.6-HR-04)
+    - `org_unit`: `ForeignKey('core.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_hierarchy_nodes', help_text="Optional link to core OrgUnit")` (driver: 10.6-HR-04)
+    - `item_category`: `ForeignKey('scm.ItemCategory', null=True, blank=True, on_delete=models.SET_NULL, related_name='mdm_hierarchy_nodes', help_text="Optional link to SCM ItemCategory for product taxonomies")` (driver: 10.6-HR-04)
+    - `relationship_kind`: `CharField(max_length=60, default='parent_child', help_text="Semantic nature of link: parent_child, subsidiary_of, rolls_up_to, category_member")` (driver: 10.6-HR-05)
+    - `sort_order`: `PositiveIntegerField(default=10)`
+    - `valid_from`: `DateField(null=True, blank=True, help_text="Temporal validity start date for restatements/reorganizations")` (driver: 10.6-HR-06)
+    - `valid_to`: `DateField(null=True, blank=True, help_text="Temporal validity end date")` (driver: 10.6-HR-06)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `level`, `path`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'hierarchy_type', 'code')]`, `indexes = [models.Index(fields=['tenant', 'hierarchy_type']), models.Index(fields=['tenant', 'parent']), models.Index(fields=['tenant', 'path']), models.Index(fields=['tenant', 'golden_record'])]`
+
+- [ ] **`MdmReferenceCode`** [Prefix: `BMRD-`] (`apps/bi/models/MasterData/MdmReferenceCodes.py`)
+  - **Purpose**: Centralized reference data code sets, canonical lookup tables, and cross-system translation mappings (e.g. ISO Country, ISO Currency, UOM, Incoterms, Payment Terms, Tax Categories) with deprecation lifecycle and superseding pointers.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `code_set`: `CharField(max_length=80, db_index=True, help_text="Grouping code set, e.g. 'country_codes', 'currency_codes', 'uom_codes', 'payment_terms', 'tax_categories', 'industry_codes'")` (driver: 10.6-RD-01)
+    - `canonical_code`: `CharField(max_length=60, db_index=True, help_text="Canonical standardized enterprise code, e.g. 'USA', 'EUR', 'KGM', 'NET30'")` (driver: 10.6-RD-01)
+    - `canonical_name`: `CharField(max_length=200, help_text="Canonical official label, e.g. 'United States of America', 'Euro', 'Kilogram', 'Net 30 Days'")` (driver: 10.6-RD-01)
+    - `source_system`: `CharField(max_length=80, blank=True, help_text="Feeder or external system name, e.g. 'crm_sales', 'sap_erp', 'legacy_db', 'iso_standard'")` (driver: 10.6-RD-02)
+    - `source_code`: `CharField(max_length=80, blank=True, help_text="Original code in the source system, e.g. 'US' or '840' for USA")` (driver: 10.6-RD-02)
+    - `category`: `CharField(max_length=80, blank=True, help_text="Sub-classification category within the code set")` (driver: 10.6-RD-02)
+    - `status`: `CharField(max_length=25, choices=[('draft', 'Draft / Under Review'), ('active', 'Active & Canonical'), ('deprecated', 'Deprecated (Do Not Use for New Records)'), ('superseded', 'Superseded by Newer Standard'), ('inactive', 'Inactive')], default='active')` (driver: 10.6-RD-03)
+    - `superseded_by`: `ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='superseded_codes', help_text="Newer canonical reference code replacing this one")` (driver: 10.6-RD-03)
+    - `effective_from`: `DateField(null=True, blank=True)` (driver: 10.6-RD-04)
+    - `effective_to`: `DateField(null=True, blank=True)` (driver: 10.6-RD-04)
+    - `attributes_json`: `JSONField(default=dict, help_text="Supplementary metadata attributes: numeric codes, secondary symbols, localized translations")` (driver: 10.6-RD-05)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code_set', 'canonical_code', 'source_system', 'source_code')]`, `indexes = [models.Index(fields=['tenant', 'code_set']), models.Index(fields=['tenant', 'canonical_code']), models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'source_system', 'source_code'])]`
+
+---
+
+## Backend Packages (`apps/bi/{models,forms,views,urls}/MasterData/`)
+
+### Models (`apps/bi/models/MasterData/`)
+- [ ] `apps/bi/models/MasterData/__init__.py`
+- [ ] `apps/bi/models/MasterData/MdmGoldenRecords.py` (`MdmGoldenRecord`)
+- [ ] `apps/bi/models/MasterData/MdmSurvivorshipRules.py` (`MdmSurvivorshipRule`)
+- [ ] `apps/bi/models/MasterData/MdmHierarchyNodes.py` (`MdmHierarchyNode`)
+- [ ] `apps/bi/models/MasterData/MdmReferenceCodes.py` (`MdmReferenceCode`)
+- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
+
+### Forms (`apps/bi/forms/MasterData/`)
+- [ ] `apps/bi/forms/MasterData/__init__.py`
+- [ ] `apps/bi/forms/MasterData/MdmGoldenRecordForms.py` (`MdmGoldenRecordForm`, `MdmGoldenRecordMergeForm`, `MdmGoldenRecordAttributeOverrideForm`)
+- [ ] `apps/bi/forms/MasterData/MdmSurvivorshipRuleForms.py` (`MdmSurvivorshipRuleForm`)
+- [ ] `apps/bi/forms/MasterData/MdmHierarchyNodeForms.py` (`MdmHierarchyNodeForm`)
+- [ ] `apps/bi/forms/MasterData/MdmReferenceCodeForms.py` (`MdmReferenceCodeForm`, `MdmReferenceCodeLookupForm`)
+- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
+
+### Views (`apps/bi/views/MasterData/`)
+- [ ] `apps/bi/views/MasterData/__init__.py`
+- [ ] `apps/bi/views/MasterData/MdmGoldenRecords.py` (`mdm_golden_record_list`, `mdm_golden_record_create`, `mdm_golden_record_detail`, `mdm_golden_record_edit`, `mdm_golden_record_delete`, `mdm_golden_record_merge`, `mdm_golden_record_unmerge`, `mdm_golden_record_approve`)
+- [ ] `apps/bi/views/MasterData/MdmSurvivorshipRules.py` (`mdm_survivorship_rule_list`, `mdm_survivorship_rule_create`, `mdm_survivorship_rule_detail`, `mdm_survivorship_rule_edit`, `mdm_survivorship_rule_delete`, `mdm_survivorship_rule_test`)
+- [ ] `apps/bi/views/MasterData/MdmHierarchyNodes.py` (`mdm_hierarchy_node_list`, `mdm_hierarchy_node_create`, `mdm_hierarchy_node_detail`, `mdm_hierarchy_node_edit`, `mdm_hierarchy_node_delete`, `mdm_hierarchy_tree_view`)
+- [ ] `apps/bi/views/MasterData/MdmReferenceCodes.py` (`mdm_reference_code_list`, `mdm_reference_code_create`, `mdm_reference_code_detail`, `mdm_reference_code_edit`, `mdm_reference_code_delete`, `mdm_reference_code_translate`)
+- [ ] `apps/bi/views/MasterData/MdmOverviewViews.py` (`mdm_overview` command center)
+- [ ] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
+
+### URLs (`apps/bi/urls/MasterData/`)
+- [ ] `apps/bi/urls/MasterData/__init__.py` (aggregates and re-exports `urlpatterns`)
+- [ ] `apps/bi/urls/MasterData/MdmGoldenRecordUrls.py`
+- [ ] `apps/bi/urls/MasterData/MdmSurvivorshipRuleUrls.py`
+- [ ] `apps/bi/urls/MasterData/MdmHierarchyNodeUrls.py`
+- [ ] `apps/bi/urls/MasterData/MdmReferenceCodeUrls.py`
+- [ ] `apps/bi/urls/MasterData/MdmOverviewUrls.py`
+- [ ] Update `apps/bi/urls/__init__.py` to include `MasterData` routes
+
+### Admin & Integration
+- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.6"]` mapping NavERP.md feature bullets to views
+- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.6 (golden records across customer/vendor/item, survivorship rules, multi-tier hierarchy trees, and reference code sets)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.6"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+  ```python
+  "10.6": {
+      "Golden Record Management": "bi:mdm_golden_record_list",
+      "Match, Merge & Survivorship": "bi:mdm_survivorship_rule_list",
+      "Hierarchy & Relationship Management": "bi:mdm_hierarchy_node_list",
+      "Reference Data Management": "bi:mdm_reference_code_list",
+      "Data Stewardship Workflows": "bi:mdm_golden_record_list",
+      # Extra live leaves
+      "Golden Records": "bi:mdm_golden_record_list",
+      "Survivorship Rules": "bi:mdm_survivorship_rule_list",
+      "Hierarchy Nodes": "bi:mdm_hierarchy_node_list",
+      "Reference Codes": "bi:mdm_reference_code_list",
+      "Master Data Overview": "bi:mdm_overview",
+  },
+  ```
+
+---
+
+## Templates (`templates/bi/master_data/`)
+
+- [ ] `templates/bi/master_data/mdm_overview.html` (Master Data command center: Golden record distribution by domain, trust tier breakdown, stewardship queue counts, match/merge activity, active hierarchy tree depths, and reference code sets)
+- [ ] `templates/bi/master_data/golden_record/list.html` (filters: domain, status, trust_tier; search: name, code, tax_id, email; confidence progress bar, action buttons)
+- [ ] `templates/bi/master_data/golden_record/detail.html` (Golden record header with trust tier badge, source crosswalks table, attribute-level provenance JSON/cards, hierarchy node associations, merge/unmerge actions, stewardship notes)
+- [ ] `templates/bi/master_data/golden_record/form.html`
+- [ ] `templates/bi/master_data/survivorship_rule/list.html` (filters: domain, survivorship_strategy, match_algorithm; search: name, code, target_field; thresholds)
+- [ ] `templates/bi/master_data/survivorship_rule/detail.html` (Strategy definition, source precedence ordered list, similarity thresholds, steward info)
+- [ ] `templates/bi/master_data/survivorship_rule/form.html`
+- [ ] `templates/bi/master_data/hierarchy_node/list.html` (filters: hierarchy_type, level; search: name, code, path; tree indents, sort order)
+- [ ] `templates/bi/master_data/hierarchy_node/detail.html` (Node details, parent-child breadcrumbs, linked golden record / party / item / org_unit card, effective dates)
+- [ ] `templates/bi/master_data/hierarchy_node/form.html`
+- [ ] `templates/bi/master_data/reference_code/list.html` (filters: code_set, status, source_system; search: canonical_code, canonical_name, source_code)
+- [ ] `templates/bi/master_data/reference_code/detail.html` (Canonical standard details, source crosswalk translation, deprecation pointer, metadata attributes)
+- [ ] `templates/bi/master_data/reference_code/form.html`
+
+---
+
+## Verification & Close-out
+
+- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0014_...` and run `python manage.py migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
+- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
+- [ ] Execute smoke test (`temp/smoke_bi_10_6.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.6.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_masterdata_models.py`, `test_masterdata_forms.py`, `test_masterdata_views.py`, `test_masterdata_security.py`
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.6 models/routes/templates and update `README.md`
+- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.6.md`
+
+## Later passes / deferred
+- External D&B Direct+ / GLEIF API third-party corporate registry enrichment -> External enrichment adapter
+- Black-box AI/LLM vector embedding clustering daemons (e.g. external CLAIRE/FERN runtime) -> Advanced BI/AI integration pass
+- Multi-tier financial signing authority Change Request subsystem (`MdmChangeRequest`) -> Enterprise compliance pass
+- Bidirectional operational reverse-ETL streaming sync daemons into third-party operational databases -> Sub-module 10.19 Integration & API Hub
+- Searchable Data Catalog & Column-Level Lineage Graph -> Sub-module 10.7 Data Catalog, Lineage & Governance
+- Interactive 360-degree Customer & Product Dashboards -> Sub-module 10.8 Interactive Dashboards
+
+## Review notes
+(to be populated during Phase 4–6)
+---
 # Sub-module 10.5: Data Quality & Cleansing (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.5.md` (2026-11-04)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, and 10.4.
