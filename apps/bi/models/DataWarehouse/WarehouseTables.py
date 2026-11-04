@@ -134,7 +134,16 @@ class WarehouseTable(TenantNumbered):
 
         partition_clause = ""
         if self.storage_policy and self.storage_policy.partition_strategy != "none" and self.storage_policy.partition_key:
-            partition_clause = f"\nPARTITION BY RANGE ({self.storage_policy.partition_key});"
+            strategy = self.storage_policy.partition_strategy
+            if strategy in ("range_time", "range_numeric"):
+                part_type = "RANGE"
+            elif strategy == "hash":
+                part_type = "HASH"
+            elif strategy == "list_category":
+                part_type = "LIST"
+            else:
+                part_type = "RANGE"
+            partition_clause = f"\nPARTITION BY {part_type} ({self.storage_policy.partition_key});"
         else:
             partition_clause = ";"
 
