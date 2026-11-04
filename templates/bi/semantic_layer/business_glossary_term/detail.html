@@ -37,6 +37,10 @@
         <p class="text-muted text-sm">{{ term.short_definition }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:business_glossary_term_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Business Glossary</span>
+        </a>
         <a href="{% url 'bi:calculated_measure_create' %}?glossary_term={{ term.pk }}" class="btn btn-outline">
             <i data-lucide="plus"></i>
             <span>Add Calculated Measure</span>
@@ -107,7 +111,7 @@
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <div>
-                    <h2 class="text-base font-semibold">Executable Measures ({{ related_measures.count }})</h2>
+                    <h2 class="text-base font-semibold">Executable Measures ({{ related_measures|length }})</h2>
                     <p class="text-xs text-muted">Concrete semantic metrics implementing this business glossary definition</p>
                 </div>
                 <a href="{% url 'bi:calculated_measure_create' %}?glossary_term={{ term.pk }}" class="btn btn-outline btn-sm">
@@ -150,7 +154,7 @@
                                 {{ rm.formula_expression|default:rm.source_column|truncatechars:30 }}
                             </td>
                             <td class="text-right table-actions">
-                                <a href="{% url 'bi:calculated_measure_detail' rm.pk %}" class="btn btn-icon" title="View Measure">
+                                <a href="{% url 'bi:calculated_measure_detail' rm.pk %}" class="btn btn-icon" title="View Measure" aria-label="View Measure">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -232,11 +236,11 @@
                     <form method="post" action="{% url 'bi:business_glossary_term_certify' term.pk %}" class="space-y-3">
                         {% csrf_token %}
                         <div class="form-group">
-                            <label class="form-label text-xs">New Status</label>
+                            <label class="form-label text-xs" for="{{ certify_form.certification_status.id_for_label }}">New Status</label>
                             {{ certify_form.certification_status }}
                         </div>
                         <div class="form-group">
-                            <label class="form-label text-xs">Sign-off Notes</label>
+                            <label class="form-label text-xs" for="{{ certify_form.certification_notes.id_for_label }}">Sign-off Notes</label>
                             {{ certify_form.certification_notes }}
                         </div>
                         <button type="submit" class="btn btn-outline btn-sm w-full">
@@ -256,7 +260,9 @@
             <div class="card-body text-sm space-y-3">
                 <div>
                     <span class="text-xs text-muted uppercase font-medium block">Designated Steward</span>
-                    <span class="font-medium text-slate-800">{{ term.steward.get_full_name|default:term.steward.username|default:"Unassigned" }}</span>
+                    <span class="font-medium text-slate-800">
+                        {% if term.steward %}{{ term.steward.get_full_name|default:term.steward.username }}{% else %}Unassigned{% endif %}
+                    </span>
                 </div>
                 <div>
                     <span class="text-xs text-muted uppercase font-medium block">Owning Department</span>
