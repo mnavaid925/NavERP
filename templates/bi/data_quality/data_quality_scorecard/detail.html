@@ -216,7 +216,7 @@
                                 </td>
                                 <td class="text-xs font-mono font-medium">{{ rule.pass_rate_pct }}%</td>
                                 <td class="text-right">
-                                    <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon">
+                                    <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon" title="View Quality Rule" aria-label="View Quality Rule">
                                         <i data-lucide="eye"></i>
                                     </a>
                                 </td>
@@ -273,7 +273,7 @@
                                     <span class="badge badge-slate">{{ exc.get_status_display }}</span>
                                 </td>
                                 <td class="text-right">
-                                    <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon">
+                                    <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon" title="View Quality Exception" aria-label="View Quality Exception">
                                         <i data-lucide="eye"></i>
                                     </a>
                                 </td>
