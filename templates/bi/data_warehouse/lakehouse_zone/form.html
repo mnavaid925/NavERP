@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ lakehouse_zone.name }}{% else %}New Lakehouse Zone{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:lakehouse_zone_list' %}">Lakehouse Zones</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Lakehouse Zone: {{ lakehouse_zone.name }}{% else %}Register Lakehouse Storage Zone{% endif %}</h1>
+        <p class="text-muted text-sm">Configure medallion storage tiers, backend providers, and default serialization formats</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:lakehouse_zone_detail' pk=lakehouse_zone.pk %}{% else %}{% url 'bi:lakehouse_zone_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-sm font-semibold text-slate-800">Zone Storage Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Zone Name <span class="text-red-500">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">Slug Code <span class="text-red-500">*</span></label>
+                    {{ form.code }}
+                    {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.zone_type.id_for_label }}">Medallion Tier</label>
+                    {{ form.zone_type }}
+                    {% if form.zone_type.errors %}<div class="form-error">{{ form.zone_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.storage_backend.id_for_label }}">Storage Backend</label>
+                    {{ form.storage_backend }}
+                    {% if form.storage_backend.errors %}<div class="form-error">{{ form.storage_backend.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_format.id_for_label }}">Serialization Format</label>
+                    {{ form.default_format }}
+                    {% if form.default_format.errors %}<div class="form-error">{{ form.default_format.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.base_uri_path.id_for_label }}">Base Storage URI Endpoint Prefix</label>
+                {{ form.base_uri_path }}
+                <div class="text-xs text-muted mt-1">e.g. s3://warehouse-lake/bronze/ or gs://my-bucket/silver/ or internal://</div>
+                {% if form.base_uri_path.errors %}<div class="form-error">{{ form.base_uri_path.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description &amp; Governance Rules</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_read_only }}
+                        <span class="text-sm text-slate-800 font-medium">Read-Only (Immutable Protection)</span>
+                    </label>
+                    <div class="text-xs text-muted">Prevent write modifications directly to tables in this tier.</div>
+                    {% if form.is_read_only.errors %}<div class="form-error">{{ form.is_read_only.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm text-slate-800 font-medium">Active Lakehouse Zone</span>
+                    </label>
+                    <div class="text-xs text-muted">Zone is available for table assignments and pipeline loaders.</div>
+                    {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:lakehouse_zone_detail' pk=lakehouse_zone.pk %}{% else %}{% url 'bi:lakehouse_zone_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Lakehouse Zone{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
