@@ -83,6 +83,13 @@ class MdmSurvivorshipRuleForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        match_pct = cleaned.get("match_threshold_pct")
+        auto_merge_pct = cleaned.get("auto_merge_threshold_pct")
+        if match_pct is not None and auto_merge_pct is not None:
+            if auto_merge_pct < match_pct:
+                raise forms.ValidationError(
+                    {"auto_merge_threshold_pct": "Auto-merge threshold must be greater than or equal to candidate match threshold."}
+                )
         reject_foreign(self, cleaned, ["steward"])
         return cleaned
 
