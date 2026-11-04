@@ -17,7 +17,7 @@ from apps.core.utils import write_audit_log
 def lakehouse_zone_list(request):
     queryset = bi_scope(LakehouseZone.objects.all(), request)
 
-    q = request.GET.get("q", "").strip()
+    q = request.GET.get("q", "").strip()[:100]
     if q:
         queryset = queryset.filter(
             Q(name__icontains=q)
