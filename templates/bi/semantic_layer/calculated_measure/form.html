@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ measure.name }}{% else %}New Calculated Measure{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:calculated_measure_list' %}">Calculated Measures</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ measure.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Measure: {{ measure.name }}{% else %}Author New Calculated Measure{% endif %}</h1>
+        <p class="text-muted text-sm">Author standardized aggregation rules, mathematical ratios, and time-intelligence expressions</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:calculated_measure_detail' measure.pk %}{% else %}{% url 'bi:calculated_measure_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Calculated Measure Specification</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Model & Context Binding -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Model & Glossary Binding</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Target Semantic Model <span class="text-red-500">*</span></label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.glossary_term.id_for_label }}">Associated Business Glossary Term</label>
+                            {{ form.glossary_term }}
+                            {% if form.glossary_term.errors %}<div class="form-error">{{ form.glossary_term.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Optional linkage to canonical business definitions.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Measure Identification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Measure Details</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Measure Title <span class="text-red-500">*</span></label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.code.id_for_label }}">Identifier Slug / Code <span class="text-red-500">*</span></label>
+                            {{ form.code }}
+                            {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Aggregation & Calculation Logic -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Aggregation & Formula Logic</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.aggregation_type.id_for_label }}">Aggregation Type <span class="text-red-500">*</span></label>
+                            {{ form.aggregation_type }}
+                            {% if form.aggregation_type.errors %}<div class="form-error">{{ form.aggregation_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.source_column.id_for_label }}">Physical Source Column</label>
+                            {{ form.source_column }}
+                            {% if form.source_column.errors %}<div class="form-error">{{ form.source_column.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Column to aggregate (e.g. amount, quantity). Required for standard aggregations.</p>
+                        </div>
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label" for="{{ form.formula_expression.id_for_label }}">Custom Calculation Formula Expression</label>
+                            {{ form.formula_expression }}
+                            {% if form.formula_expression.errors %}<div class="form-error">{{ form.formula_expression.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">E.g. [revenue] - [cost] or ([gross_profit] / [revenue]) * 100. Required when type is Formula.</p>
+                        </div>
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label" for="{{ form.filter_expression.id_for_label }}">SQL WHERE Filter Clause</label>
+                            {{ form.filter_expression }}
+                            {% if form.filter_expression.errors %}<div class="form-error">{{ form.filter_expression.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Optional filter applied prior to calculation (e.g. status = 'paid' AND is_void = false).</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.time_intelligence.id_for_label }}">Time Intelligence Offset</label>
+                            {{ form.time_intelligence }}
+                            {% if form.time_intelligence.errors %}<div class="form-error">{{ form.time_intelligence.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Display & Formatting -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Display & Presentation Formatting</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.format_string.id_for_label }}">Output Format</label>
+                            {{ form.format_string }}
+                            {% if form.format_string.errors %}<div class="form-error">{{ form.format_string.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.display_units.id_for_label }}">Display Scale Unit</label>
+                            {{ form.display_units }}
+                            {% if form.display_units.errors %}<div class="form-error">{{ form.display_units.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Targets & Thresholds -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Target Benchmarks & Alert Thresholds</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_value.id_for_label }}">Target Benchmark</label>
+                            {{ form.target_value }}
+                            {% if form.target_value.errors %}<div class="form-error">{{ form.target_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warning_threshold.id_for_label }}">Warning Threshold</label>
+                            {{ form.warning_threshold }}
+                            {% if form.warning_threshold.errors %}<div class="form-error">{{ form.warning_threshold.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.critical_threshold.id_for_label }}">Critical Threshold</label>
+                            {{ form.critical_threshold }}
+                            {% if form.critical_threshold.errors %}<div class="form-error">{{ form.critical_threshold.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Context & State -->
+                <div class="border-b border-slate-100 pb-4">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-800">Measure is Active</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:calculated_measure_detail' measure.pk %}{% else %}{% url 'bi:calculated_measure_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Measure{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
