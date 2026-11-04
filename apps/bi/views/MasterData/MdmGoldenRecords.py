@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -49,10 +49,16 @@ def mdm_golden_record_list(request):
         queryset = queryset.filter(trust_tier=trust_tier_filter)
 
     all_tenant_records = bi_scope(MdmGoldenRecord.objects.all(), request)
-    total_count = all_tenant_records.count()
-    gold_count = all_tenant_records.filter(trust_tier="gold").count()
-    pending_count = all_tenant_records.filter(status="pending_review").count()
-    merged_count = all_tenant_records.filter(status="merged").count()
+    counts = all_tenant_records.aggregate(
+        total=Count("id"),
+        gold=Count("id", filter=Q(trust_tier="gold")),
+        pending=Count("id", filter=Q(status="pending_review")),
+        merged=Count("id", filter=Q(status="merged")),
+    )
+    total_count = counts["total"]
+    gold_count = counts["gold"]
+    pending_count = counts["pending"]
+    merged_count = counts["merged"]
 
     paginator = Paginator(queryset.order_by("-created_at"), 15)
     page_number = request.GET.get("page")
