@@ -103,6 +103,8 @@ class MdmSurvivorshipRule(TenantNumbered):
     def __init__(self, *args, **kwargs):
         if "source_precedence_list" in kwargs and "source_priority_list_json" not in kwargs:
             kwargs["source_priority_list_json"] = kwargs.pop("source_precedence_list")
+        if kwargs.get("match_algorithm") == "fuzzy_token":
+            kwargs["match_algorithm"] = "token_set_ratio"
         super().__init__(*args, **kwargs)
 
     @property
