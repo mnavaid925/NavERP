@@ -95,14 +95,7 @@ def drill_hierarchy_create(request):
             hierarchy = form.save(commit=False)
             hierarchy.tenant = request.tenant
             hierarchy.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                "DrillHierarchy",
-                hierarchy.pk,
-                f"Created drill hierarchy {hierarchy.name} ({hierarchy.number})",
-            )
+            write_audit_log(request.user, hierarchy, "create", tenant=request.tenant)
             messages.success(request, f"Drill Hierarchy '{hierarchy.name}' created successfully.")
             return redirect("bi:drill_hierarchy_detail", pk=hierarchy.pk)
     else:
@@ -122,14 +115,7 @@ def drill_hierarchy_edit(request, pk):
         form = DrillHierarchyForm(request.POST, instance=hierarchy, tenant=request.tenant)
         if form.is_valid():
             hierarchy = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                "DrillHierarchy",
-                hierarchy.pk,
-                f"Updated drill hierarchy {hierarchy.name} ({hierarchy.number})",
-            )
+            write_audit_log(request.user, hierarchy, "update", tenant=request.tenant)
             messages.success(request, f"Drill Hierarchy '{hierarchy.name}' updated successfully.")
             return redirect("bi:drill_hierarchy_detail", pk=hierarchy.pk)
     else:
@@ -151,14 +137,7 @@ def drill_hierarchy_delete(request, pk):
     hierarchy = bi_object(request, DrillHierarchy, pk)
     name = hierarchy.name
     num = hierarchy.number
+    write_audit_log(request.user, hierarchy, "delete", tenant=request.tenant)
     hierarchy.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        "DrillHierarchy",
-        pk,
-        f"Deleted drill hierarchy {name} ({num})",
-    )
     messages.success(request, f"Drill Hierarchy '{name}' ({num}) deleted successfully.")
     return redirect("bi:drill_hierarchy_list")
