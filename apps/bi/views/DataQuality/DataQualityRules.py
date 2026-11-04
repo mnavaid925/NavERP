@@ -126,14 +126,7 @@ def data_quality_rule_create(request):
             rule = form.save(commit=False)
             rule.tenant = request.tenant
             rule.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "CREATE",
-                "DataQualityRule",
-                rule.pk,
-                f"Created DataQualityRule {rule.name} ({rule.code})",
-            )
+            write_audit_log(request.user, rule, "create", tenant=request.tenant)
             messages.success(request, f"Quality rule '{rule.name}' created successfully.")
             return redirect("bi:data_quality_rule_detail", pk=rule.pk)
     else:
@@ -154,14 +147,7 @@ def data_quality_rule_edit(request, pk):
         form = DataQualityRuleForm(request.POST, instance=rule, tenant=request.tenant)
         if form.is_valid():
             rule = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "UPDATE",
-                "DataQualityRule",
-                rule.pk,
-                f"Updated DataQualityRule {rule.name} ({rule.code})",
-            )
+            write_audit_log(request.user, rule, "update", tenant=request.tenant)
             messages.success(request, f"Quality rule '{rule.name}' updated successfully.")
             return redirect("bi:data_quality_rule_detail", pk=rule.pk)
     else:
@@ -180,16 +166,8 @@ def data_quality_rule_edit(request, pk):
 def data_quality_rule_delete(request, pk):
     rule = bi_object(request, DataQualityRule, pk)
     rule_name = rule.name
-    rule_number = rule.number
+    write_audit_log(request.user, rule, "delete", tenant=request.tenant)
     rule.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "DELETE",
-        "DataQualityRule",
-        pk,
-        f"Deleted DataQualityRule {rule_name} ({rule_number})",
-    )
     messages.success(request, f"Quality rule '{rule_name}' deleted successfully.")
     return redirect("bi:data_quality_rule_list")
 
@@ -242,13 +220,6 @@ def data_quality_rule_run(request, pk):
             assigned_steward=rule.steward,
         )
 
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "EXECUTE",
-        "DataQualityRule",
-        rule.pk,
-        f"Evaluated rule {rule.name}: pass rate {pass_rate}% ({rule.last_status})",
-    )
+    write_audit_log(request.user, rule, "run", tenant=request.tenant)
     messages.success(request, f"Quality rule '{rule.name}' evaluated. Result: {rule.get_last_status_display()} ({pass_rate:.2f}% pass rate).")
     return redirect("bi:data_quality_rule_detail", pk=rule.pk)
