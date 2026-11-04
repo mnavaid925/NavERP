@@ -4,7 +4,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -59,9 +59,14 @@ def data_quality_rule_list(request):
     if model_filter.isdigit():
         queryset = queryset.filter(semantic_model_id=model_filter)
 
-    total_count = bi_scope(DataQualityRule.objects.all(), request).count()
-    passed_count = bi_scope(DataQualityRule.objects.all(), request).filter(last_status="passed").count()
-    failed_count = bi_scope(DataQualityRule.objects.all(), request).filter(last_status__in=["failed", "error"]).count()
+    stat_counts = bi_scope(DataQualityRule.objects.all(), request).aggregate(
+        total=Count("id"),
+        passed=Count("id", filter=Q(last_status="passed")),
+        failed=Count("id", filter=Q(last_status__in=["failed", "error"])),
+    )
+    total_count = stat_counts["total"]
+    passed_count = stat_counts["passed"]
+    failed_count = stat_counts["failed"]
 
     paginator = Paginator(queryset, 15)
     page_number = request.GET.get("page", 1)
