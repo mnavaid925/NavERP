@@ -41,7 +41,7 @@
 - [x] **M2**: `WarehouseTable.generate_ddl_sql()` hardcodes `PARTITION BY RANGE`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L134-L136), support matching SQL partition keywords (`HASH`, `LIST`, `RANGE`) based on `partition_strategy`. fixed — fix(bi): support HASH, LIST, and RANGE partition clauses in generate_ddl_sql
 - [x] **M3**: `time_travel_days` lacks server-side range validation. In `apps/bi/forms/DataWarehouse/WarehouseStoragePolicies.py`, add validation in `clean()` verifying `time_travel_days <= 90`. fixed — fix(bi): validate time_travel_days range between 0 and 90 in WarehouseStoragePolicyForm
 - [x] **M4**: `seed_bi.py` command help string omits Sub-module 10.3. Update help text to include `& 10.3 Data Warehouse & Storage`. fixed — docs(bi): update seed_bi command help string to include Sub-module 10.3
-- [ ] **M5**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`). Remove unused variable from view context.
+- [x] **M5**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`). Remove unused variable from view context. fixed — fix(bi): remove unused show_ddl_tab context variable from warehouse_table_ddl_preview
 - [ ] **M6**: Undefined utility class `text-primary` used in navigation links in detail templates. Replace with `text-brand` or `text-blue-600`.
 - [ ] **M7**: Empty state heading typography: use semantic `<h3>` inside `.empty-state` container for consistency with `theme.css`.
 - [ ] **M8**: Native browser `alert()` in SQL DDL copy button. Replace with non-blocking feedback or label toggle.
