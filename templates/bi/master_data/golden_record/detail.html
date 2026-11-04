@@ -342,6 +342,29 @@
             </div>
         </div>
 
+        <!-- Linked Hierarchy Nodes -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-900 text-sm">Linked Hierarchy Nodes</h3>
+                <span class="badge badge-slate text-xs">{{ hierarchy_nodes|length }}</span>
+            </div>
+            <div class="card-body space-y-2 text-xs">
+                {% for hnode in hierarchy_nodes %}
+                <div class="p-2 rounded border border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div>
+                        <a href="{% url 'bi:mdm_hierarchy_node_detail' hnode.pk %}" class="font-semibold text-primary hover:underline block">
+                            {{ hnode.name }}
+                        </a>
+                        <span class="text-muted text-[11px] font-mono">{{ hnode.get_hierarchy_type_display }} · Lvl {{ hnode.level }}</span>
+                    </div>
+                    <span class="badge badge-slate font-mono text-[11px]">{{ hnode.code }}</span>
+                </div>
+                {% empty %}
+                <p class="text-muted text-xs">No organizational or catalog hierarchy nodes linked.</p>
+                {% endfor %}
+            </div>
+        </div>
+
         <!-- Merge Duplicate Workbench -->
         {% if golden_record.status != 'merged' %}
         <div class="card">
