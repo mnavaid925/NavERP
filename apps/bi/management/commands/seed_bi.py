@@ -265,12 +265,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"  BI data source connectors already seeded for tenant: {tenant.name}")
 
             # --- 10.2 ETL/ELT & Data Pipelines Seeding ---
-            if EtlPipeline.objects.filter(tenant=tenant).exists():
-                self.stdout.write(f"  BI ETL pipelines already seeded for tenant: {tenant.name}")
-                continue
-
-            with transaction.atomic():
-                pipe_invoices = IngestionPipeline.objects.filter(tenant=tenant).first()
+            if not EtlPipeline.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    pipe_invoices = IngestionPipeline.objects.filter(tenant=tenant).first()
                 pipe_s3_clicks = IngestionPipeline.objects.filter(tenant=tenant, ingestion_mode="micro_batch").first()
 
                 # 1. EtlPipeline
@@ -466,7 +463,9 @@ class Command(BaseCommand):
                     },
                 )
 
-            self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI ETL Pipelines for tenant: {tenant.name}"))
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI ETL Pipelines for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI ETL pipelines already seeded for tenant: {tenant.name}")
 
             # --- 10.3 Data Warehouse & Storage Seeding ---
             if not DataMart.objects.filter(tenant=tenant).exists():
@@ -840,5 +839,7 @@ class Command(BaseCommand):
                     )
 
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Warehouse for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Data Warehouse already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
