@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scorecard.name }} — Quality Scorecard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_scorecard_list' %}">Scorecards</a>
+            <span class="sep">/</span>
+            <span>{{ scorecard.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scorecard.name }}</h1>
+            {% if scorecard.grade == 'A' %}
+            <span class="badge badge-green font-bold">Grade A</span>
+            {% elif scorecard.grade == 'B' %}
+            <span class="badge badge-info font-bold">Grade B</span>
+            {% elif scorecard.grade == 'C' %}
+            <span class="badge badge-amber font-bold">Grade C</span>
+            {% else %}
+            <span class="badge badge-red font-bold">Grade {{ scorecard.grade }}</span>
+            {% endif %}
+
+            {% if scorecard.health_status == 'healthy' %}
+            <span class="badge badge-green">Healthy</span>
+            {% elif scorecard.health_status == 'needs_attention' %}
+            <span class="badge badge-amber">Needs Attention</span>
+            {% elif scorecard.health_status == 'critical' %}
+            <span class="badge badge-red">Critical</span>
+            {% else %}
+            <span class="badge badge-slate">Failing</span>
+            {% endif %}
+
+            {% if not scorecard.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ scorecard.number }} &middot; Code: {{ scorecard.code }} &middot; Scope: {{ scorecard.get_scope_type_display }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:data_quality_scorecard_recalculate' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="refresh-cw"></i>
+                <span>Recalculate Trust Index</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:data_quality_scorecard_edit' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Scorecard</span>
+        </a>
+        <form method="post" action="{% url 'bi:data_quality_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this scorecard?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-500 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Executive Trust Index Banner -->
+<div class="card mb-6 border-l-4 {% if scorecard.overall_quality_score >= 95 %}border-l-emerald-500{% elif scorecard.overall_quality_score >= 85 %}border-l-blue-500{% elif scorecard.overall_quality_score >= 75 %}border-l-amber-500{% else %}border-l-red-500{% endif %}">
+    <div class="card-body p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+        <div>
+            <div class="text-xs uppercase font-semibold tracking-wider text-muted">Data Trust Index (DTI)</div>
+            <div class="text-4xl font-extrabold {% if scorecard.overall_quality_score >= 95 %}text-emerald-600{% elif scorecard.overall_quality_score >= 85 %}text-blue-600{% elif scorecard.overall_quality_score >= 75 %}text-amber-600{% else %}text-red-600{% endif %} mt-1">
+                {{ scorecard.overall_quality_score }}%
+            </div>
+            <p class="text-xs text-muted mt-2">
+                Evaluated across {{ scorecard.total_rules_evaluated }} active validation rules &middot; {{ scorecard.open_exceptions_count }} open breaking records
+            </p>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="text-center px-4 border-r border-slate-100 dark:border-slate-800">
+                <div class="text-xs text-muted uppercase font-medium">SLA Target</div>
+                <div class="text-xl font-bold font-mono mt-0.5">&ge; {{ scorecard.target_quality_score }}%</div>
+                {% if scorecard.meets_sla %}
+                <span class="badge badge-green text-xs mt-1">Meets SLA</span>
+                {% else %}
+                <span class="badge badge-red text-xs mt-1">Breached</span>
+                {% endif %}
+            </div>
+            <div class="text-center px-4 border-r border-slate-100 dark:border-slate-800">
+                <div class="text-xs text-muted uppercase font-medium">Rules Passing</div>
+                <div class="text-xl font-bold font-mono text-emerald-600 mt-0.5">{{ scorecard.rules_passed_count }} / {{ scorecard.total_rules_evaluated }}</div>
+                <span class="text-xs text-muted mt-1">{{ scorecard.rules_failed_count }} failing</span>
+            </div>
+            <div class="text-center px-4">
+                <div class="text-xs text-muted uppercase font-medium">Critical Issues</div>
+                <div class="text-xl font-bold font-mono {% if scorecard.critical_exceptions_count > 0 %}text-red-600{% else %}text-slate-600{% endif %} mt-0.5">
+                    {{ scorecard.critical_exceptions_count }}
+                </div>
+                <span class="text-xs text-muted mt-1">SLA blockers</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 6 ISO/DAMA Dimensions Breakdown -->
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">1. Completeness</div>
+        <div class="text-2xl font-bold text-emerald-600 mt-2">{{ scorecard.completeness_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ scorecard.completeness_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Mandatory fields</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">2. Accuracy</div>
+        <div class="text-2xl font-bold text-blue-600 mt-2">{{ scorecard.accuracy_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-blue-500 h-1.5 rounded-full" style="width: {{ scorecard.accuracy_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Truth conformity</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">3. Consistency</div>
+        <div class="text-2xl font-bold text-indigo-600 mt-2">{{ scorecard.consistency_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-indigo-500 h-1.5 rounded-full" style="width: {{ scorecard.consistency_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Referential foreign keys</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">4. Timeliness</div>
+        <div class="text-2xl font-bold text-teal-600 mt-2">{{ scorecard.timeliness_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-teal-500 h-1.5 rounded-full" style="width: {{ scorecard.timeliness_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Freshness SLA</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">5. Uniqueness</div>
+        <div class="text-2xl font-bold text-purple-600 mt-2">{{ scorecard.uniqueness_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-purple-500 h-1.5 rounded-full" style="width: {{ scorecard.uniqueness_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Deduplication & keys</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">6. Validity</div>
+        <div class="text-2xl font-bold text-amber-600 mt-2">{{ scorecard.validity_score }}%</div>
+        <div class="w-full bg-slate-100 rounded-full h-1.5 dark:bg-slate-700 mt-2">
+            <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ scorecard.validity_score }}%"></div>
+        </div>
+        <div class="text-xs text-muted mt-2">Formats & masks</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Evaluated Rules & Exceptions -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="card-title">Scope Rules Evaluated</h2>
+                </div>
+                <span class="badge badge-slate text-xs">{{ evaluated_rules|length }} Rules</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Rule & Dimension</th>
+                                <th>Category</th>
+                                <th>Severity</th>
+                                <th>Status</th>
+                                <th>Pass Rate</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in evaluated_rules %}
+                            <tr>
+                                <td>
+                                    <div class="font-medium text-xs">
+                                        <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="hover:underline">
+                                            {{ rule.name }}
+                                        </a>
+                                    </div>
+                                    <div class="text-xs text-muted font-mono">{{ rule.get_dimension_display }}</div>
+                                </td>
+                                <td class="text-xs">{{ rule.get_rule_category_display }}</td>
+                                <td>
+                                    {% if rule.severity == 'critical' or rule.severity == 'fatal' %}
+                                    <span class="badge badge-red">{{ rule.get_severity_display }}</span>
+                                    {% elif rule.severity == 'warning' %}
+                                    <span class="badge badge-amber">Warning</span>
+                                    {% else %}
+                                    <span class="badge badge-slate">Info</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if rule.last_status == 'passed' %}
+                                    <span class="badge badge-green">Passed</span>
+                                    {% elif rule.last_status == 'warning' %}
+                                    <span class="badge badge-amber">Warning</span>
+                                    {% elif rule.last_status == 'failed' %}
+                                    <span class="badge badge-red">Failed</span>
+                                    {% else %}
+                                    <span class="badge badge-slate">{{ rule.get_last_status_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-xs font-mono font-medium">{{ rule.pass_rate_pct }}%</td>
+                                <td class="text-right">
+                                    <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon">
+                                        <i data-lucide="eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="p-6 text-center text-muted text-sm">
+                                    No rules currently configured for this scope.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+                    <h2 class="card-title">Open Scope Exceptions</h2>
+                </div>
+                <span class="badge badge-amber text-xs">{{ related_exceptions|length }} Displayed</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Identifier</th>
+                                <th>Violation</th>
+                                <th>Severity</th>
+                                <th>Status</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for exc in related_exceptions %}
+                            <tr>
+                                <td class="font-mono text-xs font-medium">{{ exc.record_identifier }}</td>
+                                <td class="text-xs">
+                                    <div class="font-mono text-red-600 truncate max-w-xs">{{ exc.invalid_value }}</div>
+                                    <div class="text-muted text-xs">{{ exc.expected_condition }}</div>
+                                </td>
+                                <td>
+                                    {% if exc.severity == 'critical' or exc.severity == 'fatal' %}
+                                    <span class="badge badge-red">{{ exc.get_severity_display }}</span>
+                                    {% else %}
+                                    <span class="badge badge-amber">Warning</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge badge-slate">{{ exc.get_status_display }}</span>
+                                </td>
+                                <td class="text-right">
+                                    <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon">
+                                        <i data-lucide="eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                    No open exceptions in this scorecard's scope!
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Column: Scope & Governance -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Scope & SLA Configuration</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-muted">Scope Level</div>
+                    <div class="font-medium mt-0.5">{{ scorecard.get_scope_type_display }}</div>
+                </div>
+                {% if scorecard.warehouse_table %}
+                <div>
+                    <div class="text-xs text-muted">Warehouse Table</div>
+                    <div class="font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:warehouse_table_detail' scorecard.warehouse_table.pk %}" class="text-primary-600 hover:underline">
+                            {{ scorecard.warehouse_table.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if scorecard.semantic_model %}
+                <div>
+                    <div class="text-xs text-muted">Semantic Model</div>
+                    <div class="font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:semantic_model_detail' scorecard.semantic_model.pk %}" class="text-primary-600 hover:underline">
+                            {{ scorecard.semantic_model.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if scorecard.data_mart %}
+                <div>
+                    <div class="text-xs text-muted">Data Mart Domain</div>
+                    <div class="font-mono text-xs mt-0.5">{{ scorecard.data_mart.name }}</div>
+                </div>
+                {% endif %}
+                {% if scorecard.org_unit %}
+                <div>
+                    <div class="text-xs text-muted">Department / Org Unit</div>
+                    <div class="font-medium text-xs mt-0.5">{{ scorecard.org_unit.name }}</div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="text-xs text-muted">Evaluation Cadence</div>
+                    <div class="font-medium text-xs mt-0.5">{{ scorecard.get_evaluation_period_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Narrative Description</div>
+                    <div class="text-xs mt-0.5 text-slate-700 dark:text-slate-300">{{ scorecard.description|default:"No description provided." }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Stewardship & Calculation Audit</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-muted">Assigned Data Steward</div>
+                    <div class="font-medium mt-0.5">{{ scorecard.steward.get_full_name|default:scorecard.steward.username|default:"Unassigned" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Last Recalculated At</div>
+                    <div class="font-mono text-xs mt-0.5">{{ scorecard.last_calculated_at|date:"Y-m-d H:i:s"|default:"Never recalculated" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Created / Updated</div>
+                    <div class="text-xs text-muted mt-0.5">{{ scorecard.created_at|date:"M d, Y" }} / {{ scorecard.updated_at|date:"M d, Y" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
