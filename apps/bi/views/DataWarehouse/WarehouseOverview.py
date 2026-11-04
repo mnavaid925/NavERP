@@ -36,7 +36,7 @@ def warehouse_overview(request):
     marts = (
         DataMart.objects.filter(tenant=request.tenant)
         .annotate(table_count=Count("tables"))
-        .order_by("-table_count")
+        .order_by("-table_count")[:8]
     )
 
     zones = (
