@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ model.name }}{% else %}New Semantic Model{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_model_list' %}">Semantic Models</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ model.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Semantic Model: {{ model.name }}{% else %}Author New Semantic Model{% endif %}</h1>
+        <p class="text-muted text-sm">Define dimensional schemas, grain, warehouse sources, and SCD versioning policies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:semantic_model_detail' model.pk %}{% else %}{% url 'bi:semantic_model_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Semantic Model Specification</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Basic Identification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Model Identification</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Model Name <span class="text-red-500">*</span></label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.code.id_for_label }}">Identifier Slug / Code <span class="text-red-500">*</span></label>
+                            {{ form.code }}
+                            {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.model_type.id_for_label }}">Model Classification</label>
+                            {{ form.model_type }}
+                            {% if form.model_type.errors %}<div class="form-error">{{ form.model_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.access_tier.id_for_label }}">Access Tier</label>
+                            {{ form.access_tier }}
+                            {% if form.access_tier.errors %}<div class="form-error">{{ form.access_tier.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Storage & Source Binding -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Source Warehouse & Domain</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Underlying Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                            <p class="text-xs text-muted mt-1">Leave empty if configuring a virtual calculated SQL view.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.data_mart.id_for_label }}">Associated Data Mart</label>
+                            {{ form.data_mart }}
+                            {% if form.data_mart.errors %}<div class="form-error">{{ form.data_mart.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Grain & Keys -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Grain, Keys & Dimensional Policies</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label" for="{{ form.grain_description.id_for_label }}">Grain Description</label>
+                            {{ form.grain_description }}
+                            {% if form.grain_description.errors %}<div class="form-error">{{ form.grain_description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.primary_key_column.id_for_label }}">Primary Surrogate Key Column</label>
+                            {{ form.primary_key_column }}
+                            {% if form.primary_key_column.errors %}<div class="form-error">{{ form.primary_key_column.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.natural_key_columns.id_for_label }}">Natural Business Keys (comma-separated)</label>
+                            {{ form.natural_key_columns }}
+                            {% if form.natural_key_columns.errors %}<div class="form-error">{{ form.natural_key_columns.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.scd_type.id_for_label }}">Slowly Changing Dimension (SCD) Policy</label>
+                            {{ form.scd_type }}
+                            {% if form.scd_type.errors %}<div class="form-error">{{ form.scd_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center pt-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_conformed_dimension }}
+                                <span class="text-sm font-medium text-slate-800">Conformed Dimension (Reusable across all marts)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Virtual View SQL -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Virtual Analytical View Expression</h3>
+                    <div class="form-group mb-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_virtual_view }}
+                            <span class="text-sm font-medium text-slate-800">Enable Virtual SQL View Definition</span>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.sql_definition.id_for_label }}">Custom SQL Query</label>
+                        {{ form.sql_definition }}
+                        {% if form.sql_definition.errors %}<div class="form-error">{{ form.sql_definition.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Governance & Status -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Governance & Stewardship</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status</label>
+                            {{ form.certification_status }}
+                            {% if form.certification_status.errors %}<div class="form-error">{{ form.certification_status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.owner.id_for_label }}">Assigned Owner</label>
+                            {{ form.owner }}
+                            {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group sm:col-span-2">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-800">Model is Active</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:semantic_model_detail' model.pk %}{% else %}{% url 'bi:semantic_model_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Model{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
