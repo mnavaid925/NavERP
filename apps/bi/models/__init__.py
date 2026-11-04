@@ -11,6 +11,10 @@ from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
 from apps.bi.models.EtlPipelines.TransformationSteps import TransformationStep
+from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
+from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
+from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
+from apps.bi.models.SemanticLayer.SemanticModels import SemanticModel
 
 __all__ = [
     "TenantOwned",
@@ -27,4 +31,8 @@ __all__ = [
     "LakehouseZone",
     "WarehouseStoragePolicy",
     "WarehouseTable",
+    "SemanticModel",
+    "BusinessGlossaryTerm",
+    "CalculatedMeasure",
+    "DrillHierarchy",
 ]
