@@ -4,7 +4,7 @@ import json
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -41,8 +41,12 @@ def mdm_survivorship_rule_list(request):
         queryset = queryset.filter(match_algorithm=match_filter)
 
     all_tenant_rules = bi_scope(MdmSurvivorshipRule.objects.all(), request)
-    total_count = all_tenant_rules.count()
-    active_count = all_tenant_rules.filter(is_active=True).count()
+    counts = all_tenant_rules.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(is_active=True)),
+    )
+    total_count = counts["total"]
+    active_count = counts["active"]
 
     paginator = Paginator(queryset.order_by("priority_order", "name"), 15)
     page_number = request.GET.get("page")
