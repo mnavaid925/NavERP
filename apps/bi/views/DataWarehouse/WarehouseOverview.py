@@ -30,6 +30,7 @@ def warehouse_overview(request):
     recent_tables = (
         WarehouseTable.objects.filter(tenant=request.tenant)
         .select_related("lakehouse_zone", "data_mart")
+        .defer("schema_definition")
         .order_by("-created_at")[:8]
     )
 
