@@ -306,11 +306,11 @@ def lakehouse_zone_a(db, tenant_a):
     return LakehouseZone.objects.create(
         tenant=tenant_a,
         name="Gold Marts Zone",
+        code="gold-marts-zone",
         zone_type="gold",
         storage_backend="internal_db",
-        base_path="/warehouse/gold",
+        base_uri_path="/warehouse/gold",
         default_format="relational_table",
-        managed_by_platform=True,
         is_active=True,
     )
 
@@ -321,11 +321,11 @@ def storage_policy_a(db, tenant_a):
         tenant=tenant_a,
         name="Daily Range Snappy Policy",
         partition_strategy="range_time",
-        partition_granularity="daily",
+        partition_granularity="day",
         compression_codec="snappy",
         vacuum_cadence="weekly",
         time_travel_days=30,
-        enable_zorder=True,
+        enable_zone_maps=True,
         is_active=True,
     )
 
@@ -335,10 +335,11 @@ def data_mart_a(db, tenant_a, admin_user):
     return DataMart.objects.create(
         tenant=tenant_a,
         name="Revenue Finance Mart",
+        code="revenue-finance-mart",
         subject_area="finance",
         certification_status="certified",
         access_tier="department",
-        refresh_schedule_cadence="daily",
+        refresh_cadence="daily",
         owner=admin_user,
         steward=admin_user,
         is_active=True,
@@ -358,8 +359,6 @@ def warehouse_table_a(db, tenant_a, lakehouse_zone_a, storage_policy_a, data_mar
         schema_type="star",
         grain="transaction",
         primary_key_column="id",
-        partition_key="invoice_date",
-        cluster_keys="customer_id,currency",
         schema_definition=[
             {"name": "id", "type": "BIGINT", "nullable": False},
             {"name": "invoice_date", "type": "DATE", "nullable": False},
@@ -369,7 +368,7 @@ def warehouse_table_a(db, tenant_a, lakehouse_zone_a, storage_policy_a, data_mar
         row_count=100000,
         compressed_bytes=10485760,
         compression_ratio=Decimal("2.80"),
-        is_conformed=True,
+        is_conformed_dimension=True,
         is_active=True,
     )
 
@@ -379,11 +378,11 @@ def lakehouse_zone_b(db, tenant_b):
     return LakehouseZone.objects.create(
         tenant=tenant_b,
         name="Globex Bronze Ingestion Zone",
+        code="globex-bronze-landing",
         zone_type="bronze",
         storage_backend="internal_db",
-        base_path="/warehouse/globex/bronze",
+        base_uri_path="/warehouse/globex/bronze",
         default_format="relational_table",
-        managed_by_platform=True,
         is_active=True,
     )
 
@@ -394,7 +393,7 @@ def storage_policy_b(db, tenant_b):
         tenant=tenant_b,
         name="Globex Monthly Policy",
         partition_strategy="range_time",
-        partition_granularity="monthly",
+        partition_granularity="month",
         compression_codec="zstd",
         vacuum_cadence="monthly",
         time_travel_days=14,
@@ -407,9 +406,10 @@ def data_mart_b(db, tenant_b, admin_user_b):
     return DataMart.objects.create(
         tenant=tenant_b,
         name="Globex Sales Mart",
+        code="globex-sales-mart",
         subject_area="sales",
-        certification_status="verified",
-        access_tier="tenant",
+        certification_status="certified",
+        access_tier="department",
         owner=admin_user_b,
         steward=admin_user_b,
         is_active=True,
@@ -429,7 +429,6 @@ def warehouse_table_b(db, tenant_b, lakehouse_zone_b, storage_policy_b, data_mar
         schema_type="star",
         grain="transaction",
         primary_key_column="id",
-        partition_key="order_date",
         schema_definition=[
             {"name": "id", "type": "BIGINT", "nullable": False},
             {"name": "order_date", "type": "DATE", "nullable": False},
