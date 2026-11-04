@@ -245,7 +245,7 @@
                     <td colspan="10">
                         <div class="empty-state">
                             <i data-lucide="table" class="empty-state-icon"></i>
-                            <div class="empty-state-title">No warehouse tables registered</div>
+                            <h3 class="empty-state-title">No warehouse tables registered</h3>
                             <p class="empty-state-text">Register analytical fact and dimension tables to establish the enterprise star schema.</p>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'bi:warehouse_table_create' %}" class="btn btn-primary mt-4">
