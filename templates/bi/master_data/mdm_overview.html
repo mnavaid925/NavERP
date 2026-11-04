@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+
+{% block title %}Master Data Management (MDM) Overview — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Master Data Management</span>
+        </div>
+        <h1 class="page-title">Master Data Management & Stewardship</h1>
+        <p class="text-muted text-sm">Enterprise single-version-of-truth golden records, match/merge survivorship rules, multi-domain hierarchies, and reference code sets</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Golden Records</span>
+        </a>
+        <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i>
+            <span>Survivorship Rules</span>
+        </a>
+        <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline">
+            <i data-lucide="network"></i>
+            <span>Hierarchies</span>
+        </a>
+        <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i>
+            <span>Reference Codes</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Golden Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="database"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Golden Records</div>
+            <div class="text-2xl font-bold">{{ total_golden_records }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Gold Tier Certified</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ gold_tier_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="user-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pending Steward Review</div>
+            <div class="text-2xl font-bold text-amber-600">{{ pending_review_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="network"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Hierarchy Nodes</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ total_hierarchy_nodes }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Master Domains & Recent Golden Records -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Master Domain Distribution -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Master Record Distribution by Domain</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {% for d in domain_distribution %}
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded">
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">{{ d.label }}</div>
+                        <div class="text-xl font-bold text-slate-800 mt-1">{{ d.count }}</div>
+                        <a href="{% url 'bi:mdm_golden_record_list' %}?domain={{ d.domain }}" class="text-xs text-primary hover:underline mt-1 inline-block">
+                            View records &rarr;
+                        </a>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-3 text-center py-4 text-xs text-muted">
+                        No golden records currently registered.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Golden Records -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Recently Consolidated Golden Records</h3>
+                <a href="{% url 'bi:mdm_golden_record_list' %}" class="text-xs text-primary hover:underline">View All</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Entity Name</th>
+                            <th>Domain</th>
+                            <th>Trust Tier</th>
+                            <th>Status</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for gr in recent_golden_records %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:mdm_golden_record_detail' gr.pk %}" class="text-primary hover:underline">
+                                    {{ gr.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm font-medium text-slate-900">{{ gr.name }}</td>
+                            <td><span class="badge badge-info text-xs">{{ gr.get_domain_display }}</span></td>
+                            <td>
+                                {% if gr.trust_tier == 'gold' %}
+                                <span class="badge badge-green text-xs">Gold</span>
+                                {% elif gr.trust_tier == 'silver' %}
+                                <span class="badge badge-slate text-xs">Silver</span>
+                                {% else %}
+                                <span class="badge badge-amber text-xs">Bronze</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if gr.status == 'approved' %}
+                                <span class="badge badge-green text-xs">Approved</span>
+                                {% elif gr.status == 'pending_review' %}
+                                <span class="badge badge-amber text-xs">Pending Review</span>
+                                {% else %}
+                                <span class="badge badge-slate text-xs">{{ gr.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-mono text-xs font-semibold">{{ gr.confidence_score }}%</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-xs text-muted">
+                                No master records recorded.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Root Level Hierarchies -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Enterprise Hierarchy Trees</h3>
+                <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="text-xs text-primary hover:underline">Manage Trees</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Tree Name</th>
+                            <th>Hierarchy Classification</th>
+                            <th>Linked Entity</th>
+                            <th>Depth</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for root in root_hierarchies %}
+                        <tr>
+                            <td class="font-medium text-sm text-slate-900">
+                                <a href="{% url 'bi:mdm_hierarchy_node_detail' root.pk %}" class="text-primary hover:underline">
+                                    {{ root.name }}
+                                </a>
+                            </td>
+                            <td><span class="badge badge-info text-xs">{{ root.get_hierarchy_type_display }}</span></td>
+                            <td class="text-xs text-slate-700">
+                                {% if root.golden_record %}
+                                {{ root.golden_record.name }}
+                                {% elif root.party %}
+                                {{ root.party.name }}
+                                {% else %}
+                                Root Tree Grouping
+                                {% endif %}
+                            </td>
+                            <td><span class="badge badge-slate text-xs font-mono">Level {{ root.level }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-xs text-muted">
+                                No hierarchy trees configured.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Survivorship Rules & Reference Code Sets -->
+    <div class="space-y-6">
+        <!-- Match & Survivorship Rules -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Survivorship Policies</h3>
+                <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="text-xs text-primary hover:underline">All Rules</a>
+            </div>
+            <div class="card-body space-y-3">
+                {% for rule in survivorship_rules %}
+                <div class="p-2.5 bg-slate-50 border border-slate-200 rounded text-xs">
+                    <div class="flex justify-between items-start">
+                        <a href="{% url 'bi:mdm_survivorship_rule_detail' rule.pk %}" class="font-semibold text-slate-900 hover:text-primary">
+                            {{ rule.name }}
+                        </a>
+                        <span class="font-mono text-slate-500">#{{ rule.priority_order }}</span>
+                    </div>
+                    <div class="text-slate-600 mt-1">
+                        Target: <span class="font-mono font-medium">{{ rule.target_field }}</span> · {{ rule.get_survivorship_strategy_display }}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-muted text-center py-2">No survivorship rules configured.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Managed Reference Code Sets -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Reference Code Sets (RDM)</h3>
+                <a href="{% url 'bi:mdm_reference_code_list' %}" class="text-xs text-primary hover:underline">All Codes</a>
+            </div>
+            <div class="card-body">
+                <div class="space-y-2">
+                    {% for cs in code_set_counts %}
+                    <div class="flex justify-between items-center p-2 bg-slate-50 border border-slate-200 rounded text-xs">
+                        <span class="font-mono font-semibold text-slate-800">{{ cs.code_set }}</span>
+                        <a href="{% url 'bi:mdm_reference_code_list' %}?code_set={{ cs.code_set }}" class="badge badge-info">
+                            {{ cs.count }} code{{ cs.count|pluralize }}
+                        </a>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-muted text-center py-2">No reference codes loaded.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
