@@ -106,14 +106,7 @@ def calculated_measure_create(request):
             measure = form.save(commit=False)
             measure.tenant = request.tenant
             measure.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                "CalculatedMeasure",
-                measure.pk,
-                f"Created calculated measure {measure.name} ({measure.number})",
-            )
+            write_audit_log(request.user, measure, "create", tenant=request.tenant)
             messages.success(request, f"Calculated Measure '{measure.name}' created successfully.")
             return redirect("bi:calculated_measure_detail", pk=measure.pk)
     else:
@@ -133,14 +126,7 @@ def calculated_measure_edit(request, pk):
         form = CalculatedMeasureForm(request.POST, instance=measure, tenant=request.tenant)
         if form.is_valid():
             measure = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                "CalculatedMeasure",
-                measure.pk,
-                f"Updated calculated measure {measure.name} ({measure.number})",
-            )
+            write_audit_log(request.user, measure, "update", tenant=request.tenant)
             messages.success(request, f"Calculated Measure '{measure.name}' updated successfully.")
             return redirect("bi:calculated_measure_detail", pk=measure.pk)
     else:
@@ -163,14 +149,7 @@ def calculated_measure_delete(request, pk):
     name = measure.name
     num = measure.number
     model_pk = measure.semantic_model_id
+    write_audit_log(request.user, measure, "delete", tenant=request.tenant)
     measure.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        "CalculatedMeasure",
-        pk,
-        f"Deleted calculated measure {name} ({num})",
-    )
     messages.success(request, f"Calculated Measure '{name}' ({num}) deleted successfully.")
     return redirect("bi:calculated_measure_list")
