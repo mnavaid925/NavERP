@@ -108,14 +108,7 @@ def data_quality_profile_create(request):
             profile = form.save(commit=False)
             profile.tenant = request.tenant
             profile.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "CREATE",
-                "DataQualityProfile",
-                profile.pk,
-                f"Created DataQualityProfile {profile.name} ({profile.number})",
-            )
+            write_audit_log(request.user, profile, "create", tenant=request.tenant)
             messages.success(request, f"Quality profile '{profile.name}' created successfully.")
             return redirect("bi:data_quality_profile_detail", pk=profile.pk)
     else:
@@ -136,14 +129,7 @@ def data_quality_profile_edit(request, pk):
         form = DataQualityProfileForm(request.POST, instance=profile, tenant=request.tenant)
         if form.is_valid():
             profile = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "UPDATE",
-                "DataQualityProfile",
-                profile.pk,
-                f"Updated DataQualityProfile {profile.name} ({profile.number})",
-            )
+            write_audit_log(request.user, profile, "update", tenant=request.tenant)
             messages.success(request, f"Quality profile '{profile.name}' updated successfully.")
             return redirect("bi:data_quality_profile_detail", pk=profile.pk)
     else:
@@ -162,16 +148,8 @@ def data_quality_profile_edit(request, pk):
 def data_quality_profile_delete(request, pk):
     profile = bi_object(request, DataQualityProfile, pk)
     profile_name = profile.name
-    profile_number = profile.number
+    write_audit_log(request.user, profile, "delete", tenant=request.tenant)
     profile.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "DELETE",
-        "DataQualityProfile",
-        pk,
-        f"Deleted DataQualityProfile {profile_name} ({profile_number})",
-    )
     messages.success(request, f"Quality profile '{profile_name}' deleted successfully.")
     return redirect("bi:data_quality_profile_list")
 
@@ -222,13 +200,6 @@ def data_quality_profile_run(request, pk):
     profile.error_message = ""
     profile.save()
 
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "EXECUTE",
-        "DataQualityProfile",
-        profile.pk,
-        f"Executed data quality profiling for {profile.name} ({profile.number})",
-    )
+    write_audit_log(request.user, profile, "run", tenant=request.tenant)
     messages.success(request, f"Data profiling completed successfully for '{profile.name}'.")
     return redirect("bi:data_quality_profile_detail", pk=profile.pk)
