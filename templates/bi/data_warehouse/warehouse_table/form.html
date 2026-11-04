@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ warehouse_table.name }}{% else %}New Warehouse Table{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_table_list' %}">Warehouse Tables</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit{% else %}Register{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Table: {{ warehouse_table.name }}{% else %}Register Analytical Warehouse Table{% endif %}</h1>
+        <p class="text-muted text-sm">Define star/snowflake schemas, physical table name, lakehouse tier, and column definitions</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:warehouse_table_detail' pk=warehouse_table.pk %}{% else %}{% url 'bi:warehouse_table_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-sm font-semibold text-slate-800">Warehouse Table Metadata</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Dataset Name <span class="text-red-500">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.table_name.id_for_label }}">Physical SQL Table Name <span class="text-red-500">*</span></label>
+                    {{ form.table_name }}
+                    <div class="text-xs text-muted">e.g. fact_gl_journal_entries or dim_customers</div>
+                    {% if form.table_name.errors %}<div class="form-error">{{ form.table_name.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.table_type.id_for_label }}">Table Type</label>
+                    {{ form.table_type }}
+                    {% if form.table_type.errors %}<div class="form-error">{{ form.table_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.schema_type.id_for_label }}">Schema Topology</label>
+                    {{ form.schema_type }}
+                    {% if form.schema_type.errors %}<div class="form-error">{{ form.schema_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.grain.id_for_label }}">Analytical Grain</label>
+                    {{ form.grain }}
+                    {% if form.grain.errors %}<div class="form-error">{{ form.grain.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lakehouse_zone.id_for_label }}">Lakehouse Medallion Tier <span class="text-red-500">*</span></label>
+                    {{ form.lakehouse_zone }}
+                    {% if form.lakehouse_zone.errors %}<div class="form-error">{{ form.lakehouse_zone.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.data_mart.id_for_label }}">Subject Data Mart</label>
+                    {{ form.data_mart }}
+                    {% if form.data_mart.errors %}<div class="form-error">{{ form.data_mart.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.storage_policy.id_for_label }}">Storage &amp; Retention Policy</label>
+                    {{ form.storage_policy }}
+                    {% if form.storage_policy.errors %}<div class="form-error">{{ form.storage_policy.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.primary_key_column.id_for_label }}">Surrogate Primary Key Column</label>
+                    {{ form.primary_key_column }}
+                    <div class="text-xs text-muted">e.g. entry_sk, id, customer_sk</div>
+                    {% if form.primary_key_column.errors %}<div class="form-error">{{ form.primary_key_column.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.natural_key_column.id_for_label }}">Business Natural Key Column</label>
+                    {{ form.natural_key_column }}
+                    <div class="text-xs text-muted">e.g. journal_number, customer_code</div>
+                    {% if form.natural_key_column.errors %}<div class="form-error">{{ form.natural_key_column.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_conformed_dimension }}
+                    <span class="text-sm text-slate-800 font-medium">Conformed Dimension</span>
+                </label>
+                <div class="text-xs text-muted">Shared master dimension referenced across multiple business processes and data marts.</div>
+                {% if form.is_conformed_dimension.errors %}<div class="form-error">{{ form.is_conformed_dimension.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.schema_definition_raw.id_for_label }}">Schema Column Definitions (JSON Array)</label>
+                {{ form.schema_definition_raw }}
+                <div class="text-xs text-muted mt-1">Specify an array of objects: [{"name": "col_name", "type": "VARCHAR(255)", "nullable": true, "description": "..."}]</div>
+                {% if form.schema_definition_raw.errors %}<div class="form-error">{{ form.schema_definition_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description &amp; Upstream Lineage Notes</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm text-slate-800 font-medium">Active Warehouse Table</span>
+                </label>
+                {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:warehouse_table_detail' pk=warehouse_table.pk %}{% else %}{% url 'bi:warehouse_table_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Register Table{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
