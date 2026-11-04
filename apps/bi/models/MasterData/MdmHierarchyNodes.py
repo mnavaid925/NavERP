@@ -92,6 +92,19 @@ class MdmHierarchyNode(TenantNumbered):
             models.Index(fields=["tenant", "is_active"], name="idx_bmhr_ten_active"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if "node_type" in kwargs and "relationship_kind" not in kwargs:
+            kwargs["relationship_kind"] = kwargs.pop("node_type")
+        super().__init__(*args, **kwargs)
+
+    @property
+    def node_type(self):
+        return self.relationship_kind
+
+    @node_type.setter
+    def node_type(self, value):
+        self.relationship_kind = value
+
     def __str__(self):
         return f"{self.number} - {self.name} ({self.get_hierarchy_type_display()})"
 
@@ -99,6 +112,10 @@ class MdmHierarchyNode(TenantNumbered):
         return reverse("bi:mdm_hierarchy_node_detail", kwargs={"pk": self.pk})
 
     def save(self, *args, **kwargs):
+        if not self.code and self.name:
+            from django.utils.text import slugify
+            self.code = slugify(self.name)[:80]
+
         old_path = None
         if self.pk:
             existing = MdmHierarchyNode.objects.filter(pk=self.pk).values("path").first()
