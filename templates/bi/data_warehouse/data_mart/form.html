@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ data_mart.name }}{% else %}New Data Mart{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_mart_list' %}">Data Marts</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Data Mart: {{ data_mart.name }}{% else %}Register Subject Data Mart{% endif %}</h1>
+        <p class="text-muted text-sm">Configure departmental analytics domain, organizational ownership, and governance tier</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_mart_detail' pk=data_mart.pk %}{% else %}{% url 'bi:data_mart_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-sm font-semibold text-slate-800">Data Mart Definition</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-4 bg-red-50 border border-red-200 text-red-700 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Mart Name <span class="text-red-500">*</span></label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.code.id_for_label }}">Slug Code <span class="text-red-500">*</span></label>
+                    {{ form.code }}
+                    {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.subject_area.id_for_label }}">Subject Area</label>
+                    {{ form.subject_area }}
+                    {% if form.subject_area.errors %}<div class="form-error">{{ form.subject_area.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Owning Org Unit / Department</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Business Domain Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.steward.id_for_label }}">Technical Data Steward</label>
+                    {{ form.steward }}
+                    {% if form.steward.errors %}<div class="form-error">{{ form.steward.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.access_tier.id_for_label }}">Access Tier</label>
+                    {{ form.access_tier }}
+                    {% if form.access_tier.errors %}<div class="form-error">{{ form.access_tier.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status</label>
+                    {{ form.certification_status }}
+                    {% if form.certification_status.errors %}<div class="form-error">{{ form.certification_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.refresh_cadence.id_for_label }}">Refresh Cadence</label>
+                    {{ form.refresh_cadence }}
+                    {% if form.refresh_cadence.errors %}<div class="form-error">{{ form.refresh_cadence.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group mb-4">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description &amp; Documentation</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_active }}
+                    <span class="text-sm text-slate-800 font-medium">Active and available for reporting</span>
+                </label>
+                {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:data_mart_detail' pk=data_mart.pk %}{% else %}{% url 'bi:data_mart_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Data Mart{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
