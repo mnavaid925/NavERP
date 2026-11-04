@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Reference Code: {{ reference_code.number }}{% else %}New Reference Code{% endif %} — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_reference_code_list' %}">Reference Codes</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Code{% else %}New Code{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Reference Code: {{ reference_code.canonical_code }}{% else %}Create Reference Code Definition{% endif %}</h1>
+        <p class="text-muted text-sm">Define canonical lookup standards and cross-system translation mappings</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:mdm_reference_code_detail' reference_code.pk %}{% else %}{% url 'bi:mdm_reference_code_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900 text-sm">Reference Code Definition</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_code_set">Code Set Grouping <span class="text-red-500">*</span></label>
+                        {{ form.code_set }}
+                        <span class="text-xs text-muted block mt-1">e.g. country_codes, currency_codes, uom_codes, payment_terms</span>
+                        {% if form.code_set.errors %}
+                        <div class="form-error">{{ form.code_set.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_canonical_code">Canonical Enterprise Code <span class="text-red-500">*</span></label>
+                        {{ form.canonical_code }}
+                        <span class="text-xs text-muted block mt-1">e.g. USA, EUR, KGM, NET30</span>
+                        {% if form.canonical_code.errors %}
+                        <div class="form-error">{{ form.canonical_code.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_canonical_name">Standard Display Name <span class="text-red-500">*</span></label>
+                        {{ form.canonical_name }}
+                        {% if form.canonical_name.errors %}
+                        <div class="form-error">{{ form.canonical_name.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_source_system">Source Feeder System (Optional)</label>
+                        {{ form.source_system }}
+                        <span class="text-xs text-muted block mt-1">e.g. legacy_crm, sap_ecc, web_store</span>
+                        {% if form.source_system.errors %}
+                        <div class="form-error">{{ form.source_system.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_source_code">Source Feeder Code (Optional)</label>
+                        {{ form.source_code }}
+                        <span class="text-xs text-muted block mt-1">Original value in the external system</span>
+                        {% if form.source_code.errors %}
+                        <div class="form-error">{{ form.source_code.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_category">Category / Region</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}
+                        <div class="form-error">{{ form.category.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_status">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                        <div class="form-error">{{ form.status.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_superseded_by">Superseded By (Newer Standard)</label>
+                        {{ form.superseded_by }}
+                        {% if form.superseded_by.errors %}
+                        <div class="form-error">{{ form.superseded_by.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_effective_from">Effective Valid From</label>
+                        {{ form.effective_from }}
+                        {% if form.effective_from.errors %}
+                        <div class="form-error">{{ form.effective_from.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_effective_to">Effective Valid To</label>
+                        {{ form.effective_to }}
+                        {% if form.effective_to.errors %}
+                        <div class="form-error">{{ form.effective_to.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_attributes_text">Supplementary Attributes (JSON format)</label>
+                        {{ form.attributes_text }}
+                        {% if form.attributes_text.errors %}
+                        <div class="form-error">{{ form.attributes_text.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_description">Standards & Semantics Description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <div class="form-error">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-xs font-medium text-slate-700">Code Mapping Active</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <a href="{% if is_edit %}{% url 'bi:mdm_reference_code_detail' reference_code.pk %}{% else %}{% url 'bi:mdm_reference_code_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Reference Code{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
