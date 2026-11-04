@@ -6,15 +6,19 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.bi.models import (
+    BusinessGlossaryTerm,
+    CalculatedMeasure,
     CdcSyncConfig,
     DataMart,
     DataSourceConnector,
+    DrillHierarchy,
     EtlPipeline,
     EtlPipelineRun,
     EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
     LakehouseZone,
+    SemanticModel,
     TransformationStep,
     WarehouseStoragePolicy,
     WarehouseTable,
@@ -438,5 +442,149 @@ def warehouse_table_b(db, tenant_b, lakehouse_zone_b, storage_policy_b, data_mar
         compression_ratio=Decimal("2.50"),
         is_active=True,
     )
+
+
+# ---------------------------------------------------------------------------
+# 10.4 Semantic Layer Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def semantic_model_a(db, tenant_a, warehouse_table, data_mart, admin_user):
+    return SemanticModel.objects.create(
+        tenant=tenant_a,
+        warehouse_table=warehouse_table,
+        data_mart=data_mart,
+        name="Acme Sales Performance Analytics",
+        code="acme_sales_perf",
+        model_type="fact",
+        primary_key_column="id",
+        grain_description="One row per line item",
+        access_tier="department",
+        certification_status="certified",
+        certified_by=admin_user,
+        certified_at=timezone.now(),
+        owner=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def glossary_term_a(db, tenant_a, admin_user):
+    return BusinessGlossaryTerm.objects.create(
+        tenant=tenant_a,
+        name="Net Recurring Revenue",
+        code="net_recurring_revenue",
+        domain_category="finance",
+        short_definition="Standard corporate NRR calculation",
+        full_definition="Percentage of recurring revenue retained from existing customers.",
+        calculation_rule="(Ending ARR - Contraction - Churn + Expansion) / Starting ARR",
+        steward=admin_user,
+        certification_status="certified",
+        certified_by=admin_user,
+        certified_at=timezone.now(),
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def calculated_measure_a(db, tenant_a, semantic_model_a, glossary_term_a):
+    return CalculatedMeasure.objects.create(
+        tenant=tenant_a,
+        semantic_model=semantic_model_a,
+        glossary_term=glossary_term_a,
+        name="Total Sales Revenue",
+        code="total_sales_revenue",
+        aggregation_type="sum",
+        source_column="amount",
+        time_intelligence="none",
+        format_string="currency",
+        display_units="auto",
+        target_value=Decimal("1000000.00"),
+        warning_threshold=Decimal("750000.00"),
+        critical_threshold=Decimal("500000.00"),
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def drill_hierarchy_a(db, tenant_a, semantic_model_a):
+    return DrillHierarchy.objects.create(
+        tenant=tenant_a,
+        semantic_model=semantic_model_a,
+        name="Fiscal Time Drill",
+        code="fiscal_time_drill",
+        hierarchy_type="time",
+        levels_json=[
+            {"level": 1, "name": "Fiscal Year", "column": "fiscal_year"},
+            {"level": 2, "name": "Fiscal Quarter", "column": "fiscal_quarter"},
+            {"level": 3, "name": "Fiscal Month", "column": "fiscal_month"},
+        ],
+        primary_drill_path=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def semantic_model_b(db, tenant_b, warehouse_table_b, data_mart_b, admin_user_b):
+    return SemanticModel.objects.create(
+        tenant=tenant_b,
+        warehouse_table=warehouse_table_b,
+        data_mart=data_mart_b,
+        name="Globex Commercial Model",
+        code="globex_commercial_model",
+        model_type="fact",
+        primary_key_column="id",
+        access_tier="restricted",
+        certification_status="draft",
+        owner=admin_user_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def glossary_term_b(db, tenant_b, admin_user_b):
+    return BusinessGlossaryTerm.objects.create(
+        tenant=tenant_b,
+        name="Globex Customer Churn Rate",
+        code="globex_customer_churn",
+        domain_category="sales",
+        short_definition="Globex Churn percentage formula",
+        steward=admin_user_b,
+        certification_status="draft",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def calculated_measure_b(db, tenant_b, semantic_model_b, glossary_term_b):
+    return CalculatedMeasure.objects.create(
+        tenant=tenant_b,
+        semantic_model=semantic_model_b,
+        glossary_term=glossary_term_b,
+        name="Globex Order Total",
+        code="globex_order_total",
+        aggregation_type="sum",
+        source_column="order_total",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def drill_hierarchy_b(db, tenant_b, semantic_model_b):
+    return DrillHierarchy.objects.create(
+        tenant=tenant_b,
+        semantic_model=semantic_model_b,
+        name="Globex Territory Hierarchy",
+        code="globex_territory_hierarchy",
+        hierarchy_type="geography",
+        levels_json=[
+            {"level": 1, "name": "Region", "column": "region"},
+            {"level": 2, "name": "Country", "column": "country"},
+        ],
+        primary_drill_path=True,
+        is_active=True,
+    )
+
 
 
