@@ -91,12 +91,12 @@
             </div>
             <div class="form-group flex items-end">
                 <div class="flex gap-2 w-full">
-                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter">
+                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter" aria-label="Filter">
                         <i data-lucide="filter"></i>
                         <span>Apply</span>
                     </button>
                     {% if request.GET.q or request.GET.hierarchy_type or request.GET.level %}
-                    <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                         <i data-lucide="x"></i>
                     </a>
                     {% endif %}
@@ -175,15 +175,15 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'bi:mdm_hierarchy_node_detail' node.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'bi:mdm_hierarchy_node_detail' node.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'bi:mdm_hierarchy_node_edit' node.pk %}" class="btn btn-icon" title="Edit Node">
+                        <a href="{% url 'bi:mdm_hierarchy_node_edit' node.pk %}" class="btn btn-icon" title="Edit Node" aria-label="Edit Node">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'bi:mdm_hierarchy_node_delete' node.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete hierarchy node {{ node.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Node">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Node" aria-label="Delete Node">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
