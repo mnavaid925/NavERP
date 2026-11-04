@@ -372,7 +372,7 @@
                 <h3 class="font-semibold text-slate-900 text-sm">Data Stewardship Merge Tool</h3>
             </div>
             <div class="card-body">
-                <form method="post" action="{% url 'bi:mdm_golden_record_merge' golden_record.pk %}">
+                <form method="post" action="{% url 'bi:mdm_golden_record_merge' golden_record.pk %}" onsubmit="return confirm('Absorb selected duplicate into this master golden record?');">
                     {% csrf_token %}
                     <div class="form-group mb-3">
                         <label class="form-label text-xs" for="id_secondary_record">Select Candidate Duplicate</label>
@@ -385,7 +385,7 @@
                         <label class="form-label text-xs" for="id_stewardship_notes">Stewardship Resolution Notes</label>
                         {{ merge_form.stewardship_notes }}
                     </div>
-                    <button type="submit" class="btn btn-primary w-full" onclick="return confirm('Absorb selected duplicate into this master golden record?');">
+                    <button type="submit" class="btn btn-primary w-full">
                         <i data-lucide="git-merge"></i>
                         <span>Execute Merge</span>
                     </button>
