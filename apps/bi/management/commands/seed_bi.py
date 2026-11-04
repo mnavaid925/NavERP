@@ -44,6 +44,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                DataQualityScorecard.objects.all().delete()
+                DataQualityException.objects.all().delete()
+                DataQualityRule.objects.all().delete()
+                DataQualityProfile.objects.all().delete()
                 DrillHierarchy.objects.all().delete()
                 CalculatedMeasure.objects.all().delete()
                 BusinessGlossaryTerm.objects.all().delete()
