@@ -107,6 +107,7 @@ class WarehouseTable(TenantNumbered):
             models.Index(fields=["tenant", "table_type"], name="idx_bdwt_ten_type"),
             models.Index(fields=["tenant", "lakehouse_zone"], name="idx_bdwt_ten_zone"),
             models.Index(fields=["tenant", "data_mart"], name="idx_bdwt_ten_mart"),
+            models.Index(fields=["tenant", "storage_policy"], name="idx_bdwt_ten_policy"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdwt_ten_active"),
         ]
 
