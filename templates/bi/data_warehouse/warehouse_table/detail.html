@@ -84,7 +84,7 @@
                 <div>
                     <div class="text-xs font-semibold uppercase tracking-wider text-muted">Lakehouse Medallion Zone</div>
                     <div class="text-sm font-medium mt-1">
-                        <a href="{% url 'bi:lakehouse_zone_detail' pk=warehouse_table.lakehouse_zone.pk %}" class="text-primary hover:underline">
+                        <a href="{% url 'bi:lakehouse_zone_detail' pk=warehouse_table.lakehouse_zone.pk %}" class="text-blue-600 hover:underline">
                             {{ warehouse_table.lakehouse_zone.name }}
                         </a>
                     </div>
@@ -93,7 +93,7 @@
                     <div class="text-xs font-semibold uppercase tracking-wider text-muted">Departmental Data Mart</div>
                     <div class="text-sm font-medium mt-1">
                         {% if warehouse_table.data_mart %}
-                        <a href="{% url 'bi:data_mart_detail' pk=warehouse_table.data_mart.pk %}" class="text-primary hover:underline">
+                        <a href="{% url 'bi:data_mart_detail' pk=warehouse_table.data_mart.pk %}" class="text-blue-600 hover:underline">
                             {{ warehouse_table.data_mart.name }}
                         </a>
                         {% else %}
@@ -146,7 +146,7 @@
                 <div class="text-xs font-semibold uppercase tracking-wider text-muted">Storage Policy</div>
                 <div class="text-sm font-medium mt-1">
                     {% if warehouse_table.storage_policy %}
-                    <a href="{% url 'bi:warehouse_storage_policy_detail' pk=warehouse_table.storage_policy.pk %}" class="text-primary hover:underline">
+                    <a href="{% url 'bi:warehouse_storage_policy_detail' pk=warehouse_table.storage_policy.pk %}" class="text-blue-600 hover:underline">
                         {{ warehouse_table.storage_policy.name }}
                     </a>
                     {% else %}
