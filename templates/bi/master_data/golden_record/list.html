@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Golden Records — Master Data Management (MDM) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <span>Golden Records</span>
+        </div>
+        <h1 class="page-title">Authoritative Golden Records</h1>
+        <p class="text-muted text-sm">Single-version-of-truth master entity repository consolidating customers, vendors, products, and assets across feeder systems</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>MDM Overview</span>
+        </a>
+        <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="git-merge"></i>
+            <span>Survivorship Rules</span>
+        </a>
+        <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline">
+            <i data-lucide="network"></i>
+            <span>Hierarchies</span>
+        </a>
+        <a href="{% url 'bi:mdm_reference_code_list' %}" class="btn btn-outline">
+            <i data-lucide="book-open"></i>
+            <span>Reference Codes</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Golden Record</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="database"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Records</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Gold Tier Certified</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ gold_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pending Steward Review</div>
+            <div class="text-2xl font-bold text-amber-600">{{ pending_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-merge"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Merged & Consolidated</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ merged_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="form-group sm:col-span-2 md:col-span-1">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, code, tax ID, email..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-domain">Domain</label>
+                <select id="filter-domain" name="domain" class="form-select">
+                    <option value="">All Domains</option>
+                    {% for val, label in domain_choices %}
+                    <option value="{{ val }}" {% if request.GET.domain == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-tier">Trust Tier</label>
+                <div class="flex gap-2">
+                    <select id="filter-tier" name="trust_tier" class="form-select flex-1">
+                        <option value="">All Tiers</option>
+                        {% for val, label in trust_tier_choices %}
+                        <option value="{{ val }}" {% if request.GET.trust_tier == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline" title="Filter">
+                        <i data-lucide="filter"></i>
+                    </button>
+                    {% if request.GET.q or request.GET.domain or request.GET.status or request.GET.trust_tier %}
+                    <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline" title="Reset Filters">
+                        <i data-lucide="x"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Record Number</th>
+                    <th>Master Entity Name</th>
+                    <th>Domain</th>
+                    <th>Trust Tier</th>
+                    <th>Confidence</th>
+                    <th>Status</th>
+                    <th>Crosswalks</th>
+                    <th>Steward</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in golden_records %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:mdm_golden_record_detail' record.pk %}" class="text-primary hover:underline">
+                            {{ record.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-900">{{ record.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ record.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ record.get_domain_display }}</span>
+                    </td>
+                    <td>
+                        {% if record.trust_tier == 'gold' %}
+                        <span class="badge badge-green"><i data-lucide="award" class="w-3 h-3 inline mr-1"></i>Gold</span>
+                        {% elif record.trust_tier == 'silver' %}
+                        <span class="badge badge-slate">Silver</span>
+                        {% else %}
+                        <span class="badge badge-amber">Bronze</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <div class="progress w-16">
+                                <div class="progress-bar {% if record.confidence_score >= 95 %}bg-emerald-500{% elif record.confidence_score >= 80 %}bg-blue-500{% else %}bg-amber-500{% endif %}" style="width: {{ record.confidence_score }}%;"></div>
+                            </div>
+                            <span class="text-xs font-mono font-medium">{{ record.confidence_score }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if record.status == 'approved' %}
+                        <span class="badge badge-green">Approved</span>
+                        {% elif record.status == 'pending_review' %}
+                        <span class="badge badge-amber">Pending Review</span>
+                        {% elif record.status == 'in_dispute' %}
+                        <span class="badge badge-red">In Dispute</span>
+                        {% elif record.status == 'merged' %}
+                        <span class="badge badge-muted">Merged</span>
+                        {% elif record.status == 'draft' %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ record.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ record.source_record_count }} source{{ record.source_record_count|pluralize }}</span>
+                    </td>
+                    <td class="text-xs text-muted">
+                        {% if record.assigned_steward %}
+                        {{ record.assigned_steward.get_full_name|default:record.assigned_steward.username }}
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:mdm_golden_record_detail' record.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:mdm_golden_record_edit' record.pk %}" class="btn btn-icon" title="Edit Record">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:mdm_golden_record_delete' record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete golden master record {{ record.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Record">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state py-8 text-center">
+                            <i data-lucide="database" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Golden Records Found</h3>
+                            <p class="text-sm text-muted mb-4">No master entity records match the selected filter criteria.</p>
+                            <a href="{% url 'bi:mdm_golden_record_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Golden Record</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.domain %}&domain={{ request.GET.domain }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.trust_tier %}&trust_tier={{ request.GET.trust_tier }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.domain %}&domain={{ request.GET.domain }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.trust_tier %}&trust_tier={{ request.GET.trust_tier }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
