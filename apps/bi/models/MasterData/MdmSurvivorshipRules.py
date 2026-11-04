@@ -88,6 +88,7 @@ class MdmSurvivorshipRule(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "domain"], name="idx_bmsr_ten_dom"),
+            models.Index(fields=["tenant", "match_algorithm"], name="idx_bmsr_ten_alg"),
             models.Index(fields=["tenant", "target_field"], name="idx_bmsr_ten_tfield"),
             models.Index(fields=["tenant", "survivorship_strategy"], name="idx_bmsr_ten_strat"),
             models.Index(fields=["tenant", "priority_order"], name="idx_bmsr_ten_porder"),
