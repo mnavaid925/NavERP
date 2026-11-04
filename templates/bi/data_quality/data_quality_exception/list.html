@@ -200,7 +200,7 @@
                             <span class="font-medium text-slate-700 dark:text-slate-300">{{ exc.get_remediation_action_display }}</span>
                         </td>
                         <td class="text-xs text-muted">
-                            {{ exc.assigned_steward.get_full_name|default:exc.assigned_steward.username|default:"Unassigned" }}
+                            {% if exc.assigned_steward %}{{ exc.assigned_steward.get_full_name|default:exc.assigned_steward.username }}{% else %}Unassigned{% endif %}
                         </td>
                         <td class="text-right">
                             <div class="table-actions justify-end">
