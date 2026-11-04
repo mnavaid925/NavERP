@@ -84,6 +84,20 @@ class MdmReferenceCode(TenantNumbered):
             models.Index(fields=["tenant", "is_active"], name="idx_bmrd_ten_active"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        self._is_standard = kwargs.pop("is_standard", None)
+        super().__init__(*args, **kwargs)
+
+    @property
+    def is_standard(self):
+        if self._is_standard is not None:
+            return self._is_standard
+        return not bool(self.source_system)
+
+    @is_standard.setter
+    def is_standard(self, value):
+        self._is_standard = value
+
     def __str__(self):
         source_info = f" [{self.source_system}:{self.source_code}]" if self.source_system else ""
         return f"{self.code_set} / {self.canonical_code} - {self.canonical_name}{source_info}"
