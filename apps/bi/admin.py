@@ -127,7 +127,7 @@ class SemanticModelAdmin(admin.ModelAdmin):
     list_select_related = ("warehouse_table", "data_mart", "owner", "certified_by")
     list_filter = ("model_type", "scd_type", "certification_status", "access_tier", "is_conformed_dimension", "is_virtual_view", "is_active", "tenant")
     search_fields = ("number", "name", "code", "primary_key_column", "natural_key_columns", "description")
-    readonly_fields = ("number", "source_fingerprint", "last_introspected_at", "certified_at", "created_at", "updated_at")
+    readonly_fields = ("number", "tenant", "source_fingerprint", "last_introspected_at", "certified_at", "created_at", "updated_at")
 
 
 @admin.register(BusinessGlossaryTerm)
@@ -136,7 +136,7 @@ class BusinessGlossaryTermAdmin(admin.ModelAdmin):
     list_select_related = ("steward", "org_unit", "certified_by")
     list_filter = ("domain_category", "certification_status", "is_active", "tenant")
     search_fields = ("number", "name", "code", "short_definition", "synonyms")
-    readonly_fields = ("number", "certified_at", "created_at", "updated_at")
+    readonly_fields = ("number", "tenant", "certified_at", "created_at", "updated_at")
 
 
 @admin.register(CalculatedMeasure)
@@ -145,7 +145,7 @@ class CalculatedMeasureAdmin(admin.ModelAdmin):
     list_select_related = ("semantic_model", "glossary_term")
     list_filter = ("aggregation_type", "time_intelligence", "format_string", "display_units", "is_active", "tenant")
     search_fields = ("number", "name", "code", "source_column", "formula_expression", "description")
-    readonly_fields = ("number", "created_at", "updated_at")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
 
 
 @admin.register(DrillHierarchy)
@@ -154,5 +154,5 @@ class DrillHierarchyAdmin(admin.ModelAdmin):
     list_select_related = ("semantic_model",)
     list_filter = ("hierarchy_type", "primary_drill_path", "is_active", "tenant")
     search_fields = ("number", "name", "code", "description")
-    readonly_fields = ("number", "created_at", "updated_at")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
 
