@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.DataWarehouse.DataMarts import DataMart
@@ -25,7 +26,6 @@ class SemanticModelForm(TenantUniqueMixin, TenantModelForm):
             "is_virtual_view",
             "sql_definition",
             "access_tier",
-            "certification_status",
             "owner",
             "description",
             "is_active",
@@ -44,7 +44,6 @@ class SemanticModelForm(TenantUniqueMixin, TenantModelForm):
             "is_virtual_view": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "sql_definition": forms.Textarea(attrs={"class": "form-textarea font-mono text-xs", "rows": 5, "placeholder": "SELECT ... FROM ..."}),
             "access_tier": forms.Select(attrs={"class": "form-select"}),
-            "certification_status": forms.Select(attrs={"class": "form-select"}),
             "owner": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
@@ -53,13 +52,23 @@ class SemanticModelForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["warehouse_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant)
-            self.fields["data_mart"].queryset = DataMart.objects.filter(tenant=self.tenant)
-            self.fields["owner"].queryset = get_user_model().objects.filter(is_active=True)
+            self.fields["warehouse_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant).order_by("name")
+            self.fields["data_mart"].queryset = DataMart.objects.filter(tenant=self.tenant).order_by("name")
+            user_qs = get_user_model().objects.filter(tenant=self.tenant)
+            owner_filter = Q(is_active=True)
+            if self.instance and self.instance.pk and self.instance.owner_id:
+                owner_filter |= Q(pk=self.instance.owner_id)
+            self.fields["owner"].queryset = user_qs.filter(owner_filter).order_by("username")
+        else:
+            self.fields["warehouse_table"].queryset = WarehouseTable.objects.none()
+            self.fields["data_mart"].queryset = DataMart.objects.none()
+            self.fields["owner"].queryset = get_user_model().objects.none()
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["warehouse_table", "data_mart"])
+        reject_foreign(self, cleaned_data, ["warehouse_table", "data_mart", "owner"])
+        if cleaned_data.get("is_virtual_view") and not (cleaned_data.get("sql_definition") or "").strip():
+            self.add_error("sql_definition", "SQL definition is required when 'is_virtual_view' is enabled.")
         return cleaned_data
 
 
