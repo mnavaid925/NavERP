@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ hierarchy.name }}{% else %}New Drill Hierarchy{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:drill_hierarchy_list' %}">Drill Hierarchies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ hierarchy.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Hierarchy: {{ hierarchy.name }}{% else %}Author New Drill Hierarchy{% endif %}</h1>
+        <p class="text-muted text-sm">Configure multi-level ordered drill paths for self-service dimensional navigation</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:drill_hierarchy_detail' hierarchy.pk %}{% else %}{% url 'bi:drill_hierarchy_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Drill Hierarchy Specification</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Model & Classification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Model Binding & Classification</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Target Semantic Model <span class="text-red-500">*</span></label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.hierarchy_type.id_for_label }}">Hierarchy Dimension Type <span class="text-red-500">*</span></label>
+                            {{ form.hierarchy_type }}
+                            {% if form.hierarchy_type.errors %}<div class="form-error">{{ form.hierarchy_type.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hierarchy Identification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Hierarchy Identification</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Hierarchy Title <span class="text-red-500">*</span></label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.code.id_for_label }}">Identifier Slug / Code <span class="text-red-500">*</span></label>
+                            {{ form.code }}
+                            {% if form.code.errors %}<div class="form-error">{{ form.code.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group sm:col-span-2 flex items-center pt-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.primary_drill_path }}
+                                <span class="text-sm font-medium text-slate-800">Set as Primary Drill Path for this Model</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Levels JSON Specification -->
+                <div class="border-b border-slate-100 pb-4">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Ordered Hierarchy Levels (JSON)</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.levels_json_raw.id_for_label }}">Drill Levels Array</label>
+                        {{ form.levels_json_raw }}
+                        {% if form.levels_json_raw.errors %}<div class="form-error">{{ form.levels_json_raw.errors }}</div>{% endif %}
+                        <p class="text-xs text-muted mt-1">Provide a JSON array of level objects with 'level', 'name', and 'column' keys in drill-down order.</p>
+                    </div>
+                </div>
+
+                <!-- Context & State -->
+                <div class="border-b border-slate-100 pb-4">
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-800">Hierarchy is Active</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:drill_hierarchy_detail' hierarchy.pk %}{% else %}{% url 'bi:drill_hierarchy_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Hierarchy{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
