@@ -17,6 +17,10 @@ from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
 from apps.bi.models.EtlPipelines.TransformationSteps import TransformationStep
+from apps.bi.models.DataQuality.DataQualityExceptions import DataQualityException
+from apps.bi.models.DataQuality.DataQualityProfiles import DataQualityProfile
+from apps.bi.models.DataQuality.DataQualityRules import DataQualityRule
+from apps.bi.models.DataQuality.DataQualityScorecards import DataQualityScorecard
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -1204,5 +1208,275 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Semantic Layer for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Semantic Layer already seeded for tenant: {tenant.name}")
+
+            # --- 10.5 Data Quality & Cleansing Seeding ---
+            if not DataQualityProfile.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    tbl_sales = WarehouseTable.objects.filter(tenant=tenant, table_name="fact_sales_orders").first()
+                    tbl_customers = WarehouseTable.objects.filter(tenant=tenant, table_name="dim_customers").first()
+                    sm_sales = SemanticModel.objects.filter(tenant=tenant, code="sales_performance_model").first()
+
+                    # 1. Data Quality Profiles
+                    prof_sales, _ = DataQualityProfile.objects.get_or_create(
+                        tenant=tenant,
+                        name="Sales Fact Table Quality Profile",
+                        defaults={
+                            "target_type": "warehouse_table",
+                            "warehouse_table": tbl_sales,
+                            "semantic_model": None,
+                            "status": "completed",
+                            "total_row_count": 1250,
+                            "total_column_count": 8,
+                            "completeness_score": Decimal("99.80"),
+                            "uniqueness_score": Decimal("100.00"),
+                            "validity_score": Decimal("99.40"),
+                            "column_profiles_json": [
+                                {"column_name": "order_sk", "data_type": "BIGINT", "null_count": 0, "null_pct": "0.00%", "distinct_count": 1250, "distinct_pct": "100.00%", "min_value": "1", "max_value": "1250", "completeness_score": "100.00%"},
+                                {"column_name": "order_number", "data_type": "VARCHAR(60)", "null_count": 0, "null_pct": "0.00%", "distinct_count": 1250, "distinct_pct": "100.00%", "min_value": "SO-0001", "max_value": "SO-1250", "completeness_score": "100.00%"},
+                                {"column_name": "total_amount", "data_type": "DECIMAL(14,2)", "null_count": 0, "null_pct": "0.00%", "distinct_count": 890, "distinct_pct": "71.20%", "min_value": "15.00", "max_value": "45000.00", "completeness_score": "100.00%"},
+                                {"column_name": "tax_amount", "data_type": "DECIMAL(14,2)", "null_count": 2, "null_pct": "0.16%", "distinct_count": 420, "distinct_pct": "33.60%", "min_value": "0.00", "max_value": "4500.00", "completeness_score": "99.84%"},
+                            ],
+                            "profiled_by": admin_user,
+                            "profiled_at": now,
+                            "duration_seconds": Decimal("1.42"),
+                            "notes": "Automated profiling of commercial sales transactions.",
+                            "is_active": True,
+                        },
+                    )
+
+                    prof_cust, _ = DataQualityProfile.objects.get_or_create(
+                        tenant=tenant,
+                        name="Customer Analytical Master Quality Profile",
+                        defaults={
+                            "target_type": "semantic_model" if sm_sales else "warehouse_table",
+                            "warehouse_table": tbl_customers,
+                            "semantic_model": sm_sales,
+                            "status": "completed",
+                            "total_row_count": 450,
+                            "total_column_count": 6,
+                            "completeness_score": Decimal("98.90"),
+                            "uniqueness_score": Decimal("100.00"),
+                            "validity_score": Decimal("98.70"),
+                            "column_profiles_json": [
+                                {"column_name": "customer_sk", "data_type": "BIGINT", "null_count": 0, "null_pct": "0.00%", "distinct_count": 450, "distinct_pct": "100.00%", "min_value": "1", "max_value": "450", "completeness_score": "100.00%"},
+                                {"column_name": "email", "data_type": "VARCHAR(255)", "null_count": 3, "null_pct": "0.67%", "distinct_count": 447, "distinct_pct": "99.33%", "min_value": "a@corp.com", "max_value": "z@corp.com", "completeness_score": "99.33%"},
+                            ],
+                            "profiled_by": admin_user,
+                            "profiled_at": now,
+                            "duration_seconds": Decimal("0.85"),
+                            "notes": "Profiling customer master contact info and attributes.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 2. Data Quality Rules
+                    rule_amount, _ = DataQualityRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="sales_order_amount_gt_zero",
+                        defaults={
+                            "name": "Sales Order Amount Greater Than Zero",
+                            "rule_category": "validation",
+                            "dimension": "accuracy",
+                            "target_type": "warehouse_table",
+                            "warehouse_table": tbl_sales,
+                            "target_column": "total_amount",
+                            "rule_type": "range_between",
+                            "parameters_json": {"min_value": 0.01, "max_value": 1000000.00},
+                            "severity": "critical",
+                            "failure_tolerance_pct": Decimal("0.00"),
+                            "last_run_at": now,
+                            "last_status": "passed",
+                            "passed_records_count": 1250,
+                            "failed_records_count": 0,
+                            "pass_rate_pct": Decimal("100.00"),
+                            "steward": admin_user,
+                            "description": "Total amount on confirmed order lines must be strictly positive.",
+                            "is_active": True,
+                        },
+                    )
+
+                    rule_email, _ = DataQualityRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="customer_email_syntax_check",
+                        defaults={
+                            "name": "Customer Email Syntax Validation",
+                            "rule_category": "validation",
+                            "dimension": "validity",
+                            "target_type": "warehouse_table",
+                            "warehouse_table": tbl_customers,
+                            "target_column": "email",
+                            "rule_type": "regex_pattern",
+                            "parameters_json": {"regex": r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"},
+                            "severity": "warning",
+                            "failure_tolerance_pct": Decimal("1.00"),
+                            "last_run_at": now,
+                            "last_status": "warning",
+                            "passed_records_count": 447,
+                            "failed_records_count": 3,
+                            "pass_rate_pct": Decimal("99.33"),
+                            "steward": admin_user,
+                            "description": "Validate that customer email addresses conform to standard format.",
+                            "is_active": True,
+                        },
+                    )
+
+                    rule_freshness, _ = DataQualityRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="sales_fact_freshness_sla",
+                        defaults={
+                            "name": "Sales Fact Table 24H Freshness SLA",
+                            "rule_category": "consistency",
+                            "dimension": "timeliness",
+                            "target_type": "warehouse_table",
+                            "warehouse_table": tbl_sales,
+                            "target_column": "updated_at",
+                            "rule_type": "date_freshness",
+                            "parameters_json": {"max_age_hours": 24},
+                            "severity": "critical",
+                            "failure_tolerance_pct": Decimal("0.00"),
+                            "last_run_at": now,
+                            "last_status": "passed",
+                            "passed_records_count": 1250,
+                            "failed_records_count": 0,
+                            "pass_rate_pct": Decimal("100.00"),
+                            "steward": admin_user,
+                            "description": "Fact table records must not be older than 24 hours.",
+                            "is_active": True,
+                        },
+                    )
+
+                    rule_dedup, _ = DataQualityRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="customer_fuzzy_dedup_check",
+                        defaults={
+                            "name": "Customer Account Fuzzy Deduplication",
+                            "rule_category": "uniqueness",
+                            "dimension": "uniqueness",
+                            "target_type": "warehouse_table",
+                            "warehouse_table": tbl_customers,
+                            "target_column": "name",
+                            "rule_type": "duplicate_cluster",
+                            "parameters_json": {"fuzzy_algorithm": "levenshtein", "match_threshold": 0.85},
+                            "severity": "warning",
+                            "failure_tolerance_pct": Decimal("0.50"),
+                            "last_run_at": now,
+                            "last_status": "warning",
+                            "passed_records_count": 448,
+                            "failed_records_count": 2,
+                            "pass_rate_pct": Decimal("99.55"),
+                            "steward": admin_user,
+                            "description": "Flag potential duplicate customer records based on fuzzy string distance.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. Data Quality Exceptions
+                    DataQualityException.objects.get_or_create(
+                        tenant=tenant,
+                        rule=rule_email,
+                        record_identifier="CUST-00042",
+                        defaults={
+                            "profile": prof_cust,
+                            "warehouse_table": tbl_customers,
+                            "target_column": "email",
+                            "invalid_value": "john.doe@invalid-domain-syntax",
+                            "expected_condition": "Valid email conforming to regex pattern",
+                            "exception_type": "format_invalid",
+                            "severity": "warning",
+                            "status": "open",
+                            "remediation_action": "none",
+                            "proposed_value": "john.doe@valid-domain.com",
+                            "assigned_steward": admin_user,
+                            "resolution_notes": "Outreach needed to customer to verify domain extension.",
+                            "is_active": True,
+                        },
+                    )
+
+                    DataQualityException.objects.get_or_create(
+                        tenant=tenant,
+                        rule=rule_dedup,
+                        record_identifier="CUST-00108 / CUST-00214",
+                        defaults={
+                            "profile": prof_cust,
+                            "warehouse_table": tbl_customers,
+                            "target_column": "name",
+                            "invalid_value": "Acme Corp Ltd vs Acme Corporation Limited",
+                            "expected_condition": "Distinct non-duplicate commercial accounts",
+                            "exception_type": "duplicate_candidate",
+                            "severity": "warning",
+                            "status": "investigating",
+                            "remediation_action": "merge_duplicate",
+                            "proposed_value": "Acme Corporation Ltd",
+                            "assigned_steward": admin_user,
+                            "resolution_notes": "Candidate match identified with 92% fuzzy similarity score.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. Data Quality Scorecards
+                    DataQualityScorecard.objects.get_or_create(
+                        tenant=tenant,
+                        code="sales_commercial_dq_scorecard",
+                        defaults={
+                            "name": "Sales Commercial Data Quality Scorecard",
+                            "scope_type": "warehouse_table",
+                            "warehouse_table": tbl_sales,
+                            "overall_quality_score": Decimal("99.50"),
+                            "completeness_score": Decimal("99.80"),
+                            "accuracy_score": Decimal("100.00"),
+                            "consistency_score": Decimal("99.40"),
+                            "timeliness_score": Decimal("100.00"),
+                            "uniqueness_score": Decimal("100.00"),
+                            "validity_score": Decimal("97.80"),
+                            "grade": "A",
+                            "health_status": "healthy",
+                            "target_quality_score": Decimal("95.00"),
+                            "meets_sla": True,
+                            "total_rules_evaluated": 8,
+                            "rules_passed_count": 8,
+                            "rules_failed_count": 0,
+                            "open_exceptions_count": 0,
+                            "critical_exceptions_count": 0,
+                            "evaluation_period": "daily",
+                            "last_calculated_at": now,
+                            "steward": admin_user,
+                            "description": "Sales operations executive data trust and SLA scorecard.",
+                            "is_active": True,
+                        },
+                    )
+
+                    DataQualityScorecard.objects.get_or_create(
+                        tenant=tenant,
+                        code="enterprise_dti_scorecard",
+                        defaults={
+                            "name": "Enterprise Data Trust Index Scorecard",
+                            "scope_type": "tenant_wide",
+                            "overall_quality_score": Decimal("98.60"),
+                            "completeness_score": Decimal("99.20"),
+                            "accuracy_score": Decimal("98.50"),
+                            "consistency_score": Decimal("97.80"),
+                            "timeliness_score": Decimal("100.00"),
+                            "uniqueness_score": Decimal("99.90"),
+                            "validity_score": Decimal("96.20"),
+                            "grade": "A",
+                            "health_status": "healthy",
+                            "target_quality_score": Decimal("95.00"),
+                            "meets_sla": True,
+                            "total_rules_evaluated": 24,
+                            "rules_passed_count": 22,
+                            "rules_failed_count": 2,
+                            "open_exceptions_count": 2,
+                            "critical_exceptions_count": 0,
+                            "evaluation_period": "weekly",
+                            "last_calculated_at": now,
+                            "steward": admin_user,
+                            "description": "Executive tenant-wide aggregate data quality index across all warehouse domains.",
+                            "is_active": True,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Quality for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Data Quality already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
