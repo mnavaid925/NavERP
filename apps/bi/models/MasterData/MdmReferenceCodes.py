@@ -15,6 +15,15 @@ class MdmReferenceCode(TenantNumbered):
         ("inactive", "Inactive"),
     ]
 
+    CODE_SET_CHOICES = [
+        ("ISO-4217-CURRENCY", "ISO 4217 Currency Codes"),
+        ("ISO-3166-COUNTRY", "ISO 3166 Country Codes"),
+        ("UN-ECE-UOM", "UN/ECE Units of Measure"),
+        ("INC-TERMS", "Incoterms Delivery Rules"),
+        ("PAYMENT-TERMS", "Commercial Payment Terms"),
+        ("CUSTOM", "Custom Enterprise Code Set"),
+    ]
+
     code_set = models.CharField(
         max_length=80,
         db_index=True,
