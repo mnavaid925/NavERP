@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Hierarchy Nodes — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <span>Hierarchy Nodes</span>
+        </div>
+        <h1 class="page-title">Hierarchy & Relationship Management</h1>
+        <p class="text-muted text-sm">Multi-domain parent-child trees: corporate structures, sales account groups, product taxonomies, and org reporting</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>MDM Overview</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Golden Records</span>
+        </a>
+        <a href="{% url 'bi:mdm_hierarchy_node_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Hierarchy Node</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="network"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Tree Nodes</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="git-pull-request"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Root Level Trees</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ root_nodes_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="folder-tree"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Hierarchy Domains</div>
+            <div class="text-2xl font-bold text-indigo-600">6 Domains</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="form-group sm:col-span-2 md:col-span-1">
+                <label class="form-label text-xs" for="filter-q">Search Nodes</label>
+                <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, code, relationship..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-type">Hierarchy Type</label>
+                <select id="filter-type" name="hierarchy_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in hierarchy_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.hierarchy_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-level">Tree Level</label>
+                <select id="filter-level" name="level" class="form-select">
+                    <option value="">All Levels</option>
+                    <option value="1" {% if request.GET.level == "1" %}selected{% endif %}>Level 1 (Root)</option>
+                    <option value="2" {% if request.GET.level == "2" %}selected{% endif %}>Level 2 (Division / Subsidiary)</option>
+                    <option value="3" {% if request.GET.level == "3" %}selected{% endif %}>Level 3 (Department / Category)</option>
+                    <option value="4" {% if request.GET.level == "4" %}selected{% endif %}>Level 4 (Team / Sub-Category)</option>
+                </select>
+            </div>
+            <div class="form-group flex items-end">
+                <div class="flex gap-2 w-full">
+                    <button type="submit" class="btn btn-outline flex-1 justify-center" title="Filter">
+                        <i data-lucide="filter"></i>
+                        <span>Apply</span>
+                    </button>
+                    {% if request.GET.q or request.GET.hierarchy_type or request.GET.level %}
+                    <a href="{% url 'bi:mdm_hierarchy_node_list' %}" class="btn btn-outline" title="Reset Filters">
+                        <i data-lucide="x"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Node Number</th>
+                    <th>Hierarchy Node Name</th>
+                    <th>Type</th>
+                    <th>Parent Node</th>
+                    <th>Tree Depth</th>
+                    <th>Linked Entity</th>
+                    <th>Path</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in hierarchy_nodes %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:mdm_hierarchy_node_detail' node.pk %}" class="text-primary hover:underline">
+                            {{ node.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-900" style="padding-left: {{ node.level|add:'-1'|default:0 }}rem;">
+                            {% if node.level > 1 %}<span class="text-slate-400 mr-1">└─</span>{% endif %}
+                            {{ node.name }}
+                        </div>
+                        <div class="text-xs text-muted font-mono" style="padding-left: {{ node.level|add:'-1'|default:0 }}rem;">{{ node.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ node.get_hierarchy_type_display }}</span>
+                    </td>
+                    <td class="text-xs">
+                        {% if node.parent %}
+                        <a href="{% url 'bi:mdm_hierarchy_node_detail' node.parent.pk %}" class="text-slate-700 hover:underline">
+                            {{ node.parent.name }}
+                        </a>
+                        {% else %}
+                        <span class="badge badge-green text-xs">Root Node</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs font-mono">Level {{ node.level }}</span>
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {% if node.golden_record %}
+                        <span class="badge badge-amber text-xs font-mono">BMGR: {{ node.golden_record.name }}</span>
+                        {% elif node.party %}
+                        <span class="badge badge-slate text-xs">Party: {{ node.party.name }}</span>
+                        {% elif node.org_unit %}
+                        <span class="badge badge-slate text-xs">Org: {{ node.org_unit.name }}</span>
+                        {% elif node.item_category %}
+                        <span class="badge badge-slate text-xs">Category: {{ node.item_category.name }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs text-muted">{{ node.path|default:"—" }}</td>
+                    <td>
+                        {% if node.is_active %}
+                        <span class="badge badge-green">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:mdm_hierarchy_node_detail' node.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:mdm_hierarchy_node_edit' node.pk %}" class="btn btn-icon" title="Edit Node">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:mdm_hierarchy_node_delete' node.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete hierarchy node {{ node.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Node">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state py-8 text-center">
+                            <i data-lucide="network" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Hierarchy Nodes Found</h3>
+                            <p class="text-sm text-muted mb-4">No tree nodes match the current filter selection.</p>
+                            <a href="{% url 'bi:mdm_hierarchy_node_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Hierarchy Node</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% endif %}
+            <span class="btn btn-outline btn-sm active">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
