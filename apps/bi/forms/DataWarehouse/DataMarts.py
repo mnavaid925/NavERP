@@ -1,4 +1,6 @@
 from django import forms
+from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.DataWarehouse.DataMarts import DataMart
@@ -40,6 +42,19 @@ class DataMartForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
+            user_qs = get_user_model().objects.filter(tenant=self.tenant)
+            owner_filter = Q(is_active=True)
+            steward_filter = Q(is_active=True)
+            if self.instance and self.instance.pk:
+                if self.instance.owner_id:
+                    owner_filter |= Q(pk=self.instance.owner_id)
+                if self.instance.steward_id:
+                    steward_filter |= Q(pk=self.instance.steward_id)
+            self.fields["owner"].queryset = user_qs.filter(owner_filter).order_by("username")
+            self.fields["steward"].queryset = user_qs.filter(steward_filter).order_by("username")
+        else:
+            self.fields["owner"].queryset = get_user_model().objects.none()
+            self.fields["steward"].queryset = get_user_model().objects.none()
 
     def clean_code(self):
         code = self.cleaned_data.get("code", "").strip().lower()
@@ -53,5 +68,5 @@ class DataMartForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["org_unit"])
+        reject_foreign(self, cleaned_data, ["org_unit", "owner", "steward"])
         return cleaned_data
