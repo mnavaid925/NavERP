@@ -21,7 +21,7 @@
             {% elif warehouse_table.table_type == 'dimension' %}
             <span class="badge badge-green">{{ warehouse_table.get_table_type_display }}</span>
             {% elif warehouse_table.table_type == 'aggregate' %}
-            <span class="badge badge-purple">{{ warehouse_table.get_table_type_display }}</span>
+            <span class="badge badge-slate">{{ warehouse_table.get_table_type_display }}</span>
             {% else %}
             <span class="badge badge-slate">{{ warehouse_table.get_table_type_display }}</span>
             {% endif %}
