@@ -8,8 +8,12 @@ from apps.accounts.models import User
 from apps.bi.models import (
     CdcSyncConfig,
     DataSourceConnector,
+    EtlPipeline,
+    EtlPipelineRun,
+    EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
+    TransformationStep,
 )
 
 
@@ -145,3 +149,145 @@ def bi_run_b(db, tenant_b, bi_pipeline_b):
         records_extracted=50,
         records_inserted=50,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 10.2 (ETL/ELT & Data Pipelines) Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def etl_pipeline_a(db, tenant_a, admin_user, bi_pipeline):
+    return EtlPipeline.objects.create(
+        tenant=tenant_a,
+        name="Acme Invoices Daily Mart",
+        description="Transforms raw staging invoices into fact_daily_sales mart",
+        source_ingestion_pipeline=bi_pipeline,
+        source_staging_table="stg_accounting_invoices",
+        target_table="fact_daily_sales",
+        target_layer="warehouse_fact",
+        trigger_type="scheduled_cron",
+        cron_expression="0 2 * * *",
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def etl_step_a(db, tenant_a, etl_pipeline_a):
+    return TransformationStep.objects.create(
+        tenant=tenant_a,
+        pipeline=etl_pipeline_a,
+        name="Join Customer Master",
+        step_type="join",
+        sequence=1,
+        upstream_step_ids=[],
+        step_config={"join_type": "inner", "left_key": "customer_id", "right_key": "id"},
+        status="active",
+        is_blocking=True,
+    )
+
+
+@pytest.fixture
+def etl_version_a(db, tenant_a, admin_user, etl_pipeline_a):
+    ver = EtlPipelineVersion.objects.create(
+        tenant=tenant_a,
+        pipeline=etl_pipeline_a,
+        version_number="v1.0.0",
+        environment="production",
+        status="published",
+        changelog="Initial production deployment",
+        promoted_by=admin_user,
+        promoted_at=timezone.now(),
+    )
+    etl_pipeline_a.active_version = ver
+    etl_pipeline_a.save(update_fields=["active_version"])
+    return ver
+
+
+@pytest.fixture
+def etl_run_a(db, tenant_a, etl_pipeline_a, etl_version_a):
+    return EtlPipelineRun.objects.create(
+        tenant=tenant_a,
+        pipeline=etl_pipeline_a,
+        version=etl_version_a,
+        trigger_type="scheduled",
+        status="completed",
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        duration_seconds=Decimal("12.50"),
+        records_in=1000,
+        records_transformed=980,
+        records_out=980,
+        records_rejected=20,
+        bytes_processed=1048576,
+    )
+
+
+@pytest.fixture
+def etl_pipeline_b(db, tenant_b, admin_user_b, bi_pipeline_b):
+    return EtlPipeline.objects.create(
+        tenant=tenant_b,
+        name="Globex Invoices Daily Mart",
+        description="Globex transformation mart",
+        source_ingestion_pipeline=bi_pipeline_b,
+        source_staging_table="stg_accounting_invoices",
+        target_table="fact_daily_sales",
+        target_layer="warehouse_fact",
+        trigger_type="scheduled_cron",
+        cron_expression="0 3 * * *",
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def etl_step_b(db, tenant_b, etl_pipeline_b):
+    return TransformationStep.objects.create(
+        tenant=tenant_b,
+        pipeline=etl_pipeline_b,
+        name="Globex Customer Join",
+        step_type="join",
+        sequence=1,
+        upstream_step_ids=[],
+        step_config={"join_type": "left", "left_key": "cust_id", "right_key": "id"},
+        status="active",
+        is_blocking=True,
+    )
+
+
+@pytest.fixture
+def etl_version_b(db, tenant_b, admin_user_b, etl_pipeline_b):
+    ver = EtlPipelineVersion.objects.create(
+        tenant=tenant_b,
+        pipeline=etl_pipeline_b,
+        version_number="v1.0.0",
+        environment="production",
+        status="published",
+        changelog="Globex initial release",
+        promoted_by=admin_user_b,
+        promoted_at=timezone.now(),
+    )
+    etl_pipeline_b.active_version = ver
+    etl_pipeline_b.save(update_fields=["active_version"])
+    return ver
+
+
+@pytest.fixture
+def etl_run_b(db, tenant_b, etl_pipeline_b, etl_version_b):
+    return EtlPipelineRun.objects.create(
+        tenant=tenant_b,
+        pipeline=etl_pipeline_b,
+        version=etl_version_b,
+        trigger_type="manual",
+        status="completed",
+        started_at=timezone.now(),
+        ended_at=timezone.now(),
+        duration_seconds=Decimal("5.20"),
+        records_in=500,
+        records_transformed=500,
+        records_out=500,
+        records_rejected=0,
+        bytes_processed=524288,
+    )
+
