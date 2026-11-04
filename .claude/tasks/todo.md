@@ -7,6 +7,229 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.4: Data Modeling & Semantic Layer (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.4.md` (2026-11-04)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, and 10.3.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0010_warehousetable_idx_bdwt_ten_created.py`, so **10.4 claims `0011`** (or next available).
+> Plan written from `.claude/tasks/research-bi-10.4.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/SemanticLayer/`
+> Template folder name: `templates/bi/semantic_layer/{semantic_model,business_glossary_term,calculated_measure,drill_hierarchy}/` + `semantic_overview.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Data Modeling & Semantic Layer Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Underlying Analytical Source: `SemanticModel.warehouse_table` links to verified sibling `bi.WarehouseTable` (Sub-module 10.3, set null on delete).
+  - Departmental Mart Scoping: `SemanticModel.data_mart` links to verified sibling `bi.DataMart` (Sub-module 10.3, set null on delete).
+  - Glossary Domain Ownership: `BusinessGlossaryTerm.org_unit` links to verified `core.OrgUnit` (Module 0.1 Org Units, set null on delete).
+  - User references: `SemanticModel.owner`, `SemanticModel.certified_by`, `BusinessGlossaryTerm.steward`, and `BusinessGlossaryTerm.certified_by` link to `settings.AUTH_USER_MODEL`.
+  - Operational Boundary: 10.4 owns *abstract business semantic models (facts, dimensions, bridge entities, virtual analytical views, certified reusable datasets), grain declarations, SCD Type 0/1/2/3 versioning metadata, conformed dimension designations, centralized business glossary definitions and synonyms, reusable calculated measures with standard aggregations and time-intelligence calculations, and governed multi-level drill-down hierarchies*. Downstream 10.8-10.12 reporting components query 10.4 semantic models rather than raw physical SQL schemas.
+  - Audit logging: Administrative actions (model certification, term certification, schema introspection) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Sibling Boundaries (10.1 vs. 10.2 vs. 10.3 vs. 10.4 vs. 10.5 vs. 10.7 vs. 10.8)**:
+  - 10.1 (`DataIntegration`): Source connectors, batch/real-time ingestion schedules, CDC delta capture, webhook gateway.
+  - 10.2 (`EtlPipelines`): Visual DAG pipeline designer, transformation node library (joins, aggregations, pivots), execution runs.
+  - 10.3 (`DataWarehouse`): Consolidated star/snowflake warehouse tables, subject data marts, medallion zones, partition strategies, storage lifecycle tiering.
+  - 10.4 (`SemanticLayer`): Business glossary, friendly metric definitions, reusable calculated measures, drill-down hierarchies, governed virtual datasets.
+  - 10.5 (`DataQuality`): Automated profiling metrics, duplicate entity resolution, fuzzy matching, steward exception queues.
+  - 10.7 (`DataCatalog`): Enterprise search catalog, PII/regulatory tags, end-to-end column-level visual lineage graphs.
+  - 10.8 (`InteractiveDashboards`): Drag-and-drop dashboard canvases, chart widgets, interactive filtering consuming 10.4 semantic models.
+- **Prefix Collision Sweep**: `BSMD` (SemanticModel), `BGLO` (BusinessGlossaryTerm), `BCMS` (CalculatedMeasure), `BDHI` (DrillHierarchy) verified 100% collision-free across the entire repository.
+
+---
+
+## 10.4-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO live distributed OLAP cube query runtime (MDX/XMLA)** — Deferred to 10.12 OLAP & Multidimensional Cubes; 10.4 manages declarative semantic definitions, calculations, and relationships.
+- [ ] **NO live external Git sync with dbt Cloud / MetricFlow APIs** — External SaaS integration sync is reserved for 10.19 / advanced integration tiers.
+- [ ] **NO custom arbitrary Python/R script runtime execution in formulas** — Formulas are expressed via safe declarative mathematical expressions and standard SQL aggregations.
+- [ ] **NO natural-language-to-SQL LLM chatbot query generation** — Deferred to 10.15 Natural Language & Conversational BI.
+
+---
+
+## Models (4 models in `apps/bi/models/SemanticLayer/`)
+
+- [ ] **`SemanticModel`** [Prefix: `BSMD-`] (`apps/bi/models/SemanticLayer/SemanticModels.py`)
+  - **Purpose**: Governed business entity representing analytical facts, dimensions, virtual views, and certified reusable datasets with modeling grain, SCD policy, and warehouse table linkage.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Sales Performance Model", "General Ledger Financials")
+    - `code`: `SlugField(max_length=50)` (e.g. "sales_performance", "gl_financials")
+    - `model_type`: `CharField(max_length=25, choices=[('fact', 'Fact Model'), ('dimension', 'Dimension Model'), ('bridge', 'Bridge / Disambiguation Model'), ('virtual_view', 'Virtual Analytical View'), ('reusable_dataset', 'Certified Reusable Dataset')], default='fact')` (driver: 10.4-DM-01)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', on_delete=models.SET_NULL, null=True, blank=True, related_name='semantic_models', help_text="Underlying warehouse table")` (driver: 10.4-DM-02)
+    - `data_mart`: `ForeignKey('bi.DataMart', on_delete=models.SET_NULL, null=True, blank=True, related_name='semantic_models', help_text="Associated analytical data mart")` (driver: 10.4-DM-03)
+    - `primary_key_column`: `CharField(max_length=100, default='id', help_text="Surrogate or physical primary key column")` (driver: 10.4-DM-04)
+    - `natural_key_columns`: `CharField(max_length=255, blank=True, help_text="Business natural keys (comma-separated)")` (driver: 10.4-DM-04)
+    - `grain_description`: `CharField(max_length=255, blank=True, help_text="Analytical granularity, e.g. One row per completed sales order item")` (driver: 10.4-DM-05)
+    - `is_conformed_dimension`: `BooleanField(default=False, help_text="Shared dimension across multiple business processes / marts")` (driver: 10.4-DM-06)
+    - `scd_type`: `CharField(max_length=20, choices=[('type_0', 'Type 0: Fixed / Non-Changing'), ('type_1', 'Type 1: Overwrite In-Place'), ('type_2', 'Type 2: Historical Versioning (Start/End Date)'), ('type_3', 'Type 3: Previous Value Tracking')], default='type_1')` (driver: 10.4-DM-07)
+    - `is_virtual_view`: `BooleanField(default=False, help_text="Computed on-the-fly via custom SQL expression")` (driver: 10.4-RD-01)
+    - `sql_definition`: `TextField(blank=True, help_text="Custom SQL query for virtual views")` (driver: 10.4-RD-02)
+    - `access_tier`: `CharField(max_length=25, choices=[('public', 'Public (Tenant-Wide)'), ('department', 'Departmental Only'), ('restricted', 'Restricted / Confidential')], default='department')` (driver: 10.4-RD-03)
+    - `certification_status`: `CharField(max_length=25, choices=[('draft', 'Draft / In Development'), ('in_review', 'Under Review & Validation'), ('certified', 'Certified Single Source of Truth'), ('deprecated', 'Deprecated / Sunset Pending')], default='draft')` (driver: 10.4-GL-01)
+    - `certified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
+    - `certified_at`: `DateTimeField(null=True, blank=True)`
+    - `certification_notes`: `TextField(blank=True)`
+    - `source_fingerprint`: `CharField(max_length=64, blank=True, help_text="Schema hash from warehouse table inspection")` (driver: 10.4-MD-01)
+    - `last_introspected_at`: `DateTimeField(null=True, blank=True)` (driver: 10.4-MD-02)
+    - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="owned_semantic_models")`
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `certified_by`, `certified_at`, `source_fingerprint`, `last_introspected_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'model_type']), models.Index(fields=['tenant', 'certification_status']), models.Index(fields=['tenant', 'warehouse_table'])]`
+
+- [ ] **`BusinessGlossaryTerm`** [Prefix: `BGLO-`] (`apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`)
+  - **Purpose**: Canonical corporate business vocabulary dictionary establishing standardized definitions, acronyms, calculation narratives, synonyms, stewardship, and governance certification.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Net Recurring Revenue (NRR)", "Active Customer")
+    - `code`: `SlugField(max_length=50)` (e.g. "net_recurring_revenue", "active_customer")
+    - `domain_category`: `CharField(max_length=30, choices=[('finance', 'Finance & Accounting'), ('sales', 'Sales & Commercial'), ('marketing', 'Marketing & Demand Gen'), ('hr', 'Human Resources & People'), ('supply_chain', 'Supply Chain & Inventory'), ('operations', 'Operations & Manufacturing'), ('general', 'General Enterprise')], default='finance')` (driver: 10.4-GL-02)
+    - `short_definition`: `CharField(max_length=300, help_text="Executive one-line definition")` (driver: 10.4-GL-03)
+    - `full_definition`: `TextField(blank=True, help_text="Comprehensive corporate standard definition")`
+    - `calculation_rule`: `TextField(blank=True, help_text="Prose business rule narrative or formula breakdown")` (driver: 10.4-GL-04)
+    - `synonyms`: `CharField(max_length=255, blank=True, help_text="Alternative names or abbreviations (comma-separated)")` (driver: 10.4-GL-05)
+    - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="stewarded_glossary_terms")` (driver: 10.4-GL-06)
+    - `org_unit`: `ForeignKey('core.OrgUnit', on_delete=models.SET_NULL, null=True, blank=True, related_name="glossary_terms")`
+    - `certification_status`: `CharField(max_length=25, choices=[('draft', 'Draft / In Development'), ('in_review', 'Under Review & Validation'), ('certified', 'Certified Corporate Standard'), ('deprecated', 'Deprecated / Superseded')], default='draft')` (driver: 10.4-GL-07)
+    - `certified_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")`
+    - `certified_at`: `DateTimeField(null=True, blank=True)`
+    - `certification_notes`: `TextField(blank=True)`
+    - `related_terms`: `ManyToManyField('self', blank=True, symmetrical=True)` (driver: 10.4-GL-08)
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `certified_by`, `certified_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain_category']), models.Index(fields=['tenant', 'certification_status'])]`
+
+- [ ] **`CalculatedMeasure`** [Prefix: `BCMS-`] (`apps/bi/models/SemanticLayer/CalculatedMeasures.py`)
+  - **Purpose**: Centrally authored reusable business metrics, KPIs, aggregations, ratios, and time-intelligence expressions with display formatting and target/alert thresholds.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', on_delete=models.CASCADE, related_name='measures', help_text="Parent semantic model")` (driver: 10.4-CM-01)
+    - `glossary_term`: `ForeignKey('bi.BusinessGlossaryTerm', on_delete=models.SET_NULL, null=True, blank=True, related_name='measures', help_text="Associated glossary definition")` (driver: 10.4-CM-02)
+    - `name`: `CharField(max_length=150)` (e.g. "Gross Profit Margin %", "Total Invoiced Revenue")
+    - `code`: `SlugField(max_length=50)` (e.g. "gross_profit_margin_pct", "total_invoiced_revenue")
+    - `aggregation_type`: `CharField(max_length=25, choices=[('sum', 'Sum'), ('avg', 'Average'), ('count', 'Count'), ('count_distinct', 'Count Distinct'), ('min', 'Minimum'), ('max', 'Maximum'), ('formula', 'Custom Calculated Expression / Ratio')], default='sum')` (driver: 10.4-CM-03)
+    - `source_column`: `CharField(max_length=100, blank=True, help_text="Column name for standard aggregations")` (driver: 10.4-CM-04)
+    - `formula_expression`: `CharField(max_length=500, blank=True, help_text="Calculation formula, e.g. [total_revenue] - [total_cost]")` (driver: 10.4-CM-05)
+    - `filter_expression`: `CharField(max_length=500, blank=True, help_text="SQL WHERE filter clause, e.g. status = 'paid'")` (driver: 10.4-CM-06)
+    - `time_intelligence`: `CharField(max_length=25, choices=[('none', 'None (Standard Aggregation)'), ('yoy_growth', 'Year-over-Year (YoY) Growth %'), ('qtd', 'Quarter-to-Date (QTD)'), ('ytd', 'Year-to-Date (YTD)'), ('rolling_30d', 'Rolling 30-Day Moving Sum/Avg'), ('prior_period', 'Prior Period Difference')], default='none')` (driver: 10.4-CM-07)
+    - `format_string`: `CharField(max_length=25, choices=[('currency', 'Currency ($#,##0.00)'), ('percentage', 'Percentage (0.00%)'), ('integer', 'Whole Number (#,##0)'), ('decimal', 'Decimal Number (#,##0.00)'), ('raw', 'Raw Unformatted')], default='decimal')` (driver: 10.4-CM-08)
+    - `display_units`: `CharField(max_length=20, choices=[('auto', 'Auto-Scale (K/M/B)'), ('none', 'None (Raw Value)'), ('thousands', 'Thousands (K)'), ('millions', 'Millions (M)'), ('billions', 'Billions (B)')], default='auto')` (driver: 10.4-CM-09)
+    - `target_value`: `DecimalField(max_digits=16, decimal_places=4, null=True, blank=True, help_text="Target benchmark value")` (driver: 10.4-CM-10)
+    - `warning_threshold`: `DecimalField(max_digits=16, decimal_places=4, null=True, blank=True, help_text="Warning threshold boundary")` (driver: 10.4-CM-10)
+    - `critical_threshold`: `DecimalField(max_digits=16, decimal_places=4, null=True, blank=True, help_text="Critical alert threshold boundary")` (driver: 10.4-CM-10)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'semantic_model', 'code')]`, `indexes = [models.Index(fields=['tenant', 'aggregation_type']), models.Index(fields=['tenant', 'time_intelligence'])]`
+
+- [ ] **`DrillHierarchy`** [Prefix: `BDHI-`] (`apps/bi/models/SemanticLayer/DrillHierarchies.py`)
+  - **Purpose**: Defines governed multi-level navigation and aggregation drill paths (Time, Geography, Organization, Product, Custom) with ordered levels for ad-hoc slicing.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', on_delete=models.CASCADE, related_name='drill_hierarchies')` (driver: 10.4-DH-01)
+    - `name`: `CharField(max_length=150)` (e.g. "Fiscal Calendar Hierarchy", "Sales Territory Drill Path")
+    - `code`: `SlugField(max_length=50)` (e.g. "fiscal_calendar", "sales_territory")
+    - `hierarchy_type`: `CharField(max_length=25, choices=[('time', 'Calendar / Fiscal Time (Year -> Quarter -> Month -> Day)'), ('geography', 'Geographical Territory (Region -> Country -> State -> City)'), ('organizational', 'Organizational Unit (Company -> Division -> Department)'), ('product', 'Product Catalog (Category -> Subcategory -> Item)'), ('custom', 'Custom Business Dimension Path')], default='time')` (driver: 10.4-DH-02)
+    - `levels_json`: `JSONField(default=list, help_text="Ordered list of hierarchy levels [{'level': 1, 'name': 'Year', 'column': 'fiscal_year'}, ...]")` (driver: 10.4-DH-03)
+    - `primary_drill_path`: `BooleanField(default=True, help_text="Default drill path for this dimensional model")` (driver: 10.4-DH-04)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'semantic_model', 'code')]`, `indexes = [models.Index(fields=['tenant', 'hierarchy_type'])]`
+
+---
+
+## Backend Packages & Files (`apps/bi/`)
+
+### Models (`apps/bi/models/SemanticLayer/`)
+- [ ] `apps/bi/models/SemanticLayer/__init__.py` (re-exports `SemanticModel`, `BusinessGlossaryTerm`, `CalculatedMeasure`, `DrillHierarchy`)
+- [ ] `apps/bi/models/SemanticLayer/SemanticModels.py`
+- [ ] `apps/bi/models/SemanticLayer/BusinessGlossaryTerms.py`
+- [ ] `apps/bi/models/SemanticLayer/CalculatedMeasures.py`
+- [ ] `apps/bi/models/SemanticLayer/DrillHierarchies.py`
+- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models
+
+### Forms (`apps/bi/forms/SemanticLayer/`)
+- [ ] `apps/bi/forms/SemanticLayer/__init__.py`
+- [ ] `apps/bi/forms/SemanticLayer/SemanticModelForms.py` (`SemanticModelForm`, `SemanticModelCertificationForm`)
+- [ ] `apps/bi/forms/SemanticLayer/BusinessGlossaryTermForms.py` (`BusinessGlossaryTermForm`, `BusinessGlossaryTermCertificationForm`)
+- [ ] `apps/bi/forms/SemanticLayer/CalculatedMeasureForms.py` (`CalculatedMeasureForm`)
+- [ ] `apps/bi/forms/SemanticLayer/DrillHierarchyForms.py` (`DrillHierarchyForm`)
+- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms
+
+### Views (`apps/bi/views/SemanticLayer/`)
+- [ ] `apps/bi/views/SemanticLayer/__init__.py`
+- [ ] `apps/bi/views/SemanticLayer/SemanticModelViews.py` (list, create, detail, edit, delete, certify, introspect)
+- [ ] `apps/bi/views/SemanticLayer/BusinessGlossaryTermViews.py` (list, create, detail, edit, delete, certify)
+- [ ] `apps/bi/views/SemanticLayer/CalculatedMeasureViews.py` (list, create, detail, edit, delete)
+- [ ] `apps/bi/views/SemanticLayer/DrillHierarchyViews.py` (list, create, detail, edit, delete)
+- [ ] `apps/bi/views/SemanticLayer/SemanticOverviewViews.py` (`semantic_overview` command center)
+- [ ] Update `apps/bi/views/__init__.py` to re-export view functions
+
+### URLs (`apps/bi/urls/SemanticLayer/`)
+- [ ] `apps/bi/urls/SemanticLayer/__init__.py` (re-exports `urlpatterns`)
+- [ ] `apps/bi/urls/SemanticLayer/SemanticModelUrls.py`
+- [ ] `apps/bi/urls/SemanticLayer/BusinessGlossaryTermUrls.py`
+- [ ] `apps/bi/urls/SemanticLayer/CalculatedMeasureUrls.py`
+- [ ] `apps/bi/urls/SemanticLayer/DrillHierarchyUrls.py`
+- [ ] `apps/bi/urls/SemanticLayer/SemanticOverviewUrls.py`
+- [ ] Update `apps/bi/urls/__init__.py` to include `SemanticLayer` routes
+
+### Admin & Integration
+- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.4"]` mapping NavERP.md feature bullets to views
+- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.4 (Finance, Sales, HR semantic models, glossary terms, measures, hierarchies)
+
+---
+
+## Templates (`templates/bi/semantic_layer/`)
+- [ ] `templates/bi/semantic_layer/semantic_overview.html` (Command center dashboard: total models, certified terms, calculated measures, hierarchies, quick actions)
+- [ ] `templates/bi/semantic_layer/semantic_model/list.html`
+- [ ] `templates/bi/semantic_layer/semantic_model/detail.html`
+- [ ] `templates/bi/semantic_layer/semantic_model/form.html`
+- [ ] `templates/bi/semantic_layer/business_glossary_term/list.html`
+- [ ] `templates/bi/semantic_layer/business_glossary_term/detail.html`
+- [ ] `templates/bi/semantic_layer/business_glossary_term/form.html`
+- [ ] `templates/bi/semantic_layer/calculated_measure/list.html`
+- [ ] `templates/bi/semantic_layer/calculated_measure/detail.html`
+- [ ] `templates/bi/semantic_layer/calculated_measure/form.html`
+- [ ] `templates/bi/semantic_layer/drill_hierarchy/list.html`
+- [ ] `templates/bi/semantic_layer/drill_hierarchy/detail.html`
+- [ ] `templates/bi/semantic_layer/drill_hierarchy/form.html`
+
+---
+
+## Verification & Close-out
+- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0011_...` and run `python manage.py migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency
+- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
+- [ ] Execute smoke test (`temp/smoke_bi_10_4.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.4.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_semanticlayer_models.py`, `test_semanticlayer_forms.py`, `test_semanticlayer_views.py`, `test_semanticlayer_security.py`
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.4 models/routes/templates and update `README.md`
+- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.4.md`
+
+## Later passes / deferred
+- Live bi-directional dbt Semantic Layer MetricFlow synchronization via Git/API -> Enterprise Analytics integration
+- Custom Python/R script runtime execution inside semantic measure formulas -> Advanced data science extensions
+- Automated LLM text-to-semantic-measure query parsing -> Sub-module 10.15 Natural Language & Conversational BI
+- Pre-aggregation caching engine (Cube pre-aggregations / materialized rollup tables) -> Performance optimization pass
+- Automated Data Profiling & Quality Rules -> Sub-module 10.5 Data Quality & Cleansing
+- Master Data Management (MDM) Golden Records -> Sub-module 10.6 Master Data Management
+- Enterprise Data Catalog & Column-Level Lineage -> Sub-module 10.7 Data Catalog, Lineage & Governance
+
+## Review notes
+(to be populated during Phase 4–6)
+
+---
 # Sub-module 10.3: Data Warehouse & Storage (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.3.md` (2026-11-04)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-module 10.1 (Data Integration & Ingestion) and Sub-module 10.2 (ETL/ELT & Data Pipelines).
@@ -203,29 +426,21 @@
 - [ ] `templates/bi/data_warehouse/warehouse_overview.html` (consolidated operational dashboard: total tables, storage volume by zone, fact/dim distribution, mart certification statuses, quick actions)
 
 ## Verification & Close-out
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0007_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_3.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.3.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_datawarehouse_models.py`, `test_datawarehouse_forms.py`, `test_datawarehouse_views.py`, `test_datawarehouse_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.3 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.3.md`
-
-## Later passes / deferred
-- Dedicated Apache Spark / EMR / Trino distributed analytical query execution -> Enterprise big data cluster integration
-- Dynamic automated partition rebalancing without table lockouts (Iceberg hidden partition evolution) -> Enterprise lakehouse tier
-- Automated continuous background micro-clustering daemons (Snowflake automatic clustering equivalent) -> Background daemon service tier
-- Live asynchronous PyArrow Parquet streaming writers directly into external customer cloud buckets -> Async Celery worker tasks
-- Multi-tenant cryptographic data clean rooms and external data sharing -> Sub-module 10.19 / Advanced Governance
-- Business Glossary, Metrics & Semantic Layer -> Sub-module 10.4 Data Modeling & Semantic Layer
-- Data Quality Profiling & Exception Remediation -> Sub-module 10.5 Data Quality & Cleansing
-- Master Data Management (MDM) Golden Records -> Sub-module 10.6 Master Data Management
-- Enterprise Data Catalog & Column-Level Lineage -> Sub-module 10.7 Data Catalog, Lineage & Governance
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0007_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_3.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.3.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_datawarehouse_models.py`, `test_datawarehouse_forms.py`, `test_datawarehouse_views.py`, `test_datawarehouse_security.py`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.3 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.3.md` (no gaps open)
 
 ## Review notes
-(to be populated during Phase 4–6)
+- **Status**: Shipped & verified green (272/272 tests passing).
+- **Models**: `DataMart` [BDMT-], `LakehouseZone` [BLHZ-], `WarehouseStoragePolicy` [BWSP-], `WarehouseTable` [BDWT-].
+- **Reviews**: 6 sequential reviewer passes in `.claude/tasks/review-bi-10.3.md` resolved by code-fixer.
+- **Gaps**: None.
 
 ---
 # Sub-module 10.2: ETL/ELT & Data Pipelines (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.2.md` (2026-11-03)
