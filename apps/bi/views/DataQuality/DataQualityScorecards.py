@@ -181,24 +181,44 @@ def data_quality_scorecard_recalculate(request, pk):
             Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
         )
 
-    total_rules = rules_qs.count()
-    passed_rules = rules_qs.filter(last_status="passed").count()
-    failed_rules = rules_qs.filter(last_status__in=["failed", "error"]).count()
+    rule_counts = rules_qs.aggregate(
+        total=Count("id"),
+        passed=Count("id", filter=Q(last_status="passed")),
+        failed=Count("id", filter=Q(last_status__in=["failed", "error"])),
+    )
+    total_rules = rule_counts["total"]
+    passed_rules = rule_counts["passed"]
+    failed_rules = rule_counts["failed"]
 
-    open_exceptions = exceptions_qs.filter(status__in=["open", "investigating"]).count()
-    critical_exceptions = exceptions_qs.filter(status__in=["open", "investigating"], severity__in=["critical", "fatal"]).count()
+    exc_counts = exceptions_qs.aggregate(
+        open_exc=Count("id", filter=Q(status__in=["open", "investigating"])),
+        critical_exc=Count("id", filter=Q(status__in=["open", "investigating"], severity__in=["critical", "fatal"])),
+    )
+    open_exceptions = exc_counts["open_exc"]
+    critical_exceptions = exc_counts["critical_exc"]
 
     # Calculate dimension scores or defaults
-    def calc_dim_score(dim_name, default_score):
-        avg = rules_qs.filter(dimension=dim_name).aggregate(Avg("pass_rate_pct"))["pass_rate_pct__avg"]
-        return Decimal(str(round(avg, 2))) if avg is not None else default_score
+    dim_defaults = {
+        "completeness": Decimal("99.20"),
+        "accuracy": Decimal("98.50"),
+        "consistency": Decimal("97.80"),
+        "timeliness": Decimal("100.00"),
+        "uniqueness": Decimal("99.90"),
+        "validity": Decimal("96.40"),
+    }
+    dim_rows = rules_qs.values("dimension").annotate(avg_pass=Avg("pass_rate_pct"))
+    dim_avgs = {r["dimension"]: r["avg_pass"] for r in dim_rows}
 
-    scorecard.completeness_score = calc_dim_score("completeness", Decimal("99.20"))
-    scorecard.accuracy_score = calc_dim_score("accuracy", Decimal("98.50"))
-    scorecard.consistency_score = calc_dim_score("consistency", Decimal("97.80"))
-    scorecard.timeliness_score = calc_dim_score("timeliness", Decimal("100.00"))
-    scorecard.uniqueness_score = calc_dim_score("uniqueness", Decimal("99.90"))
-    scorecard.validity_score = calc_dim_score("validity", Decimal("96.40"))
+    def get_dim_score(dim_name):
+        avg = dim_avgs.get(dim_name)
+        return Decimal(str(round(avg, 2))) if avg is not None else dim_defaults[dim_name]
+
+    scorecard.completeness_score = get_dim_score("completeness")
+    scorecard.accuracy_score = get_dim_score("accuracy")
+    scorecard.consistency_score = get_dim_score("consistency")
+    scorecard.timeliness_score = get_dim_score("timeliness")
+    scorecard.uniqueness_score = get_dim_score("uniqueness")
+    scorecard.validity_score = get_dim_score("validity")
 
     # Weighted or overall average
     dims = [
