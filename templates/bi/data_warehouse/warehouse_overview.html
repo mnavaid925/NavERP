@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Data Warehouse &amp; Lakehouse Overview — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Data Warehouse &amp; Storage</span>
+        </div>
+        <h1 class="page-title">Enterprise Data Warehouse &amp; Lakehouse</h1>
+        <p class="text-muted text-sm">Consolidated dimensional schemas, subject data marts, medallion lakehouse zones, and storage lifecycle governance</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_mart_list' %}" class="btn btn-outline">
+            <i data-lucide="layers"></i>
+            <span>Data Marts</span>
+        </a>
+        <a href="{% url 'bi:lakehouse_zone_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Lakehouse Zones</span>
+        </a>
+        <a href="{% url 'bi:warehouse_storage_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="archive"></i>
+            <span>Storage Policies</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_table_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Register Table</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Warehouse Tables</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_tables }}</div>
+                <div class="text-xs text-muted mt-1">{{ fact_count }} facts · {{ dim_count }} dimensions</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="table"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Stored Analytical Rows</div>
+                <div class="text-2xl font-bold mt-1 text-purple-600">{{ total_rows }}</div>
+                <div class="text-xs text-muted mt-1">Across all zones</div>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="database"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Subject Data Marts</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_marts }}</div>
+                <div class="text-xs text-green-600 font-medium mt-1">{{ certified_marts }} certified single-source</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="layers"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Lakehouse Medallion Zones</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_zones }}</div>
+                <div class="text-xs text-muted mt-1">{{ total_policies }} storage policies</div>
+            </div>
+            <div class="stat-icon slate">
+                <i data-lucide="server"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Medallion Architecture Tier Overview -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-sm font-semibold text-slate-800">Lakehouse Medallion Architecture Zones</h2>
+            <p class="text-xs text-muted">Physical and logical storage tiers from raw ingestion to business-ready marts</p>
+        </div>
+        <a href="{% url 'bi:lakehouse_zone_list' %}" class="btn btn-outline btn-sm">
+            <span>Manage Zones</span>
+            <i data-lucide="arrow-right"></i>
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {% for zone in zones %}
+            <div class="p-4 border rounded-lg {% if zone.zone_type == 'bronze' %}bg-amber-50/50 border-amber-200{% elif zone.zone_type == 'silver' %}bg-blue-50/50 border-blue-200{% elif zone.zone_type == 'gold' %}bg-green-50/50 border-green-200{% else %}bg-purple-50/50 border-purple-200{% endif %}">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider {% if zone.zone_type == 'bronze' %}text-amber-800{% elif zone.zone_type == 'silver' %}text-blue-800{% elif zone.zone_type == 'gold' %}text-green-800{% else %}text-purple-800{% endif %}">
+                        {{ zone.get_zone_type_display }}
+                    </span>
+                    <span class="badge badge-slate text-[10px]">{{ zone.table_count }} tables</span>
+                </div>
+                <div class="font-semibold text-slate-900 text-sm mb-1 truncate">{{ zone.name }}</div>
+                <div class="text-xs text-muted font-mono mb-2">{{ zone.get_default_format_display }}</div>
+                <div class="text-xs text-slate-600 line-clamp-2 mb-3">{{ zone.description|default:"Medallion storage zone." }}</div>
+                <a href="{% url 'bi:lakehouse_zone_detail' pk=zone.pk %}" class="text-xs font-medium text-primary hover:underline flex items-center gap-1">
+                    <span>Explore Zone</span>
+                    <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                </a>
+            </div>
+            {% empty %}
+            <div class="col-span-4 empty-state py-4">
+                <p class="text-sm text-muted">No lakehouse zones defined. Register Bronze, Silver, and Gold zones.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Departmental Marts & Recent Tables Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Departmental Marts Summary -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-800">Subject Data Marts</h2>
+                <p class="text-xs text-muted">Departmental analytical domains</p>
+            </div>
+            <a href="{% url 'bi:data_mart_list' %}" class="btn btn-outline btn-sm">
+                <span>All Marts</span>
+            </a>
+        </div>
+        <div class="divide-y divide-slate-100">
+            {% for mart in marts %}
+            <div class="p-3 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div>
+                    <a href="{% url 'bi:data_mart_detail' pk=mart.pk %}" class="font-medium text-sm text-slate-900 hover:text-primary">
+                        {{ mart.name }}
+                    </a>
+                    <div class="text-xs text-muted flex items-center gap-2 mt-0.5">
+                        <span>{{ mart.get_subject_area_display }}</span>
+                        <span>·</span>
+                        <span>{{ mart.table_count }} tables</span>
+                    </div>
+                </div>
+                <div>
+                    {% if mart.certification_status == 'certified' %}
+                    <span class="badge badge-green text-[10px]">Certified</span>
+                    {% elif mart.certification_status == 'in_review' %}
+                    <span class="badge badge-info text-[10px]">In Review</span>
+                    {% else %}
+                    <span class="badge badge-amber text-[10px]">{{ mart.get_certification_status_display }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="p-4 text-center text-sm text-muted">No data marts configured.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recent Tables -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <div>
+                <h2 class="text-sm font-semibold text-slate-800">Recently Registered Warehouse Tables</h2>
+                <p class="text-xs text-muted">Star/snowflake schemas active in the analytical warehouse</p>
+            </div>
+            <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline btn-sm">
+                <span>View All Tables</span>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Table Name</th>
+                        <th>Type</th>
+                        <th>Zone</th>
+                        <th>Data Mart</th>
+                        <th class="text-right">Rows</th>
+                        <th class="text-right">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for table in recent_tables %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="font-medium text-slate-900 hover:text-primary text-sm">
+                                {{ table.name }}
+                            </a>
+                            <div class="text-xs text-muted font-mono">{{ table.table_name }}</div>
+                        </td>
+                        <td>
+                            {% if table.table_type == 'fact' %}
+                            <span class="badge badge-info">{{ table.get_table_type_display }}</span>
+                            {% elif table.table_type == 'dimension' %}
+                            <span class="badge badge-green">{{ table.get_table_type_display }}</span>
+                            {% else %}
+                            <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-slate">{{ table.lakehouse_zone.name }}</span></td>
+                        <td>
+                            {% if table.data_mart %}
+                            <span class="text-xs text-slate-700">{{ table.data_mart.name }}</span>
+                            {% else %}
+                            <span class="text-xs text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right font-mono text-xs text-slate-700">{{ table.row_count }}</td>
+                        <td class="text-right table-actions">
+                            <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="btn-icon btn-outline" title="View Table">
+                                <i data-lucide="eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="p-4 text-center text-sm text-muted">No tables registered yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
