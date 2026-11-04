@@ -5,7 +5,7 @@
 - **Target app:** `apps/bi`
 - **Review date:** 2026-11-04
 - **Base SHA:** `069fb344d5ed505ef7ef4373b47d5ed6938ce6ed`
-- **Status:** In Progress (Pass 2/6 complete)
+- **Status:** In Progress (Pass 3/6 complete)
 
 ---
 
@@ -104,3 +104,47 @@
   - `tenant_admin_required` in `SemanticModels.py:L20` and `model_pk` in `CalculatedMeasures.py:L165`.
 - **[EXP-MIN-5]** Introspection surrogate key override logic:
   - `apps/bi/views/SemanticLayer/SemanticModels.py:L247`.
+
+---
+
+## Pass 3: frontend-reviewer Findings
+
+### Important
+- **[FE-IMP-1]** Unstyled `badge-purple` used across multiple list templates (L33 Theme.css color system violation):
+  - `templates/bi/semantic_layer/semantic_model/list.html:129`
+  - `templates/bi/semantic_layer/business_glossary_term/list.html:121`
+  - `templates/bi/semantic_layer/drill_hierarchy/list.html:123`
+  - Fix: Replace `badge-purple` with `badge-info` (the indigo/purple theme hue) or `badge-slate`.
+- **[FE-IMP-2]** Detail templates missing "Back to List" button in `.page-actions`:
+  - `templates/bi/semantic_layer/semantic_model/detail.html:39-68`
+  - `templates/bi/semantic_layer/business_glossary_term/detail.html:39-55`
+  - `templates/bi/semantic_layer/calculated_measure/detail.html:32-48`
+  - `templates/bi/semantic_layer/drill_hierarchy/detail.html:32-48`
+  - Fix: Add standard `<a href="..." class="btn btn-outline"><i data-lucide="arrow-left"></i><span>Back to ...</span></a>` action button.
+- **[FE-IMP-3]** Overview certification status badge lacks 'deprecated' branch and fallback:
+  - `templates/bi/semantic_layer/semantic_overview.html:190-196`
+  - Fix: Handle `deprecated` (`badge-red`) and fallback to `{{ sm.get_certification_status_display }}`.
+- **[FE-IMP-4]** Missing `aria-label` on icon-only buttons across templates:
+  - `templates/bi/semantic_layer/semantic_overview.html:199,259`
+  - `templates/bi/semantic_layer/semantic_model/list.html:80,184,187,192`
+  - `templates/bi/semantic_layer/semantic_model/detail.html:210,213,280,283`
+  - `templates/bi/semantic_layer/business_glossary_term/list.html:71,158,161,166`
+  - `templates/bi/semantic_layer/business_glossary_term/detail.html:153`
+  - `templates/bi/semantic_layer/calculated_measure/list.html:71,156,159,164`
+  - `templates/bi/semantic_layer/drill_hierarchy/list.html:71,146,149,154`
+  - Fix: Add descriptive `aria-label` attributes to all icon-only buttons.
+
+### Minor
+- **[FE-MIN-1]** Missing `for` and `id` associations on list filter inputs and detail inline forms:
+  - `templates/bi/semantic_layer/semantic_model/list.html:43,47,56,65`
+  - `templates/bi/semantic_layer/business_glossary_term/list.html:43,47,56`
+  - `templates/bi/semantic_layer/calculated_measure/list.html:43,47,56`
+  - `templates/bi/semantic_layer/drill_hierarchy/list.html:43,47,56`
+  - `templates/bi/semantic_layer/semantic_model/detail.html:348,352`
+  - `templates/bi/semantic_layer/business_glossary_term/detail.html:235,239`
+  - Fix: Add `id` attributes to filter inputs and pair them with `for="..."` on `<label>`. On detail forms, use `for="{{ certify_form.<field>.id_for_label }}"`.
+- **[FE-MIN-2]** None-safe method calls on nullable Foreign Keys:
+  - `templates/bi/semantic_layer/semantic_model/detail.html:400`
+  - `templates/bi/semantic_layer/business_glossary_term/list.html:131`
+  - `templates/bi/semantic_layer/business_glossary_term/detail.html:259`
+  - Fix: Wrap with explicit `{% if model.owner %}...{% else %}Unassigned{% endif %}` check (rule L10).
