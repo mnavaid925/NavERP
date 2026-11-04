@@ -21,6 +21,10 @@ from apps.bi.models import (
     DataQualityRule,
     DataQualityException,
     DataQualityScorecard,
+    MdmGoldenRecord,
+    MdmSurvivorshipRule,
+    MdmHierarchyNode,
+    MdmReferenceCode,
 )
 
 
@@ -197,3 +201,37 @@ class DataQualityScorecardAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "tenant", "overall_quality_score", "completeness_score", "accuracy_score", "consistency_score", "timeliness_score", "uniqueness_score", "validity_score", "grade", "health_status", "meets_sla", "total_rules_evaluated", "rules_passed_count", "rules_failed_count", "open_exceptions_count", "critical_exceptions_count", "last_calculated_at", "created_at", "updated_at")
 
 
+@admin.register(MdmGoldenRecord)
+class MdmGoldenRecordAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "domain", "status", "trust_tier", "confidence_score", "source_record_count", "assigned_steward", "is_active", "tenant")
+    list_select_related = ("party", "party_role", "item", "asset", "warehouse_table", "assigned_steward", "merged_into_record")
+    list_filter = ("domain", "status", "trust_tier", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "tax_id", "primary_email", "primary_phone")
+    readonly_fields = ("number", "tenant", "merged_into_record", "merged_at", "reviewed_by", "reviewed_at", "created_at", "updated_at")
+
+
+@admin.register(MdmSurvivorshipRule)
+class MdmSurvivorshipRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "domain", "target_field", "survivorship_strategy", "match_algorithm", "match_threshold_pct", "auto_merge_threshold_pct", "priority_order", "is_active", "tenant")
+    list_select_related = ("steward",)
+    list_filter = ("domain", "survivorship_strategy", "match_algorithm", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "target_field", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(MdmHierarchyNode)
+class MdmHierarchyNodeAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "hierarchy_type", "parent", "level", "path", "golden_record", "sort_order", "is_active", "tenant")
+    list_select_related = ("parent", "golden_record", "party", "org_unit", "item_category")
+    list_filter = ("hierarchy_type", "level", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "path", "description")
+    readonly_fields = ("number", "tenant", "level", "path", "created_at", "updated_at")
+
+
+@admin.register(MdmReferenceCode)
+class MdmReferenceCodeAdmin(admin.ModelAdmin):
+    list_display = ("number", "code_set", "canonical_code", "canonical_name", "source_system", "source_code", "status", "is_active", "tenant")
+    list_select_related = ("superseded_by",)
+    list_filter = ("code_set", "status", "source_system", "is_active", "tenant")
+    search_fields = ("number", "code_set", "canonical_code", "canonical_name", "source_code")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
