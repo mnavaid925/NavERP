@@ -25,7 +25,7 @@ def warehouse_table_list(request):
         .defer("schema_definition")
     )
 
-    q = request.GET.get("q", "").strip()
+    q = request.GET.get("q", "").strip()[:100]
     if q:
         queryset = queryset.filter(
             Q(name__icontains=q)
