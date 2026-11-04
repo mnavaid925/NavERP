@@ -218,7 +218,10 @@
         <!-- Match & Survivorship Rules -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-900 text-sm">Survivorship Policies</h3>
+                <div class="flex items-center gap-2">
+                    <h3 class="font-semibold text-slate-900 text-sm">Survivorship Policies</h3>
+                    <span class="badge badge-slate text-xs">{{ total_rules }}</span>
+                </div>
                 <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="text-xs text-primary hover:underline">All Rules</a>
             </div>
             <div class="card-body space-y-3">
@@ -243,7 +246,10 @@
         <!-- Managed Reference Code Sets -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-900 text-sm">Reference Code Sets (RDM)</h3>
+                <div class="flex items-center gap-2">
+                    <h3 class="font-semibold text-slate-900 text-sm">Reference Code Sets (RDM)</h3>
+                    <span class="badge badge-slate text-xs">{{ total_reference_codes }}</span>
+                </div>
                 <a href="{% url 'bi:mdm_reference_code_list' %}" class="text-xs text-primary hover:underline">All Codes</a>
             </div>
             <div class="card-body">
