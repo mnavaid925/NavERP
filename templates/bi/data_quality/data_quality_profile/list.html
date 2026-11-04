@@ -78,7 +78,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
             <div class="form-group lg:col-span-2">
                 <label class="form-label text-xs" for="filter-q">Search Profiles</label>
                 <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, table, model..." class="form-input">
@@ -107,6 +107,15 @@
                     <option value="">All Tables</option>
                     {% for tbl in warehouse_tables %}
                     <option value="{{ tbl.pk|stringformat:'d' }}" {% if request.GET.warehouse_table == tbl.pk|stringformat:'d' %}selected{% endif %}>{{ tbl.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-model">Semantic Model</label>
+                <select id="filter-model" name="semantic_model" class="form-select">
+                    <option value="">All Models</option>
+                    {% for sm in semantic_models %}
+                    <option value="{{ sm.pk|stringformat:'d' }}" {% if request.GET.semantic_model == sm.pk|stringformat:'d' %}selected{% endif %}>{{ sm.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -257,11 +266,11 @@
             <span class="text-xs text-muted">Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} profiles</span>
             <div class="flex gap-2">
                 {% if page_obj.has_previous %}
-                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}{% if request.GET.semantic_model %}&semantic_model={{ request.GET.semantic_model }}{% endif %}" class="btn btn-outline text-xs">Previous</a>
                 {% endif %}
                 <span class="btn btn-outline text-xs active">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
                 {% if page_obj.has_next %}
-                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}" class="btn btn-outline text-xs">Next</a>
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.warehouse_table %}&warehouse_table={{ request.GET.warehouse_table }}{% endif %}{% if request.GET.semantic_model %}&semantic_model={{ request.GET.semantic_model }}{% endif %}" class="btn btn-outline text-xs">Next</a>
                 {% endif %}
             </div>
         </div>
