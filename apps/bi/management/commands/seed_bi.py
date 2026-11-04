@@ -9,6 +9,10 @@ from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
 from apps.bi.models.DataIntegration.DataSourceConnectors import DataSourceConnector
 from apps.bi.models.DataIntegration.IngestionPipelines import IngestionPipeline
 from apps.bi.models.DataIntegration.IngestionRuns import IngestionRun
+from apps.bi.models.DataWarehouse.DataMarts import DataMart
+from apps.bi.models.DataWarehouse.LakehouseZones import LakehouseZone
+from apps.bi.models.DataWarehouse.WarehouseStoragePolicies import WarehouseStoragePolicy
+from apps.bi.models.DataWarehouse.WarehouseTables import WarehouseTable
 from apps.bi.models.EtlPipelines.EtlPipelineRuns import EtlPipelineRun
 from apps.bi.models.EtlPipelines.EtlPipelines import EtlPipeline
 from apps.bi.models.EtlPipelines.EtlPipelineVersions import EtlPipelineVersion
@@ -31,6 +35,10 @@ class Command(BaseCommand):
         flush = options.get("flush", False)
         if flush:
             self.stdout.write("Flushing existing BI data...")
+            WarehouseTable.objects.all().delete()
+            WarehouseStoragePolicy.objects.all().delete()
+            LakehouseZone.objects.all().delete()
+            DataMart.objects.all().delete()
             EtlPipelineRun.objects.all().delete()
             TransformationStep.objects.all().delete()
             EtlPipelineVersion.objects.all().delete()
@@ -459,5 +467,378 @@ class Command(BaseCommand):
                 )
 
             self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI ETL Pipelines for tenant: {tenant.name}"))
+
+            # --- 10.3 Data Warehouse & Storage Seeding ---
+            if not DataMart.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    # 1. DataMarts
+                    mart_finance, _ = DataMart.objects.get_or_create(
+                        tenant=tenant,
+                        code="finance",
+                        defaults={
+                            "name": "Finance & Accounting Mart",
+                            "subject_area": "finance",
+                            "owner": admin_user,
+                            "steward": admin_user,
+                            "access_tier": "department",
+                            "certification_status": "certified",
+                            "refresh_cadence": "daily",
+                            "description": "General ledger, receivables, payables, and fiscal budget analytics.",
+                            "is_active": True,
+                        },
+                    )
+
+                    mart_sales, _ = DataMart.objects.get_or_create(
+                        tenant=tenant,
+                        code="sales",
+                        defaults={
+                            "name": "Sales & CRM Mart",
+                            "subject_area": "sales",
+                            "owner": admin_user,
+                            "steward": admin_user,
+                            "access_tier": "department",
+                            "certification_status": "certified",
+                            "refresh_cadence": "hourly",
+                            "description": "Sales pipelines, opportunity conversion rates, and revenue attainment.",
+                            "is_active": True,
+                        },
+                    )
+
+                    mart_scm, _ = DataMart.objects.get_or_create(
+                        tenant=tenant,
+                        code="supply_chain",
+                        defaults={
+                            "name": "Supply Chain & Logistics Mart",
+                            "subject_area": "supply_chain",
+                            "owner": admin_user,
+                            "steward": admin_user,
+                            "access_tier": "department",
+                            "certification_status": "in_review",
+                            "refresh_cadence": "daily",
+                            "description": "Inventory turnover, stock movement ledgers, and procurement spend.",
+                            "is_active": True,
+                        },
+                    )
+
+                    mart_hr, _ = DataMart.objects.get_or_create(
+                        tenant=tenant,
+                        code="hr",
+                        defaults={
+                            "name": "Human Resources & Workforce Mart",
+                            "subject_area": "hr",
+                            "owner": admin_user,
+                            "steward": admin_user,
+                            "access_tier": "restricted",
+                            "certification_status": "draft",
+                            "refresh_cadence": "weekly",
+                            "description": "Headcount trends, employee retention, payroll allocations, and attendance.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 2. LakehouseZones
+                    zone_bronze, _ = LakehouseZone.objects.get_or_create(
+                        tenant=tenant,
+                        code="bronze",
+                        defaults={
+                            "name": "Bronze Raw Ingestion Zone",
+                            "zone_type": "bronze",
+                            "storage_backend": "internal_db",
+                            "default_format": "relational_table",
+                            "base_uri_path": "internal://lake/bronze/",
+                            "is_read_only": True,
+                            "description": "Append-only immutable raw landing layer from operational extractors.",
+                            "is_active": True,
+                        },
+                    )
+
+                    zone_silver, _ = LakehouseZone.objects.get_or_create(
+                        tenant=tenant,
+                        code="silver",
+                        defaults={
+                            "name": "Silver Curated Master Zone",
+                            "zone_type": "silver",
+                            "storage_backend": "internal_db",
+                            "default_format": "parquet",
+                            "base_uri_path": "internal://lake/silver/",
+                            "is_read_only": False,
+                            "description": "Cleaned, sanitized, and conformed master dataset layer.",
+                            "is_active": True,
+                        },
+                    )
+
+                    zone_gold, _ = LakehouseZone.objects.get_or_create(
+                        tenant=tenant,
+                        code="gold",
+                        defaults={
+                            "name": "Gold Enterprise Analytics Zone",
+                            "zone_type": "gold",
+                            "storage_backend": "internal_db",
+                            "default_format": "delta_lake",
+                            "base_uri_path": "internal://lake/gold/",
+                            "is_read_only": False,
+                            "description": "Aggregated dimensional star schemas and certified business reporting layer.",
+                            "is_active": True,
+                        },
+                    )
+
+                    zone_sandbox, _ = LakehouseZone.objects.get_or_create(
+                        tenant=tenant,
+                        code="sandbox",
+                        defaults={
+                            "name": "Sandbox Exploration Zone",
+                            "zone_type": "sandbox",
+                            "storage_backend": "internal_db",
+                            "default_format": "relational_table",
+                            "base_uri_path": "internal://lake/sandbox/",
+                            "is_read_only": False,
+                            "description": "Ad-hoc experimentation and feature engineering workspace.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. WarehouseStoragePolicies
+                    policy_fin, _ = WarehouseStoragePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        name="Financial Statutory 7-Year Retention",
+                        defaults={
+                            "partition_strategy": "range_time",
+                            "partition_key": "posting_date",
+                            "partition_granularity": "month",
+                            "compression_codec": "zstd",
+                            "enable_zone_maps": True,
+                            "hot_tier_days": 90,
+                            "warm_tier_days": 365,
+                            "cold_tier_days": 2555,
+                            "time_travel_days": 14,
+                            "auto_purge_enabled": False,
+                            "vacuum_cadence": "weekly",
+                            "is_default": False,
+                            "description": "Statutory retention rule conforming to GAAP/IFRS 7-year audit requirements.",
+                            "is_active": True,
+                        },
+                    )
+
+                    policy_timeseries, _ = WarehouseStoragePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        name="High-Throughput Timeseries Policy",
+                        defaults={
+                            "partition_strategy": "range_time",
+                            "partition_key": "created_at",
+                            "partition_granularity": "day",
+                            "compression_codec": "snappy",
+                            "enable_zone_maps": True,
+                            "hot_tier_days": 30,
+                            "warm_tier_days": 90,
+                            "cold_tier_days": 365,
+                            "time_travel_days": 7,
+                            "auto_purge_enabled": True,
+                            "vacuum_cadence": "daily",
+                            "is_default": False,
+                            "description": "Fast-ingestion policy for operational events and transactional ledgers.",
+                            "is_active": True,
+                        },
+                    )
+
+                    policy_dim, _ = WarehouseStoragePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        name="Standard Dimensional Storage",
+                        defaults={
+                            "partition_strategy": "none",
+                            "partition_key": "",
+                            "partition_granularity": "month",
+                            "compression_codec": "zstd",
+                            "enable_zone_maps": True,
+                            "hot_tier_days": 365,
+                            "warm_tier_days": 730,
+                            "cold_tier_days": 2555,
+                            "time_travel_days": 7,
+                            "auto_purge_enabled": False,
+                            "vacuum_cadence": "monthly",
+                            "is_default": True,
+                            "description": "Default storage policy for dimensional lookup tables.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. WarehouseTables
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="fact_gl_journal_entries",
+                        defaults={
+                            "name": "Fact GL Journal Entries",
+                            "table_type": "fact",
+                            "schema_type": "star",
+                            "grain": "transaction",
+                            "lakehouse_zone": zone_gold,
+                            "data_mart": mart_finance,
+                            "storage_policy": policy_fin,
+                            "primary_key_column": "entry_sk",
+                            "natural_key_column": "journal_number",
+                            "is_conformed_dimension": False,
+                            "schema_definition": [
+                                {"name": "entry_sk", "type": "BIGINT", "nullable": False, "description": "Surrogate primary key"},
+                                {"name": "posting_date", "type": "DATE", "nullable": False, "description": "Fiscal posting date"},
+                                {"name": "account_sk", "type": "INTEGER", "nullable": False, "description": "FK to dim_accounts"},
+                                {"name": "debit_amount", "type": "NUMERIC(18,2)", "nullable": False, "description": "Debit line total"},
+                                {"name": "credit_amount", "type": "NUMERIC(18,2)", "nullable": False, "description": "Credit line total"},
+                            ],
+                            "row_count": 250000,
+                            "compressed_bytes": 45000000,
+                            "compression_ratio": Decimal("3.40"),
+                            "last_analyzed_at": now,
+                            "description": "Consolidated general ledger entries loaded from Module 2 Accounting.",
+                            "is_active": True,
+                        },
+                    )
+
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="fact_sales_orders",
+                        defaults={
+                            "name": "Fact Sales Orders",
+                            "table_type": "fact",
+                            "schema_type": "star",
+                            "grain": "transaction",
+                            "lakehouse_zone": zone_gold,
+                            "data_mart": mart_sales,
+                            "storage_policy": policy_timeseries,
+                            "primary_key_column": "order_sk",
+                            "natural_key_column": "order_number",
+                            "is_conformed_dimension": False,
+                            "schema_definition": [
+                                {"name": "order_sk", "type": "BIGINT", "nullable": False, "description": "Surrogate primary key"},
+                                {"name": "order_date", "type": "DATE", "nullable": False, "description": "Order placement date"},
+                                {"name": "customer_sk", "type": "INTEGER", "nullable": False, "description": "FK to dim_customers"},
+                                {"name": "net_amount", "type": "NUMERIC(18,2)", "nullable": False, "description": "Net sales amount"},
+                                {"name": "tax_amount", "type": "NUMERIC(18,2)", "nullable": False, "description": "Tax charge"},
+                            ],
+                            "row_count": 180000,
+                            "compressed_bytes": 32000000,
+                            "compression_ratio": Decimal("3.20"),
+                            "last_analyzed_at": now,
+                            "description": "Order transactions syndicating sales pipeline attainments.",
+                            "is_active": True,
+                        },
+                    )
+
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="fact_inventory_movements",
+                        defaults={
+                            "name": "Fact Inventory Movements",
+                            "table_type": "fact",
+                            "schema_type": "star",
+                            "grain": "transaction",
+                            "lakehouse_zone": zone_silver,
+                            "data_mart": mart_scm,
+                            "storage_policy": policy_timeseries,
+                            "primary_key_column": "movement_sk",
+                            "natural_key_column": "movement_number",
+                            "is_conformed_dimension": False,
+                            "schema_definition": [
+                                {"name": "movement_sk", "type": "BIGINT", "nullable": False, "description": "Surrogate primary key"},
+                                {"name": "movement_date", "type": "DATE", "nullable": False, "description": "Movement date"},
+                                {"name": "item_code", "type": "VARCHAR(50)", "nullable": False, "description": "Stock item code"},
+                                {"name": "quantity", "type": "NUMERIC(12,4)", "nullable": False, "description": "Stock quantity"},
+                            ],
+                            "row_count": 420000,
+                            "compressed_bytes": 78000000,
+                            "compression_ratio": Decimal("3.50"),
+                            "last_analyzed_at": now,
+                            "description": "StockMove ledger lines tracking warehouse transactions.",
+                            "is_active": True,
+                        },
+                    )
+
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="dim_customers",
+                        defaults={
+                            "name": "Dim Customers",
+                            "table_type": "dimension",
+                            "schema_type": "star",
+                            "grain": "entity_state",
+                            "lakehouse_zone": zone_gold,
+                            "data_mart": mart_sales,
+                            "storage_policy": policy_dim,
+                            "primary_key_column": "customer_sk",
+                            "natural_key_column": "customer_code",
+                            "is_conformed_dimension": True,
+                            "schema_definition": [
+                                {"name": "customer_sk", "type": "BIGINT", "nullable": False, "description": "Surrogate dimension key"},
+                                {"name": "customer_code", "type": "VARCHAR(50)", "nullable": False, "description": "Natural customer code"},
+                                {"name": "customer_name", "type": "VARCHAR(255)", "nullable": False, "description": "Account / customer name"},
+                                {"name": "industry", "type": "VARCHAR(100)", "nullable": True, "description": "Market sector"},
+                            ],
+                            "row_count": 12500,
+                            "compressed_bytes": 2500000,
+                            "compression_ratio": Decimal("2.80"),
+                            "last_analyzed_at": now,
+                            "description": "Conformed customer dimension shared across sales and finance.",
+                            "is_active": True,
+                        },
+                    )
+
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="dim_accounts",
+                        defaults={
+                            "name": "Dim Accounts",
+                            "table_type": "dimension",
+                            "schema_type": "snowflake",
+                            "grain": "entity_state",
+                            "lakehouse_zone": zone_gold,
+                            "data_mart": mart_finance,
+                            "storage_policy": policy_dim,
+                            "primary_key_column": "account_sk",
+                            "natural_key_column": "account_code",
+                            "is_conformed_dimension": True,
+                            "schema_definition": [
+                                {"name": "account_sk", "type": "BIGINT", "nullable": False, "description": "Surrogate key"},
+                                {"name": "account_code", "type": "VARCHAR(50)", "nullable": False, "description": "GL account code"},
+                                {"name": "account_name", "type": "VARCHAR(150)", "nullable": False, "description": "GL account title"},
+                                {"name": "account_type", "type": "VARCHAR(50)", "nullable": False, "description": "Asset/Liability/Equity/Rev/Exp"},
+                            ],
+                            "row_count": 850,
+                            "compressed_bytes": 400000,
+                            "compression_ratio": Decimal("2.10"),
+                            "last_analyzed_at": now,
+                            "description": "Conformed chart of accounts dimension for financial statement reporting.",
+                            "is_active": True,
+                        },
+                    )
+
+                    WarehouseTable.objects.get_or_create(
+                        tenant=tenant,
+                        table_name="dim_dates",
+                        defaults={
+                            "name": "Dim Dates (Time Intelligence)",
+                            "table_type": "dimension",
+                            "schema_type": "star",
+                            "grain": "entity_state",
+                            "lakehouse_zone": zone_gold,
+                            "data_mart": None,
+                            "storage_policy": policy_dim,
+                            "primary_key_column": "date_sk",
+                            "natural_key_column": "calendar_date",
+                            "is_conformed_dimension": True,
+                            "schema_definition": [
+                                {"name": "date_sk", "type": "INTEGER", "nullable": False, "description": "YYYYMMDD integer key"},
+                                {"name": "calendar_date", "type": "DATE", "nullable": False, "description": "Calendar day"},
+                                {"name": "fiscal_year", "type": "SMALLINT", "nullable": False, "description": "Fiscal year"},
+                                {"name": "fiscal_quarter", "type": "SMALLINT", "nullable": False, "description": "Fiscal quarter 1-4"},
+                                {"name": "month_name", "type": "VARCHAR(20)", "nullable": False, "description": "Month name"},
+                            ],
+                            "row_count": 3650,
+                            "compressed_bytes": 800000,
+                            "compression_ratio": Decimal("2.50"),
+                            "last_analyzed_at": now,
+                            "description": "Conformed enterprise calendar and fiscal date dimension.",
+                            "is_active": True,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Warehouse for tenant: {tenant.name}"))
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
