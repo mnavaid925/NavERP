@@ -109,6 +109,7 @@ class WarehouseTable(TenantNumbered):
             models.Index(fields=["tenant", "data_mart"], name="idx_bdwt_ten_mart"),
             models.Index(fields=["tenant", "storage_policy"], name="idx_bdwt_ten_policy"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdwt_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bdwt_ten_created"),
         ]
 
     def __str__(self):
