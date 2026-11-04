@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 
@@ -40,7 +41,12 @@ class MdmGoldenRecord(TenantNumbered):
     domain = models.CharField(max_length=30, choices=DOMAIN_CHOICES, default="customer")
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default="approved")
     trust_tier = models.CharField(max_length=20, choices=TRUST_TIER_CHOICES, default="silver")
-    confidence_score = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("100.00"))
+    confidence_score = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("100.00"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
+    )
 
     tax_id = models.CharField(max_length=64, blank=True)
     primary_email = models.EmailField(blank=True)
