@@ -11,6 +11,16 @@ from apps.bi.models.DataWarehouse.WarehouseStoragePolicies import WarehouseStora
 from apps.bi.models.DataWarehouse.WarehouseTables import WarehouseTable
 from apps.core.forms import TenantModelForm
 
+VALID_SQL_TYPES = {
+    "BIGINT", "INTEGER", "INT", "SMALLINT", "TINYINT",
+    "NUMERIC", "DECIMAL", "FLOAT", "DOUBLE", "DOUBLE PRECISION", "REAL",
+    "BOOLEAN", "BOOL",
+    "VARCHAR", "CHAR", "TEXT",
+    "DATE", "TIME", "TIMESTAMP", "DATETIME",
+    "JSON", "BYTES", "BINARY", "VARBINARY",
+}
+SQL_TYPE_REGEX = re.compile(r"^([A-Z]+(?:\s+[A-Z]+)?)(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?$")
+
 
 class WarehouseTableForm(TenantUniqueMixin, TenantModelForm):
     schema_definition_raw = forms.CharField(
@@ -126,6 +136,13 @@ class WarehouseTableForm(TenantUniqueMixin, TenantModelForm):
                 if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", col_name):
                     raise forms.ValidationError(
                         f"Column name '{col_name}' must be a valid SQL identifier."
+                    )
+                col_type = str(item.get("type", "VARCHAR(255)")).strip().upper()
+                m = SQL_TYPE_REGEX.match(col_type)
+                if not m or m.group(1) not in VALID_SQL_TYPES:
+                    raise forms.ValidationError(
+                        f"Unsupported or invalid SQL data type '{col_type}' for column '{col_name}'. "
+                        "Allowed types include BIGINT, INTEGER, NUMERIC(p,s), VARCHAR(n), DATE, TIMESTAMP, BOOLEAN, etc."
                     )
             return parsed
         except json.JSONDecodeError as exc:
