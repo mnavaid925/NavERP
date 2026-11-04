@@ -249,7 +249,7 @@
             <div class="card-body text-sm space-y-3">
                 <div>
                     <div class="text-xs text-muted">Assigned Data Steward</div>
-                    <div class="font-medium mt-0.5">{{ rule.steward.get_full_name|default:rule.steward.username|default:"Unassigned" }}</div>
+                    <div class="font-medium mt-0.5">{% if rule.steward %}{{ rule.steward.get_full_name|default:rule.steward.username }}{% else %}Unassigned{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-xs text-muted">Last Evaluated At</div>
