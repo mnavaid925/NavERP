@@ -132,6 +132,9 @@
             <div class="text-sm font-semibold text-slate-700">
                 {% if golden_record.reviewed_at %}
                 {{ golden_record.reviewed_at|date:"M d, Y H:i" }}
+                {% if golden_record.reviewed_by %}
+                <div class="text-[11px] text-muted font-normal">by {{ golden_record.reviewed_by.get_full_name|default:golden_record.reviewed_by.username }}</div>
+                {% endif %}
                 {% else %}
                 <span class="text-muted font-normal">Not reviewed</span>
                 {% endif %}
