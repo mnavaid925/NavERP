@@ -47,7 +47,7 @@
 - [x] **M8**: Native browser `alert()` in SQL DDL copy button. Replace with non-blocking feedback or label toggle. fixed — fix(bi): replace alert with non-blocking label toggle for DDL copy button
 - [x] **M9**: Redundant `SELECT COUNT(*)` query before queryset iteration in detail templates (`lakehouse_zone/detail.html:112`, `warehouse_storage_policy/detail.html:159`). Use `{{ tables|length }}` instead of `{{ tables.count }}` to leverage result cache. fixed — perf(bi): use tables|length instead of tables.count in detail templates
 - [x] **M10**: Large unused `schema_definition` JSONField loaded in list and overview queries (`WarehouseOverview.py:30-34`, `WarehouseTables.py:22-24`). Add `.defer("schema_definition")` to querysets in list and overview views. fixed — perf(bi): defer schema_definition in warehouse list and overview queries
-- [ ] **M11**: Non-atomic multi-table delete in `seed_bi --flush` (`apps/bi/management/commands/seed_bi.py:36-50`). Wrap deletion block in `with transaction.atomic():`.
+- [x] **M11**: Non-atomic multi-table delete in `seed_bi --flush` (`apps/bi/management/commands/seed_bi.py:36-50`). Wrap deletion block in `with transaction.atomic():`. fixed — fix(bi): wrap multi-table flush deletion block in transaction.atomic
 - [ ] **M12**: Validate ANSI SQL data types in `WarehouseTableForm.clean_schema_definition_raw` to restrict unsupported arbitrary type strings.
 - [ ] **M13**: Unclamped search query `q` parameter string length in list filters. Clamp `q = request.GET.get("q", "").strip()[:100]` across list endpoints.
 
