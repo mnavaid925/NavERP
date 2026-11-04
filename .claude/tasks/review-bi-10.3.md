@@ -12,7 +12,7 @@
 
 ### Critical Findings
 
-- [ ] **C1**: `DataMartForm` scopes neither `owner` nor `steward` to `self.tenant` in `__init__` (triggering full `auth_user` table scans across all tenants and exposing cross-tenant user dropdowns) and omits them from `reject_foreign()` in `clean()`. In `apps/bi/forms/DataWarehouse/DataMarts.py` (L39-L43, L54-L58), filter `owner` and `steward` querysets by `get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username")` and add `"owner"` and `"steward"` to `reject_foreign(self, cleaned_data, ["org_unit", "owner", "steward"])`.
+- [x] **C1**: `DataMartForm` scopes neither `owner` nor `steward` to `self.tenant` in `__init__` (triggering full `auth_user` table scans across all tenants and exposing cross-tenant user dropdowns) and omits them from `reject_foreign()` in `clean()`. In `apps/bi/forms/DataWarehouse/DataMarts.py` (L39-L43, L54-L58), filter `owner` and `steward` querysets by `get_user_model().objects.filter(tenant=self.tenant, is_active=True).order_by("username")` and add `"owner"` and `"steward"` to `reject_foreign(self, cleaned_data, ["org_unit", "owner", "steward"])`. fixed — fix(bi): scope owner and steward to tenant and reject foreign users in DataMartForm
 
 ---
 
