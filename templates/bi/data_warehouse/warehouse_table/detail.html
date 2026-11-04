@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}{{ warehouse_table.name }} — Warehouse Tables — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_table_list' %}">Warehouse Tables</a>
+            <span class="sep">/</span>
+            <span>{{ warehouse_table.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ warehouse_table.name }}</h1>
+            {% if warehouse_table.table_type == 'fact' %}
+            <span class="badge badge-info">{{ warehouse_table.get_table_type_display }}</span>
+            {% elif warehouse_table.table_type == 'dimension' %}
+            <span class="badge badge-green">{{ warehouse_table.get_table_type_display }}</span>
+            {% elif warehouse_table.table_type == 'aggregate' %}
+            <span class="badge badge-purple">{{ warehouse_table.get_table_type_display }}</span>
+            {% else %}
+            <span class="badge badge-slate">{{ warehouse_table.get_table_type_display }}</span>
+            {% endif %}
+
+            {% if warehouse_table.is_conformed_dimension %}
+            <span class="badge badge-green">Conformed Dimension</span>
+            {% endif %}
+            {% if not warehouse_table.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ warehouse_table.number }} · {{ warehouse_table.table_name }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Tables</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'bi:warehouse_table_analyze' pk=warehouse_table.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw"></i>
+                <span>Analyze Statistics</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:warehouse_table_edit' pk=warehouse_table.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Table</span>
+        </a>
+        <form method="post" action="{% url 'bi:warehouse_table_delete' pk=warehouse_table.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete warehouse table {{ warehouse_table.name|escapejs }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Architecture & Telemetry Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Architecture Details -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-slate-800">Dimensional Modeling &amp; Architecture</h2>
+            <span class="text-xs text-muted">ID: {{ warehouse_table.number }}</span>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Physical SQL Table</div>
+                    <div class="text-sm font-mono font-bold text-slate-900 mt-1">{{ warehouse_table.table_name }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Schema Topology</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ warehouse_table.get_schema_type_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Lakehouse Medallion Zone</div>
+                    <div class="text-sm font-medium mt-1">
+                        <a href="{% url 'bi:lakehouse_zone_detail' pk=warehouse_table.lakehouse_zone.pk %}" class="text-primary hover:underline">
+                            {{ warehouse_table.lakehouse_zone.name }}
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Departmental Data Mart</div>
+                    <div class="text-sm font-medium mt-1">
+                        {% if warehouse_table.data_mart %}
+                        <a href="{% url 'bi:data_mart_detail' pk=warehouse_table.data_mart.pk %}" class="text-primary hover:underline">
+                            {{ warehouse_table.data_mart.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Enterprise Wide (No Mart Bound)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Analytical Grain</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">{{ warehouse_table.get_grain_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs font-semibold uppercase tracking-wider text-muted">Key Identifiers</div>
+                    <div class="text-xs font-mono text-slate-800 mt-1">
+                        PK: <span class="font-bold">{{ warehouse_table.primary_key_column }}</span>
+                        {% if warehouse_table.natural_key_column %}
+                        | NK: <span class="font-bold">{{ warehouse_table.natural_key_column }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if warehouse_table.description %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted mb-1">Description &amp; Lineage Notes</div>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ warehouse_table.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Storage Telemetry Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-sm font-semibold text-slate-800">Storage &amp; Telemetry</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Analyzed Row Count</div>
+                <div class="text-2xl font-bold font-mono text-slate-900 mt-1">{{ warehouse_table.row_count }}</div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Storage Footprint &amp; Ratio</div>
+                <div class="text-sm font-medium font-mono text-slate-900 mt-1">
+                    {{ warehouse_table.compressed_bytes }} bytes
+                    <span class="badge badge-green ml-1">{{ warehouse_table.compression_ratio }}x Ratio</span>
+                </div>
+            </div>
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Storage Policy</div>
+                <div class="text-sm font-medium mt-1">
+                    {% if warehouse_table.storage_policy %}
+                    <a href="{% url 'bi:warehouse_storage_policy_detail' pk=warehouse_table.storage_policy.pk %}" class="text-primary hover:underline">
+                        {{ warehouse_table.storage_policy.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted">Standard Unpartitioned</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="pt-4 border-t border-slate-100 text-xs text-muted space-y-1">
+                <div>Last Analyzed: {{ warehouse_table.last_analyzed_at|date:"Y-m-d H:i"|default:"Never" }}</div>
+                <div>Created: {{ warehouse_table.created_at|date:"Y-m-d H:i" }}</div>
+                <div>Updated: {{ warehouse_table.updated_at|date:"Y-m-d H:i" }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Schema Column Definitions -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-sm font-semibold text-slate-800">Schema Column Definitions</h2>
+        <p class="text-xs text-muted">Physical and logical columns declared in this dimensional table</p>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Column Name</th>
+                    <th>Data Type</th>
+                    <th>Nullability</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if warehouse_table.primary_key_column %}
+                <tr class="bg-blue-50/50">
+                    <td class="font-mono text-xs font-bold text-blue-900">
+                        {{ warehouse_table.primary_key_column }}
+                        <span class="badge badge-info ml-1 text-[10px]">Primary Key</span>
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">BIGINT</td>
+                    <td><span class="badge badge-amber text-[10px]">NOT NULL</span></td>
+                    <td class="text-xs text-slate-600">Surrogate primary key index</td>
+                </tr>
+                {% endif %}
+                {% for col in warehouse_table.schema_definition %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-900">{{ col.name }}</td>
+                    <td class="font-mono text-xs text-slate-700 uppercase">{{ col.type|default:"VARCHAR(255)" }}</td>
+                    <td>
+                        {% if col.nullable %}
+                        <span class="badge badge-slate text-[10px]">NULL</span>
+                        {% else %}
+                        <span class="badge badge-amber text-[10px]">NOT NULL</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">{{ col.description|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                {% if not warehouse_table.primary_key_column %}
+                <tr>
+                    <td colspan="4">
+                        <div class="empty-state py-4">
+                            <p class="text-sm text-muted">No explicit columns defined yet. Edit table to add schema definitions.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- SQL DDL Preview -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-sm font-semibold text-slate-800">Generated SQL DDL Script</h2>
+            <p class="text-xs text-muted">Standard ANSI SQL table creation and partition script</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('ddl-content').innerText); alert('SQL copied to clipboard!');">
+            <i data-lucide="copy"></i>
+            <span>Copy SQL</span>
+        </button>
+    </div>
+    <div class="card-body p-0">
+        <pre id="ddl-content" class="p-4 bg-slate-900 text-slate-100 font-mono text-xs rounded-b overflow-x-auto leading-relaxed">{{ ddl_sql }}</pre>
+    </div>
+</div>
+{% endblock %}
