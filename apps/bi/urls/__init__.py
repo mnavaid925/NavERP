@@ -12,6 +12,9 @@ from apps.bi.urls.DataIntegration.IngestionPipelines import (
 from apps.bi.urls.DataIntegration.IngestionRuns import (
     urlpatterns as run_urlpatterns,
 )
+from apps.bi.urls.DataQuality import (
+    urlpatterns as data_quality_urlpatterns,
+)
 from apps.bi.urls.DataWarehouse import (
     urlpatterns as warehouse_urlpatterns,
 )
@@ -49,4 +52,5 @@ urlpatterns = (
     + etl_runs_urlpatterns
     + warehouse_urlpatterns
     + semantic_urlpatterns
+    + data_quality_urlpatterns
 )
