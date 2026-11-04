@@ -42,7 +42,7 @@
 - [x] **M3**: `time_travel_days` lacks server-side range validation. In `apps/bi/forms/DataWarehouse/WarehouseStoragePolicies.py`, add validation in `clean()` verifying `time_travel_days <= 90`. fixed — fix(bi): validate time_travel_days range between 0 and 90 in WarehouseStoragePolicyForm
 - [x] **M4**: `seed_bi.py` command help string omits Sub-module 10.3. Update help text to include `& 10.3 Data Warehouse & Storage`. fixed — docs(bi): update seed_bi command help string to include Sub-module 10.3
 - [x] **M5**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`). Remove unused variable from view context. fixed — fix(bi): remove unused show_ddl_tab context variable from warehouse_table_ddl_preview
-- [ ] **M6**: Undefined utility class `text-primary` used in navigation links in detail templates. Replace with `text-brand` or `text-blue-600`.
+- [x] **M6**: Undefined utility class `text-primary` used in navigation links in detail templates. Replace with `text-brand` or `text-blue-600`. fixed — fix(bi): replace text-primary with text-blue-600 across warehouse templates
 - [ ] **M7**: Empty state heading typography: use semantic `<h3>` inside `.empty-state` container for consistency with `theme.css`.
 - [ ] **M8**: Native browser `alert()` in SQL DDL copy button. Replace with non-blocking feedback or label toggle.
 - [ ] **M9**: Redundant `SELECT COUNT(*)` query before queryset iteration in detail templates (`lakehouse_zone/detail.html:112`, `warehouse_storage_policy/detail.html:159`). Use `{{ tables|length }}` instead of `{{ tables.count }}` to leverage result cache.
