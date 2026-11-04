@@ -79,20 +79,20 @@ def data_quality_scorecard_detail(request, pk):
     exceptions_qs = bi_scope(DataQualityException.objects.all(), request).filter(status__in=["open", "investigating"])
 
     if scorecard.scope_type == "warehouse_table" and scorecard.warehouse_table:
-        evaluated_rules = rules_qs.filter(warehouse_table=scorecard.warehouse_table)
+        evaluated_rules = rules_qs.filter(warehouse_table=scorecard.warehouse_table)[:25]
         related_exceptions = exceptions_qs.filter(warehouse_table=scorecard.warehouse_table)[:15]
     elif scorecard.scope_type == "semantic_model" and scorecard.semantic_model:
-        evaluated_rules = rules_qs.filter(semantic_model=scorecard.semantic_model)
+        evaluated_rules = rules_qs.filter(semantic_model=scorecard.semantic_model)[:25]
         related_exceptions = exceptions_qs.filter(semantic_model=scorecard.semantic_model)[:15]
     elif scorecard.scope_type == "data_mart" and scorecard.data_mart:
         evaluated_rules = rules_qs.filter(
             Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
-        )
+        )[:25]
         related_exceptions = exceptions_qs.filter(
             Q(warehouse_table__data_mart=scorecard.data_mart) | Q(semantic_model__data_mart=scorecard.data_mart)
         )[:15]
     else:
-        evaluated_rules = rules_qs[:15]
+        evaluated_rules = rules_qs[:25]
         related_exceptions = exceptions_qs[:15]
 
     context = {
