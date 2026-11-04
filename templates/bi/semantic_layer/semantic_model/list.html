@@ -38,14 +38,14 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div class="form-group md:col-span-2">
-                <label class="form-label text-xs">Search Models</label>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Search by name, code, grain, key..." class="form-input">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
+            <div class="form-group lg:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search Models</label>
+                <input type="text" id="filter-q" name="q" value="{{ search_query }}" placeholder="Search by name, code, grain, key..." class="form-input">
             </div>
             <div class="form-group">
-                <label class="form-label text-xs">Model Type</label>
-                <select name="model_type" class="form-select">
+                <label class="form-label text-xs" for="filter-model-type">Model Type</label>
+                <select id="filter-model-type" name="model_type" class="form-select">
                     <option value="">All Types</option>
                     {% for val, label in model_type_choices %}
                     <option value="{{ val }}" {% if model_type_filter == val %}selected{% endif %}>{{ label }}</option>
@@ -53,8 +53,8 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label text-xs">Certification</label>
-                <select name="certification_status" class="form-select">
+                <label class="form-label text-xs" for="filter-certification">Certification</label>
+                <select id="filter-certification" name="certification_status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in certification_status_choices %}
                     <option value="{{ val }}" {% if certification_status_filter == val %}selected{% endif %}>{{ label }}</option>
@@ -62,11 +62,20 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label text-xs">Data Mart</label>
-                <select name="data_mart" class="form-select">
+                <label class="form-label text-xs" for="filter-data-mart">Data Mart</label>
+                <select id="filter-data-mart" name="data_mart" class="form-select">
                     <option value="">All Marts</option>
                     {% for mart in data_marts %}
                     <option value="{{ mart.pk|stringformat:'d' }}" {% if data_mart_filter == mart.pk|stringformat:'d' %}selected{% endif %}>{{ mart.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-scd-type">SCD Policy</label>
+                <select id="filter-scd-type" name="scd_type" class="form-select">
+                    <option value="">All SCD Types</option>
+                    {% for val, label in scd_type_choices %}
+                    <option value="{{ val }}" {% if scd_type_filter == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -75,8 +84,8 @@
                     <i data-lucide="filter"></i>
                     <span>Filter</span>
                 </button>
-                {% if search_query or model_type_filter or certification_status_filter or data_mart_filter or scd_type_filter %}
-                <a href="{% url 'bi:semantic_model_list' %}" class="btn btn-outline" title="Clear Filters">
+                {% if search_query or model_type_filter or certification_status_filter or data_mart_filter or scd_type_filter or is_active_filter %}
+                <a href="{% url 'bi:semantic_model_list' %}" class="btn btn-outline" title="Clear Filters" aria-label="Clear Filters">
                     <i data-lucide="x"></i>
                 </a>
                 {% endif %}
@@ -126,7 +135,7 @@
                         {% elif sm.model_type == 'virtual_view' %}
                         <span class="badge badge-amber">Virtual View</span>
                         {% elif sm.model_type == 'reusable_dataset' %}
-                        <span class="badge badge-purple">Certified Dataset</span>
+                        <span class="badge badge-info">Certified Dataset</span>
                         {% else %}
                         <span class="badge badge-slate">{{ sm.get_model_type_display }}</span>
                         {% endif %}
@@ -181,15 +190,15 @@
                         {% endif %}
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'bi:semantic_model_edit' sm.pk %}" class="btn btn-icon" title="Edit Model">
+                        <a href="{% url 'bi:semantic_model_edit' sm.pk %}" class="btn btn-icon" title="Edit Model" aria-label="Edit Model">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'bi:semantic_model_delete' sm.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete semantic model {{ sm.name }} ({{ sm.number }})?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Model">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Model" aria-label="Delete Model">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
@@ -230,13 +239,13 @@
         </div>
         <div class="pagination">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_type_filter %}&model_type={{ model_type_filter }}{% endif %}{% if certification_status_filter %}&certification_status={{ certification_status_filter }}{% endif %}{% if data_mart_filter %}&data_mart={{ data_mart_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_type_filter %}&model_type={{ model_type_filter }}{% endif %}{% if certification_status_filter %}&certification_status={{ certification_status_filter }}{% endif %}{% if data_mart_filter %}&data_mart={{ data_mart_filter }}{% endif %}{% if scd_type_filter %}&scd_type={{ scd_type_filter }}{% endif %}{% if is_active_filter %}&is_active={{ is_active_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 Previous
             </a>
             {% endif %}
             <span class="px-3 py-1 text-sm font-medium">{{ page_obj.number }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_type_filter %}&model_type={{ model_type_filter }}{% endif %}{% if certification_status_filter %}&certification_status={{ certification_status_filter }}{% endif %}{% if data_mart_filter %}&data_mart={{ data_mart_filter }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_type_filter %}&model_type={{ model_type_filter }}{% endif %}{% if certification_status_filter %}&certification_status={{ certification_status_filter }}{% endif %}{% if data_mart_filter %}&data_mart={{ data_mart_filter }}{% endif %}{% if scd_type_filter %}&scd_type={{ scd_type_filter }}{% endif %}{% if is_active_filter %}&is_active={{ is_active_filter }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% endif %}
