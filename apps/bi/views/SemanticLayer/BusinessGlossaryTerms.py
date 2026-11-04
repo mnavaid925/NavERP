@@ -20,7 +20,6 @@ def business_glossary_term_list(request):
     queryset = (
         bi_scope(BusinessGlossaryTerm.objects.all(), request)
         .select_related("steward", "org_unit")
-        .prefetch_related("related_terms")
         .annotate(measure_count=Count("measures", distinct=True))
     )
 
