@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}{{ measure.name }} ({{ measure.number }}) — Calculated Measure — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:calculated_measure_list' %}">Calculated Measures</a>
+            <span class="sep">/</span>
+            <span>{{ measure.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ measure.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ measure.number }}</span>
+            <span class="badge badge-info">{{ measure.get_aggregation_type_display }}</span>
+            {% if measure.time_intelligence != 'none' %}
+            <span class="badge badge-amber">{{ measure.get_time_intelligence_display }}</span>
+            {% endif %}
+            {% if measure.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ measure.description|default:"No description provided for this calculated measure." }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:semantic_model_detail' measure.semantic_model.pk %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Parent Model</span>
+        </a>
+        <a href="{% url 'bi:calculated_measure_edit' measure.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:calculated_measure_delete' measure.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete measure {{ measure.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Calculation Logic Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Formula Expression & Aggregation Logic</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if measure.formula_expression %}
+                <div>
+                    <span class="text-xs uppercase font-medium text-muted block mb-1">Calculated Formula Expression</span>
+                    <pre class="bg-slate-900 text-slate-100 p-3 rounded text-sm font-mono overflow-x-auto leading-relaxed">{{ measure.formula_expression }}</pre>
+                </div>
+                {% endif %}
+
+                {% if measure.filter_expression %}
+                <div>
+                    <span class="text-xs uppercase font-medium text-muted block mb-1">Pre-Aggregation Filter Condition (SQL WHERE)</span>
+                    <pre class="bg-slate-100 text-slate-800 p-2.5 rounded text-xs font-mono overflow-x-auto border border-slate-200">{{ measure.filter_expression }}</pre>
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-sm">
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Identifier Code</span>
+                        <span class="font-mono text-slate-800">{{ measure.code }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Bound Semantic Model</span>
+                        <a href="{% url 'bi:semantic_model_detail' measure.semantic_model.pk %}" class="text-primary hover:underline font-medium">
+                            {{ measure.semantic_model.name }} ({{ measure.semantic_model.number }})
+                        </a>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Aggregation Method</span>
+                        <span class="font-medium text-slate-800">{{ measure.get_aggregation_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Source Physical Column</span>
+                        <span class="font-mono text-slate-700">{{ measure.source_column|default:"Derived from formula" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Time Intelligence</span>
+                        <span class="font-medium text-slate-800">{{ measure.get_time_intelligence_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Output Format String</span>
+                        <span class="font-medium text-slate-800">{{ measure.get_format_string_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Display Scale Unit</span>
+                        <span class="font-medium text-slate-800">{{ measure.get_display_units_display }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Target & Alert Boundaries -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Targets & Alert Thresholds</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded">
+                        <div class="text-xs uppercase font-semibold text-muted">Target Benchmark</div>
+                        <div class="text-lg font-bold font-mono text-slate-800 mt-1">
+                            {{ measure.target_value|default:"Not configured" }}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-amber-50 border border-amber-200 rounded">
+                        <div class="text-xs uppercase font-semibold text-amber-800">Warning Boundary</div>
+                        <div class="text-lg font-bold font-mono text-amber-900 mt-1">
+                            {{ measure.warning_threshold|default:"Not configured" }}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-red-50 border border-red-200 rounded">
+                        <div class="text-xs uppercase font-semibold text-red-800">Critical Boundary</div>
+                        <div class="text-lg font-bold font-mono text-red-900 mt-1">
+                            {{ measure.critical_threshold|default:"Not configured" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (1 col) -->
+    <div class="space-y-6">
+        <!-- Business Glossary Link -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Business Glossary Context</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                {% if measure.glossary_term %}
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Standard Term</span>
+                    <a href="{% url 'bi:business_glossary_term_detail' measure.glossary_term.pk %}" class="text-primary hover:underline font-medium text-base">
+                        {{ measure.glossary_term.name }}
+                    </a>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Canonical Definition</span>
+                    <p class="text-xs text-slate-700 mt-1">{{ measure.glossary_term.short_definition }}</p>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Certification</span>
+                    <span class="badge badge-green mt-1">{{ measure.glossary_term.get_certification_status_display }}</span>
+                </div>
+                {% else %}
+                <p class="text-xs text-muted">No business glossary term linked. Associating a glossary term connects this calculation to standardized definitions.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Audit & Metadata -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Audit & Timestamps</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Created</span>
+                    <span class="text-slate-700 text-xs">{{ measure.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Last Updated</span>
+                    <span class="text-slate-700 text-xs">{{ measure.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
