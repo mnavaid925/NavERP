@@ -13,7 +13,7 @@
 
 ### Critical Findings
 
-- [ ] **[C1] Universal `write_audit_log` parameter mismatch crashes all 15 POST mutations across all 4 entities with HTTP 500**
+- [x] **[C1] Universal `write_audit_log` parameter mismatch crashes all 15 POST mutations across all 4 entities with HTTP 500** — fixed in `80f6ccd7`, `4039c1b1`, `2ec6c25b`, `0e9e6c91`
   - **Found by:** code-reviewer, qa-smoke-tester, security-reviewer
   - **Locations:**
     - `apps/bi/views/MasterData/MdmGoldenRecords.py:121, 148, 174, 213, 253, 273` (`create`, `edit`, `delete`, `merge`, `unmerge`, `approve`)
