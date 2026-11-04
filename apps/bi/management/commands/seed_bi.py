@@ -21,6 +21,10 @@ from apps.bi.models.DataQuality.DataQualityExceptions import DataQualityExceptio
 from apps.bi.models.DataQuality.DataQualityProfiles import DataQualityProfile
 from apps.bi.models.DataQuality.DataQualityRules import DataQualityRule
 from apps.bi.models.DataQuality.DataQualityScorecards import DataQualityScorecard
+from apps.bi.models.MasterData.MdmGoldenRecords import MdmGoldenRecord
+from apps.bi.models.MasterData.MdmHierarchyNodes import MdmHierarchyNode
+from apps.bi.models.MasterData.MdmReferenceCodes import MdmReferenceCode
+from apps.bi.models.MasterData.MdmSurvivorshipRules import MdmSurvivorshipRule
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -44,6 +48,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                MdmHierarchyNode.objects.all().delete()
+                MdmGoldenRecord.objects.all().delete()
+                MdmSurvivorshipRule.objects.all().delete()
+                MdmReferenceCode.objects.all().delete()
                 DataQualityScorecard.objects.all().delete()
                 DataQualityException.objects.all().delete()
                 DataQualityRule.objects.all().delete()
@@ -1482,5 +1490,309 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Quality for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Data Quality already seeded for tenant: {tenant.name}")
+
+            # =========================================================================
+            # 10.6 Master Data Management (MDM) Seeding
+            # =========================================================================
+            if not MdmGoldenRecord.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"  Seeding BI Master Data Management for tenant: {tenant.name}...")
+                with transaction.atomic():
+                    from apps.core.models import Party, OrgUnit
+                    from apps.scm.models.InventoryManagement.Items import Item, ItemCategory
+                    from apps.scm.models.AssetManagement.Assets import Asset
+
+                    demo_party = Party.objects.filter(tenant=tenant).first()
+                    demo_item = Item.objects.filter(tenant=tenant).first()
+                    demo_asset = Asset.objects.filter(tenant=tenant).first()
+                    demo_org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+                    demo_item_category = ItemCategory.objects.filter(tenant=tenant).first()
+
+                    # 1. MdmReferenceCode (Standard enterprise code sets)
+                    ref_codes = [
+                        ("country_codes", "USA", "United States of America", "iso_standard", "US", "Americas"),
+                        ("country_codes", "GBR", "United Kingdom", "iso_standard", "GB", "Europe"),
+                        ("country_codes", "DEU", "Germany", "iso_standard", "DE", "Europe"),
+                        ("country_codes", "JPN", "Japan", "iso_standard", "JP", "Asia-Pacific"),
+                        ("currency_codes", "USD", "US Dollar", "iso_standard", "USD", "Global"),
+                        ("currency_codes", "EUR", "Euro", "iso_standard", "EUR", "Europe"),
+                        ("currency_codes", "GBP", "British Pound", "iso_standard", "GBP", "Europe"),
+                        ("currency_codes", "JPY", "Japanese Yen", "iso_standard", "JPY", "Asia"),
+                        ("uom_codes", "KGM", "Kilogram", "iso_uom", "KG", "Mass"),
+                        ("uom_codes", "EA", "Each / Unit", "iso_uom", "PC", "Quantity"),
+                        ("uom_codes", "MTR", "Meter", "iso_uom", "M", "Length"),
+                        ("payment_terms", "NET30", "Net 30 Days", "erp_core", "N30", "Commercial"),
+                        ("payment_terms", "NET60", "Net 60 Days", "erp_core", "N60", "Commercial"),
+                        ("payment_terms", "DUE_REC", "Due Upon Receipt", "erp_core", "COD", "Immediate"),
+                    ]
+                    for cset, ccode, cname, ssys, scode, cat in ref_codes:
+                        MdmReferenceCode.objects.get_or_create(
+                            tenant=tenant,
+                            code_set=cset,
+                            canonical_code=ccode,
+                            source_system=ssys,
+                            source_code=scode,
+                            defaults={
+                                "canonical_name": cname,
+                                "category": cat,
+                                "status": "active",
+                                "attributes_json": {"standard_spec": "ISO-MDM", "scope": "enterprise"},
+                                "is_active": True,
+                            },
+                        )
+
+                    # 2. MdmSurvivorshipRule (Matching algorithms & precedence matrices)
+                    MdmSurvivorshipRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="legal_name_erp_precedence",
+                        defaults={
+                            "name": "Customer Legal Name ERP Precedence",
+                            "domain": "customer",
+                            "target_field": "name",
+                            "survivorship_strategy": "source_priority",
+                            "match_algorithm": "exact",
+                            "match_threshold_pct": Decimal("85.00"),
+                            "auto_merge_threshold_pct": Decimal("98.00"),
+                            "source_priority_list_json": ["erp_core", "crm_sales", "billing_app", "web_portal"],
+                            "priority_order": 10,
+                            "steward": admin_user,
+                            "description": "Enterprise legal entity name resolution prioritizing operational ERP records.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmSurvivorshipRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="primary_phone_most_recent",
+                        defaults={
+                            "name": "Primary Phone Most Recent Wins",
+                            "domain": "all",
+                            "target_field": "primary_phone",
+                            "survivorship_strategy": "most_recent",
+                            "match_algorithm": "exact",
+                            "match_threshold_pct": Decimal("80.00"),
+                            "auto_merge_threshold_pct": Decimal("95.00"),
+                            "source_priority_list_json": ["crm_sales", "erp_core", "web_portal"],
+                            "priority_order": 20,
+                            "steward": admin_user,
+                            "description": "Attribute survivorship rule selecting newest validated telephone contact.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmSurvivorshipRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="vendor_tax_id_exact_match",
+                        defaults={
+                            "name": "Vendor Tax ID Exact Deterministic Match",
+                            "domain": "vendor",
+                            "target_field": "tax_id",
+                            "survivorship_strategy": "highest_completeness",
+                            "match_algorithm": "exact",
+                            "match_threshold_pct": Decimal("100.00"),
+                            "auto_merge_threshold_pct": Decimal("100.00"),
+                            "source_priority_list_json": ["scm_procurement", "erp_accounting", "legacy_db"],
+                            "priority_order": 30,
+                            "steward": admin_user,
+                            "description": "Zero-tolerance exact tax and VAT ID reconciliation for supplier masters.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmSurvivorshipRule.objects.get_or_create(
+                        tenant=tenant,
+                        code="product_fuzzy_matching_rule",
+                        defaults={
+                            "name": "Product SKU Fuzzy Jaro-Winkler Matching",
+                            "domain": "product",
+                            "target_field": "name",
+                            "survivorship_strategy": "source_priority",
+                            "match_algorithm": "fuzzy_jaro_winkler",
+                            "match_threshold_pct": Decimal("82.00"),
+                            "auto_merge_threshold_pct": Decimal("96.00"),
+                            "source_priority_list_json": ["plm_engineering", "scm_inventory", "ecommerce_store"],
+                            "priority_order": 40,
+                            "steward": admin_user,
+                            "description": "Fuzzy string clustering detecting cross-catalog duplicate material items.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. MdmGoldenRecord (Authoritative single sources of truth)
+                    rec_acme, _ = MdmGoldenRecord.objects.get_or_create(
+                        tenant=tenant,
+                        domain="customer",
+                        code="acme_global_industries",
+                        defaults={
+                            "name": "Acme Global Industries Inc.",
+                            "status": "approved",
+                            "trust_tier": "gold",
+                            "confidence_score": Decimal("99.50"),
+                            "tax_id": "US-123456789",
+                            "primary_email": "contact@acmeglobal.example.com",
+                            "primary_phone": "+1-555-0199",
+                            "primary_address": "100 Innovation Way, Suite 400\nSan Jose, CA 95134",
+                            "party": demo_party,
+                            "source_record_count": 3,
+                            "golden_attributes_json": {
+                                "name": {"value": "Acme Global Industries Inc.", "source_system": "erp_core", "confidence": 100.0},
+                                "tax_id": {"value": "US-123456789", "source_system": "erp_core", "confidence": 100.0},
+                                "primary_phone": {"value": "+1-555-0199", "source_system": "crm_sales", "confidence": 98.5},
+                                "primary_email": {"value": "contact@acmeglobal.example.com", "source_system": "crm_sales", "confidence": 99.0},
+                            },
+                            "source_crosswalks_json": [
+                                {"source_system": "erp_core", "source_record_id": "CUST-1042", "match_confidence": 100.0, "ingested_at": "2026-11-01"},
+                                {"source_system": "crm_sales", "source_record_id": "LEAD-9088", "match_confidence": 98.5, "ingested_at": "2026-11-02"},
+                                {"source_system": "billing_app", "source_record_id": "ACC-4402", "match_confidence": 99.0, "ingested_at": "2026-11-03"},
+                            ],
+                            "assigned_steward": admin_user,
+                            "reviewed_by": admin_user,
+                            "reviewed_at": now,
+                            "stewardship_notes": "Authoritative golden record verified across ERP, CRM, and billing feeds.",
+                            "is_active": True,
+                        },
+                    )
+
+                    rec_apex, _ = MdmGoldenRecord.objects.get_or_create(
+                        tenant=tenant,
+                        domain="vendor",
+                        code="apex_industrial_supply",
+                        defaults={
+                            "name": "Apex Industrial Supply Corp",
+                            "status": "approved",
+                            "trust_tier": "gold",
+                            "confidence_score": Decimal("98.80"),
+                            "tax_id": "US-987654321",
+                            "primary_email": "orders@apexsupply.example.com",
+                            "primary_phone": "+1-555-0288",
+                            "primary_address": "500 Logistics Blvd\nChicago, IL 60607",
+                            "party": demo_party,
+                            "source_record_count": 2,
+                            "golden_attributes_json": {
+                                "name": {"value": "Apex Industrial Supply Corp", "source_system": "scm_procurement", "confidence": 99.0},
+                                "tax_id": {"value": "US-987654321", "source_system": "scm_procurement", "confidence": 100.0},
+                            },
+                            "source_crosswalks_json": [
+                                {"source_system": "scm_procurement", "source_record_id": "VEND-804", "match_confidence": 100.0, "ingested_at": "2026-11-01"},
+                                {"source_system": "legacy_accounting", "source_record_id": "AP-1109", "match_confidence": 97.6, "ingested_at": "2026-11-02"},
+                            ],
+                            "assigned_steward": admin_user,
+                            "reviewed_by": admin_user,
+                            "reviewed_at": now,
+                            "stewardship_notes": "Consolidated supplier profile certified active.",
+                            "is_active": True,
+                        },
+                    )
+
+                    rec_drill, _ = MdmGoldenRecord.objects.get_or_create(
+                        tenant=tenant,
+                        domain="product",
+                        code="titanium_drill_bit_v4",
+                        defaults={
+                            "name": "Precision Titanium Drill Bit #4",
+                            "status": "approved",
+                            "trust_tier": "silver",
+                            "confidence_score": Decimal("94.20"),
+                            "item": demo_item,
+                            "source_record_count": 2,
+                            "golden_attributes_json": {
+                                "name": {"value": "Precision Titanium Drill Bit #4", "source_system": "plm_engineering", "confidence": 95.0},
+                                "sku": {"value": "SKU-DRILL-T4", "source_system": "scm_inventory", "confidence": 93.4},
+                            },
+                            "source_crosswalks_json": [
+                                {"source_system": "plm_engineering", "source_record_id": "PART-0044", "match_confidence": 95.0, "ingested_at": "2026-11-01"},
+                                {"source_system": "scm_inventory", "source_record_id": "ITEM-8812", "match_confidence": 93.4, "ingested_at": "2026-11-03"},
+                            ],
+                            "assigned_steward": admin_user,
+                            "is_active": True,
+                        },
+                    )
+
+                    # Absorbed Duplicate Record
+                    MdmGoldenRecord.objects.get_or_create(
+                        tenant=tenant,
+                        domain="customer",
+                        code="acme_distribution_services",
+                        defaults={
+                            "name": "Acme Distribution Services LLC",
+                            "status": "merged",
+                            "trust_tier": "bronze",
+                            "confidence_score": Decimal("86.50"),
+                            "merged_into_record": rec_acme,
+                            "merged_at": now,
+                            "source_record_count": 1,
+                            "assigned_steward": admin_user,
+                            "stewardship_notes": f"[Merged into {rec_acme.number}]: Confirmed secondary regional branch subsidiary.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. MdmHierarchyNode (Multi-domain tree hierarchies)
+                    root_holding, _ = MdmHierarchyNode.objects.get_or_create(
+                        tenant=tenant,
+                        hierarchy_type="corporate_legal",
+                        code="apex_global_holding",
+                        defaults={
+                            "name": "Apex Global Holding Group",
+                            "golden_record": rec_acme,
+                            "party": demo_party,
+                            "relationship_kind": "parent_holding_entity",
+                            "sort_order": 1,
+                            "level": 1,
+                            "path": "/1/",
+                            "description": "Global ultimate holding corporation for commercial entities.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmHierarchyNode.objects.get_or_create(
+                        tenant=tenant,
+                        hierarchy_type="corporate_legal",
+                        code="na_commercial_operations",
+                        defaults={
+                            "name": "North American Commercial Operations",
+                            "parent": root_holding,
+                            "party": demo_party,
+                            "org_unit": demo_org_unit,
+                            "relationship_kind": "operating_subsidiary",
+                            "sort_order": 10,
+                            "level": 2,
+                            "path": f"{root_holding.path}{root_holding.pk}/",
+                            "description": "Primary operating division across US and Canada.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmHierarchyNode.objects.get_or_create(
+                        tenant=tenant,
+                        hierarchy_type="account_group",
+                        code="tier1_strategic_accounts",
+                        defaults={
+                            "name": "Tier 1 Global Strategic Accounts",
+                            "relationship_kind": "sales_account_tier",
+                            "sort_order": 5,
+                            "level": 1,
+                            "description": "Enterprise accounts generating over $5M ARR.",
+                            "is_active": True,
+                        },
+                    )
+
+                    MdmHierarchyNode.objects.get_or_create(
+                        tenant=tenant,
+                        hierarchy_type="product_taxonomy",
+                        code="industrial_tooling_taxonomy",
+                        defaults={
+                            "name": "Precision Industrial Tooling",
+                            "item_category": demo_item_category,
+                            "relationship_kind": "product_master_family",
+                            "sort_order": 10,
+                            "level": 1,
+                            "description": "Top-level product taxonomy node for heavy tooling.",
+                            "is_active": True,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Master Data Management for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Master Data Management already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
