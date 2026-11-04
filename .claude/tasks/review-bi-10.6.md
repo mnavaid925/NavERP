@@ -142,47 +142,47 @@
 
 ### Minor Findings
 
-- [ ] **[M1] Pinned contract variable `hierarchy_nodes` omitted from `golden_record/detail.html`**
+- [x] **[M1] Pinned contract variable `hierarchy_nodes` omitted from `golden_record/detail.html`** — fixed in `a1bb8dfd`
   - **Location:** `templates/bi/master_data/golden_record/detail.html:275`
   - **Fix:** Render linked hierarchy node cards with links to node detail.
 
-- [ ] **[M2] Redundant duplicate queries in detail templates via `.exists` and `.count`**
+- [x] **[M2] Redundant duplicate queries in detail templates via `.exists` and `.count`** — fixed in `83dcab0d`, `9b8b6781`, `482c01c6`
   - **Locations:** `templates/bi/master_data/reference_code/detail.html:114, 129, 133`, `golden_record/detail.html:229, 242`, `hierarchy_node/detail.html:103, 118`
   - **Fix:** Pre-evaluate into lists in views or use `{% if relation %}` and `{{ relation|length }}` in templates.
 
-- [ ] **[M3] Missing `aria-label` and `title` on pagination previous and next links**
+- [x] **[M3] Missing `aria-label` and `title` on pagination previous and next links** — fixed in `39e39004`, `88acd4e9`, `3944ad3d`, `6a3de151`
   - **Locations:** `list.html` across all 4 entities
   - **Fix:** Add `aria-label="Previous page"` and `aria-label="Next page"`.
 
-- [ ] **[M4] Missing `aria-label` attributes on table action and filter icon buttons**
+- [x] **[M4] Missing `aria-label` attributes on table action and filter icon buttons** — fixed in `c62b7756`, `08e5a4ab`, `4b491af5`, `0455e1ea`
   - **Locations:** `list.html` and `detail.html` across all 4 entities
   - **Fix:** Add `aria-label` attributes matching `title`.
 
-- [ ] **[M5] Confirmation prompt on submit button instead of form `onsubmit` in merge workbench**
+- [x] **[M5] Confirmation prompt on submit button instead of form `onsubmit` in merge workbench** — fixed in `dd719287`
   - **Location:** `templates/bi/master_data/golden_record/detail.html:323, 336`
   - **Fix:** Move `onsubmit="return confirm(...)"` to the `<form>` element.
 
-- [ ] **[M6] Percentage metric fields lack min/max validators**
+- [x] **[M6] Percentage metric fields lack min/max validators** — fixed in `39a8d3c2`, `5bfa83d1`, `aaae78be`
   - **Locations:** `MdmGoldenRecord.confidence_score`, `MdmSurvivorshipRule.match_threshold_pct`, `auto_merge_threshold_pct`
   - **Fix:** Add `MinValueValidator(Decimal("0.00"))` and `MaxValueValidator(Decimal("100.00"))`.
 
-- [ ] **[M7] Over-fetching Foreign Keys via Unused `select_related` in Golden Record List & Overview**
+- [x] **[M7] Over-fetching Foreign Keys via Unused `select_related` in Golden Record List & Overview** — fixed in `6d364d72`, `069fd49b`, `430d600a`
   - **Locations:** `MdmGoldenRecords.py:24-27`, `MdmSurvivorshipRules.py:19`, `MdmOverviewViews.py:38-41`
   - **Fix:** Prune unused joins to only what the templates render.
 
-- [ ] **[M8] Non-standard parameter signature in `MdmGoldenRecordMergeForm`**
+- [x] **[M8] Non-standard parameter signature in `MdmGoldenRecordMergeForm`** — fixed in `5bd2afe9`, `d7a70de3`
   - **Location:** `apps/bi/forms/MasterData/MdmGoldenRecordForms.py:96`
   - **Fix:** Use standard `def __init__(self, *args, tenant=None, primary_record=None, **kwargs):`.
 
-- [ ] **[M9] `reviewed_by` steward omitted from governance panel**
+- [x] **[M9] `reviewed_by` steward omitted from governance panel** — fixed in `edb97473`
   - **Location:** `templates/bi/master_data/golden_record/detail.html:103`
   - **Fix:** Display `Certified by {{ golden_record.reviewed_by.get_full_name|default:golden_record.reviewed_by.username }}` when present.
 
-- [ ] **[M10] Responsive grid empty-state colspan in MDM overview domain distribution**
+- [x] **[M10] Responsive grid empty-state colspan in MDM overview domain distribution** — fixed in `12170d7f`
   - **Location:** `templates/bi/master_data/mdm_overview.html:98-101`
   - **Fix:** Change `col-span-3` to `col-span-full`.
 
-- [ ] **[M11] `total_rules` and `total_reference_codes` context keys not rendered in `mdm_overview.html`**
+- [x] **[M11] `total_rules` and `total_reference_codes` context keys not rendered in `mdm_overview.html`** — fixed in `8ca0107d`
   - **Location:** `templates/bi/master_data/mdm_overview.html:41`
   - **Fix:** Display total count badges on the Survivorship Policies and Reference Code Sets cards.
 
