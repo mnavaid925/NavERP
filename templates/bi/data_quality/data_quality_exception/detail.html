@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Exception {{ exception.number }} — Quality Queue — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_exception_list' %}">Exceptions Queue</a>
+            <span class="sep">/</span>
+            <span>{{ exception.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title font-mono">{{ exception.number }}: {{ exception.record_identifier }}</h1>
+            {% if exception.status == 'remediated' %}
+            <span class="badge badge-green">Remediated</span>
+            {% elif exception.status == 'investigating' %}
+            <span class="badge badge-amber">Investigating</span>
+            {% elif exception.status == 'suppressed_false_positive' %}
+            <span class="badge badge-slate">Suppressed</span>
+            {% elif exception.status == 'accepted_risk' %}
+            <span class="badge badge-info">Accepted Risk</span>
+            {% elif exception.status == 'rejected' %}
+            <span class="badge badge-muted">Rejected</span>
+            {% else %}
+            <span class="badge badge-red">Open Violation</span>
+            {% endif %}
+
+            {% if exception.severity == 'critical' or exception.severity == 'fatal' %}
+            <span class="badge badge-red">{{ exception.get_severity_display }}</span>
+            {% elif exception.severity == 'warning' %}
+            <span class="badge badge-amber">Warning</span>
+            {% else %}
+            <span class="badge badge-slate">Info</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">
+            Type: {{ exception.get_exception_type_display }} &middot; Column: {{ exception.target_column|default:"(Table-level)" }}
+        </p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_quality_exception_edit' exception.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Exception</span>
+        </a>
+        <form method="post" action="{% url 'bi:data_quality_exception_delete' exception.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this exception?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-500 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Violation Context & Remediation Workbench -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Violation Evidence Card -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-5 h-5 text-red-500"></i>
+                    <h2 class="card-title">Violation Evidence & Expected Assertion</h2>
+                </div>
+                <span class="badge badge-slate text-xs">{{ exception.get_exception_type_display }}</span>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Record Identifier</div>
+                        <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 mt-1">
+                            {{ exception.record_identifier }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Target Column</div>
+                        <div class="font-mono text-sm font-semibold text-slate-800 dark:text-slate-200 mt-1">
+                            {{ exception.target_column|default:"(Whole row record)" }}
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted font-medium uppercase tracking-wider mb-1">Captured Invalid / Anomalous Value</div>
+                    <pre class="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-xs font-mono text-red-700 dark:text-red-300 overflow-x-auto whitespace-pre-wrap">{{ exception.invalid_value }}</pre>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted font-medium uppercase tracking-wider mb-1">Expected Business Condition</div>
+                    <div class="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200">
+                        {{ exception.expected_condition|default:"Must satisfy data quality rule assertion." }}
+                    </div>
+                </div>
+
+                {% if exception.proposed_value %}
+                <div>
+                    <div class="text-xs text-muted font-medium uppercase tracking-wider mb-1">Proposed Standardized Value</div>
+                    <pre class="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-lg text-xs font-mono text-blue-700 dark:text-blue-300 overflow-x-auto whitespace-pre-wrap">{{ exception.proposed_value }}</pre>
+                </div>
+                {% endif %}
+
+                {% if exception.remediated_value %}
+                <div>
+                    <div class="text-xs text-muted font-medium uppercase tracking-wider mb-1">Final Remediated Value Applied</div>
+                    <pre class="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-lg text-xs font-mono text-emerald-700 dark:text-emerald-300 overflow-x-auto whitespace-pre-wrap">{{ exception.remediated_value }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Steward Remediation Action Form -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="check-square" class="w-5 h-5 text-emerald-600"></i>
+                    <h2 class="card-title">Steward Remediation Workbench</h2>
+                </div>
+                <span class="text-xs text-muted">Update lifecycle status and resolution audit</span>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:data_quality_exception_remediate' exception.pk %}" class="space-y-4">
+                    {% csrf_token %}
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ remediation_form.status.id_for_label }}">Triage Lifecycle Status</label>
+                            {{ remediation_form.status }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ remediation_form.remediation_action.id_for_label }}">Remediation Action Applied</label>
+                            {{ remediation_form.remediation_action }}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ remediation_form.proposed_value.id_for_label }}">Proposed Cleansed Value</label>
+                            {{ remediation_form.proposed_value }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ remediation_form.remediated_value.id_for_label }}">Final Remediated Value</label>
+                            {{ remediation_form.remediated_value }}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ remediation_form.assigned_steward.id_for_label }}">Assigned Data Steward</label>
+                        {{ remediation_form.assigned_steward }}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ remediation_form.resolution_notes.id_for_label }}">Resolution Audit Notes</label>
+                        {{ remediation_form.resolution_notes }}
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i data-lucide="check"></i>
+                            <span>Save Remediation Updates</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Column: Context & History -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Origin & Context</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                {% if exception.rule %}
+                <div>
+                    <div class="text-xs text-muted">Violated Rule</div>
+                    <div class="font-medium text-xs mt-0.5">
+                        <a href="{% url 'bi:data_quality_rule_detail' exception.rule.pk %}" class="text-primary-600 hover:underline">
+                            {{ exception.rule.name }} ({{ exception.rule.code }})
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Rule Dimension</div>
+                    <div class="text-xs font-medium mt-0.5">{{ exception.rule.get_dimension_display }}</div>
+                </div>
+                {% endif %}
+
+                {% if exception.profile %}
+                <div>
+                    <div class="text-xs text-muted">Discovered in Profile</div>
+                    <div class="font-medium text-xs mt-0.5">
+                        <a href="{% url 'bi:data_quality_profile_detail' exception.profile.pk %}" class="text-primary-600 hover:underline">
+                            {{ exception.profile.name }} ({{ exception.profile.number }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if exception.warehouse_table %}
+                <div>
+                    <div class="text-xs text-muted">Warehouse Table</div>
+                    <div class="font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:warehouse_table_detail' exception.warehouse_table.pk %}" class="text-primary-600 hover:underline">
+                            {{ exception.warehouse_table.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if exception.semantic_model %}
+                <div>
+                    <div class="text-xs text-muted">Semantic Model</div>
+                    <div class="font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:semantic_model_detail' exception.semantic_model.pk %}" class="text-primary-600 hover:underline">
+                            {{ exception.semantic_model.name }}
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Resolution Audit Trail</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-muted">Assigned Steward</div>
+                    <div class="font-medium mt-0.5">{{ exception.assigned_steward.get_full_name|default:exception.assigned_steward.username|default:"Unassigned" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Resolved By</div>
+                    <div class="font-medium mt-0.5">{{ exception.resolved_by.get_full_name|default:exception.resolved_by.username|default:"Pending resolution" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Resolved At</div>
+                    <div class="font-mono text-xs mt-0.5">{{ exception.resolved_at|date:"Y-m-d H:i:s"|default:"Pending" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Logged At</div>
+                    <div class="text-xs text-muted mt-0.5">{{ exception.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
