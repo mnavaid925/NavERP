@@ -119,10 +119,11 @@ def mdm_golden_record_create(request):
             record.tenant = request.tenant
             record.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=record,
+                request.user,
+                record,
+                "create",
                 changes=f"Created golden master record {record.number} ({record.name})",
+                tenant=request.tenant,
             )
             messages.success(request, f"Golden record '{record.name}' created successfully.")
             return redirect("bi:mdm_golden_record_detail", pk=record.pk)
@@ -146,10 +147,11 @@ def mdm_golden_record_edit(request, pk):
         if form.is_valid():
             record = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=record,
+                request.user,
+                record,
+                "update",
                 changes=f"Updated golden master record {record.number}",
+                tenant=request.tenant,
             )
             messages.success(request, f"Golden record '{record.name}' updated successfully.")
             return redirect("bi:mdm_golden_record_detail", pk=record.pk)
@@ -172,10 +174,11 @@ def mdm_golden_record_delete(request, pk):
     record_name = golden_record.name
 
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=golden_record,
+        request.user,
+        golden_record,
+        "delete",
         changes=f"Deleted golden master record {record_number} ({record_name})",
+        tenant=request.tenant,
     )
     golden_record.delete()
     messages.success(request, f"Golden record {record_number} deleted successfully.")
@@ -211,10 +214,11 @@ def mdm_golden_record_merge(request, pk):
             primary_record.save()
 
             write_audit_log(
-                request=request,
-                action="merge",
-                instance=primary_record,
+                request.user,
+                primary_record,
+                "merge",
                 changes=f"Merged {secondary_record.number} into {primary_record.number}",
+                tenant=request.tenant,
             )
 
         messages.success(
@@ -251,10 +255,11 @@ def mdm_golden_record_unmerge(request, pk):
             surviving_record.save()
 
         write_audit_log(
-            request=request,
-            action="unmerge",
-            instance=absorbed_record,
+            request.user,
+            absorbed_record,
+            "unmerge",
             changes=f"Unmerged {absorbed_record.number} from {surviving_record.number}",
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Record {absorbed_record.number} successfully unmerged.")
@@ -271,10 +276,11 @@ def mdm_golden_record_approve(request, pk):
     golden_record.save()
 
     write_audit_log(
-        request=request,
-        action="approve",
-        instance=golden_record,
+        request.user,
+        golden_record,
+        "approve",
         changes=f"Approved golden master record {golden_record.number} by {request.user.username}",
+        tenant=request.tenant,
     )
     messages.success(request, f"Golden record {golden_record.number} approved as certified master.")
     return redirect("bi:mdm_golden_record_detail", pk=golden_record.pk)
