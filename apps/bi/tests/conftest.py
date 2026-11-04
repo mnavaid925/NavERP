@@ -22,6 +22,10 @@ from apps.bi.models import (
     IngestionPipeline,
     IngestionRun,
     LakehouseZone,
+    MdmGoldenRecord,
+    MdmHierarchyNode,
+    MdmReferenceCode,
+    MdmSurvivorshipRule,
     SemanticModel,
     TransformationStep,
     WarehouseStoragePolicy,
@@ -750,6 +754,171 @@ def dq_scorecard_b(db, tenant_b, warehouse_table_b, admin_user_b):
         is_active=True,
     )
 
+# ---------------------------------------------------------------------------
+# 10.6 Master Data Management Fixtures
+# ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def mdm_golden_record_a(db, tenant_a, admin_user):
+    return MdmGoldenRecord.objects.create(
+        tenant=tenant_a,
+        number="BMGR-00001",
+        name="Acme Prime Corp",
+        domain="customer",
+        trust_tier="gold",
+        confidence_score=Decimal("98.50"),
+        status="approved",
+        assigned_steward=admin_user,
+        source_record_count=1,
+        source_crosswalks_json=[{"system": "CRM", "id": "101"}],
+        golden_attributes_json={"tier": "VIP"},
+    )
+
+
+@pytest.fixture
+def mdm_golden_record_secondary_a(db, tenant_a, admin_user):
+    return MdmGoldenRecord.objects.create(
+        tenant=tenant_a,
+        number="BMGR-00002",
+        name="Acme Subsidiary Corp",
+        domain="customer",
+        trust_tier="silver",
+        confidence_score=Decimal("85.00"),
+        status="pending_review",
+        assigned_steward=admin_user,
+        source_record_count=1,
+        source_crosswalks_json=[{"system": "ERP", "id": "202"}],
+        golden_attributes_json={"tier": "Standard"},
+    )
+
+
+@pytest.fixture
+def mdm_golden_record_b(db, tenant_b, admin_user_b):
+    return MdmGoldenRecord.objects.create(
+        tenant=tenant_b,
+        number="BMGR-00003",
+        name="Globex Heavy Industries",
+        domain="customer",
+        trust_tier="silver",
+        confidence_score=Decimal("89.00"),
+        status="approved",
+        assigned_steward=admin_user_b,
+        source_record_count=1,
+        source_crosswalks_json=[{"system": "CRM", "id": "GLB-101"}],
+        golden_attributes_json={"industry": "Manufacturing"},
+    )
+
+
+@pytest.fixture
+def mdm_survivorship_rule_a(db, tenant_a, admin_user):
+    return MdmSurvivorshipRule.objects.create(
+        tenant=tenant_a,
+        number="BMSR-00001",
+        name="Acme Customer Survivorship Rule",
+        domain="customer",
+        survivorship_strategy="source_priority",
+        source_precedence_list=["CRM", "ERP", "BILLING"],
+        match_algorithm="exact",
+        match_threshold_pct=Decimal("80.00"),
+        auto_merge_threshold_pct=Decimal("95.00"),
+        steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def mdm_survivorship_rule_b(db, tenant_b, admin_user_b):
+    return MdmSurvivorshipRule.objects.create(
+        tenant=tenant_b,
+        number="BMSR-00002",
+        name="Globex Vendor Survivorship Rule",
+        domain="vendor",
+        survivorship_strategy="most_recent",
+        source_precedence_list=["PROCUREMENT"],
+        match_algorithm="fuzzy_token",
+        match_threshold_pct=Decimal("85.00"),
+        auto_merge_threshold_pct=Decimal("95.00"),
+        steward=admin_user_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def mdm_hierarchy_node_root_a(db, tenant_a):
+    return MdmHierarchyNode.objects.create(
+        tenant=tenant_a,
+        number="BMHR-00001",
+        name="Acme Global Enterprise",
+        code="acme_global",
+        hierarchy_type="corporate_legal",
+        node_type="holding_company",
+        parent=None,
+        level=0,
+        sort_order=10,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def mdm_hierarchy_node_child_a(db, tenant_a, mdm_hierarchy_node_root_a, mdm_golden_record_a):
+    return MdmHierarchyNode.objects.create(
+        tenant=tenant_a,
+        number="BMHR-00002",
+        name="Acme North America LLC",
+        code="acme_na",
+        hierarchy_type="corporate_legal",
+        node_type="subsidiary",
+        parent=mdm_hierarchy_node_root_a,
+        golden_record=mdm_golden_record_a,
+        level=1,
+        sort_order=20,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def mdm_hierarchy_node_b(db, tenant_b):
+    return MdmHierarchyNode.objects.create(
+        tenant=tenant_b,
+        number="BMHR-00003",
+        name="Globex International Corp",
+        code="globex_intl",
+        hierarchy_type="corporate_legal",
+        node_type="holding_company",
+        parent=None,
+        level=0,
+        sort_order=10,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def mdm_reference_code_a(db, tenant_a):
+    return MdmReferenceCode.objects.create(
+        tenant=tenant_a,
+        number="BMRD-00001",
+        code_set="ISO-4217-CURRENCY",
+        source_system="SAP",
+        source_code="USD",
+        canonical_code="USD",
+        canonical_name="United States Dollar",
+        status="active",
+        is_standard=True,
+    )
+
+
+@pytest.fixture
+def mdm_reference_code_b(db, tenant_b):
+    return MdmReferenceCode.objects.create(
+        tenant=tenant_b,
+        number="BMRD-00002",
+        code_set="ISO-4217-CURRENCY",
+        source_system="ORACLE",
+        source_code="EUR",
+        canonical_code="EUR",
+        canonical_name="Euro",
+        status="active",
+        is_standard=True,
+    )
 
