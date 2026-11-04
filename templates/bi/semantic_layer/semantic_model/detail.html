@@ -37,6 +37,10 @@
         <p class="text-muted text-sm">{{ model.description|default:"No description provided for this semantic model." }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:semantic_model_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Semantic Models</span>
+        </a>
         {% if model.warehouse_table %}
         <form method="post" action="{% url 'bi:semantic_model_introspect' model.pk %}" class="inline">
             {% csrf_token %}
@@ -151,7 +155,7 @@
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <div>
-                    <h2 class="text-base font-semibold">Calculated Measures ({{ measures.count }})</h2>
+                    <h2 class="text-base font-semibold">Calculated Measures ({{ measures|length }})</h2>
                     <p class="text-xs text-muted">Centrally authored KPIs, aggregations, ratios, and time-intelligence metrics</p>
                 </div>
                 <a href="{% url 'bi:calculated_measure_create' %}?model={{ model.pk }}" class="btn btn-outline btn-sm">
@@ -207,10 +211,10 @@
                                 <span class="text-xs font-medium text-slate-700">{{ cm.get_format_string_display }}</span>
                             </td>
                             <td class="text-right table-actions">
-                                <a href="{% url 'bi:calculated_measure_detail' cm.pk %}" class="btn btn-icon" title="View Measure">
+                                <a href="{% url 'bi:calculated_measure_detail' cm.pk %}" class="btn btn-icon" title="View Measure" aria-label="View Measure">
                                     <i data-lucide="eye"></i>
                                 </a>
-                                <a href="{% url 'bi:calculated_measure_edit' cm.pk %}" class="btn btn-icon" title="Edit Measure">
+                                <a href="{% url 'bi:calculated_measure_edit' cm.pk %}" class="btn btn-icon" title="Edit Measure" aria-label="Edit Measure">
                                     <i data-lucide="pencil"></i>
                                 </a>
                             </td>
@@ -231,7 +235,7 @@
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <div>
-                    <h2 class="text-base font-semibold">Drill Hierarchies ({{ drill_hierarchies.count }})</h2>
+                    <h2 class="text-base font-semibold">Drill Hierarchies ({{ drill_hierarchies|length }})</h2>
                     <p class="text-xs text-muted">Multi-level dimensional drill paths for self-service analytics</p>
                 </div>
                 <a href="{% url 'bi:drill_hierarchy_create' %}?model={{ model.pk }}" class="btn btn-outline btn-sm">
@@ -277,10 +281,10 @@
                                 {% endif %}
                             </td>
                             <td class="text-right table-actions">
-                                <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="btn btn-icon" title="View Hierarchy">
+                                <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="btn btn-icon" title="View Hierarchy" aria-label="View Hierarchy">
                                     <i data-lucide="eye"></i>
                                 </a>
-                                <a href="{% url 'bi:drill_hierarchy_edit' dh.pk %}" class="btn btn-icon" title="Edit Hierarchy">
+                                <a href="{% url 'bi:drill_hierarchy_edit' dh.pk %}" class="btn btn-icon" title="Edit Hierarchy" aria-label="Edit Hierarchy">
                                     <i data-lucide="pencil"></i>
                                 </a>
                             </td>
@@ -345,11 +349,11 @@
                     <form method="post" action="{% url 'bi:semantic_model_certify' model.pk %}" class="space-y-3">
                         {% csrf_token %}
                         <div class="form-group">
-                            <label class="form-label text-xs">New Status</label>
+                            <label class="form-label text-xs" for="{{ certify_form.certification_status.id_for_label }}">New Status</label>
                             {{ certify_form.certification_status }}
                         </div>
                         <div class="form-group">
-                            <label class="form-label text-xs">Sign-off Notes</label>
+                            <label class="form-label text-xs" for="{{ certify_form.certification_notes.id_for_label }}">Sign-off Notes</label>
                             {{ certify_form.certification_notes }}
                         </div>
                         <button type="submit" class="btn btn-outline btn-sm w-full">
@@ -397,7 +401,9 @@
             <div class="card-body text-sm space-y-3">
                 <div>
                     <span class="text-xs text-muted uppercase font-medium block">Owner / Author</span>
-                    <span class="font-medium text-slate-800">{{ model.owner.get_full_name|default:model.owner.username|default:"Unassigned" }}</span>
+                    <span class="font-medium text-slate-800">
+                        {% if model.owner %}{{ model.owner.get_full_name|default:model.owner.username }}{% else %}Unassigned{% endif %}
+                    </span>
                 </div>
                 <div>
                     <span class="text-xs text-muted uppercase font-medium block">Created</span>
