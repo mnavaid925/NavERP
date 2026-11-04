@@ -141,6 +141,8 @@ class SemanticModel(TenantNumbered):
             models.Index(fields=["tenant", "certification_status"], name="idx_bsmd_ten_cert"),
             models.Index(fields=["tenant", "warehouse_table"], name="idx_bsmd_ten_whtbl"),
             models.Index(fields=["tenant", "is_active"], name="idx_bsmd_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bsmd_ten_created"),
+            models.Index(fields=["tenant", "data_mart"], name="idx_bsmd_ten_mart"),
         ]
 
     def __str__(self):
