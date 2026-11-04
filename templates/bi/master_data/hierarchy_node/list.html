@@ -216,13 +216,13 @@
         </div>
         <div class="flex gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm" title="Previous page" aria-label="Previous page">
                 <i data-lucide="chevron-left"></i>
             </a>
             {% endif %}
             <span class="btn btn-outline btn-sm active">{{ page_obj.number }}</span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.hierarchy_type %}&hierarchy_type={{ request.GET.hierarchy_type }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}" class="btn btn-outline btn-sm" title="Next page" aria-label="Next page">
                 <i data-lucide="chevron-right"></i>
             </a>
             {% endif %}
