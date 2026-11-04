@@ -114,11 +114,11 @@
                         <option value="{{ val }}" {% if request.GET.trust_tier == val %}selected{% endif %}>{{ label }}</option>
                         {% endfor %}
                     </select>
-                    <button type="submit" class="btn btn-outline" title="Filter">
+                    <button type="submit" class="btn btn-outline" title="Filter" aria-label="Filter">
                         <i data-lucide="filter"></i>
                     </button>
                     {% if request.GET.q or request.GET.domain or request.GET.status or request.GET.trust_tier %}
-                    <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                         <i data-lucide="x"></i>
                     </a>
                     {% endif %}
@@ -203,15 +203,15 @@
                         {% endif %}
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'bi:mdm_golden_record_detail' record.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'bi:mdm_golden_record_detail' record.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'bi:mdm_golden_record_edit' record.pk %}" class="btn btn-icon" title="Edit Record">
+                        <a href="{% url 'bi:mdm_golden_record_edit' record.pk %}" class="btn btn-icon" title="Edit Record" aria-label="Edit Record">
                             <i data-lucide="pencil"></i>
                         </a>
                         <form method="post" action="{% url 'bi:mdm_golden_record_delete' record.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete golden master record {{ record.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Record">
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Record" aria-label="Delete Record">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
