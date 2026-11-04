@@ -105,6 +105,7 @@ class WarehouseStoragePolicy(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bwsp_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "name"], name="idx_bwsp_ten_name"),
             models.Index(fields=["tenant", "partition_strategy"], name="idx_bwsp_ten_part"),
             models.Index(fields=["tenant", "is_default"], name="idx_bwsp_ten_def"),
             models.Index(fields=["tenant", "is_active"], name="idx_bwsp_ten_active"),
