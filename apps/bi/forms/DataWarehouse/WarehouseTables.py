@@ -1,4 +1,5 @@
 import json
+import re
 
 from django import forms
 from django.db.models import Q
@@ -90,12 +91,25 @@ class WarehouseTableForm(TenantUniqueMixin, TenantModelForm):
     def clean_table_name(self):
         name = self.cleaned_data.get("table_name", "").strip().lower()
         if name:
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", name):
+                raise forms.ValidationError(
+                    "Table name must be a valid SQL identifier (letters, digits, underscore; starting with a letter or underscore; max 63 chars)."
+                )
             existing = WarehouseTable.objects.filter(tenant=self.tenant, table_name=name)
             if self.instance.pk:
                 existing = existing.exclude(pk=self.instance.pk)
             if existing.exists():
                 raise forms.ValidationError("A warehouse table with this physical table name already exists in your workspace.")
         return name
+
+    def clean_primary_key_column(self):
+        col = self.cleaned_data.get("primary_key_column", "").strip()
+        if col:
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", col):
+                raise forms.ValidationError(
+                    "Primary key column must be a valid SQL identifier (letters, digits, underscore; starting with a letter or underscore; max 63 chars)."
+                )
+        return col
 
     def clean_schema_definition_raw(self):
         raw = self.cleaned_data.get("schema_definition_raw", "").strip()
@@ -108,6 +122,11 @@ class WarehouseTableForm(TenantUniqueMixin, TenantModelForm):
             for item in parsed:
                 if not isinstance(item, dict) or "name" not in item:
                     raise forms.ValidationError("Each item in the schema definition must be a dictionary containing at least a 'name' key.")
+                col_name = str(item.get("name", "")).strip()
+                if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", col_name):
+                    raise forms.ValidationError(
+                        f"Column name '{col_name}' must be a valid SQL identifier."
+                    )
             return parsed
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON format: {exc.msg}")
