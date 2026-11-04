@@ -60,12 +60,16 @@ class MdmHierarchyNodeForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         parent = cleaned.get("parent")
-        if parent and self.instance and self.instance.pk:
-            if parent.pk == self.instance.pk:
-                raise ValidationError({"parent": "A hierarchy node cannot be its own parent."})
-            # Prevent circular reference if parent has this node in its path
-            if self.instance.path and self.instance.path in parent.path:
-                raise ValidationError({"parent": "Cannot set a child node as parent (circular hierarchy)."})
+        hierarchy_type = cleaned.get("hierarchy_type")
+        if parent:
+            if hierarchy_type and parent.hierarchy_type != hierarchy_type:
+                raise ValidationError({"parent": "Parent node hierarchy type must match node hierarchy type."})
+            if self.instance and self.instance.pk:
+                if parent.pk == self.instance.pk:
+                    raise ValidationError({"parent": "A hierarchy node cannot be its own parent."})
+                # Prevent circular reference if parent has this node in its path
+                if self.instance.path and self.instance.path in parent.path:
+                    raise ValidationError({"parent": "Cannot set a child node as parent (circular hierarchy)."})
         reject_foreign(
             self,
             cleaned,
