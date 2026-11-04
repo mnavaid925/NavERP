@@ -16,7 +16,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def mdm_survivorship_rule_list(request):
-    queryset = bi_scope(MdmSurvivorshipRule.objects.all(), request).select_related("steward")
+    queryset = bi_scope(MdmSurvivorshipRule.objects.all(), request)
 
     q = request.GET.get("q", "").strip()[:100]
     if q:
