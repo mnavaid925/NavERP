@@ -34,4 +34,29 @@
 3. `apps/bi/forms/DataQuality/DataQualityRuleForms.py:62-72` — `clean_parameters_json` does not validate that parsed JSON is a `dict`.
 4. `apps/bi/views/DataQuality/DataQualityScorecards.py:87, 191` — Scorecard rule/exception scoping only explicitly branches for warehouse_table and semantic_model; add data_mart branch.
 
+---
+
+### Pass 2: explorer
+
+#### Critical
+1. `apps/bi/views/DataQuality/DataQualityScorecards.py:80-92, 185-195` — Missing `data_mart` scope resolution in Scorecard Detail & Recalculation views: branches only for warehouse_table and semantic_model, falling back to tenant-wide for data_mart scoped scorecards instead of filtering `rules_qs.filter(warehouse_table__data_mart=scorecard.data_mart)`.
+
+#### Important
+1. `templates/bi/data_quality/data_quality_profile/list.html:70-115, 190, 194` — Filter bar & pagination omit `semantic_model` (dropdown missing, pagination drops param).
+2. `templates/bi/data_quality/data_quality_rule/list.html:78-125, 262, 266` — Filter bar & pagination omit `warehouse_table` and `semantic_model`.
+3. `templates/bi/data_quality/data_quality_exception/list.html:81-125, 249, 253` — Filter bar & pagination omit `rule` dropdown and pagination drops `assigned_steward` and `rule`.
+4. `apps/bi/views/DataQuality/QualityOverviewViews.py:44` — `critical_exceptions` does not filter for `severity__in=["critical", "fatal"]`.
+5. `apps/bi/management/commands/seed_bi.py:45-63` — `--flush` handler omits Sub-module 10.5 models (`DataQualityScorecard`, `DataQualityException`, `DataQualityRule`, `DataQualityProfile`).
+6. `apps/bi/forms/DataQuality/DataQualityExceptionForms.py:75` — `DataQualityExceptionRemediationForm` inherits from `forms.ModelForm` instead of `TenantModelForm`, lacking tenant scoping and `reject_foreign`.
+7. `templates/bi/data_quality/data_quality_exception/detail.html:125-168` — Remediation form does not display form errors, and invalid POST redirects instead of re-rendering with errors.
+8. `templates/bi/data_quality/data_quality_profile/detail.html`, `rule/detail.html`, `exception/detail.html`, `scorecard/detail.html` — Missing "Back to List" navigation action in header toolbar.
+
+#### Minor
+1. `templates/bi/data_quality/data_quality_scorecard/detail.html:196` — Unlinked Data Mart domain in detail sidebar; should link to `bi:data_mart_detail`.
+2. `templates/bi/data_quality/data_quality_profile/detail.html:82` — Use of non-standard `badge-purple`.
+3. `apps/bi/forms/DataQuality/DataQualityRuleForms.py:62-72` — `clean_parameters_json` does not enforce dict structure.
+4. `apps/bi/management/commands/seed_bi.py:29` — Command help string omits 10.5.
+5. `apps/bi/views/DataQuality/DataQualityScorecards.py:233-242` — Health status assignment logic unreachable failing branch.
+
+
 
