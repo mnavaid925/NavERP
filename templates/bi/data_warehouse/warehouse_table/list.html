@@ -84,8 +84,8 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
-            <div class="form-group md:col-span-2">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div class="form-group">
                 <label class="form-label" for="search-input">Search</label>
                 <input type="text" id="search-input" name="q" value="{{ search_query }}" placeholder="Table name, physical SQL name..." class="form-input">
             </div>
@@ -113,6 +113,33 @@
                     <option value="">All Zones</option>
                     {% for z in lakehouse_zones %}
                     <option value="{{ z.pk }}" {% if request.GET.lakehouse_zone == z.pk|stringformat:"d" %}selected{% endif %}>{{ z.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="data-mart-filter">Data Mart</label>
+                <select id="data-mart-filter" name="data_mart" class="form-select">
+                    <option value="">All Marts</option>
+                    {% for m in data_marts %}
+                    <option value="{{ m.pk }}" {% if request.GET.data_mart == m.pk|stringformat:"d" %}selected{% endif %}>{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="grain-filter">Grain</label>
+                <select id="grain-filter" name="grain" class="form-select">
+                    <option value="">All Grains</option>
+                    {% for code, label in grain_choices %}
+                    <option value="{{ code }}" {% if request.GET.grain == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="active-filter">Status</label>
+                <select id="active-filter" name="is_active" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in active_choices %}
+                    <option value="{{ val }}" {% if request.GET.is_active == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
