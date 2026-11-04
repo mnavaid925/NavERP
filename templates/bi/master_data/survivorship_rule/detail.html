@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.number }} — {{ rule.name }} — Survivorship Rules — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_survivorship_rule_list' %}">Survivorship Rules</a>
+            <span class="sep">/</span>
+            <span>{{ rule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ rule.name }}</h1>
+            {% if rule.is_active %}
+            <span class="badge badge-green text-xs">Active Rule</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">Inactive</span>
+            {% endif %}
+            <span class="badge badge-info text-xs">{{ rule.get_domain_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Code: {{ rule.code }} · Target Field: {{ rule.target_field }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:mdm_survivorship_rule_edit' rule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Rule</span>
+        </a>
+        <a href="{% url 'bi:mdm_survivorship_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Rules</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Rule Specification -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Survivorship Policy Specification</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Survivorship Strategy</dt>
+                        <dd class="font-semibold text-slate-800">{{ rule.get_survivorship_strategy_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Entity Resolution Match Algorithm</dt>
+                        <dd class="font-semibold text-slate-800">{{ rule.get_match_algorithm_display }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Steward Review Match Threshold</dt>
+                        <dd class="font-mono font-semibold text-amber-600">{{ rule.match_threshold_pct }}%</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Automated Merge Threshold</dt>
+                        <dd class="font-mono font-semibold text-emerald-600">{{ rule.auto_merge_threshold_pct }}%</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Rule Evaluation Precedence Order</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ rule.priority_order }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Assigned Data Steward</dt>
+                        <dd class="text-slate-800">
+                            {% if rule.steward %}
+                            {{ rule.steward.get_full_name|default:rule.steward.username }}
+                            {% else %}
+                            <span class="text-muted">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs text-muted">Business Description & Intent</dt>
+                        <dd class="text-slate-700 whitespace-pre-line">{{ rule.description|default:"No description provided." }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Source System Precedence Ranking -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Source System Authority Ranking</h3>
+                <span class="text-xs text-muted">Highest to Lowest Precedence</span>
+            </div>
+            <div class="card-body">
+                {% if source_priority_list %}
+                <ol class="space-y-2">
+                    {% for src in source_priority_list %}
+                    <li class="flex items-center gap-3 p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span class="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold">
+                            {{ forloop.counter }}
+                        </span>
+                        <span class="font-mono font-semibold text-sm text-slate-800">{{ src }}</span>
+                        {% if forloop.first %}
+                        <span class="badge badge-green text-xs ml-auto">Highest Authority</span>
+                        {% elif forloop.last %}
+                        <span class="badge badge-slate text-xs ml-auto">Fallback Source</span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% else %}
+                <div class="text-sm text-muted py-4 text-center">
+                    No explicit source priority list configured. Evaluates based on timestamp recency or majority vote.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Metadata & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Governance & Metadata</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                <div>
+                    <span class="text-muted block">System Number:</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ rule.number }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block">Created Date:</span>
+                    <span class="text-slate-700">{{ rule.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block">Last Updated:</span>
+                    <span class="text-slate-700">{{ rule.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Rule Actions</h3>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'bi:mdm_survivorship_rule_edit' rule.pk %}" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="pencil"></i>
+                    <span>Edit Configuration</span>
+                </a>
+                <form method="post" action="{% url 'bi:mdm_survivorship_rule_delete' rule.pk %}" onsubmit="return confirm('Delete survivorship rule {{ rule.number }}?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50 w-full justify-center">
+                        <i data-lucide="trash-2"></i>
+                        <span>Delete Rule</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
