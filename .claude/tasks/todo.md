@@ -7,6 +7,254 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.5: Data Quality & Cleansing (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.5.md` (2026-11-04)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, and 10.4.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0012_businessglossaryterm_idx_bglo_ten_domain_name_and_more.py`, so **10.5 claims `0013`** (or next available).
+> Plan written from `.claude/tasks/research-bi-10.5.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/DataQuality/`
+> Template folder name: `templates/bi/data_quality/{data_quality_profile,data_quality_rule,data_quality_exception,data_quality_scorecard}/` + `quality_overview.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Data Quality & Cleansing Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical Target Scoping:
+    - `DataQualityProfile`: `warehouse_table` links to verified sibling `bi.WarehouseTable` (Sub-module 10.3, cascade delete), `semantic_model` links to verified sibling `bi.SemanticModel` (Sub-module 10.4, cascade delete).
+    - `DataQualityRule`: `warehouse_table` links to `bi.WarehouseTable` (cascade delete), `semantic_model` links to `bi.SemanticModel` (cascade delete), and `steward` links to `settings.AUTH_USER_MODEL` (set null on delete).
+    - `DataQualityException`: `rule` links to `bi.DataQualityRule` (set null on delete), `profile` links to `bi.DataQualityProfile` (set null on delete), `warehouse_table` links to `bi.WarehouseTable` (set null on delete), `semantic_model` links to `bi.SemanticModel` (set null on delete), `assigned_steward` links to `settings.AUTH_USER_MODEL`, and `resolved_by` links to `settings.AUTH_USER_MODEL`.
+    - `DataQualityScorecard`: `warehouse_table` links to `bi.WarehouseTable` (set null on delete), `semantic_model` links to `bi.SemanticModel` (set null on delete), `data_mart` links to `bi.DataMart` (Sub-module 10.3, set null on delete), `org_unit` links to verified `core.OrgUnit` (Module 0.1 Org Units, set null on delete), and `steward` links to `settings.AUTH_USER_MODEL`.
+  - Operational Boundary: 10.5 owns *data profiling (statistical indicators, null ratios, distinct counts, min/max/mean, pattern masks), configurable declarative validation rules (not null, uniqueness, ranges, regex, enums, referential integrity, freshness, custom SQL), fuzzy deduplication clustering and similarity thresholds, standardization and imputation transformations, multi-dimensional quality scorecards (ISO/DAMA 6 dimensions, Data Trust Index, letter grades A-F, SLA targets), and operational data steward exception queues with investigation and remediation workflows*.
+  - Sibling Hand-offs & Boundaries:
+    - 10.3 (`DataWarehouse`): Consolidated warehouse tables (`fact_*`, `dim_*`, `agg_*`), subject data marts, and lakehouse zones evaluated by 10.5 rules.
+    - 10.4 (`SemanticLayer`): Governed semantic models, dimensions, and measures evaluated by 10.5 profiles.
+    - 10.5 (`DataQuality` — THIS SUB-MODULE): Automated profiling, quality rule assertions, duplicate candidate detection, and steward exception remediation.
+    - 10.6 (`MasterDataManagement` — NEXT SUB-MODULE): Consumes 10.5 duplicate detection candidate pairs to drive cross-system Golden Record consolidation, master record match/merge/survivorship across Parties, Items, and Vendors, and enterprise reference data crosswalks.
+    - 10.7 (`DataCatalog`): Enterprise search catalog, PII/regulatory tagging, and visual lineage displaying 10.5 quality badges and trust ratings.
+    - 10.8 (`InteractiveDashboards`): Visual heatmaps and operational scorecards consuming 10.5 Data Trust Index metrics.
+  - Audit logging: Administrative and steward actions (rule execution, manual validation runs, exception remediation actions, steward assignments, scorecard recalculation) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BDQP` (DataQualityProfile), `BDQR` (DataQualityRule), `BDQE` (DataQualityException), `BDQS` (DataQualityScorecard) verified 100% collision-free repository-wide.
+
+---
+
+## 10.5-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO cross-system Golden Record merge/survivorship engine** — Master Data Management (MDM) Golden Records across Parties, Vendors, and Items is the core scope of Sub-module 10.6 MDM.
+- [ ] **NO automated Great Expectations CLI daemon / Soda Core background subprocess runners** — Execution is internal Django ORM/SQL calculation and scheduled pipeline steps.
+- [ ] **NO commercial paid external address API integrations (SmartyStreets, Google Maps Geocoding)** — Standardization relies on local regex, trimming, case normalization, and dictionary reference lookups.
+- [ ] **NO distributed Apache Spark / Trino / DuckDB distributed cluster orchestration** — Analytics run directly on SQL warehouse tables and semantic query engines.
+- [ ] **NO LLM-based natural language rule generation** — Deferred to 10.15 Natural Language & Conversational BI.
+
+---
+
+## Models (4 models in `apps/bi/models/DataQuality/`)
+
+- [ ] **`DataQualityProfile`** [Prefix: `BDQP-`] (`apps/bi/models/DataQuality/DataQualityProfiles.py`)
+  - **Purpose**: Statistical metadata and data health profiling across physical warehouse tables and analytical semantic models (row/column counts, null frequencies, distinct ratios, min/max/mean, pattern masks, and completeness/uniqueness/validity scores).
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Sales Fact Table Profile", "Customer Dimension Profile")
+    - `target_type`: `CharField(max_length=25, choices=[('warehouse_table', 'Warehouse Table'), ('semantic_model', 'Semantic Model')], default='warehouse_table')` (driver: 10.5-DP-01)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.CASCADE, related_name='quality_profiles')` (driver: 10.5-DP-01)
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', null=True, blank=True, on_delete=models.CASCADE, related_name='quality_profiles')` (driver: 10.5-DP-01)
+    - `status`: `CharField(max_length=25, choices=[('pending', 'Pending / Scheduled'), ('profiling', 'Profiling In Progress'), ('completed', 'Completed Successfully'), ('failed', 'Profiling Failed')], default='pending')` (driver: 10.5-DP-02)
+    - `total_row_count`: `BigIntegerField(default=0, help_text="Total rows analyzed during profiling run")` (driver: 10.5-DP-03)
+    - `total_column_count`: `PositiveIntegerField(default=0, help_text="Total columns analyzed")` (driver: 10.5-DP-03)
+    - `completeness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'), help_text="Percentage of populated, non-null values")` (driver: 10.5-DP-04)
+    - `uniqueness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'), help_text="Percentage of unique distinct records across primary keys")` (driver: 10.5-DP-04)
+    - `validity_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'), help_text="Percentage of values conforming to expected data types and masks")` (driver: 10.5-DP-04)
+    - `column_profiles_json`: `JSONField(default=list, help_text="Statistical metadata per column: column_name, data_type, null_count, null_pct, distinct_count, distinct_pct, min_value, max_value, avg_value, sample_patterns, most_frequent_values")` (driver: 10.5-DP-05)
+    - `profiled_by`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')`
+    - `profiled_at`: `DateTimeField(null=True, blank=True)` (driver: 10.5-DP-06)
+    - `duration_seconds`: `DecimalField(max_digits=8, decimal_places=2, default=Decimal('0.00'), help_text="Execution run duration in seconds")` (driver: 10.5-DP-06)
+    - `error_message`: `TextField(blank=True)`
+    - `notes`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `total_row_count`, `total_column_count`, `completeness_score`, `uniqueness_score`, `validity_score`, `column_profiles_json`, `profiled_by`, `profiled_at`, `duration_seconds`, `error_message`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'target_type']), models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'warehouse_table']), models.Index(fields=['tenant', 'semantic_model'])]`
+
+- [ ] **`DataQualityRule`** [Prefix: `BDQR-`] (`apps/bi/models/DataQuality/DataQualityRules.py`)
+  - **Purpose**: Configurable declarative assertions (Not Null, Uniqueness, Range Boundaries, Regex, Enums, Referential Integrity, Freshness, Custom SQL, Standardization, and Fuzzy Duplicate Clustering) with failure tolerance and execution tracking.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Customer Email Valid Format", "Invoice Line Amount Greater Than Zero")
+    - `code`: `SlugField(max_length=60)`
+    - `rule_category`: `CharField(max_length=25, choices=[('validation', 'Validation & Accuracy Check'), ('consistency', 'Consistency & Referential Integrity'), ('uniqueness', 'Uniqueness & Deduplication'), ('standardization', 'Standardization & Cleansing'), ('custom_sql', 'Custom SQL Assertion')], default='validation')` (driver: 10.5-VR-01)
+    - `dimension`: `CharField(max_length=20, choices=[('completeness', 'Completeness'), ('accuracy', 'Accuracy'), ('consistency', 'Consistency'), ('timeliness', 'Timeliness'), ('uniqueness', 'Uniqueness'), ('validity', 'Validity')], default='validity')` (driver: 10.5-VR-02)
+    - `target_type`: `CharField(max_length=25, choices=[('warehouse_table', 'Warehouse Table'), ('semantic_model', 'Semantic Model')], default='warehouse_table')` (driver: 10.5-VR-03)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.CASCADE, related_name='quality_rules')` (driver: 10.5-VR-03)
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', null=True, blank=True, on_delete=models.CASCADE, related_name='quality_rules')` (driver: 10.5-VR-03)
+    - `target_column`: `CharField(max_length=100, blank=True, help_text="Specific target column to evaluate, or empty for table-level rules")` (driver: 10.5-VR-04)
+    - `rule_type`: `CharField(max_length=30, choices=[('not_null', 'Not Null / Mandatory Check'), ('unique', 'Uniqueness Constraint'), ('range_between', 'Value Range Boundary (Min/Max)'), ('regex_pattern', 'Regex Pattern Matching'), ('set_membership', 'Allowed Set Membership / Enum'), ('referential_integrity', 'Referential Integrity / Foreign Key'), ('date_freshness', 'Data Freshness / Timeliness SLA'), ('string_standardization', 'Standardization (Trim, Case, Regex Normalize)'), ('duplicate_cluster', 'Fuzzy Duplicate Cluster Check'), ('custom_sql', 'Custom SQL Boolean Condition')], default='not_null')` (driver: 10.5-VR-05)
+    - `parameters_json`: `JSONField(default=dict, help_text="Configuration parameters (e.g. min_value, max_value, regex, allowed_values, foreign_table, foreign_column, sql_condition, fuzzy_algorithm, match_threshold)")` (driver: 10.5-VR-06)
+    - `severity`: `CharField(max_length=20, choices=[('info', 'Information (Advisory)'), ('warning', 'Warning (Low Impact)'), ('critical', 'Critical (Business SLA Impact)'), ('fatal', 'Fatal (Pipeline Blocking)')], default='warning')` (driver: 10.5-VR-07)
+    - `failure_tolerance_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'), help_text="Maximum failure rate allowed before rule status changes to failed")` (driver: 10.5-VR-08)
+    - `last_run_at`: `DateTimeField(null=True, blank=True)` (driver: 10.5-VR-09)
+    - `last_status`: `CharField(max_length=20, choices=[('passed', 'Passed'), ('warning', 'Warning (Within Tolerance)'), ('failed', 'Failed'), ('error', 'Execution Error'), ('skipped', 'Skipped')], default='passed')` (driver: 10.5-VR-10)
+    - `passed_records_count`: `BigIntegerField(default=0)` (driver: 10.5-VR-11)
+    - `failed_records_count`: `BigIntegerField(default=0)` (driver: 10.5-VR-11)
+    - `pass_rate_pct`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-VR-11)
+    - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='stewarded_quality_rules')` (driver: 10.5-VR-12)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `last_run_at`, `last_status`, `passed_records_count`, `failed_records_count`, `pass_rate_pct`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'rule_category']), models.Index(fields=['tenant', 'dimension']), models.Index(fields=['tenant', 'last_status']), models.Index(fields=['tenant', 'severity'])]`
+
+- [ ] **`DataQualityException`** [Prefix: `BDQE-`] (`apps/bi/models/DataQuality/DataQualityExceptions.py`)
+  - **Purpose**: Operational queue and workbench recording rule violations, anomalous records, potential duplicate candidates, and tracking data steward investigation, remediation actions, and resolution audit trails.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `rule`: `ForeignKey('bi.DataQualityRule', null=True, blank=True, on_delete=models.SET_NULL, related_name='exceptions')` (driver: 10.5-EX-01)
+    - `profile`: `ForeignKey('bi.DataQualityProfile', null=True, blank=True, on_delete=models.SET_NULL, related_name='exceptions')` (driver: 10.5-EX-02)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.SET_NULL, related_name='quality_exceptions')` (driver: 10.5-EX-03)
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', null=True, blank=True, on_delete=models.SET_NULL, related_name='quality_exceptions')` (driver: 10.5-EX-03)
+    - `record_identifier`: `CharField(max_length=150, help_text="Primary key value or natural identifier of the offending record")` (driver: 10.5-EX-04)
+    - `target_column`: `CharField(max_length=100, blank=True)` (driver: 10.5-EX-04)
+    - `invalid_value`: `TextField(blank=True, help_text="Offending or anomalous value captured")` (driver: 10.5-EX-05)
+    - `expected_condition`: `CharField(max_length=255, blank=True, help_text="Description of what value was expected")` (driver: 10.5-EX-05)
+    - `exception_type`: `CharField(max_length=30, choices=[('rule_violation', 'Rule Assertion Violation'), ('duplicate_candidate', 'Potential Duplicate Record Pair'), ('null_anomaly', 'Null / Missing Mandatory Value'), ('range_outlier', 'Range / Statistical Outlier'), ('format_invalid', 'Invalid Pattern or Format'), ('referential_orphan', 'Referential Integrity Orphan')], default='rule_violation')` (driver: 10.5-EX-06)
+    - `severity`: `CharField(max_length=20, choices=[('info', 'Information'), ('warning', 'Warning'), ('critical', 'Critical'), ('fatal', 'Fatal')], default='warning')` (driver: 10.5-EX-07)
+    - `status`: `CharField(max_length=30, choices=[('open', 'Open / Unassigned'), ('investigating', 'Under Investigation'), ('remediated', 'Remediated & Verified'), ('suppressed_false_positive', 'Suppressed (False Positive)'), ('accepted_risk', 'Accepted Business Risk'), ('rejected', 'Rejected / Invalid Exception')], default='open')` (driver: 10.5-EX-08)
+    - `remediation_action`: `CharField(max_length=30, choices=[('none', 'No Action Taken'), ('manual_edit', 'Manual Record Correction'), ('automated_standardize', 'Automated Standardization Applied'), ('merge_duplicate', 'Duplicate Merged / Reconciled'), ('impute_value', 'Value Imputed / Defaulted'), ('quarantine_row', 'Record Quarantined')], default='none')` (driver: 10.5-EX-09)
+    - `proposed_value`: `TextField(blank=True, help_text="Suggested cleansed or standardized value")` (driver: 10.5-EX-10)
+    - `remediated_value`: `TextField(blank=True, help_text="Final corrected value applied")` (driver: 10.5-EX-10)
+    - `assigned_steward`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='assigned_quality_exceptions')` (driver: 10.5-EX-11)
+    - `resolved_by`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')`
+    - `resolved_at`: `DateTimeField(null=True, blank=True)`
+    - `resolution_notes`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `resolved_by`, `resolved_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'status']), models.Index(fields=['tenant', 'severity']), models.Index(fields=['tenant', 'exception_type']), models.Index(fields=['tenant', 'rule'])]`
+
+- [ ] **`DataQualityScorecard`** [Prefix: `BDQS-`] (`apps/bi/models/DataQuality/DataQualityScorecards.py`)
+  - **Purpose**: Multi-dimensional quality scorecards aggregating data health across 6 ISO/DAMA dimensions (Completeness, Accuracy, Consistency, Timeliness, Uniqueness, Validity), calculating overall Data Trust Index (0-100%), assigning executive letter grades (A-F), and tracking corporate SLA compliance.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `name`: `CharField(max_length=150)` (e.g. "Sales Operations Data Quality Scorecard", "Enterprise Warehouse Health Scorecard")
+    - `code`: `SlugField(max_length=60)`
+    - `scope_type`: `CharField(max_length=25, choices=[('warehouse_table', 'Warehouse Table'), ('semantic_model', 'Semantic Model'), ('data_mart', 'Data Mart Domain'), ('tenant_wide', 'Tenant-Wide Aggregate')], default='warehouse_table')` (driver: 10.5-QS-01)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.SET_NULL, related_name='scorecards')` (driver: 10.5-QS-01)
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', null=True, blank=True, on_delete=models.SET_NULL, related_name='scorecards')` (driver: 10.5-QS-01)
+    - `data_mart`: `ForeignKey('bi.DataMart', null=True, blank=True, on_delete=models.SET_NULL, related_name='scorecards')` (driver: 10.5-QS-01)
+    - `org_unit`: `ForeignKey('core.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL, related_name='quality_scorecards')` (driver: 10.5-QS-02)
+    - `overall_quality_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'), help_text="Aggregated Data Trust Index (0.00% - 100.00%)")` (driver: 10.5-QS-03)
+    - `completeness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `accuracy_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `consistency_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `timeliness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `uniqueness_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `validity_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('100.00'))` (driver: 10.5-QS-04)
+    - `grade`: `CharField(max_length=5, choices=[('A', 'Grade A: Excellent (>95%)'), ('B', 'Grade B: Good (85-95%)'), ('C', 'Grade C: Acceptable (75-84%)'), ('D', 'Grade D: Poor (60-74%)'), ('F', 'Grade F: Failing (<60%)')], default='A')` (driver: 10.5-QS-05)
+    - `health_status`: `CharField(max_length=20, choices=[('healthy', 'Healthy (Meets SLAs)'), ('needs_attention', 'Needs Attention (Minor Breaches)'), ('critical', 'Critical (Major SLA Breaches)'), ('failing', 'Failing (Data Untrusted)')], default='healthy')` (driver: 10.5-QS-06)
+    - `target_quality_score`: `DecimalField(max_digits=5, decimal_places=2, default=Decimal('95.00'), help_text="Corporate SLA threshold target")` (driver: 10.5-QS-07)
+    - `meets_sla`: `BooleanField(default=True)` (driver: 10.5-QS-07)
+    - `total_rules_evaluated`: `PositiveIntegerField(default=0)` (driver: 10.5-QS-08)
+    - `rules_passed_count`: `PositiveIntegerField(default=0)` (driver: 10.5-QS-08)
+    - `rules_failed_count`: `PositiveIntegerField(default=0)` (driver: 10.5-QS-08)
+    - `open_exceptions_count`: `PositiveIntegerField(default=0)` (driver: 10.5-QS-09)
+    - `critical_exceptions_count`: `PositiveIntegerField(default=0)` (driver: 10.5-QS-09)
+    - `evaluation_period`: `CharField(max_length=20, choices=[('ad_hoc', 'Ad-Hoc / Current'), ('daily', 'Daily Snapshot'), ('weekly', 'Weekly Rollup'), ('monthly', 'Monthly Scorecard')], default='ad_hoc')` (driver: 10.5-QS-10)
+    - `last_calculated_at`: `DateTimeField(null=True, blank=True)` (driver: 10.5-QS-11)
+    - `steward`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='stewarded_scorecards')` (driver: 10.5-QS-12)
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `overall_quality_score`, `completeness_score`, `accuracy_score`, `consistency_score`, `timeliness_score`, `uniqueness_score`, `validity_score`, `grade`, `health_status`, `meets_sla`, `total_rules_evaluated`, `rules_passed_count`, `rules_failed_count`, `open_exceptions_count`, `critical_exceptions_count`, `last_calculated_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'scope_type']), models.Index(fields=['tenant', 'grade']), models.Index(fields=['tenant', 'health_status'])]`
+
+---
+
+## Backend Packages & Files (`apps/bi/`)
+
+### Models (`apps/bi/models/DataQuality/`)
+- [ ] `apps/bi/models/DataQuality/__init__.py` (re-exports `DataQualityProfile`, `DataQualityRule`, `DataQualityException`, `DataQualityScorecard`)
+- [ ] `apps/bi/models/DataQuality/DataQualityProfiles.py`
+- [ ] `apps/bi/models/DataQuality/DataQualityRules.py`
+- [ ] `apps/bi/models/DataQuality/DataQualityExceptions.py`
+- [ ] `apps/bi/models/DataQuality/DataQualityScorecards.py`
+- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models
+
+### Forms (`apps/bi/forms/DataQuality/`)
+- [ ] `apps/bi/forms/DataQuality/__init__.py`
+- [ ] `apps/bi/forms/DataQuality/DataQualityProfileForms.py` (`DataQualityProfileForm`)
+- [ ] `apps/bi/forms/DataQuality/DataQualityRuleForms.py` (`DataQualityRuleForm`)
+- [ ] `apps/bi/forms/DataQuality/DataQualityExceptionForms.py` (`DataQualityExceptionForm`, `DataQualityExceptionRemediationForm`)
+- [ ] `apps/bi/forms/DataQuality/DataQualityScorecardForms.py` (`DataQualityScorecardForm`)
+- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms
+
+### Views (`apps/bi/views/DataQuality/`)
+- [ ] `apps/bi/views/DataQuality/__init__.py`
+- [ ] `apps/bi/views/DataQuality/DataQualityProfiles.py` (list, create, detail, edit, delete, run_profile)
+- [ ] `apps/bi/views/DataQuality/DataQualityRules.py` (list, create, detail, edit, delete, run_rule)
+- [ ] `apps/bi/views/DataQuality/DataQualityExceptions.py` (list, create, detail, edit, delete, remediate, assign_steward)
+- [ ] `apps/bi/views/DataQuality/DataQualityScorecards.py` (list, create, detail, edit, delete, recalculate)
+- [ ] `apps/bi/views/DataQuality/QualityOverviewViews.py` (`quality_overview` command center)
+- [ ] Update `apps/bi/views/__init__.py` to re-export view functions
+
+### URLs (`apps/bi/urls/DataQuality/`)
+- [ ] `apps/bi/urls/DataQuality/__init__.py` (re-exports `urlpatterns`)
+- [ ] `apps/bi/urls/DataQuality/DataQualityProfileUrls.py`
+- [ ] `apps/bi/urls/DataQuality/DataQualityRuleUrls.py`
+- [ ] `apps/bi/urls/DataQuality/DataQualityExceptionUrls.py`
+- [ ] `apps/bi/urls/DataQuality/DataQualityScorecardUrls.py`
+- [ ] `apps/bi/urls/DataQuality/QualityOverviewUrls.py`
+- [ ] Update `apps/bi/urls/__init__.py` to include `DataQuality` routes
+
+### Admin & Integration
+- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.5"]` mapping NavERP.md feature bullets to views
+- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic demo data for 10.5 (profiles, rules, exceptions, and scorecards)
+
+---
+
+## Templates (`templates/bi/data_quality/`)
+- [ ] `templates/bi/data_quality/quality_overview.html` (Command center dashboard: Data Trust Index gauge, ISO/DAMA 6-dimension health breakdown, rule pass rates, open exceptions queue summary, recent profiling runs, quick actions)
+- [ ] `templates/bi/data_quality/data_quality_profile/list.html`
+- [ ] `templates/bi/data_quality/data_quality_profile/detail.html`
+- [ ] `templates/bi/data_quality/data_quality_profile/form.html`
+- [ ] `templates/bi/data_quality/data_quality_rule/list.html`
+- [ ] `templates/bi/data_quality/data_quality_rule/detail.html`
+- [ ] `templates/bi/data_quality/data_quality_rule/form.html`
+- [ ] `templates/bi/data_quality/data_quality_exception/list.html`
+- [ ] `templates/bi/data_quality/data_quality_exception/detail.html`
+- [ ] `templates/bi/data_quality/data_quality_exception/form.html`
+- [ ] `templates/bi/data_quality/data_quality_scorecard/list.html`
+- [ ] `templates/bi/data_quality/data_quality_scorecard/detail.html`
+- [ ] `templates/bi/data_quality/data_quality_scorecard/form.html`
+
+---
+
+## Verification & Close-out
+- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0013_...` and run `python manage.py migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency
+- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
+- [ ] Execute smoke test (`temp/smoke_bi_10_5.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.5.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dataquality_models.py`, `test_dataquality_forms.py`, `test_dataquality_views.py`, `test_dataquality_security.py`
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.5 models/routes/templates and update `README.md`
+- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.5.md`
+
+## Later passes / deferred
+- Automated Great Expectations Checkpoint / Soda Core CLI daemon runner -> Advanced orchestration integration
+- Commercial address verification / standardization API integration -> External enrichment adapter
+- AI/LLM-assisted natural language rule drafting -> Sub-module 10.15 Natural Language & Conversational BI
+- Distributed Spark / DuckDB in-memory profiling engine for multi-terabyte datasets -> Big Data scaling pass
+- Master Data Management (MDM) Golden Records & Cross-System Entity Consolidation -> Sub-module 10.6 Master Data Management
+- Searchable Data Catalog & Column-Level Lineage Graph -> Sub-module 10.7 Data Catalog, Lineage & Governance
+- Interactive KPI Scorecard Heatmaps -> Sub-module 10.8 Interactive Dashboards
+
+## Review notes
+(to be populated during Phase 4–6)
+
+---
+
 # Sub-module 10.4: Data Modeling & Semantic Layer (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.4.md` (2026-11-04)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, and 10.3.
