@@ -18,6 +18,13 @@ from apps.bi.forms.DataQuality.DataQualityExceptionForms import (
 from apps.bi.forms.DataQuality.DataQualityProfileForms import DataQualityProfileForm
 from apps.bi.forms.DataQuality.DataQualityRuleForms import DataQualityRuleForm
 from apps.bi.forms.DataQuality.DataQualityScorecardForms import DataQualityScorecardForm
+from apps.bi.forms.MasterData.MdmGoldenRecordForms import (
+    MdmGoldenRecordForm,
+    MdmGoldenRecordMergeForm,
+)
+from apps.bi.forms.MasterData.MdmHierarchyNodeForms import MdmHierarchyNodeForm
+from apps.bi.forms.MasterData.MdmReferenceCodeForms import MdmReferenceCodeForm
+from apps.bi.forms.MasterData.MdmSurvivorshipRuleForms import MdmSurvivorshipRuleForm
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -55,4 +62,9 @@ __all__ = [
     "DataQualityExceptionForm",
     "DataQualityExceptionRemediationForm",
     "DataQualityScorecardForm",
+    "MdmGoldenRecordForm",
+    "MdmGoldenRecordMergeForm",
+    "MdmSurvivorshipRuleForm",
+    "MdmHierarchyNodeForm",
+    "MdmReferenceCodeForm",
 ]
