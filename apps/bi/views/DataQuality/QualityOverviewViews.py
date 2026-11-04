@@ -38,7 +38,7 @@ def quality_overview(request):
         .order_by("-last_run_at")[:6]
     )
     critical_exceptions = (
-        exceptions_qs.filter(status__in=["open", "investigating"])
+        exceptions_qs.filter(status__in=["open", "investigating"], severity__in=["critical", "fatal"])
         .select_related("rule", "warehouse_table", "semantic_model", "assigned_steward")
         .order_by("-created_at")[:6]
     )
