@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Warehouse Tables — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <span>Warehouse Tables</span>
+        </div>
+        <h1 class="page-title">Enterprise Warehouse Tables</h1>
+        <p class="text-muted text-sm">Star and snowflake dimensional schemas, transactional fact tables, conformed dimensions, and aggregate marts</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Warehouse Overview</span>
+        </a>
+        <a href="{% url 'bi:data_mart_list' %}" class="btn btn-outline">
+            <i data-lucide="layers"></i>
+            <span>Data Marts</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:warehouse_table_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Warehouse Table</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Tables</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="table"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Fact Tables</div>
+                <div class="text-2xl font-bold mt-1 text-blue-600">{{ fact_count }}</div>
+            </div>
+            <div class="stat-icon orange">
+                <i data-lucide="activity"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Dimensions</div>
+                <div class="text-2xl font-bold mt-1 text-green-600">{{ dimension_count }}</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="share-2"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Stored Rows</div>
+                <div class="text-2xl font-bold mt-1 text-purple-600">{{ total_rows }}</div>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="database"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="search-input">Search</label>
+                <input type="text" id="search-input" name="q" value="{{ search_query }}" placeholder="Table name, physical SQL name..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="table-type-filter">Table Type</label>
+                <select id="table-type-filter" name="table_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in table_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.table_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="schema-type-filter">Schema</label>
+                <select id="schema-type-filter" name="schema_type" class="form-select">
+                    <option value="">All Schemas</option>
+                    {% for code, label in schema_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.schema_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="zone-filter">Lakehouse Zone</label>
+                <select id="zone-filter" name="lakehouse_zone" class="form-select">
+                    <option value="">All Zones</option>
+                    {% for z in lakehouse_zones %}
+                    <option value="{{ z.pk }}" {% if request.GET.lakehouse_zone == z.pk|stringformat:"d" %}selected{% endif %}>{{ z.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                <a href="?{% for key, val in request.GET.items %}{% if key != 'export' %}{{ key }}={{ val }}&{% endif %}{% endfor %}export=csv" class="btn btn-outline" title="Export CSV">
+                    <i data-lucide="download"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Table Name</th>
+                    <th>Physical SQL Table</th>
+                    <th>Type</th>
+                    <th>Schema</th>
+                    <th>Zone</th>
+                    <th>Data Mart</th>
+                    <th>Grain</th>
+                    <th class="text-right">Rows</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in warehouse_tables %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="text-primary hover:underline">
+                            {{ table.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ table.name }}</div>
+                        {% if table.is_conformed_dimension %}
+                        <span class="badge badge-green text-[10px]">Conformed Dimension</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                            {{ table.table_name }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if table.table_type == 'fact' %}
+                        <span class="badge badge-info">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'dimension' %}
+                        <span class="badge badge-green">{{ table.get_table_type_display }}</span>
+                        {% elif table.table_type == 'aggregate' %}
+                        <span class="badge badge-purple">{{ table.get_table_type_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ table.get_table_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs text-slate-700">{{ table.get_schema_type_display }}</span></td>
+                    <td><span class="badge badge-slate">{{ table.lakehouse_zone.name }}</span></td>
+                    <td>
+                        {% if table.data_mart %}
+                        <span class="text-xs text-slate-700">{{ table.data_mart.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="text-xs text-slate-600">{{ table.get_grain_display }}</span></td>
+                    <td class="text-right font-mono text-xs text-slate-700">{{ table.row_count }}</td>
+                    <td class="text-right table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'bi:warehouse_table_detail' pk=table.pk %}" class="btn-icon btn-outline" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:warehouse_table_ddl_preview' pk=table.pk %}" class="btn-icon btn-outline" title="SQL DDL">
+                                <i data-lucide="code"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:warehouse_table_edit' pk=table.pk %}" class="btn-icon btn-outline" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:warehouse_table_delete' pk=table.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete table {{ table.name|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon btn-outline text-danger" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="table" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No warehouse tables registered</div>
+                            <p class="empty-state-text">Register analytical fact and dimension tables to establish the enterprise star schema.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:warehouse_table_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>New Warehouse Table</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} tables
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="text-xs px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
