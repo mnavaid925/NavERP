@@ -130,6 +130,7 @@ class DataQualityScorecard(TenantNumbered):
             models.Index(fields=["tenant", "scope_type"], name="idx_bdqs_ten_stype"),
             models.Index(fields=["tenant", "grade"], name="idx_bdqs_ten_grade"),
             models.Index(fields=["tenant", "health_status"], name="idx_bdqs_ten_hstat"),
+            models.Index(fields=["tenant", "meets_sla"], name="idx_bdqs_ten_msla"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdqs_ten_active"),
             models.Index(fields=["tenant", "-created_at"], name="idx_bdqs_ten_created"),
         ]
