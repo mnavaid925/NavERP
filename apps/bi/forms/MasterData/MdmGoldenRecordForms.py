@@ -58,6 +58,8 @@ class MdmGoldenRecordForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "status" in self.fields:
+            self.fields["status"].choices = [c for c in MdmGoldenRecord.STATUS_CHOICES if c[0] != "merged"]
         if self.tenant is not None:
             self.fields["party"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["party_role"].queryset = PartyRole.objects.filter(tenant=self.tenant).order_by("role")
