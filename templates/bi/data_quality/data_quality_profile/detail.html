@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.name }} ({{ profile.number }}) — Quality Profile — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:quality_overview' %}">Data Quality & Cleansing</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_quality_profile_list' %}">Quality Profiles</a>
+            <span class="sep">/</span>
+            <span>{{ profile.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ profile.name }}</h1>
+            {% if profile.status == 'completed' %}
+            <span class="badge badge-green">Completed</span>
+            {% elif profile.status == 'profiling' %}
+            <span class="badge badge-amber">Profiling</span>
+            {% elif profile.status == 'failed' %}
+            <span class="badge badge-red">Failed</span>
+            {% else %}
+            <span class="badge badge-slate">Pending</span>
+            {% endif %}
+            {% if not profile.is_active %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ profile.number }} &middot; Target: {{ profile.get_target_type_display }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:data_quality_profile_run' profile.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play"></i>
+                <span>Run Profiling Now</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:data_quality_profile_edit' profile.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Profile</span>
+        </a>
+        <form method="post" action="{% url 'bi:data_quality_profile_delete' profile.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this profile?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-500 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Score Indicators -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">Completeness Score</div>
+        <div class="flex items-baseline justify-between mt-2">
+            <div class="text-3xl font-bold text-emerald-600">{{ profile.completeness_score }}%</div>
+            <span class="badge badge-green text-xs">Non-Null</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-2 dark:bg-slate-700 mt-3">
+            <div class="bg-emerald-500 h-2 rounded-full" style="width: {{ profile.completeness_score }}%"></div>
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">Uniqueness Score</div>
+        <div class="flex items-baseline justify-between mt-2">
+            <div class="text-3xl font-bold text-blue-600">{{ profile.uniqueness_score }}%</div>
+            <span class="badge badge-info text-xs">Primary Keys</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-2 dark:bg-slate-700 mt-3">
+            <div class="bg-blue-500 h-2 rounded-full" style="width: {{ profile.uniqueness_score }}%"></div>
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">Validity Score</div>
+        <div class="flex items-baseline justify-between mt-2">
+            <div class="text-3xl font-bold text-indigo-600">{{ profile.validity_score }}%</div>
+            <span class="badge badge-purple text-xs">Conforming</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-2 dark:bg-slate-700 mt-3">
+            <div class="bg-indigo-500 h-2 rounded-full" style="width: {{ profile.validity_score }}%"></div>
+        </div>
+    </div>
+    <div class="card p-4">
+        <div class="text-xs text-muted font-medium uppercase tracking-wider">Volume & Execution</div>
+        <div class="flex items-baseline justify-between mt-2">
+            <div class="text-2xl font-bold">{{ profile.total_row_count }} <span class="text-sm font-normal text-muted">rows</span></div>
+            <span class="text-xs font-mono text-muted">{{ profile.duration_seconds }}s</span>
+        </div>
+        <div class="text-xs text-muted mt-3">
+            Analyzed {{ profile.total_column_count }} columns &middot; {{ profile.profiled_at|date:"M d, Y H:i"|default:"Not run yet" }}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Column Statistics -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="columns-3" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="card-title">Column-Level Statistical Distribution</h2>
+                </div>
+                <span class="badge badge-slate text-xs">{{ column_profiles|length }} Columns Profiled</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Column & Type</th>
+                                <th>Nulls & %</th>
+                                <th>Distinct & %</th>
+                                <th>Min / Max Values</th>
+                                <th>Completeness</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for col in column_profiles %}
+                            <tr>
+                                <td>
+                                    <div class="font-medium font-mono text-xs text-slate-900 dark:text-slate-100">{{ col.column_name }}</div>
+                                    <div class="text-xs text-muted font-mono">{{ col.data_type }}</div>
+                                </td>
+                                <td class="text-xs">
+                                    <div>{{ col.null_count }} nulls</div>
+                                    <div class="text-muted font-mono">{{ col.null_pct }}</div>
+                                </td>
+                                <td class="text-xs">
+                                    <div>{{ col.distinct_count }} unique</div>
+                                    <div class="text-muted font-mono">{{ col.distinct_pct }}</div>
+                                </td>
+                                <td class="text-xs font-mono">
+                                    <div class="text-slate-600 dark:text-slate-400">Min: {{ col.min_value }}</div>
+                                    <div class="text-slate-600 dark:text-slate-400">Max: {{ col.max_value }}</div>
+                                </td>
+                                <td class="text-xs font-medium text-emerald-600">
+                                    {{ col.completeness_score }}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                    No column profiles recorded yet. Click "Run Profiling Now" to compute statistical indicators.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exceptions Linked to this Profile -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+                    <h2 class="card-title">Linked Quality Exceptions</h2>
+                </div>
+                <span class="badge badge-amber text-xs">{{ total_exceptions_count }} Total Exceptions</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Identifier & Column</th>
+                                <th>Rule Violation</th>
+                                <th>Severity</th>
+                                <th>Status</th>
+                                <th class="text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for exc in exceptions %}
+                            <tr>
+                                <td>
+                                    <div class="font-mono font-medium text-xs">{{ exc.record_identifier }}</div>
+                                    <div class="text-xs text-muted">{{ exc.target_column|default:"Table-level" }}</div>
+                                </td>
+                                <td class="text-xs">
+                                    <div class="font-medium">{{ exc.get_exception_type_display }}</div>
+                                    <div class="text-muted font-mono text-xs truncate max-w-xs">{{ exc.invalid_value }}</div>
+                                </td>
+                                <td>
+                                    {% if exc.severity == 'critical' or exc.severity == 'fatal' %}
+                                    <span class="badge badge-red">{{ exc.get_severity_display }}</span>
+                                    {% elif exc.severity == 'warning' %}
+                                    <span class="badge badge-amber">Warning</span>
+                                    {% else %}
+                                    <span class="badge badge-info">Info</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if exc.status == 'remediated' %}
+                                    <span class="badge badge-green">Remediated</span>
+                                    {% elif exc.status == 'investigating' %}
+                                    <span class="badge badge-amber">Investigating</span>
+                                    {% else %}
+                                    <span class="badge badge-slate">{{ exc.get_status_display }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon">
+                                        <i data-lucide="eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                    No quality exceptions associated with this profile run.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Column: Metadata & Target Details -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Target Dataset Details</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-muted">Target Scope</div>
+                    <div class="font-medium mt-0.5">{{ profile.get_target_type_display }}</div>
+                </div>
+                {% if profile.warehouse_table %}
+                <div>
+                    <div class="text-xs text-muted">Warehouse Table</div>
+                    <div class="font-medium font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:warehouse_table_detail' profile.warehouse_table.pk %}" class="text-primary-600 hover:underline">
+                            {{ profile.warehouse_table.name }} ({{ profile.warehouse_table.number }})
+                        </a>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Schema / Table Classification</div>
+                    <div class="font-medium text-xs mt-0.5">{{ profile.warehouse_table.get_table_type_display }}</div>
+                </div>
+                {% endif %}
+                {% if profile.semantic_model %}
+                <div>
+                    <div class="text-xs text-muted">Semantic Model</div>
+                    <div class="font-medium font-mono text-xs mt-0.5">
+                        <a href="{% url 'bi:semantic_model_detail' profile.semantic_model.pk %}" class="text-primary-600 hover:underline">
+                            {{ profile.semantic_model.name }} ({{ profile.semantic_model.number }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="text-xs text-muted">Notes / Scope</div>
+                    <div class="text-xs mt-0.5 text-slate-700 dark:text-slate-300">{{ profile.notes|default:"No notes specified." }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm font-semibold">Profiling Audit Trail</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <div class="text-xs text-muted">Last Profiled By</div>
+                    <div class="font-medium mt-0.5">{{ profile.profiled_by.get_full_name|default:profile.profiled_by.username|default:"System" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Profiled At</div>
+                    <div class="font-medium font-mono text-xs mt-0.5">{{ profile.profiled_at|date:"Y-m-d H:i:s"|default:"Never" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Run Duration</div>
+                    <div class="font-medium font-mono text-xs mt-0.5">{{ profile.duration_seconds }} seconds</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Created / Updated</div>
+                    <div class="text-xs text-muted mt-0.5">{{ profile.created_at|date:"M d, Y" }} / {{ profile.updated_at|date:"M d, Y" }}</div>
+                </div>
+                {% if profile.error_message %}
+                <div class="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-xs text-red-600 dark:text-red-400">
+                    <span class="font-semibold">Error:</span> {{ profile.error_message }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
