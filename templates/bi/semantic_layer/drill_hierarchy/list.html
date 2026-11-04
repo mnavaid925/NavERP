@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Drill Hierarchies — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <span>Drill Hierarchies</span>
+        </div>
+        <h1 class="page-title">Dimensional Drill Hierarchies</h1>
+        <p class="text-muted text-sm">Governed multi-level drill paths for self-service slicing and dicing (Time, Geography, Org, Catalog)</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:semantic_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Semantic Overview</span>
+        </a>
+        <a href="{% url 'bi:semantic_model_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Semantic Models</span>
+        </a>
+        <a href="{% url 'bi:calculated_measure_list' %}" class="btn btn-outline">
+            <i data-lucide="calculator"></i>
+            <span>Calculated Measures</span>
+        </a>
+        <a href="{% url 'bi:drill_hierarchy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Drill Hierarchy</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="form-group md:col-span-2">
+                <label class="form-label text-xs">Search Hierarchies</label>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search by hierarchy name, code, description..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Semantic Model</label>
+                <select name="model" class="form-select">
+                    <option value="">All Models</option>
+                    {% for sm in semantic_models %}
+                    <option value="{{ sm.pk|stringformat:'d' }}" {% if model_filter == sm.pk|stringformat:'d' %}selected{% endif %}>{{ sm.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs">Hierarchy Type</label>
+                <select name="hierarchy_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in hierarchy_type_choices %}
+                    <option value="{{ val }}" {% if hierarchy_type_filter == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button type="submit" class="btn btn-primary w-full">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if search_query or model_filter or hierarchy_type_filter %}
+                <a href="{% url 'bi:drill_hierarchy_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold">Drill Hierarchies ({{ total_count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Hierarchy Name</th>
+                    <th>Semantic Model</th>
+                    <th>Type</th>
+                    <th>Levels</th>
+                    <th>Primary Path</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dh in hierarchies %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="text-primary hover:underline">
+                            {{ dh.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ dh.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ dh.code }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:semantic_model_detail' dh.semantic_model.pk %}" class="text-xs text-primary hover:underline">
+                            {{ dh.semantic_model.name }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if dh.hierarchy_type == 'time' %}
+                        <span class="badge badge-info">Time Calendar</span>
+                        {% elif dh.hierarchy_type == 'geography' %}
+                        <span class="badge badge-green">Geography</span>
+                        {% elif dh.hierarchy_type == 'organizational' %}
+                        <span class="badge badge-amber">Organization</span>
+                        {% elif dh.hierarchy_type == 'product' %}
+                        <span class="badge badge-purple">Product Catalog</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ dh.get_hierarchy_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs font-medium text-slate-700">
+                        {{ dh.levels_json|length }} levels
+                    </td>
+                    <td>
+                        {% if dh.primary_drill_path %}
+                        <span class="badge badge-green text-xs">Primary</span>
+                        {% else %}
+                        <span class="badge badge-slate text-xs">Secondary</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if dh.is_active %}
+                        <span class="badge badge-green">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:drill_hierarchy_detail' dh.pk %}" class="btn btn-icon" title="View Hierarchy">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:drill_hierarchy_edit' dh.pk %}" class="btn btn-icon" title="Edit Hierarchy">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:drill_hierarchy_delete' dh.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete hierarchy {{ dh.name }} ({{ dh.number }})?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Hierarchy">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-8 text-center">
+                            <div class="text-slate-400 mb-2">
+                                <i data-lucide="git-merge" class="w-12 h-12 mx-auto"></i>
+                            </div>
+                            <div class="text-base font-semibold text-slate-800">No Drill Hierarchies Found</div>
+                            <p class="text-sm text-muted mt-1 max-w-sm mx-auto">
+                                {% if search_query or model_filter or hierarchy_type_filter %}
+                                No drill paths matched your filters. Try clearing filters or creating a new hierarchy.
+                                {% else %}
+                                Author structured drill paths (Year -> Quarter -> Month, Region -> Country -> City) for your models.
+                                {% endif %}
+                            </p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:drill_hierarchy_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Drill Hierarchy</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <div class="card-footer flex items-center justify-between">
+        <div class="text-xs text-muted">
+            Showing page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ total_count }} total)
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_filter %}&model={{ model_filter }}{% endif %}{% if hierarchy_type_filter %}&hierarchy_type={{ hierarchy_type_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="px-3 py-1 text-sm font-medium">{{ page_obj.number }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if model_filter %}&model={{ model_filter }}{% endif %}{% if hierarchy_type_filter %}&hierarchy_type={{ hierarchy_type_filter }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
