@@ -43,6 +43,10 @@
         <p class="text-muted text-sm font-mono mt-1">{{ scorecard.number }} &middot; Code: {{ scorecard.code }} &middot; Scope: {{ scorecard.get_scope_type_display }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:data_quality_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Scorecards</span>
+        </a>
         <form method="post" action="{% url 'bi:data_quality_scorecard_recalculate' scorecard.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
