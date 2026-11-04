@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block title %}{{ golden_record.number }} — {{ golden_record.name }} — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_golden_record_list' %}">Golden Records</a>
+            <span class="sep">/</span>
+            <span>{{ golden_record.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ golden_record.name }}</h1>
+            {% if golden_record.trust_tier == 'gold' %}
+            <span class="badge badge-green text-xs"><i data-lucide="award" class="w-3 h-3 inline mr-1"></i>Gold Tier Certified</span>
+            {% elif golden_record.trust_tier == 'silver' %}
+            <span class="badge badge-slate text-xs">Silver Tier</span>
+            {% else %}
+            <span class="badge badge-amber text-xs">Bronze Tier</span>
+            {% endif %}
+
+            {% if golden_record.status == 'approved' %}
+            <span class="badge badge-green">Approved Active</span>
+            {% elif golden_record.status == 'pending_review' %}
+            <span class="badge badge-amber">Pending Review</span>
+            {% elif golden_record.status == 'in_dispute' %}
+            <span class="badge badge-red">In Dispute</span>
+            {% elif golden_record.status == 'merged' %}
+            <span class="badge badge-muted">Merged</span>
+            {% else %}
+            <span class="badge badge-slate">{{ golden_record.get_status_display }}</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Code: {{ golden_record.code }} · Domain: {{ golden_record.get_domain_display }}</p>
+    </div>
+    <div class="page-actions">
+        {% if golden_record.status != 'approved' and golden_record.status != 'merged' %}
+        <form method="post" action="{% url 'bi:mdm_golden_record_approve' golden_record.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-600 hover:bg-emerald-50">
+                <i data-lucide="check-circle"></i>
+                <span>Approve / Certify</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'bi:mdm_golden_record_edit' golden_record.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Record</span>
+        </a>
+        <a href="{% url 'bi:mdm_golden_record_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
+    </div>
+</div>
+
+<!-- Key Metric Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Consolidation Confidence</div>
+            <div class="text-2xl font-bold">{{ golden_record.confidence_score }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="git-merge"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Source Systems Consolidated</div>
+            <div class="text-2xl font-bold">{{ golden_record.source_record_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Assigned Steward</div>
+            <div class="text-base font-bold text-slate-800">
+                {% if golden_record.assigned_steward %}
+                {{ golden_record.assigned_steward.get_full_name|default:golden_record.assigned_steward.username }}
+                {% else %}
+                <span class="text-muted font-normal">Unassigned</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Last Certified Date</div>
+            <div class="text-sm font-semibold text-slate-700">
+                {% if golden_record.reviewed_at %}
+                {{ golden_record.reviewed_at|date:"M d, Y H:i" }}
+                {% else %}
+                <span class="text-muted font-normal">Not reviewed</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Primary Master Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Master Attributes Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Authoritative Master Attributes</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Legal Tax / Registration ID</dt>
+                        <dd class="font-mono font-medium text-slate-800">{{ golden_record.tax_id|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Primary Email</dt>
+                        <dd class="font-medium text-slate-800">{{ golden_record.primary_email|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Primary Phone</dt>
+                        <dd class="font-medium text-slate-800">{{ golden_record.primary_phone|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Domain</dt>
+                        <dd class="font-medium text-slate-800">{{ golden_record.get_domain_display }}</dd>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <dt class="text-xs text-muted">Authoritative Address</dt>
+                        <dd class="text-slate-800 whitespace-pre-line">{{ golden_record.primary_address|default:"No address recorded" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Crosswalks (Source System Feeder Records) -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Source System Crosswalks (XREF)</h3>
+                <span class="text-xs text-muted">{{ crosswalks|length }} Feeder Sources</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source System</th>
+                            <th>Source Record ID</th>
+                            <th>Match Confidence</th>
+                            <th>Ingested At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cw in crosswalks %}
+                        <tr>
+                            <td class="font-medium text-xs text-slate-900">
+                                <span class="badge badge-info uppercase">{{ cw.source_system }}</span>
+                            </td>
+                            <td class="font-mono text-xs">{{ cw.source_record_id }}</td>
+                            <td>
+                                <span class="text-xs font-semibold {% if cw.match_confidence >= 90 %}text-emerald-600{% else %}text-blue-600{% endif %}">
+                                    {{ cw.match_confidence }}%
+                                </span>
+                            </td>
+                            <td class="text-xs text-muted">{{ cw.ingested_at|default:"Automated" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-xs text-muted">
+                                Native ERP single-source master record.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Attribute Provenance & Survivorship Matrix -->
+        {% if attributes_dict %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Attribute Provenance & Survivorship Precedence</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Attribute</th>
+                            <th>Surviving Value</th>
+                            <th>Winning Source</th>
+                            <th>Rule Applied</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for attr, meta in attributes_dict.items %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">{{ attr }}</td>
+                            <td class="text-xs text-slate-800 font-medium">{{ meta.value }}</td>
+                            <td>
+                                <span class="badge badge-slate uppercase">{{ meta.source_system }}</span>
+                            </td>
+                            <td class="text-xs text-muted">{{ meta.survivorship_rule|default:"Source Priority" }}</td>
+                            <td class="font-mono text-xs text-emerald-600">{{ meta.confidence|default:"100.0" }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Absorbed / Merged Records -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900 text-sm">Absorbed Duplicate Records</h3>
+                <span class="text-xs text-muted">{{ absorbed_records.count }} Merged Entities</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Record Number</th>
+                            <th>Name</th>
+                            <th>Merged Date</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for abs in absorbed_records %}
+                        <tr>
+                            <td class="font-mono text-xs">
+                                <a href="{% url 'bi:mdm_golden_record_detail' abs.pk %}" class="text-primary hover:underline">
+                                    {{ abs.number }}
+                                </a>
+                            </td>
+                            <td class="text-xs font-medium">{{ abs.name }}</td>
+                            <td class="text-xs text-muted">{{ abs.merged_at|date:"M d, Y H:i"|default:"—" }}</td>
+                            <td class="text-right">
+                                <form method="post" action="{% url 'bi:mdm_golden_record_unmerge' abs.pk %}" class="inline" onsubmit="return confirm('Unmerge record {{ abs.number }} from this golden master?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline btn-sm text-red-600 hover:bg-red-50">
+                                        <i data-lucide="git-pull-request"></i>
+                                        <span>Unmerge</span>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-4 text-xs text-muted">
+                                No duplicate records currently absorbed into this master.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Spine Links & Stewardship Workbench -->
+    <div class="space-y-6">
+        <!-- Unified Core Spine Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Core ERP Spine Links</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                {% if golden_record.party %}
+                <div>
+                    <span class="text-muted block">Core Party Entity:</span>
+                    <span class="font-semibold text-slate-800">{{ golden_record.party.name }}</span>
+                    <span class="text-muted block font-mono">ID: {{ golden_record.party.pk }}</span>
+                </div>
+                {% endif %}
+                {% if golden_record.item %}
+                <div>
+                    <span class="text-muted block">Inventory / Product Master:</span>
+                    <span class="font-semibold text-slate-800">{{ golden_record.item.name }}</span>
+                    <span class="text-muted block font-mono">{{ golden_record.item.code }}</span>
+                </div>
+                {% endif %}
+                {% if golden_record.asset %}
+                <div>
+                    <span class="text-muted block">CMMS / Asset Master:</span>
+                    <span class="font-semibold text-slate-800">{{ golden_record.asset.name }}</span>
+                    <span class="text-muted block font-mono">{{ golden_record.asset.number }}</span>
+                </div>
+                {% endif %}
+                {% if golden_record.warehouse_table %}
+                <div>
+                    <span class="text-muted block">Warehouse Feeder Dimension:</span>
+                    <span class="font-semibold text-slate-800">{{ golden_record.warehouse_table.name }}</span>
+                    <span class="text-muted block font-mono">{{ golden_record.warehouse_table.table_name }}</span>
+                </div>
+                {% endif %}
+                {% if not golden_record.party and not golden_record.item and not golden_record.asset and not golden_record.warehouse_table %}
+                <p class="text-muted">No external ERP spine references linked.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Merge Duplicate Workbench -->
+        {% if golden_record.status != 'merged' %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Data Stewardship Merge Tool</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:mdm_golden_record_merge' golden_record.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-3">
+                        <label class="form-label text-xs" for="id_secondary_record">Select Candidate Duplicate</label>
+                        {{ merge_form.secondary_record }}
+                        {% if merge_form.secondary_record.errors %}
+                        <div class="form-error">{{ merge_form.secondary_record.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="form-group mb-4">
+                        <label class="form-label text-xs" for="id_stewardship_notes">Stewardship Resolution Notes</label>
+                        {{ merge_form.stewardship_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full" onclick="return confirm('Absorb selected duplicate into this master golden record?');">
+                        <i data-lucide="git-merge"></i>
+                        <span>Execute Merge</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Stewardship Audit Notes -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900 text-sm">Stewardship Audit Trail</h3>
+            </div>
+            <div class="card-body">
+                <div class="text-xs text-slate-700 bg-slate-50 p-3 rounded font-mono whitespace-pre-wrap max-h-48 overflow-y-auto">
+                    {{ golden_record.stewardship_notes|default:"No stewardship notes logged." }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
