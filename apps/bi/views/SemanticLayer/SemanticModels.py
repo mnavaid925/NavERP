@@ -28,7 +28,6 @@ def semantic_model_list(request):
         .select_related("warehouse_table", "data_mart", "owner")
         .annotate(
             measure_count=Count("measures", distinct=True),
-            hierarchy_count=Count("drill_hierarchies", distinct=True),
         )
     )
 
