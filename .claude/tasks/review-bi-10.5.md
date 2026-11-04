@@ -58,5 +58,21 @@
 4. `apps/bi/management/commands/seed_bi.py:29` — Command help string omits 10.5.
 5. `apps/bi/views/DataQuality/DataQualityScorecards.py:233-242` — Health status assignment logic unreachable failing branch.
 
+---
+
+### Pass 3: frontend-reviewer
+
+#### Critical
+None.
+
+#### Important
+1. `templates/bi/data_quality/data_quality_profile/detail.html:82` — Theme.css non-existent badge modifier `badge-purple` (renders unstyled). Fix: Replace with `badge-info`.
+2. `templates/bi/data_quality/data_quality_exception/list.html:249, 253` — Filter parameter `assigned_steward` dropped in pagination previous/next links. Fix: Append `{% if request.GET.assigned_steward %}&assigned_steward={{ request.GET.assigned_steward }}{% endif %}`.
+
+#### Minor
+1. `templates/bi/data_quality/data_quality_profile/detail.html:34-54`, `rule/detail.html:35-55`, `exception/detail.html:45-58`, `scorecard/detail.html:45-65` — Missing "Back to List" action button in detail view header toolbars. Fix: Add standard `<a href="{% url 'bi:...' %}" class="btn btn-outline"><i data-lucide="arrow-left"></i><span>Back to ...</span></a>`.
+2. `templates/bi/data_quality/quality_overview.html:192, 253, 325, 386`, `profile/detail.html:210`, `rule/detail.html:180`, `scorecard/detail.html:215, 272` — Missing `title` or `aria-label` on icon-only table action buttons.
+
+
 
 
