@@ -17,6 +17,10 @@ from apps.bi.models import (
     BusinessGlossaryTerm,
     CalculatedMeasure,
     DrillHierarchy,
+    DataQualityProfile,
+    DataQualityRule,
+    DataQualityException,
+    DataQualityScorecard,
 )
 
 
@@ -155,4 +159,41 @@ class DrillHierarchyAdmin(admin.ModelAdmin):
     list_filter = ("hierarchy_type", "primary_drill_path", "is_active", "tenant")
     search_fields = ("number", "name", "code", "description")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(DataQualityProfile)
+class DataQualityProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_type", "status", "completeness_score", "uniqueness_score", "validity_score", "total_row_count", "is_active", "tenant")
+    list_select_related = ("warehouse_table", "semantic_model", "profiled_by")
+    list_filter = ("target_type", "status", "is_active", "tenant")
+    search_fields = ("number", "name", "notes")
+    readonly_fields = ("number", "tenant", "profiled_at", "duration_seconds", "created_at", "updated_at")
+
+
+@admin.register(DataQualityRule)
+class DataQualityRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "rule_category", "dimension", "target_type", "rule_type", "severity", "last_status", "pass_rate_pct", "is_active", "tenant")
+    list_select_related = ("warehouse_table", "semantic_model", "steward")
+    list_filter = ("rule_category", "dimension", "target_type", "rule_type", "severity", "last_status", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "target_column", "description")
+    readonly_fields = ("number", "tenant", "last_run_at", "passed_records_count", "failed_records_count", "pass_rate_pct", "created_at", "updated_at")
+
+
+@admin.register(DataQualityException)
+class DataQualityExceptionAdmin(admin.ModelAdmin):
+    list_display = ("number", "record_identifier", "target_column", "exception_type", "severity", "status", "remediation_action", "assigned_steward", "is_active", "tenant")
+    list_select_related = ("rule", "profile", "warehouse_table", "semantic_model", "assigned_steward", "resolved_by")
+    list_filter = ("exception_type", "severity", "status", "remediation_action", "is_active", "tenant")
+    search_fields = ("number", "record_identifier", "target_column", "invalid_value", "expected_condition", "resolution_notes")
+    readonly_fields = ("number", "tenant", "resolved_at", "created_at", "updated_at")
+
+
+@admin.register(DataQualityScorecard)
+class DataQualityScorecardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "scope_type", "overall_quality_score", "grade", "health_status", "meets_sla", "total_rules_evaluated", "open_exceptions_count", "is_active", "tenant")
+    list_select_related = ("warehouse_table", "semantic_model", "data_mart", "org_unit", "steward")
+    list_filter = ("scope_type", "grade", "health_status", "meets_sla", "evaluation_period", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "tenant", "overall_quality_score", "completeness_score", "accuracy_score", "consistency_score", "timeliness_score", "uniqueness_score", "validity_score", "grade", "health_status", "meets_sla", "total_rules_evaluated", "rules_passed_count", "rules_failed_count", "open_exceptions_count", "critical_exceptions_count", "last_calculated_at", "created_at", "updated_at")
+
 
