@@ -4,7 +4,7 @@
 - **Module:** 10 Business Intelligence (`apps/bi`)
 - **Review Date:** 2026-11-04
 - **Changeset:** `0e8727a2393473bbcb65013c79c53f02c9081036...75d1a1d2f6b549c4d3df40c30afb2f99bc62bcfe`
-- **Review Passes In Progress:** Pass 1/6 Completed (`code-reviewer`)
+- **Review Passes In Progress:** Pass 2/6 Completed (`code-reviewer`, `explorer`)
 
 ---
 
@@ -24,3 +24,20 @@
 - [ ] **CR-M2**: `WarehouseTable.generate_ddl_sql()` hardcodes `PARTITION BY RANGE`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L134-L136), support matching SQL partition keywords (`HASH`, `LIST`, `RANGE`) based on `partition_strategy`.
 - [ ] **CR-M3**: `time_travel_days` lacks server-side range validation. In `apps/bi/forms/DataWarehouse/WarehouseStoragePolicies.py`, add validation in `clean()` verifying `time_travel_days <= 90`.
 - [ ] **CR-M4**: `seed_bi.py` command help string omits Sub-module 10.3. Update help text to include `& 10.3 Data Warehouse & Storage`.
+
+---
+
+## Pass 2: `explorer`
+
+### Critical Findings
+*None.*
+
+### Important Findings
+- [ ] **EX-I1**: Missing filter controls for pinned context keys `active_choices`, `data_marts`, and `grain_choices` across list templates. In `warehouse_table/list.html`, add `<select>` for `data_mart`, `grain`, and `is_active`. In `data_mart/list.html`, `lakehouse_zone/list.html`, and `warehouse_storage_policy/list.html`, add `<select>` for `is_active`.
+- [ ] **EX-I2**: `warehouse_overview.html` omits rendering the pinned context metric `total_compressed_bytes`. Display `total_compressed_bytes` formatted alongside `total_rows`.
+- [ ] **EX-I3**: Unsupported badge class `.badge-purple` used in `data_mart/detail.html`, `lakehouse_zone/list.html`, `lakehouse_zone/detail.html`, `warehouse_storage_policy/detail.html`, `warehouse_table/list.html`, `warehouse_table/detail.html`. Replace with `.badge-info` or `.badge-slate`.
+- [ ] **EX-I4**: Duplicate primary key column rendered in `warehouse_table/detail.html`. Skip `col.name == warehouse_table.primary_key_column` in the `schema_definition` loop to avoid double-rendering the PK.
+
+### Minor Findings
+- [ ] **EX-M1**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`).
+- [ ] **EX-M2**: Unscoped `owner` and `steward` User querysets in `DataMartForm.__init__`. Scope User dropdown querysets to users belonging to `self.tenant`.
