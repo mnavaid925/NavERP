@@ -125,6 +125,7 @@ apps/bi/
 In `apps/core/navigation.py`:
 - `LIVE_LINKS["10.1"] = "bi:data_integration_hub"`
 - `LIVE_LINKS["10.2"] = "bi:etl_pipeline_list"`
+- `LIVE_LINKS["10.3"] = "bi:warehouse_overview"`
 
 ---
 
@@ -178,3 +179,79 @@ In `apps/core/navigation.py`:
   - SSRF protection: Target URLs and API endpoints are validated against private/loopback IP address ranges via `is_safe_url`.
 - **Audit Logging**: Any destructive action or state change (create, edit, delete, trigger run, test connection, cdc toggle) must record an immutable audit log entry via `write_audit_log(request.user, obj, action, tenant=request.tenant)`.
 - **Testing**: Tests run using in-memory SQLite (`config.settings_test`). Test functions must follow `test_dataintegration_*` naming convention with zero hardcoded cross-tenant leaks.
+
+---
+
+## Sub-module 10.3: Data Warehouse & Storage
+
+### Models
+1. **`DataMart`** (`apps/bi/models/DataWarehouse/DataMarts.py`)
+   - Prefix: `BDMT-`
+   - Fields: `name`, `code` (unique per tenant), `subject_area` (finance, sales, procurement, inventory, hrm, crm, executive, operations), `access_tier` (public_internal, department, restricted, confidential, tenant), `certification_status` (draft, under_review, verified, certified, deprecated), `refresh_schedule_cadence` (realtime, hourly, daily, weekly, monthly, manual), `org_unit` (`core.OrgUnit`), `owner` (`auth.User`), `steward` (`auth.User`), `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`, composite index on `(tenant, name)`.
+2. **`LakehouseZone`** (`apps/bi/models/DataWarehouse/LakehouseZones.py`)
+   - Prefix: `BLHZ-`
+   - Fields: `name`, `code` (unique per tenant), `zone_type` (raw, bronze, silver, gold, sandbox), `storage_backend` (internal_db, s3_compatible, azure_blob, gcs, local_filesystem), `base_uri_path`, `default_format` (relational_table, delta_lake, apache_iceberg, parquet_raw), `managed_by_platform`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`, composite index on `(tenant, zone_type)`.
+3. **`WarehouseStoragePolicy`** (`apps/bi/models/DataWarehouse/WarehouseStoragePolicies.py`)
+   - Prefix: `BWSP-`
+   - Fields: `name`, `partition_strategy` (none, range_time, hash_bucket, list_categorical), `partition_granularity` (none, hourly, daily, weekly, monthly, yearly), `compression_codec` (none, gzip, snappy, zstd, lz4), `vacuum_cadence` (disabled, daily, weekly, monthly), `time_travel_days` (0-90), `hot_tier_retention_days`, `warm_tier_retention_days`, `cold_tier_retention_days`, `enable_zorder`, `enable_bloom_filters`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, number)`, composite index on `(tenant, name)`.
+4. **`WarehouseTable`** (`apps/bi/models/DataWarehouse/WarehouseTables.py`)
+   - Prefix: `BDWT-`
+   - Fields: `lakehouse_zone` (`bi.LakehouseZone`, `PROTECT`), `storage_policy` (`bi.WarehouseStoragePolicy`, `SET_NULL`), `data_mart` (`bi.DataMart`, `SET_NULL`), `name`, `table_name` (SQL identifier), `table_type` (fact, dimension, aggregate, bridge, staging, snapshot), `schema_type` (star, snowflake, galaxy, flat_denormalized), `grain` (transaction, periodic_snapshot, accumulating_snapshot, line_item, summary), `primary_key_column`, `partition_key`, `cluster_keys`, `schema_definition` (JSON array of column objects), `row_count`, `compressed_bytes`, `compression_ratio`, `is_conformed`, `last_analyzed_at`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, table_name)` and `(tenant, number)`, composite indexes on `(tenant, storage_policy)`, `(tenant, -created_at)`, `(tenant, lakehouse_zone)`, `(tenant, data_mart)`.
+   - Methods: `generate_ddl_sql()` supports ANSI DDL generation with `CREATE TABLE IF NOT EXISTS`, schema column mapping, primary key clauses, and `RANGE` / `HASH` / `LIST` partitioning.
+
+### URLs & Routes
+- Overview:
+  - `bi:warehouse_overview` (`/bi/warehouse/`)
+- Data Marts:
+  - `bi:data_mart_list` (`/bi/warehouse/marts/`)
+  - `bi:data_mart_create` (`/bi/warehouse/marts/create/`)
+  - `bi:data_mart_detail` (`/bi/warehouse/marts/<int:pk>/`)
+  - `bi:data_mart_edit` (`/bi/warehouse/marts/<int:pk>/edit/`)
+  - `bi:data_mart_delete` (`/bi/warehouse/marts/<int:pk>/delete/`)
+- Lakehouse Zones:
+  - `bi:lakehouse_zone_list` (`/bi/warehouse/zones/`)
+  - `bi:lakehouse_zone_create` (`/bi/warehouse/zones/create/`)
+  - `bi:lakehouse_zone_detail` (`/bi/warehouse/zones/<int:pk>/`)
+  - `bi:lakehouse_zone_edit` (`/bi/warehouse/zones/<int:pk>/edit/`)
+  - `bi:lakehouse_zone_delete` (`/bi/warehouse/zones/<int:pk>/delete/`)
+- Warehouse Storage Policies:
+  - `bi:warehouse_storage_policy_list` (`/bi/warehouse/policies/`)
+  - `bi:warehouse_storage_policy_create` (`/bi/warehouse/policies/create/`)
+  - `bi:warehouse_storage_policy_detail` (`/bi/warehouse/policies/<int:pk>/`)
+  - `bi:warehouse_storage_policy_edit` (`/bi/warehouse/policies/<int:pk>/edit/`)
+  - `bi:warehouse_storage_policy_delete` (`/bi/warehouse/policies/<int:pk>/delete/`)
+- Warehouse Tables:
+  - `bi:warehouse_table_list` (`/bi/warehouse/tables/`)
+  - `bi:warehouse_table_create` (`/bi/warehouse/tables/create/`)
+  - `bi:warehouse_table_detail` (`/bi/warehouse/tables/<int:pk>/`)
+  - `bi:warehouse_table_edit` (`/bi/warehouse/tables/<int:pk>/edit/`)
+  - `bi:warehouse_table_delete` (`/bi/warehouse/tables/<int:pk>/delete/`)
+  - `bi:warehouse_table_ddl_preview` (`/bi/warehouse/tables/<int:pk>/ddl/`)
+  - `bi:warehouse_table_analyze` (`/bi/warehouse/tables/<int:pk>/analyze/`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/data_warehouse/`:
+  - `warehouse_overview.html` (Stat cards, storage breakdown, recent tables table, quick links)
+  - `data_mart/` (`list.html`, `detail.html`, `form.html`)
+  - `lakehouse_zone/` (`list.html`, `detail.html`, `form.html`)
+  - `warehouse_storage_policy/` (`list.html`, `detail.html`, `form.html`)
+  - `warehouse_table/` (`list.html`, `detail.html`, `form.html`, `ddl_preview.html`)
+- Design System: Colour-named badges only (`.badge-info`, `.badge-slate`, `.badge-green`, `.badge-amber`, `.badge-red`). Empty state typography uses semantic `<h3>`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant data for:
+  - 4 Lakehouse Zones (Bronze, Silver, Gold, Sandbox)
+  - 3 Warehouse Storage Policies (Hot Daily Snappy, Balanced Weekly Zstd, Cold Archive Gzip)
+  - 4 Data Marts (Executive, Sales & Revenue, Finance & GL, Supply Chain)
+  - 6 Warehouse Tables (`fact_daily_revenue`, `fact_sales_order_lines`, `fact_gl_journal_entries`, `dim_customer_master`, `dim_product_catalog`, `dim_fiscal_calendar`) with populated JSON column schemas.
+- 100% idempotent; guarded against duplicate executions.
+
+### Key Conventions
+- **JSON Column Deferral**: Queries for tables in `warehouse_overview` and `warehouse_table_list` use `.defer("schema_definition")` to conserve RAM and reduce serialization load.
+- **Foreign Key Permissiveness on Edit**: Model forms permit currently bound inactive FKs on edit via `Q(is_active=True) | Q(pk=self.instance.<fk_id>)`.
+- **SQL Identifier Validation**: `table_name` and `primary_key_column` are sanitized with regex `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`.
+
