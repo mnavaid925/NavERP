@@ -7,13 +7,17 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.bi.models import (
     CdcSyncConfig,
+    DataMart,
     DataSourceConnector,
     EtlPipeline,
     EtlPipelineRun,
     EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
+    LakehouseZone,
     TransformationStep,
+    WarehouseStoragePolicy,
+    WarehouseTable,
 )
 
 
@@ -290,4 +294,150 @@ def etl_run_b(db, tenant_b, etl_pipeline_b, etl_version_b):
         records_rejected=0,
         bytes_processed=524288,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 10.3 (Data Warehouse & Storage) Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def lakehouse_zone_a(db, tenant_a):
+    return LakehouseZone.objects.create(
+        tenant=tenant_a,
+        name="Gold Marts Zone",
+        zone_type="gold",
+        storage_backend="internal_db",
+        base_path="/warehouse/gold",
+        default_format="relational_table",
+        managed_by_platform=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def storage_policy_a(db, tenant_a):
+    return WarehouseStoragePolicy.objects.create(
+        tenant=tenant_a,
+        name="Daily Range Snappy Policy",
+        partition_strategy="range_time",
+        partition_granularity="daily",
+        compression_codec="snappy",
+        vacuum_cadence="weekly",
+        time_travel_days=30,
+        enable_zorder=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def data_mart_a(db, tenant_a, admin_user):
+    return DataMart.objects.create(
+        tenant=tenant_a,
+        name="Revenue Finance Mart",
+        subject_area="finance",
+        certification_status="certified",
+        access_tier="department",
+        refresh_schedule_cadence="daily",
+        owner=admin_user,
+        steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def warehouse_table_a(db, tenant_a, lakehouse_zone_a, storage_policy_a, data_mart_a):
+    return WarehouseTable.objects.create(
+        tenant=tenant_a,
+        lakehouse_zone=lakehouse_zone_a,
+        storage_policy=storage_policy_a,
+        data_mart=data_mart_a,
+        name="Daily Invoiced Revenue Fact",
+        table_name="fact_daily_revenue",
+        table_type="fact",
+        schema_type="star",
+        grain="transaction",
+        primary_key_column="id",
+        partition_key="invoice_date",
+        cluster_keys="customer_id,currency",
+        schema_definition=[
+            {"name": "id", "type": "BIGINT", "nullable": False},
+            {"name": "invoice_date", "type": "DATE", "nullable": False},
+            {"name": "customer_id", "type": "INTEGER", "nullable": False},
+            {"name": "amount", "type": "NUMERIC(14, 2)", "nullable": False},
+        ],
+        row_count=100000,
+        compressed_bytes=10485760,
+        compression_ratio=Decimal("2.80"),
+        is_conformed=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def lakehouse_zone_b(db, tenant_b):
+    return LakehouseZone.objects.create(
+        tenant=tenant_b,
+        name="Globex Bronze Ingestion Zone",
+        zone_type="bronze",
+        storage_backend="internal_db",
+        base_path="/warehouse/globex/bronze",
+        default_format="relational_table",
+        managed_by_platform=True,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def storage_policy_b(db, tenant_b):
+    return WarehouseStoragePolicy.objects.create(
+        tenant=tenant_b,
+        name="Globex Monthly Policy",
+        partition_strategy="range_time",
+        partition_granularity="monthly",
+        compression_codec="zstd",
+        vacuum_cadence="monthly",
+        time_travel_days=14,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def data_mart_b(db, tenant_b, admin_user_b):
+    return DataMart.objects.create(
+        tenant=tenant_b,
+        name="Globex Sales Mart",
+        subject_area="sales",
+        certification_status="verified",
+        access_tier="tenant",
+        owner=admin_user_b,
+        steward=admin_user_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def warehouse_table_b(db, tenant_b, lakehouse_zone_b, storage_policy_b, data_mart_b):
+    return WarehouseTable.objects.create(
+        tenant=tenant_b,
+        lakehouse_zone=lakehouse_zone_b,
+        storage_policy=storage_policy_b,
+        data_mart=data_mart_b,
+        name="Globex Orders Fact",
+        table_name="fact_globex_orders",
+        table_type="fact",
+        schema_type="star",
+        grain="transaction",
+        primary_key_column="id",
+        partition_key="order_date",
+        schema_definition=[
+            {"name": "id", "type": "BIGINT", "nullable": False},
+            {"name": "order_date", "type": "DATE", "nullable": False},
+        ],
+        row_count=50000,
+        compressed_bytes=5242880,
+        compression_ratio=Decimal("2.50"),
+        is_active=True,
+    )
+
 
