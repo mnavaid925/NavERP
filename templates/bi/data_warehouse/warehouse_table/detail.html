@@ -192,6 +192,7 @@
                 </tr>
                 {% endif %}
                 {% for col in warehouse_table.schema_definition %}
+                {% if col.name != warehouse_table.primary_key_column %}
                 <tr>
                     <td class="font-mono text-xs font-semibold text-slate-900">{{ col.name }}</td>
                     <td class="font-mono text-xs text-slate-700 uppercase">{{ col.type|default:"VARCHAR(255)" }}</td>
@@ -204,6 +205,7 @@
                     </td>
                     <td class="text-xs text-slate-600">{{ col.description|default:"—" }}</td>
                 </tr>
+                {% endif %}
                 {% empty %}
                 {% if not warehouse_table.primary_key_column %}
                 <tr>
