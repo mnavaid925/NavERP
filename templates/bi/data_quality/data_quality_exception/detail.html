@@ -233,11 +233,11 @@
             <div class="card-body text-sm space-y-3">
                 <div>
                     <div class="text-xs text-muted">Assigned Steward</div>
-                    <div class="font-medium mt-0.5">{{ exception.assigned_steward.get_full_name|default:exception.assigned_steward.username|default:"Unassigned" }}</div>
+                    <div class="font-medium mt-0.5">{% if exception.assigned_steward %}{{ exception.assigned_steward.get_full_name|default:exception.assigned_steward.username }}{% else %}Unassigned{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-xs text-muted">Resolved By</div>
-                    <div class="font-medium mt-0.5">{{ exception.resolved_by.get_full_name|default:exception.resolved_by.username|default:"Pending resolution" }}</div>
+                    <div class="font-medium mt-0.5">{% if exception.resolved_by %}{{ exception.resolved_by.get_full_name|default:exception.resolved_by.username }}{% else %}Pending resolution{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-xs text-muted">Resolved At</div>
