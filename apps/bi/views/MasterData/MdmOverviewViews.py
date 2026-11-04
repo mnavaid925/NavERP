@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.bi.models.MasterData.MdmGoldenRecords import MdmGoldenRecord
@@ -16,13 +16,18 @@ def mdm_overview(request):
     all_nodes = bi_scope(MdmHierarchyNode.objects.all(), request)
     all_codes = bi_scope(MdmReferenceCode.objects.all(), request)
 
-    total_golden_records = all_golden.count()
     total_rules = all_rules.count()
     total_hierarchy_nodes = all_nodes.count()
     total_reference_codes = all_codes.count()
 
-    gold_tier_count = all_golden.filter(trust_tier="gold").count()
-    pending_review_count = all_golden.filter(status="pending_review").count()
+    golden_stats = all_golden.aggregate(
+        total=Count("id"),
+        gold_tier=Count("id", filter=Q(trust_tier="gold")),
+        pending_review=Count("id", filter=Q(status="pending_review")),
+    )
+    total_golden_records = golden_stats["total"]
+    gold_tier_count = golden_stats["gold_tier"]
+    pending_review_count = golden_stats["pending_review"]
 
     domain_counts_raw = (
         all_golden.values("domain")
