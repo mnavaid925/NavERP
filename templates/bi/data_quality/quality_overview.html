@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Data Quality & Cleansing Overview — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Data Quality & Cleansing</span>
+        </div>
+        <h1 class="page-title">Data Quality Command Center</h1>
+        <p class="text-muted text-sm">Automated data profiling, rule assertion monitoring, duplicate detection, and steward exception remediation</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_quality_profile_list' %}" class="btn btn-outline">
+            <i data-lucide="file-bar-chart"></i>
+            <span>Profiles</span>
+        </a>
+        <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Quality Rules</span>
+        </a>
+        <a href="{% url 'bi:data_quality_exception_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-triangle"></i>
+            <span>Exception Queue</span>
+        </a>
+        <a href="{% url 'bi:data_quality_scorecard_list' %}" class="btn btn-primary">
+            <i data-lucide="award"></i>
+            <span>Executive Scorecards</span>
+        </a>
+    </div>
+</div>
+
+<!-- Executive Trust & Health Metrics -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Data Trust Index</div>
+            <div class="text-3xl font-extrabold text-emerald-600">{{ avg_trust_score }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="sliders"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Rules</div>
+            <div class="text-3xl font-bold text-blue-600">{{ total_rules }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Open Exceptions</div>
+            <div class="text-3xl font-bold {% if open_exceptions > 0 %}text-amber-600{% else %}text-slate-600{% endif %}">
+                {{ open_exceptions }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Healthy Domains</div>
+            <div class="text-3xl font-bold text-indigo-600">{{ healthy_scorecards_count }} / {{ total_scorecards }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- ISO/DAMA 6-Dimension Health Radar -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <i data-lucide="gauge" class="w-5 h-5 text-indigo-600"></i>
+            <h2 class="card-title">Enterprise ISO/DAMA Data Quality Health Index</h2>
+        </div>
+        <span class="badge badge-info text-xs">Continuous Health Monitoring</span>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Completeness</div>
+                <div class="text-xl font-bold text-emerald-600 mt-1">{{ dimension_scores.completeness }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ dimension_scores.completeness }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Populated & non-null</span>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Accuracy</div>
+                <div class="text-xl font-bold text-blue-600 mt-1">{{ dimension_scores.accuracy }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-blue-500 h-1.5 rounded-full" style="width: {{ dimension_scores.accuracy }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Conforms to truth</span>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Consistency</div>
+                <div class="text-xl font-bold text-indigo-600 mt-1">{{ dimension_scores.consistency }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-indigo-500 h-1.5 rounded-full" style="width: {{ dimension_scores.consistency }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Referential FK integrity</span>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Timeliness</div>
+                <div class="text-xl font-bold text-teal-600 mt-1">{{ dimension_scores.timeliness }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-teal-500 h-1.5 rounded-full" style="width: {{ dimension_scores.timeliness }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Data freshness SLA</span>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Uniqueness</div>
+                <div class="text-xl font-bold text-purple-600 mt-1">{{ dimension_scores.uniqueness }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-purple-500 h-1.5 rounded-full" style="width: {{ dimension_scores.uniqueness }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Zero duplicate clusters</span>
+            </div>
+            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                <div class="text-xs text-muted font-medium">Validity</div>
+                <div class="text-xl font-bold text-amber-600 mt-1">{{ dimension_scores.validity }}%</div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-2">
+                    <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ dimension_scores.validity }}%"></div>
+                </div>
+                <span class="text-[11px] text-muted mt-1 block">Schema mask syntax</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Attention Needed: Failing Rules -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="alert-octagon" class="w-5 h-5 text-red-500"></i>
+                <h2 class="card-title text-base font-semibold">Rules Requiring Attention</h2>
+            </div>
+            <a href="{% url 'bi:data_quality_rule_list' %}?last_status=failed" class="text-xs text-primary-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Pass Rate</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rule in failing_rules %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-xs">
+                                    <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="hover:underline">
+                                        {{ rule.name }}
+                                    </a>
+                                </div>
+                                <div class="text-xs text-muted font-mono">{{ rule.code }}</div>
+                            </td>
+                            <td>
+                                {% if rule.severity == 'critical' or rule.severity == 'fatal' %}
+                                <span class="badge badge-red">{{ rule.get_severity_display }}</span>
+                                {% else %}
+                                <span class="badge badge-amber">Warning</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rule.last_status == 'passed' %}
+                                <span class="badge badge-green">Passed</span>
+                                {% elif rule.last_status == 'warning' %}
+                                <span class="badge badge-amber">Warning</span>
+                                {% else %}
+                                <span class="badge badge-red">Failed</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-mono text-xs font-semibold">{{ rule.pass_rate_pct }}%</td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:data_quality_rule_detail' rule.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                All evaluated quality rules are passing cleanly within tolerance!
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Exception Queue Items -->
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>
+                <h2 class="card-title text-base font-semibold">Active Remediation Queue</h2>
+            </div>
+            <a href="{% url 'bi:data_quality_exception_list' %}" class="text-xs text-primary-600 hover:underline">View Queue &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Identifier</th>
+                            <th>Offending Value</th>
+                            <th>Severity</th>
+                            <th>Steward</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exc in critical_exceptions %}
+                        <tr>
+                            <td class="font-mono text-xs font-medium">
+                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="hover:underline">
+                                    {{ exc.record_identifier }}
+                                </a>
+                            </td>
+                            <td class="text-xs">
+                                <div class="font-mono text-red-600 truncate max-w-xs">{{ exc.invalid_value }}</div>
+                            </td>
+                            <td>
+                                {% if exc.severity == 'critical' or exc.severity == 'fatal' %}
+                                <span class="badge badge-red">{{ exc.get_severity_display }}</span>
+                                {% else %}
+                                <span class="badge badge-amber">Warning</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-muted">
+                                {{ exc.assigned_steward.get_full_name|default:exc.assigned_steward.username|default:"Unassigned" }}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:data_quality_exception_detail' exc.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                No open quality exceptions in queue!
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Executive Scorecards & Recent Profiling -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="award" class="w-5 h-5 text-purple-600"></i>
+                <h2 class="card-title text-base font-semibold">Executive Scorecards</h2>
+            </div>
+            <a href="{% url 'bi:data_quality_scorecard_list' %}" class="text-xs text-primary-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Scorecard</th>
+                            <th>Trust Index</th>
+                            <th>Grade</th>
+                            <th>Health</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sc in scorecards %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-xs">
+                                    <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="hover:underline">
+                                        {{ sc.name }}
+                                    </a>
+                                </div>
+                                <div class="text-xs text-muted font-mono">{{ sc.get_scope_type_display }}</div>
+                            </td>
+                            <td class="font-bold text-xs font-mono">{{ sc.overall_quality_score }}%</td>
+                            <td>
+                                {% if sc.grade == 'A' %}
+                                <span class="badge badge-green">Grade A</span>
+                                {% elif sc.grade == 'B' %}
+                                <span class="badge badge-info">Grade B</span>
+                                {% else %}
+                                <span class="badge badge-amber">Grade {{ sc.grade }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if sc.health_status == 'healthy' %}
+                                <span class="badge badge-green">Healthy</span>
+                                {% elif sc.health_status == 'needs_attention' %}
+                                <span class="badge badge-amber">Attention</span>
+                                {% else %}
+                                <span class="badge badge-red">{{ sc.get_health_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:data_quality_scorecard_detail' sc.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                No scorecards created yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="file-bar-chart" class="w-5 h-5 text-blue-600"></i>
+                <h2 class="card-title text-base font-semibold">Recent Profiling Runs</h2>
+            </div>
+            <a href="{% url 'bi:data_quality_profile_list' %}" class="text-xs text-primary-600 hover:underline">View All &rarr;</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Profile</th>
+                            <th>Status</th>
+                            <th>Completeness</th>
+                            <th>Rows</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prof in recent_profiles %}
+                        <tr>
+                            <td>
+                                <div class="font-medium text-xs">
+                                    <a href="{% url 'bi:data_quality_profile_detail' prof.pk %}" class="hover:underline">
+                                        {{ prof.name }}
+                                    </a>
+                                </div>
+                                <div class="text-xs text-muted font-mono">{{ prof.number }}</div>
+                            </td>
+                            <td>
+                                {% if prof.status == 'completed' %}
+                                <span class="badge badge-green">Completed</span>
+                                {% elif prof.status == 'failed' %}
+                                <span class="badge badge-red">Failed</span>
+                                {% else %}
+                                <span class="badge badge-slate">{{ prof.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="font-mono text-xs font-semibold text-emerald-600">{{ prof.completeness_score }}%</td>
+                            <td class="text-xs font-mono">{{ prof.total_row_count }}</td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:data_quality_profile_detail' prof.pk %}" class="btn btn-icon">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="p-6 text-center text-muted text-sm">
+                                No data quality profiles run yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
