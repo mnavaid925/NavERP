@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}{{ term.name }} ({{ term.number }}) — Business Glossary — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:semantic_overview' %}">Semantic Layer</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:business_glossary_term_list' %}">Business Glossary</a>
+            <span class="sep">/</span>
+            <span>{{ term.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ term.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ term.number }}</span>
+            {% if term.certification_status == 'certified' %}
+            <span class="badge badge-green">
+                <i data-lucide="check-circle" class="w-3 h-3 inline mr-1"></i>Certified Corporate Standard
+            </span>
+            {% elif term.certification_status == 'in_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif term.certification_status == 'deprecated' %}
+            <span class="badge badge-red">Deprecated</span>
+            {% else %}
+            <span class="badge badge-slate">Draft</span>
+            {% endif %}
+            {% if term.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ term.short_definition }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:calculated_measure_create' %}?glossary_term={{ term.pk }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Add Calculated Measure</span>
+        </a>
+        <a href="{% url 'bi:business_glossary_term_edit' term.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:business_glossary_term_delete' term.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete term {{ term.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Definitions & Rules Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Standard Definitions & Calculation Rule</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <span class="text-xs uppercase font-medium text-muted block mb-1">Executive Summary Definition</span>
+                    <p class="text-sm font-medium text-slate-900 bg-slate-50 p-3 rounded border border-slate-100">
+                        {{ term.short_definition }}
+                    </p>
+                </div>
+                {% if term.full_definition %}
+                <div>
+                    <span class="text-xs uppercase font-medium text-muted block mb-1">Detailed Corporate Standard Definition</span>
+                    <div class="text-sm text-slate-800 leading-relaxed bg-white p-3 rounded border border-slate-100">
+                        {{ term.full_definition|linebreaks }}
+                    </div>
+                </div>
+                {% endif %}
+                {% if term.calculation_rule %}
+                <div>
+                    <span class="text-xs uppercase font-medium text-muted block mb-1">Calculation Rule & Formula Narrative</span>
+                    <pre class="bg-slate-900 text-slate-100 p-3 rounded text-xs font-mono overflow-x-auto leading-relaxed">{{ term.calculation_rule }}</pre>
+                </div>
+                {% endif %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-sm">
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Identifier Code</span>
+                        <span class="font-mono text-slate-800">{{ term.code }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs uppercase font-medium text-muted block">Domain Category</span>
+                        <span class="font-medium text-slate-800">{{ term.get_domain_category_display }}</span>
+                    </div>
+                    {% if term.synonyms %}
+                    <div class="sm:col-span-2">
+                        <span class="text-xs uppercase font-medium text-muted block">Synonyms & Acronyms</span>
+                        <span class="text-slate-700">{{ term.synonyms }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Mapped Calculated Measures -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold">Executable Measures ({{ related_measures.count }})</h2>
+                    <p class="text-xs text-muted">Concrete semantic metrics implementing this business glossary definition</p>
+                </div>
+                <a href="{% url 'bi:calculated_measure_create' %}?glossary_term={{ term.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Link Measure</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Measure Name</th>
+                            <th>Model</th>
+                            <th>Aggregation</th>
+                            <th>Formula</th>
+                            <th class="text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rm in related_measures %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:calculated_measure_detail' rm.pk %}" class="text-primary hover:underline">
+                                    {{ rm.number }}
+                                </a>
+                            </td>
+                            <td class="font-medium text-slate-900">
+                                {{ rm.name }}
+                            </td>
+                            <td>
+                                <a href="{% url 'bi:semantic_model_detail' rm.semantic_model.pk %}" class="text-xs text-primary hover:underline">
+                                    {{ rm.semantic_model.name }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="badge badge-info">{{ rm.get_aggregation_type_display }}</span>
+                            </td>
+                            <td class="font-mono text-xs text-slate-700">
+                                {{ rm.formula_expression|default:rm.source_column|truncatechars:30 }}
+                            </td>
+                            <td class="text-right table-actions">
+                                <a href="{% url 'bi:calculated_measure_detail' rm.pk %}" class="btn btn-icon" title="View Measure">
+                                    <i data-lucide="eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-6 text-center text-muted text-sm">
+                                No executable calculated measures linked to this term yet. Click "Link Measure" to author one.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if term.related_terms.all %}
+        <!-- Related Terms Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Related Glossary Terms</h2>
+            </div>
+            <div class="card-body">
+                <div class="flex flex-wrap gap-2">
+                    {% for rt in term.related_terms.all %}
+                    <a href="{% url 'bi:business_glossary_term_detail' rt.pk %}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-800 transition">
+                        <i data-lucide="book" class="w-3.5 h-3.5 text-slate-500"></i>
+                        <span>{{ rt.name }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column (1 col) -->
+    <div class="space-y-6">
+        <!-- Certification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Governance & Certification</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Current Status</span>
+                    <div class="mt-1">
+                        {% if term.certification_status == 'certified' %}
+                        <span class="badge badge-green">
+                            <i data-lucide="check-circle" class="w-3 h-3 inline mr-1"></i>Certified Standard
+                        </span>
+                        {% elif term.certification_status == 'in_review' %}
+                        <span class="badge badge-amber">Under Review</span>
+                        {% elif term.certification_status == 'deprecated' %}
+                        <span class="badge badge-red">Deprecated</span>
+                        {% else %}
+                        <span class="badge badge-slate">Draft Term</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if term.certified_by %}
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Certified By</span>
+                    <span class="text-sm font-medium text-slate-800">{{ term.certified_by.get_full_name|default:term.certified_by.username }}</span>
+                    {% if term.certified_at %}
+                    <span class="text-xs text-muted block">{{ term.certified_at|date:"M d, Y H:i" }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if term.certification_notes %}
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Certification Notes</span>
+                    <p class="text-xs text-slate-700 bg-slate-50 p-2 rounded mt-1">{{ term.certification_notes }}</p>
+                </div>
+                {% endif %}
+
+                <div class="border-t border-slate-100 pt-4 mt-4">
+                    <h4 class="text-xs font-semibold uppercase text-muted mb-2">Update Certification</h4>
+                    <form method="post" action="{% url 'bi:business_glossary_term_certify' term.pk %}" class="space-y-3">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label class="form-label text-xs">New Status</label>
+                            {{ certify_form.certification_status }}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label text-xs">Sign-off Notes</label>
+                            {{ certify_form.certification_notes }}
+                        </div>
+                        <button type="submit" class="btn btn-outline btn-sm w-full">
+                            <i data-lucide="shield-check"></i>
+                            <span>Update Certification</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stewardship Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Stewardship & Ownership</h3>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Designated Steward</span>
+                    <span class="font-medium text-slate-800">{{ term.steward.get_full_name|default:term.steward.username|default:"Unassigned" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Owning Department</span>
+                    <span class="text-slate-800">{{ term.org_unit.name|default:"Enterprise-Wide" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Created</span>
+                    <span class="text-slate-700 text-xs">{{ term.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted uppercase font-medium block">Last Updated</span>
+                    <span class="text-slate-700 text-xs">{{ term.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
