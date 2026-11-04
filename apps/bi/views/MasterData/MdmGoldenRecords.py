@@ -170,6 +170,13 @@ def mdm_golden_record_edit(request, pk):
 @require_POST
 def mdm_golden_record_delete(request, pk):
     golden_record = bi_object(request, MdmGoldenRecord, pk)
+    if golden_record.absorbed_records.exists():
+        messages.error(
+            request,
+            f"Cannot delete {golden_record.number} because it has absorbed duplicate records. Unmerge them first.",
+        )
+        return redirect("bi:mdm_golden_record_detail", pk=golden_record.pk)
+
     record_number = golden_record.number
     record_name = golden_record.name
 
