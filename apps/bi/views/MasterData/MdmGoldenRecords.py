@@ -225,6 +225,13 @@ def mdm_golden_record_merge(request, pk):
                 primary_record.stewardship_notes = (
                     f"{primary_record.stewardship_notes}\n[Absorbed {secondary_record.number}]: {notes}".strip()
                 )
+            # Consolidate feeder system crosswalks from absorbed secondary record
+            primary_crosswalks = list(primary_record.source_crosswalks_json or [])
+            secondary_crosswalks = list(secondary_record.source_crosswalks_json or [])
+            if secondary_crosswalks:
+                primary_crosswalks.extend(secondary_crosswalks)
+                primary_record.source_crosswalks_json = primary_crosswalks
+
             primary_record.save()
 
             write_audit_log(
