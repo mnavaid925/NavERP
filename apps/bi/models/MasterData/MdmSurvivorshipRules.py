@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.urls import reverse
 
@@ -54,11 +55,13 @@ class MdmSurvivorshipRule(TenantNumbered):
         max_digits=5,
         decimal_places=2,
         default=Decimal("80.00"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
     )
     auto_merge_threshold_pct = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=Decimal("95.00"),
+        validators=[MinValueValidator(Decimal("0.00")), MaxValueValidator(Decimal("100.00"))],
     )
     source_priority_list_json = models.JSONField(default=list)
     priority_order = models.PositiveIntegerField(default=10)
