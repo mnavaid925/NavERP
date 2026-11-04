@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -55,10 +55,16 @@ def data_quality_exception_list(request):
     if steward_filter.isdigit():
         queryset = queryset.filter(assigned_steward_id=steward_filter)
 
-    total_count = bi_scope(DataQualityException.objects.all(), request).count()
-    open_count = bi_scope(DataQualityException.objects.all(), request).filter(status__in=["open", "investigating"]).count()
-    remediated_count = bi_scope(DataQualityException.objects.all(), request).filter(status="remediated").count()
-    critical_count = bi_scope(DataQualityException.objects.all(), request).filter(severity__in=["critical", "fatal"]).count()
+    stat_counts = bi_scope(DataQualityException.objects.all(), request).aggregate(
+        total=Count("id"),
+        open=Count("id", filter=Q(status__in=["open", "investigating"])),
+        remediated=Count("id", filter=Q(status="remediated")),
+        critical=Count("id", filter=Q(severity__in=["critical", "fatal"])),
+    )
+    total_count = stat_counts["total"]
+    open_count = stat_counts["open"]
+    remediated_count = stat_counts["remediated"]
+    critical_count = stat_counts["critical"]
 
     paginator = Paginator(queryset, 15)
     page_number = request.GET.get("page", 1)
