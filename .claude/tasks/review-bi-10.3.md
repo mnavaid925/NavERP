@@ -18,7 +18,7 @@
 
 ### Important Findings
 
-- [ ] **I1**: `WarehouseTableForm` excludes inactive FK references on edit, blocking updates to existing tables. In `apps/bi/forms/DataWarehouse/WarehouseTables.py` (L62-L72), `lakehouse_zone`, `data_mart`, and `storage_policy` querysets filter strictly on `is_active=True`. When editing an existing instance, permit the currently bound foreign key ID even if inactive (`Q(is_active=True) | Q(pk=self.instance.<fk_id>)`).
+- [x] **I1**: `WarehouseTableForm` excludes inactive FK references on edit, blocking updates to existing tables. In `apps/bi/forms/DataWarehouse/WarehouseTables.py` (L62-L72), `lakehouse_zone`, `data_mart`, and `storage_policy` querysets filter strictly on `is_active=True`. When editing an existing instance, permit the currently bound foreign key ID even if inactive (`Q(is_active=True) | Q(pk=self.instance.<fk_id>)`). fixed — fix(bi): permit currently bound foreign keys on edit in WarehouseTableForm
 - [ ] **I2**: `lakehouse_zone_delete` writes audit log before `ProtectedError` check, leaving a phantom deletion record. In `apps/bi/views/DataWarehouse/LakehouseZones.py` (L181-L194), wrap `zone.delete()` and `write_audit_log` inside `transaction.atomic()` or log only after successful deletion.
 - [ ] **I3**: Key filter dropdown controls omitted from list templates despite view context support:
   - In `templates/bi/data_warehouse/warehouse_table/list.html`, add `<select>` dropdowns for `data_mart`, `grain`, and `is_active`.
