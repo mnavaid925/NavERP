@@ -33,6 +33,10 @@
         <p class="text-muted text-sm font-mono mt-1">{{ rule.number }} &middot; Code: {{ rule.code }} &middot; Category: {{ rule.get_rule_category_display }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:data_quality_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Rules</span>
+        </a>
         <form method="post" action="{% url 'bi:data_quality_rule_run' rule.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
