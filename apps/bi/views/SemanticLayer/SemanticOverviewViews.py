@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import render
 
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
@@ -16,10 +16,20 @@ def semantic_overview(request):
     measures_qs = bi_scope(CalculatedMeasure.objects.all(), request)
     hierarchies_qs = bi_scope(DrillHierarchy.objects.all(), request)
 
-    total_models = models_qs.count()
-    total_certified_models = models_qs.filter(certification_status="certified").count()
-    total_glossary_terms = terms_qs.count()
-    total_certified_terms = terms_qs.filter(certification_status="certified").count()
+    model_stats = models_qs.aggregate(
+        total_models=Count("id"),
+        total_certified_models=Count("id", filter=Q(certification_status="certified")),
+    )
+    total_models = model_stats["total_models"]
+    total_certified_models = model_stats["total_certified_models"]
+
+    term_stats = terms_qs.aggregate(
+        total_glossary_terms=Count("id"),
+        total_certified_terms=Count("id", filter=Q(certification_status="certified")),
+    )
+    total_glossary_terms = term_stats["total_glossary_terms"]
+    total_certified_terms = term_stats["total_certified_terms"]
+
     total_measures = measures_qs.count()
     total_hierarchies = hierarchies_qs.count()
 
@@ -32,8 +42,22 @@ def semantic_overview(request):
         .order_by("-updated_at")[:5]
     )
 
-    model_type_counts = models_qs.values("model_type").annotate(count=Count("id")).order_by("-count")
-    domain_term_counts = terms_qs.values("domain_category").annotate(count=Count("id")).order_by("-count")
+    model_type_dict = dict(SemanticModel.MODEL_TYPE_CHOICES)
+    model_type_counts = [
+        {
+            "model_type": model_type_dict.get(item["model_type"], item["model_type"].replace("_", " ").title()),
+            "count": item["count"],
+        }
+        for item in models_qs.values("model_type").annotate(count=Count("id")).order_by("-count")
+    ]
+    domain_dict = dict(BusinessGlossaryTerm.DOMAIN_CATEGORY_CHOICES)
+    domain_term_counts = [
+        {
+            "domain_category": domain_dict.get(item["domain_category"], item["domain_category"].replace("_", " ").title()),
+            "count": item["count"],
+        }
+        for item in terms_qs.values("domain_category").annotate(count=Count("id")).order_by("-count")
+    ]
 
     context = {
         "total_models": total_models,
