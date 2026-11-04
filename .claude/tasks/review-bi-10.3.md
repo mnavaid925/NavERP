@@ -40,7 +40,7 @@
 - [x] **M1**: Duplicate primary key column rendered in `warehouse_table/detail.html`. Skip `col.name == warehouse_table.primary_key_column` in the `schema_definition` loop to avoid double-rendering the PK. fixed — fix(bi): skip duplicate primary key column in warehouse_table schema definition table
 - [x] **M2**: `WarehouseTable.generate_ddl_sql()` hardcodes `PARTITION BY RANGE`. In `apps/bi/models/DataWarehouse/WarehouseTables.py` (L134-L136), support matching SQL partition keywords (`HASH`, `LIST`, `RANGE`) based on `partition_strategy`. fixed — fix(bi): support HASH, LIST, and RANGE partition clauses in generate_ddl_sql
 - [x] **M3**: `time_travel_days` lacks server-side range validation. In `apps/bi/forms/DataWarehouse/WarehouseStoragePolicies.py`, add validation in `clean()` verifying `time_travel_days <= 90`. fixed — fix(bi): validate time_travel_days range between 0 and 90 in WarehouseStoragePolicyForm
-- [ ] **M4**: `seed_bi.py` command help string omits Sub-module 10.3. Update help text to include `& 10.3 Data Warehouse & Storage`.
+- [x] **M4**: `seed_bi.py` command help string omits Sub-module 10.3. Update help text to include `& 10.3 Data Warehouse & Storage`. fixed — docs(bi): update seed_bi command help string to include Sub-module 10.3
 - [ ] **M5**: Unused context variable `show_ddl_tab` in `warehouse_table_ddl_preview` (`apps/bi/views/DataWarehouse/WarehouseTables.py:255`). Remove unused variable from view context.
 - [ ] **M6**: Undefined utility class `text-primary` used in navigation links in detail templates. Replace with `text-brand` or `text-blue-600`.
 - [ ] **M7**: Empty state heading typography: use semantic `<h3>` inside `.empty-state` container for consistency with `theme.css`.
