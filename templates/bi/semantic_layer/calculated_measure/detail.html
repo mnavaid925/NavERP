@@ -30,6 +30,10 @@
         <p class="text-muted text-sm">{{ measure.description|default:"No description provided for this calculated measure." }}</p>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:calculated_measure_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Calculated Measures</span>
+        </a>
         <a href="{% url 'bi:semantic_model_detail' measure.semantic_model.pk %}" class="btn btn-outline">
             <i data-lucide="database"></i>
             <span>Parent Model</span>
