@@ -13,7 +13,7 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.3 Data Warehouse & Lakehouse Management**: Star/snowflake schemas, facts & dimensions, storage tiers, partition pruning.
 - **10.4 Semantic Layer & Metrics Store**: Reusable metrics, calculated KPIs, dimensions, business glossary, and virtual views.
 - **10.5 Data Quality & Cleansing**: Automated profiling, declarative validation rules, steward exception remediation queues, executive Data Trust Index (DTI) scorecards.
-- **10.6 Ad-hoc Query & SQL Studio**: Interactive SQL editor, query history, permission-governed result sets, pushdown query runner.
+- **10.6 Master Data Management (MDM)**: Golden master records, source crosswalks, survivorship rules, multi-domain hierarchies, and reference data management (RDM).
 - **10.7 Metadata & Data Catalog**: Enterprise catalog, automated schema discovery, data classification, and end-to-end lineage graph.
 - **10.8 Master Data Management (MDM) Analytics**: Golden record resolution, survivorship rules, entity matching.
 - **10.9 Data Quality & Governance**: Validation rules, anomaly detection, threshold alerting, quarantine workflows.
@@ -414,5 +414,85 @@ In `apps/core/navigation.py`:
 - **Atomic Tenant Numbering**: Automatic generation of `BDQP-#####`, `BDQR-#####`, `BDQE-#####`, `BDQS-#####` using `TenantNumbered`.
 - **Sidebar Wiring**: Live links mapped under `apps/core/navigation.py` via `LIVE_LINKS["10.5"]`.
 
+---
 
+## Sub-module 10.6: Master Data Management (MDM)
+
+### Models
+1. **`MdmGoldenRecord`** (`apps/bi/models/MasterData/MdmGoldenRecords.py`)
+   - Prefix: `BMGR-` (`BMGR-00001`)
+   - Purpose: Authoritative single source of truth across core domains with confidence scoring, trust tiers, and source lineage.
+   - Fields: `name`, `code` (slug), `domain` (`customer`, `vendor`, `product`, `asset`, `employee`, `location`, `general_ledger`), `status` (`draft`, `pending_review`, `approved`, `merged`, `in_dispute`, `archived`), `trust_tier` (`bronze`, `silver`, `gold`, `platinum`), `confidence_score` (Decimal 0.00-100.00), `party` (`core.Party`), `party_role` (`core.PartyRole`), `item` (`scm.Item`), `asset` (`scm.Asset`), `warehouse_table` (`bi.WarehouseTable`), `primary_tax_identifier`, `primary_email`, `primary_phone`, `primary_address`, `source_record_count`, `source_crosswalks_json` (list of feeder identifiers), `golden_attributes_json` (consolidated authoritative payload), `merged_into_record` (`MdmGoldenRecord`), `merged_at`, `stewardship_notes`, `assigned_steward` (`auth.User`), `reviewed_by` (`auth.User`), `reviewed_at`.
+   - Constraints & Indexes: Unique constraint on `(tenant, domain, code)` and `(tenant, number)`. Composite indexes on `(tenant, domain)`, `(tenant, status)`, `(tenant, trust_tier)`, `(tenant, -created_at)`.
+
+2. **`MdmSurvivorshipRule`** (`apps/bi/models/MasterData/MdmSurvivorshipRules.py`)
+   - Prefix: `BMSR-` (`BMSR-00001`)
+   - Purpose: Deterministic precedence matrices and algorithms governing attribute consolidation across feeder systems.
+   - Fields: `name`, `code` (slug), `domain` (`customer`, `vendor`, `product`, `asset`, `employee`, `location`, `general_ledger`), `target_attribute_name`, `survivorship_strategy` (`most_recent`, `source_priority`, `highest_frequency`, `longest_string`, `manual_curation`), `source_priority_list_json` (ordered list of feeder systems), `match_algorithm` (`exact`, `fuzzy_levenshtein`, `fuzzy_jaro_winkler`, `token_set_ratio`, `soundex`, `rule_heuristic`), `match_threshold_pct` (Decimal 0.00-100.00), `auto_merge_threshold_pct` (Decimal 0.00-100.00, must be >= `match_threshold_pct`), `description`, `is_active`, `steward` (`auth.User`).
+   - Constraints & Indexes: Unique constraint on `(tenant, code)` and `(tenant, number)`. Composite indexes on `(tenant, domain)`, `(tenant, survivorship_strategy)`, `(tenant, match_algorithm)`, `(tenant, is_active)`.
+
+3. **`MdmHierarchyNode`** (`apps/bi/models/MasterData/MdmHierarchyNodes.py`)
+   - Prefix: `BMHR-` (`BMHR-00001`)
+   - Purpose: Multi-domain recursive trees and materialized path graphs for corporate holding structures, product taxonomies, and reporting rollups.
+   - Fields: `name`, `code` (slug), `hierarchy_type` (`corporate_legal`, `product_taxonomy`, `sales_territory`, `cost_center`, `asset_category`, `org_reporting`), `relationship_kind` (`holding_company`, `subsidiary`, `division`, `business_unit`, `product_line`, `category`, `sub_category`, `territory_region`, `territory_country`), `parent` (`MdmHierarchyNode`), `golden_record` (`bi.MdmGoldenRecord`), `party` (`core.Party`), `org_unit` (`core.OrgUnit`), `item_category` (`scm.ItemCategory`), `level` (root=0, child=parent.level+1), `path` (materialized path e.g. `/{parent.pk}/{child.pk}/`), `sort_order`, `description`, `is_active`.
+   - Constraints & Indexes: Unique constraint on `(tenant, hierarchy_type, code)` and `(tenant, number)`. Composite indexes on `(tenant, hierarchy_type)`, `(tenant, level)`, `(tenant, hierarchy_type, level)`, `(tenant, parent)`.
+
+4. **`MdmReferenceCode`** (`apps/bi/models/MasterData/MdmReferenceCodes.py`)
+   - Prefix: `BMRD-` (`BMRD-00001`)
+   - Purpose: Enterprise reference data management (RDM) crosswalks, standardizing internal and partner code sets to ISO/ANSI canonical taxonomies.
+   - Fields: `code_set` (`ISO-4217-CURRENCY`, `ISO-3166-COUNTRY`, `UN-LOCODE-PORT`, `INCOTERMS-2020`, `NAICS-INDUSTRY`, `UNSPSC-COMMODITY`, `INTERNAL-PAYMENT-TERMS`, `CUSTOM`), `source_system`, `source_code`, `canonical_code`, `canonical_name`, `status` (`active`, `deprecated`, `superseded`, `draft`), `effective_from`, `effective_to`, `superseded_by` (`MdmReferenceCode`), `attributes_json`, `description`.
+   - Constraints & Indexes: Unique constraint on `(tenant, code_set, canonical_code, source_system, source_code)` and `(tenant, number)`. Composite indexes on `(tenant, code_set)`, `(tenant, source_system)`, `(tenant, status)`, `(tenant, canonical_code)`.
+
+### URLs & Routes
+- Master MDM Command Center: `bi:mdm_overview` (`/bi/mdm/overview/`)
+- Golden Records:
+  - `bi:mdm_golden_record_list` (`/bi/mdm/golden-records/`)
+  - `bi:mdm_golden_record_create` (`/bi/mdm/golden-records/create/`)
+  - `bi:mdm_golden_record_detail` (`/bi/mdm/golden-records/<int:pk>/`)
+  - `bi:mdm_golden_record_edit` (`/bi/mdm/golden-records/<int:pk>/edit/`)
+  - `bi:mdm_golden_record_delete` (`/bi/mdm/golden-records/<int:pk>/delete/`)
+  - `bi:mdm_golden_record_merge` (`/bi/mdm/golden-records/<int:pk>/merge/`)
+  - `bi:mdm_golden_record_unmerge` (`/bi/mdm/golden-records/<int:pk>/unmerge/`)
+  - `bi:mdm_golden_record_approve` (`/bi/mdm/golden-records/<int:pk>/approve/`)
+- Survivorship Rules:
+  - `bi:mdm_survivorship_rule_list` (`/bi/mdm/survivorship-rules/`)
+  - `bi:mdm_survivorship_rule_create` (`/bi/mdm/survivorship-rules/create/`)
+  - `bi:mdm_survivorship_rule_detail` (`/bi/mdm/survivorship-rules/<int:pk>/`)
+  - `bi:mdm_survivorship_rule_edit` (`/bi/mdm/survivorship-rules/<int:pk>/edit/`)
+  - `bi:mdm_survivorship_rule_delete` (`/bi/mdm/survivorship-rules/<int:pk>/delete/`)
+- Hierarchy Nodes:
+  - `bi:mdm_hierarchy_node_list` (`/bi/mdm/hierarchy-nodes/`)
+  - `bi:mdm_hierarchy_node_create` (`/bi/mdm/hierarchy-nodes/create/`)
+  - `bi:mdm_hierarchy_node_detail` (`/bi/mdm/hierarchy-nodes/<int:pk>/`)
+  - `bi:mdm_hierarchy_node_edit` (`/bi/mdm/hierarchy-nodes/<int:pk>/edit/`)
+  - `bi:mdm_hierarchy_node_delete` (`/bi/mdm/hierarchy-nodes/<int:pk>/delete/`)
+- Reference Codes:
+  - `bi:mdm_reference_code_list` (`/bi/mdm/reference-codes/`)
+  - `bi:mdm_reference_code_create` (`/bi/mdm/reference-codes/create/`)
+  - `bi:mdm_reference_code_detail` (`/bi/mdm/reference-codes/<int:pk>/`)
+  - `bi:mdm_reference_code_edit` (`/bi/mdm/reference-codes/<int:pk>/edit/`)
+  - `bi:mdm_reference_code_delete` (`/bi/mdm/reference-codes/<int:pk>/delete/`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/master_data/`:
+  - `mdm_overview.html` (Master Data Command Center with domain KPI breakdown, recent golden records, active survivorship policies, and code sets)
+  - `golden_record/` (`list.html`, `detail.html` with crosswalks provenance table and merge workbench, `form.html`)
+  - `survivorship_rule/` (`list.html`, `detail.html` with visual precedence matrix, `form.html`)
+  - `hierarchy_node/` (`list.html` with tree level indentation, `detail.html` with ancestor path breadcrumbs and children list, `form.html`)
+  - `reference_code/` (`list.html`, `detail.html` with translation crosswalks and superseding history, `form.html`)
+- Design System: Colour-named badges (`.badge-green`, `.badge-info`, `.badge-amber`, `.badge-red`, `.badge-slate`, `.badge-muted`). Accessible icon buttons with `title` and `aria-label`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Master Data demo records:
+  - Golden Records (Acme Global Holding, Acme Electronics US, Acme Industrial Supply, Acme Duplicate Staging, Globex Master Entity)
+  - Survivorship Rules (Customer Master Rule, Vendor Master Rule, Product Catalog Rule, Asset Registry Rule)
+  - Hierarchy Nodes (Acme Global Enterprise, North America Holding, US Commercial Ops, US Defense Systems)
+  - Reference Codes (ISO Currency USD/EUR/GBP, ISO Country US/CA/DE, Incoterms FOB/CIF/DDP)
+- 100% idempotent; `--flush` cleanly deletes records in reverse dependency order.
+
+### Key Conventions
+- **Merge/Unmerge State Machine**: Merging absorbs secondary records, consolidates feeder crosswalks, increments source counts, and flags duplicates as `merged`. Unmerging restores records to `pending_review` for steward certification. Master deletion is blocked while absorbed duplicates exist.
+- **Tree Homogeneity & Loop Prevention**: Hierarchy nodes enforce matching `hierarchy_type` between parent and child, prevent circular hierarchies, and dynamically cascade materialized paths (`/{pk}/...`) on re-parenting.
+- **Auto-Numbering**: Automatic sequence generation for `BMGR-#####`, `BMSR-#####`, `BMHR-#####`, and `BMRD-#####`.
+- **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.6"]`.
 
