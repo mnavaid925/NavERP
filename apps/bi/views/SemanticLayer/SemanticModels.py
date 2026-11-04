@@ -131,14 +131,7 @@ def semantic_model_create(request):
             if not model.owner:
                 model.owner = request.user
             model.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "create",
-                "SemanticModel",
-                model.pk,
-                f"Created semantic model {model.name} ({model.number})",
-            )
+            write_audit_log(request.user, model, "create", tenant=request.tenant)
             messages.success(request, f"Semantic Model '{model.name}' created successfully.")
             return redirect("bi:semantic_model_detail", pk=model.pk)
     else:
@@ -158,14 +151,7 @@ def semantic_model_edit(request, pk):
         form = SemanticModelForm(request.POST, instance=model, tenant=request.tenant)
         if form.is_valid():
             model = form.save()
-            write_audit_log(
-                request.tenant,
-                request.user,
-                "update",
-                "SemanticModel",
-                model.pk,
-                f"Updated semantic model {model.name} ({model.number})",
-            )
+            write_audit_log(request.user, model, "update", tenant=request.tenant)
             messages.success(request, f"Semantic Model '{model.name}' updated successfully.")
             return redirect("bi:semantic_model_detail", pk=model.pk)
     else:
@@ -187,15 +173,8 @@ def semantic_model_delete(request, pk):
     model = bi_object(request, SemanticModel, pk)
     name = model.name
     num = model.number
+    write_audit_log(request.user, model, "delete", tenant=request.tenant)
     model.delete()
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "delete",
-        "SemanticModel",
-        pk,
-        f"Deleted semantic model {name} ({num})",
-    )
     messages.success(request, f"Semantic Model '{name}' ({num}) deleted successfully.")
     return redirect("bi:semantic_model_list")
 
@@ -215,14 +194,7 @@ def semantic_model_certify(request, pk):
             model.certified_by = request.user
             model.certified_at = timezone.now()
         model.save(update_fields=["certification_status", "certification_notes", "certified_by", "certified_at", "updated_at"])
-        write_audit_log(
-            request.tenant,
-            request.user,
-            "certify",
-            "SemanticModel",
-            model.pk,
-            f"Changed certification of {model.name} from {old_status} to {new_status}",
-        )
+        write_audit_log(request.user, model, "certify", tenant=request.tenant)
         messages.success(request, f"Certification status updated to '{model.get_certification_status_display()}'.")
     else:
         messages.error(request, "Invalid certification status submitted.")
@@ -251,14 +223,7 @@ def semantic_model_introspect(request, pk):
 
     model.save(update_fields=["source_fingerprint", "last_introspected_at", "primary_key_column", "natural_key_columns", "updated_at"])
 
-    write_audit_log(
-        request.tenant,
-        request.user,
-        "introspect",
-        "SemanticModel",
-        model.pk,
-        f"Introspected schema from table {table.name} (fingerprint: {fingerprint})",
-    )
+    write_audit_log(request.user, model, "introspect", tenant=request.tenant)
     messages.success(
         request,
         f"Schema introspected from '{table.name}'. Found {len(schema_def)} column definitions (Hash: {fingerprint}).",
