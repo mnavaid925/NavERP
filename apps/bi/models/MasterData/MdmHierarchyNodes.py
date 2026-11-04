@@ -85,6 +85,7 @@ class MdmHierarchyNode(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "hierarchy_type"], name="idx_bmhr_ten_htype"),
+            models.Index(fields=["tenant", "hierarchy_type", "level"], name="idx_bmhr_ten_htype_lvl"),
             models.Index(fields=["tenant", "parent"], name="idx_bmhr_ten_parent"),
             models.Index(fields=["tenant", "path"], name="idx_bmhr_ten_path"),
             models.Index(fields=["tenant", "golden_record"], name="idx_bmhr_ten_grec"),
