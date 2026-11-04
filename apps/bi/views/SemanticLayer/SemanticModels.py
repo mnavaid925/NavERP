@@ -17,7 +17,6 @@ from apps.bi.models.DataWarehouse.DataMarts import DataMart
 from apps.bi.models.DataWarehouse.WarehouseTables import WarehouseTable
 from apps.bi.models.SemanticLayer.SemanticModels import SemanticModel
 from apps.bi.views._common import bi_object, bi_scope
-from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -222,7 +221,7 @@ def semantic_model_introspect(request, pk):
 
     model.source_fingerprint = fingerprint
     model.last_introspected_at = timezone.now()
-    if not model.primary_key_column and table.primary_key_column:
+    if (not model.primary_key_column or model.primary_key_column == "id") and table.primary_key_column:
         model.primary_key_column = table.primary_key_column
     if not model.natural_key_columns and table.natural_key_column:
         model.natural_key_columns = table.natural_key_column
