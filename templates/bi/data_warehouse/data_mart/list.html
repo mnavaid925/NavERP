@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Data Marts — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_overview' %}">Data Warehouse</a>
+            <span class="sep">/</span>
+            <span>Data Marts</span>
+        </div>
+        <h1 class="page-title">Subject-Specific Data Marts</h1>
+        <p class="text-muted text-sm">Departmental analytics zones, domain ownership, and certified single-source-of-truth marts</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Warehouse Overview</span>
+        </a>
+        <a href="{% url 'bi:warehouse_table_list' %}" class="btn btn-outline">
+            <i data-lucide="table"></i>
+            <span>Warehouse Tables</span>
+        </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        <a href="{% url 'bi:data_mart_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Data Mart</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Total Data Marts</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_count }}</div>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="layers"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">Certified Marts</div>
+                <div class="text-2xl font-bold mt-1 text-green-600">{{ certified_count }}</div>
+            </div>
+            <div class="stat-icon green">
+                <i data-lucide="shield-check"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <div class="text-xs font-semibold uppercase tracking-wider text-muted">In Development</div>
+                <div class="text-2xl font-bold mt-1 text-amber-600">{{ draft_count }}</div>
+            </div>
+            <div class="stat-icon orange">
+                <i data-lucide="clock"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+            <div class="form-group">
+                <label class="form-label" for="search-input">Search</label>
+                <div class="relative">
+                    <input type="text" id="search-input" name="q" value="{{ search_query }}" placeholder="Name, code, number..." class="form-input">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="subject-area-filter">Subject Area</label>
+                <select id="subject-area-filter" name="subject_area" class="form-select">
+                    <option value="">All Subject Areas</option>
+                    {% for code, label in subject_area_choices %}
+                    <option value="{{ code }}" {% if request.GET.subject_area == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="cert-status-filter">Certification</label>
+                <select id="cert-status-filter" name="certification_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in certification_status_choices %}
+                    <option value="{{ code }}" {% if request.GET.certification_status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="access-tier-filter">Access Tier</label>
+                <select id="access-tier-filter" name="access_tier" class="form-select">
+                    <option value="">All Tiers</option>
+                    {% for code, label in access_tier_choices %}
+                    <option value="{{ code }}" {% if request.GET.access_tier == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_mart_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+                <a href="?{% for key, val in request.GET.items %}{% if key != 'export' %}{{ key }}={{ val }}&{% endif %}{% endfor %}export=csv" class="btn btn-outline" title="Export CSV">
+                    <i data-lucide="download"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Mart Name</th>
+                    <th>Subject Area</th>
+                    <th>Org Unit</th>
+                    <th>Owner / Steward</th>
+                    <th>Access Tier</th>
+                    <th>Certification</th>
+                    <th>Cadence</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mart in data_marts %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-700">
+                        <a href="{% url 'bi:data_mart_detail' pk=mart.pk %}" class="text-primary hover:underline">
+                            {{ mart.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ mart.name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ mart.code }}</div>
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium text-slate-700">{{ mart.get_subject_area_display }}</span>
+                    </td>
+                    <td>
+                        {% if mart.org_unit %}
+                        <span class="text-xs text-slate-600">{{ mart.org_unit.name }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-800">
+                            {% if mart.owner %}{{ mart.owner.get_full_name|default:mart.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                        </div>
+                        <div class="text-xs text-muted">
+                            Steward: {% if mart.steward %}{{ mart.steward.get_full_name|default:mart.steward.username }}{% else %}—{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if mart.access_tier == 'public' %}
+                        <span class="badge badge-green">{{ mart.get_access_tier_display }}</span>
+                        {% elif mart.access_tier == 'department' %}
+                        <span class="badge badge-info">{{ mart.get_access_tier_display }}</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ mart.get_access_tier_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if mart.certification_status == 'certified' %}
+                        <span class="badge badge-green">{{ mart.get_certification_status_display }}</span>
+                        {% elif mart.certification_status == 'in_review' %}
+                        <span class="badge badge-info">{{ mart.get_certification_status_display }}</span>
+                        {% elif mart.certification_status == 'draft' %}
+                        <span class="badge badge-amber">{{ mart.get_certification_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ mart.get_certification_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ mart.get_refresh_cadence_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <div class="flex items-center justify-end gap-1">
+                            <a href="{% url 'bi:data_mart_detail' pk=mart.pk %}" class="btn-icon btn-outline" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:data_mart_edit' pk=mart.pk %}" class="btn-icon btn-outline" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:data_mart_delete' pk=mart.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete data mart {{ mart.name|escapejs }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon btn-outline text-danger" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="layers" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No data marts found</div>
+                            <p class="empty-state-text">Create subject data marts to organize facts and dimensions by departmental domains.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
+                            <a href="{% url 'bi:data_mart_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>New Data Mart</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-100">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} marts
+        </div>
+        <div class="flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="text-xs px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, val in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ val }}{% endif %}{% endfor %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
