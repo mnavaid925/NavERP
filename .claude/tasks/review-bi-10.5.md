@@ -92,6 +92,24 @@ None.
 2. `apps/bi/views/DataQuality/` (all list views) — Stat cards issue multiple single count queries instead of combined conditional aggregation.
 3. `apps/bi/models/DataQuality/DataQualityScorecards.py:129-135` — Missing composite index on `(tenant, meets_sla)`.
 
+---
+
+### Pass 5: qa-smoke-tester
+
+#### Critical
+1. `apps/bi/views/DataQuality/DataQualityProfiles.py:188` — `AttributeError: 'WarehouseTable' object has no attribute 'columns_metadata_json'` on Profile Run POST: `WarehouseTable` defines column definitions as `schema_definition`, not `columns_metadata_json`. Profile execution crashes with 500. Fix: Change to `profile.warehouse_table.schema_definition or []`.
+2. `apps/bi/views/DataQuality/` across all 4 entity files (16 mutation call sites) — `write_audit_log` parameter mismatch raises `TypeError` and crashes all POST endpoints (create, edit, delete, run, remediate, recalculate) with HTTP 500. Fix: Use `write_audit_log(request.user, obj, action, tenant=request.tenant)` (and call before `.delete()` on delete views).
+
+#### Important
+1. `apps/bi/views/DataQuality/DataQualityExceptions.py:180-192` — Incomplete resolution state reset (retaining `resolved_by`/`resolved_at` on non-remediated transitions) and swallowing field validation errors on invalid remediation submissions.
+2. `apps/bi/views/DataQuality/DataQualityScorecards.py:80-92, 185-195` — Scorecard recalculation and detail views ignore `data_mart` scope.
+3. `templates/bi/data_quality/` list templates — Missing FK dropdown filters (`semantic_model`, `warehouse_table`, `rule`) and pagination parameter loss.
+
+#### Minor
+1. Detail page headers missing "Back to List" navigation button.
+2. `badge-purple` unstyled badge modifier in `profile/detail.html:82`.
+
+
 
 
 
