@@ -64,8 +64,8 @@ def data_quality_exception_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    rules = bi_scope(DataQualityRule.objects.all(), request).order_by("name")
-    stewards = get_user_model().objects.filter(tenant=request.tenant, is_active=True).order_by("first_name", "username")
+    rules = bi_scope(DataQualityRule.objects.only("id", "name"), request).order_by("name")
+    stewards = get_user_model().objects.filter(tenant=request.tenant, is_active=True).only("id", "first_name", "last_name", "username").order_by("first_name", "username")
 
     context = {
         "page_obj": page_obj,
