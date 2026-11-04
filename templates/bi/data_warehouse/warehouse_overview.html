@@ -53,10 +53,10 @@
         <div class="flex items-center justify-between">
             <div>
                 <div class="text-xs font-semibold uppercase tracking-wider text-muted">Stored Analytical Rows</div>
-                <div class="text-2xl font-bold mt-1 text-purple-600">{{ total_rows }}</div>
-                <div class="text-xs text-muted mt-1">Across all zones</div>
+                <div class="text-2xl font-bold mt-1 text-slate-800">{{ total_rows }}</div>
+                <div class="text-xs text-muted mt-1">{{ total_compressed_bytes|filesizeformat }} compressed · all zones</div>
             </div>
-            <div class="stat-icon purple">
+            <div class="stat-icon blue">
                 <i data-lucide="database"></i>
             </div>
         </div>
