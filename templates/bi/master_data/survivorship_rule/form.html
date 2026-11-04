@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Survivorship Rule: {{ rule.number }}{% else %}New Survivorship Rule{% endif %} — Master Data Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_overview' %}">Master Data Management</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mdm_survivorship_rule_list' %}">Survivorship Rules</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Rule{% else %}New Rule{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Survivorship Rule: {{ rule.name }}{% else %}Create Survivorship Rule{% endif %}</h1>
+        <p class="text-muted text-sm">Configure entity resolution algorithms, trusted-source rankings, and attribute survivorship</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:mdm_survivorship_rule_detail' rule.pk %}{% else %}{% url 'bi:mdm_survivorship_rule_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900 text-sm">Rule Configuration</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-3 mb-4 rounded bg-red-50 text-red-700 text-sm border border-red-200">
+                    {% for error in form.non_field_errors %}
+                    <div>{{ error }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_name">Rule Name <span class="text-red-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                        <div class="form-error">{{ form.name.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_code">Rule Code Slug <span class="text-red-500">*</span></label>
+                        {{ form.code }}
+                        {% if form.code.errors %}
+                        <div class="form-error">{{ form.code.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_domain">Target Master Domain</label>
+                        {{ form.domain }}
+                        {% if form.domain.errors %}
+                        <div class="form-error">{{ form.domain.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_target_field">Target Attribute / Field (* for Entity-level)</label>
+                        {{ form.target_field }}
+                        {% if form.target_field.errors %}
+                        <div class="form-error">{{ form.target_field.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_survivorship_strategy">Survivorship Strategy</label>
+                        {{ form.survivorship_strategy }}
+                        {% if form.survivorship_strategy.errors %}
+                        <div class="form-error">{{ form.survivorship_strategy.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_match_algorithm">Match Algorithm</label>
+                        {{ form.match_algorithm }}
+                        {% if form.match_algorithm.errors %}
+                        <div class="form-error">{{ form.match_algorithm.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_priority_order">Evaluation Order Precedence</label>
+                        {{ form.priority_order }}
+                        {% if form.priority_order.errors %}
+                        <div class="form-error">{{ form.priority_order.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_match_threshold_pct">Steward Review Threshold (%)</label>
+                        {{ form.match_threshold_pct }}
+                        {% if form.match_threshold_pct.errors %}
+                        <div class="form-error">{{ form.match_threshold_pct.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label text-xs" for="id_auto_merge_threshold_pct">Automated Merge Threshold (%)</label>
+                        {{ form.auto_merge_threshold_pct }}
+                        {% if form.auto_merge_threshold_pct.errors %}
+                        <div class="form-error">{{ form.auto_merge_threshold_pct.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_source_priority_list_text">
+                            Source System Priority Ranking (JSON array or comma-separated)
+                        </label>
+                        {{ form.source_priority_list_text }}
+                        <span class="text-xs text-muted block mt-1">Example: ["erp_core", "crm_sales", "billing_service", "web_portal"]</span>
+                        {% if form.source_priority_list_text.errors %}
+                        <div class="form-error">{{ form.source_priority_list_text.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_steward">Assigned Data Steward</label>
+                        {{ form.steward }}
+                        {% if form.steward.errors %}
+                        <div class="form-error">{{ form.steward.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label text-xs" for="id_description">Business Description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <div class="form-error">{{ form.description.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-xs font-medium text-slate-700">Rule Active for Entity Resolution</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <a href="{% if is_edit %}{% url 'bi:mdm_survivorship_rule_detail' rule.pk %}{% else %}{% url 'bi:mdm_survivorship_rule_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Survivorship Rule{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
