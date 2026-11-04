@@ -592,6 +592,16 @@ def drill_hierarchy_b(db, tenant_b, semantic_model_b):
 
 
 @pytest.fixture
+def warehouse_table(warehouse_table_a):
+    return warehouse_table_a
+
+
+@pytest.fixture
+def data_mart(data_mart_a):
+    return data_mart_a
+
+
+@pytest.fixture
 def dq_profile_a(db, tenant_a, warehouse_table_a, admin_user):
     return DataQualityProfile.objects.create(
         tenant=tenant_a,
@@ -603,8 +613,6 @@ def dq_profile_a(db, tenant_a, warehouse_table_a, admin_user):
         completeness_score=Decimal("99.40"),
         validity_score=Decimal("98.70"),
         uniqueness_score=Decimal("100.00"),
-        consistency_score=Decimal("97.50"),
-        timeliness_score=Decimal("99.00"),
         profiled_by=admin_user,
         profiled_at=timezone.now(),
     )
@@ -619,7 +627,7 @@ def dq_rule_a(db, tenant_a, warehouse_table_a, admin_user):
         warehouse_table=warehouse_table_a,
         target_column="total_amount",
         dimension="validity",
-        rule_type="range_check",
+        rule_type="range_between",
         parameters_json={"min_val": 0.01},
         severity="critical",
         failure_tolerance_pct=Decimal("0.00"),
@@ -636,16 +644,15 @@ def dq_exception_a(db, tenant_a, dq_profile_a, dq_rule_a, warehouse_table_a, adm
         tenant=tenant_a,
         profile=dq_profile_a,
         rule=dq_rule_a,
-        target_type="warehouse_table",
         warehouse_table=warehouse_table_a,
         target_column="total_amount",
         record_identifier="INV-2026-9999",
-        exception_type="range_violation",
+        exception_type="range_outlier",
         invalid_value="-45.00",
         expected_condition="amount > 0",
         severity="critical",
         status="open",
-        remediation_action="investigate",
+        remediation_action="manual_edit",
         assigned_steward=admin_user,
     )
 
@@ -659,7 +666,7 @@ def dq_scorecard_a(db, tenant_a, warehouse_table_a, admin_user):
         scope_type="warehouse_table",
         warehouse_table=warehouse_table_a,
         evaluation_period="monthly",
-        target_sla_pct=Decimal("95.00"),
+        target_quality_score=Decimal("95.00"),
         overall_quality_score=Decimal("98.50"),
         grade="A",
         health_status="healthy",
@@ -681,8 +688,6 @@ def dq_profile_b(db, tenant_b, warehouse_table_b, admin_user_b):
         completeness_score=Decimal("95.00"),
         validity_score=Decimal("92.00"),
         uniqueness_score=Decimal("90.00"),
-        consistency_score=Decimal("91.00"),
-        timeliness_score=Decimal("94.00"),
         profiled_by=admin_user_b,
         profiled_at=timezone.now(),
     )
@@ -714,16 +719,15 @@ def dq_exception_b(db, tenant_b, dq_profile_b, dq_rule_b, warehouse_table_b, adm
         tenant=tenant_b,
         profile=dq_profile_b,
         rule=dq_rule_b,
-        target_type="warehouse_table",
         warehouse_table=warehouse_table_b,
         target_column="email",
         record_identifier="CUST-GLOBEX-101",
-        exception_type="null_value",
+        exception_type="null_anomaly",
         invalid_value="NULL",
         expected_condition="email IS NOT NULL",
         severity="warning",
         status="open",
-        remediation_action="enrich_data",
+        remediation_action="impute_value",
         assigned_steward=admin_user_b,
     )
 
@@ -737,7 +741,7 @@ def dq_scorecard_b(db, tenant_b, warehouse_table_b, admin_user_b):
         scope_type="warehouse_table",
         warehouse_table=warehouse_table_b,
         evaluation_period="weekly",
-        target_sla_pct=Decimal("90.00"),
+        target_quality_score=Decimal("90.00"),
         overall_quality_score=Decimal("88.00"),
         grade="B",
         health_status="needs_attention",
