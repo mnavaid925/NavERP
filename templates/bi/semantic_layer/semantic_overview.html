@@ -184,19 +184,27 @@
                                 <span class="badge badge-slate text-xs">{{ sm.get_model_type_display }}</span>
                             </td>
                             <td class="text-xs text-slate-600 font-mono">
-                                {{ sm.warehouse_table.name|default:"Virtual View" }}
+                                {% if sm.warehouse_table %}
+                                {{ sm.warehouse_table.name }}
+                                {% elif sm.is_virtual_view %}
+                                Virtual View
+                                {% else %}
+                                No Table Bound
+                                {% endif %}
                             </td>
                             <td>
                                 {% if sm.certification_status == 'certified' %}
                                 <span class="badge badge-green text-xs">Certified</span>
                                 {% elif sm.certification_status == 'in_review' %}
                                 <span class="badge badge-amber text-xs">In Review</span>
+                                {% elif sm.certification_status == 'deprecated' %}
+                                <span class="badge badge-red text-xs">Deprecated</span>
                                 {% else %}
-                                <span class="badge badge-slate text-xs">Draft</span>
+                                <span class="badge badge-slate text-xs">{{ sm.get_certification_status_display }}</span>
                                 {% endif %}
                             </td>
                             <td class="text-right table-actions">
-                                <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:semantic_model_detail' sm.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
@@ -256,7 +264,7 @@
                                 {% endif %}
                             </td>
                             <td class="text-right table-actions">
-                                <a href="{% url 'bi:business_glossary_term_detail' term.pk %}" class="btn btn-icon">
+                                <a href="{% url 'bi:business_glossary_term_detail' term.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                                     <i data-lucide="eye"></i>
                                 </a>
                             </td>
