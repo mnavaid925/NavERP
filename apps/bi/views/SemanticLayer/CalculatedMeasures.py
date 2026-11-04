@@ -148,7 +148,6 @@ def calculated_measure_delete(request, pk):
     measure = bi_object(request, CalculatedMeasure, pk)
     name = measure.name
     num = measure.number
-    model_pk = measure.semantic_model_id
     write_audit_log(request.user, measure, "delete", tenant=request.tenant)
     measure.delete()
     messages.success(request, f"Calculated Measure '{name}' ({num}) deleted successfully.")
