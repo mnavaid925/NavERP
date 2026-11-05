@@ -65,7 +65,12 @@ def catalog_overview(request):
     )
     domain_map = dict(CatalogAsset.DOMAIN_CHOICES)
     domain_distribution = [
-        {"domain": d["domain"], "label": domain_map.get(d["domain"], d["domain"]), "count": d["count"]}
+        {
+            "domain": d["domain"],
+            "label": domain_map.get(d["domain"], d["domain"]),
+            "count": d["count"],
+            "pct": round((d["count"] / total_assets) * 100, 1) if total_assets > 0 else 0,
+        }
         for d in domain_counts_raw
     ]
 
@@ -76,7 +81,12 @@ def catalog_overview(request):
     )
     sensitivity_map = dict(CatalogAsset.SENSITIVITY_CHOICES)
     sensitivity_distribution = [
-        {"sensitivity": s["data_sensitivity"], "label": sensitivity_map.get(s["data_sensitivity"], s["data_sensitivity"]), "count": s["count"]}
+        {
+            "sensitivity": s["data_sensitivity"],
+            "label": sensitivity_map.get(s["data_sensitivity"], s["data_sensitivity"]),
+            "count": s["count"],
+            "pct": round((s["count"] / total_assets) * 100, 1) if total_assets > 0 else 0,
+        }
         for s in sensitivity_counts_raw
     ]
 
