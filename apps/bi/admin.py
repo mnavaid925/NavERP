@@ -29,6 +29,10 @@ from apps.bi.models import (
     CatalogLineageEdge,
     DataGovernancePolicy,
     CatalogTrustEndorsement,
+    BiDashboard,
+    BiDashboardWidget,
+    BiDashboardBookmark,
+    BiDashboardFilter,
 )
 
 
@@ -275,3 +279,40 @@ class CatalogTrustEndorsementAdmin(admin.ModelAdmin):
     list_filter = ("endorsement_type", "verdict", "is_active", "tenant")
     search_fields = ("number", "asset__name", "review_comments")
     readonly_fields = ("number", "tenant", "attested_at", "created_at", "updated_at")
+
+
+@admin.register(BiDashboard)
+class BiDashboardAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "slug", "category", "layout_type", "theme", "is_published", "is_default", "view_count", "tenant")
+    list_select_related = ("created_by", "org_unit")
+    list_filter = ("category", "layout_type", "theme", "is_published", "is_default", "is_active", "tenant")
+    search_fields = ("number", "title", "slug", "description")
+    readonly_fields = ("number", "tenant", "view_count", "last_viewed_at", "created_at", "updated_at")
+
+
+@admin.register(BiDashboardWidget)
+class BiDashboardWidgetAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "dashboard", "widget_type", "aggregation_type", "pos_x", "pos_y", "width_cols", "height_rows", "is_active", "tenant")
+    list_select_related = ("dashboard", "semantic_model", "calculated_measure", "warehouse_table")
+    list_filter = ("widget_type", "aggregation_type", "is_active", "tenant")
+    search_fields = ("number", "title", "subtitle", "dashboard__title")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(BiDashboardBookmark)
+class BiDashboardBookmarkAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "dashboard", "user", "is_default", "is_shared", "view_count", "tenant")
+    list_select_related = ("dashboard", "user")
+    list_filter = ("is_default", "is_shared", "is_active", "tenant")
+    search_fields = ("number", "name", "dashboard__title", "description")
+    readonly_fields = ("number", "tenant", "view_count", "last_viewed_at", "created_at", "updated_at")
+
+
+@admin.register(BiDashboardFilter)
+class BiDashboardFilterAdmin(admin.ModelAdmin):
+    list_display = ("number", "filter_label", "filter_key", "dashboard", "filter_type", "target_field", "order", "is_required", "is_active", "tenant")
+    list_select_related = ("dashboard",)
+    list_filter = ("filter_type", "options_source", "is_required", "is_active", "tenant")
+    search_fields = ("number", "filter_label", "filter_key", "target_field", "dashboard__title")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
