@@ -109,9 +109,9 @@ def catalog_lineage_edge_create(request):
             edge.save()
             write_audit_log(
                 request.user,
-                "create",
                 edge,
-                f"Created lineage edge {edge.number}: {edge.upstream_asset.code} -> {edge.downstream_asset.code}",
+                "create",
+                changes=f"Created lineage edge {edge.number}: {edge.upstream_asset.code} -> {edge.downstream_asset.code}",
                 tenant=request.tenant,
             )
             messages.success(request, f"Lineage edge {edge.number} registered successfully.")
@@ -136,9 +136,9 @@ def catalog_lineage_edge_edit(request, pk):
             edge = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 edge,
-                f"Updated lineage edge {edge.number}",
+                "update",
+                changes=f"Updated lineage edge {edge.number}",
                 tenant=request.tenant,
             )
             messages.success(request, f"Lineage edge {edge.number} updated successfully.")
@@ -162,9 +162,9 @@ def catalog_lineage_edge_delete(request, pk):
     edge.delete()
     write_audit_log(
         request.user,
-        "delete",
         edge,
-        f"Deleted lineage edge {edge_number}",
+        "delete",
+        changes=f"Deleted lineage edge {edge_number}",
         tenant=request.tenant,
     )
     messages.success(request, f"Lineage edge {edge_number} was deleted.")
