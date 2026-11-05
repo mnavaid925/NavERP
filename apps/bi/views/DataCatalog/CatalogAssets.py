@@ -112,7 +112,7 @@ def catalog_asset_detail(request, pk):
     )
 
     CatalogAsset.objects.filter(pk=asset.pk).update(view_count=F("view_count") + 1)
-    asset.refresh_from_db(fields=["view_count"])
+    asset.view_count = (asset.view_count or 0) + 1
 
     upstream_lineage = asset.upstream_edges.select_related("upstream_asset").filter(is_active=True).order_by("impact_criticality")
     downstream_lineage = asset.downstream_edges.select_related("downstream_asset").filter(is_active=True).order_by("impact_criticality")
