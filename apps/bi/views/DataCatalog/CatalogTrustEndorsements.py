@@ -110,9 +110,9 @@ def catalog_trust_endorsement_create(request):
 
             write_audit_log(
                 request.user,
-                "create",
                 endorsement,
-                f"Attested endorsement {endorsement.number} ({endorsement.get_verdict_display()}) for {endorsement.asset.name}",
+                "create",
+                changes=f"Attested endorsement {endorsement.number} ({endorsement.get_verdict_display()}) for {endorsement.asset.name}",
                 tenant=request.tenant,
             )
             messages.success(request, f"Endorsement {endorsement.number} recorded successfully.")
@@ -137,9 +137,9 @@ def catalog_trust_endorsement_edit(request, pk):
             endorsement = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 endorsement,
-                f"Updated endorsement {endorsement.number}",
+                "update",
+                changes=f"Updated endorsement {endorsement.number}",
                 tenant=request.tenant,
             )
             messages.success(request, f"Endorsement {endorsement.number} updated successfully.")
@@ -163,9 +163,9 @@ def catalog_trust_endorsement_delete(request, pk):
     endorsement.delete()
     write_audit_log(
         request.user,
-        "delete",
         endorsement,
-        f"Deleted endorsement {endorsement_number}",
+        "delete",
+        changes=f"Deleted endorsement {endorsement_number}",
         tenant=request.tenant,
     )
     messages.success(request, f"Endorsement {endorsement_number} was deleted.")
