@@ -1,6 +1,9 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -82,6 +85,21 @@ def catalog_trust_endorsement_detail(request, pk):
     return render(request, "bi/data_catalog/catalog_trust_endorsement/detail.html", context)
 
 
+def _recalculate_asset_rating(asset):
+    if not asset:
+        return
+    ratings = CatalogTrustEndorsement.objects.filter(
+        tenant=asset.tenant,
+        asset=asset,
+        rating_value__isnull=False,
+    ).aggregate(avg=Avg("rating_value"))
+    if ratings["avg"] is not None:
+        asset.average_rating = Decimal(str(round(ratings["avg"], 2)))
+    else:
+        asset.average_rating = Decimal("0.00")
+    asset.save(update_fields=["average_rating"])
+
+
 @login_required
 def catalog_trust_endorsement_create(request):
     initial = {}
@@ -92,29 +110,22 @@ def catalog_trust_endorsement_create(request):
     if request.method == "POST":
         form = CatalogTrustEndorsementForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            endorsement = form.save(commit=False)
-            endorsement.tenant = request.tenant
-            endorsement.attested_by = request.user
-            endorsement.save()
+            with transaction.atomic():
+                endorsement = form.save(commit=False)
+                endorsement.tenant = request.tenant
+                endorsement.attested_by = request.user
+                endorsement.save()
 
-            # Recalculate average rating on asset if rating_value was provided
-            if endorsement.rating_value and endorsement.asset:
-                ratings = CatalogTrustEndorsement.objects.filter(
+                if endorsement.asset:
+                    _recalculate_asset_rating(endorsement.asset)
+
+                write_audit_log(
+                    request.user,
+                    endorsement,
+                    "create",
+                    changes=f"Attested endorsement {endorsement.number} ({endorsement.get_verdict_display()}) for {endorsement.asset.name}",
                     tenant=request.tenant,
-                    asset=endorsement.asset,
-                    rating_value__isnull=False,
-                ).aggregate(avg=Avg("rating_value"))
-                if ratings["avg"]:
-                    endorsement.asset.average_rating = round(ratings["avg"], 2)
-                    endorsement.asset.save(update_fields=["average_rating"])
-
-            write_audit_log(
-                request.user,
-                endorsement,
-                "create",
-                changes=f"Attested endorsement {endorsement.number} ({endorsement.get_verdict_display()}) for {endorsement.asset.name}",
-                tenant=request.tenant,
-            )
+                )
             messages.success(request, f"Endorsement {endorsement.number} recorded successfully.")
             return redirect("bi:catalog_trust_endorsement_detail", pk=endorsement.pk)
     else:
@@ -134,14 +145,20 @@ def catalog_trust_endorsement_edit(request, pk):
     if request.method == "POST":
         form = CatalogTrustEndorsementForm(request.POST, instance=endorsement, tenant=request.tenant)
         if form.is_valid():
-            endorsement = form.save()
-            write_audit_log(
-                request.user,
-                endorsement,
-                "update",
-                changes=f"Updated endorsement {endorsement.number}",
-                tenant=request.tenant,
-            )
+            with transaction.atomic():
+                old_asset = endorsement.asset
+                endorsement = form.save()
+                if endorsement.asset:
+                    _recalculate_asset_rating(endorsement.asset)
+                if old_asset and old_asset != endorsement.asset:
+                    _recalculate_asset_rating(old_asset)
+                write_audit_log(
+                    request.user,
+                    endorsement,
+                    "update",
+                    changes=f"Updated endorsement {endorsement.number}",
+                    tenant=request.tenant,
+                )
             messages.success(request, f"Endorsement {endorsement.number} updated successfully.")
             return redirect("bi:catalog_trust_endorsement_detail", pk=endorsement.pk)
     else:
@@ -160,13 +177,17 @@ def catalog_trust_endorsement_edit(request, pk):
 def catalog_trust_endorsement_delete(request, pk):
     endorsement = bi_object(request, CatalogTrustEndorsement, pk)
     endorsement_number = endorsement.number
-    write_audit_log(
-        request.user,
-        endorsement,
-        "delete",
-        changes=f"Deleted endorsement {endorsement_number}",
-        tenant=request.tenant,
-    )
-    endorsement.delete()
+    asset = endorsement.asset
+    with transaction.atomic():
+        write_audit_log(
+            request.user,
+            endorsement,
+            "delete",
+            changes=f"Deleted endorsement {endorsement_number}",
+            tenant=request.tenant,
+        )
+        endorsement.delete()
+        if asset:
+            _recalculate_asset_rating(asset)
     messages.success(request, f"Endorsement {endorsement_number} was deleted.")
     return redirect("bi:catalog_trust_endorsement_list")
