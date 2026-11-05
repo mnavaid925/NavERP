@@ -101,10 +101,17 @@ class CatalogLineageEdge(TenantNumbered):
         ]
 
     def __str__(self):
-        source = f"{self.upstream_asset.code}"
+        if "upstream_asset" in self._state.fields_cache:
+            source = self.upstream_asset.code
+        else:
+            source = f"Asset #{self.upstream_asset_id}"
         if self.upstream_column:
             source += f".{self.upstream_column}"
-        target = f"{self.downstream_asset.code}"
+
+        if "downstream_asset" in self._state.fields_cache:
+            target = self.downstream_asset.code
+        else:
+            target = f"Asset #{self.downstream_asset_id}"
         if self.downstream_column:
             target += f".{self.downstream_column}"
         return f"{self.number} ({source} -> {target})"
