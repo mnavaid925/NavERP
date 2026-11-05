@@ -33,6 +33,16 @@ from apps.bi.forms.DataCatalog.CatalogAssets import (
 from apps.bi.forms.DataCatalog.CatalogLineageEdges import CatalogLineageEdgeForm
 from apps.bi.forms.DataCatalog.DataGovernancePolicies import DataGovernancePolicyForm
 from apps.bi.forms.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsementForm
+from apps.bi.forms.Dashboards.BiDashboardBookmarkForms import BiDashboardBookmarkForm
+from apps.bi.forms.Dashboards.BiDashboardFilterForms import BiDashboardFilterForm
+from apps.bi.forms.Dashboards.BiDashboardForms import (
+    BiDashboardDuplicateForm,
+    BiDashboardForm,
+)
+from apps.bi.forms.Dashboards.BiDashboardWidgetForms import (
+    BiDashboardWidgetForm,
+    BiDashboardWidgetPositionForm,
+)
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -81,4 +91,10 @@ __all__ = [
     "CatalogLineageEdgeForm",
     "DataGovernancePolicyForm",
     "CatalogTrustEndorsementForm",
+    "BiDashboardForm",
+    "BiDashboardDuplicateForm",
+    "BiDashboardWidgetForm",
+    "BiDashboardWidgetPositionForm",
+    "BiDashboardBookmarkForm",
+    "BiDashboardFilterForm",
 ]
