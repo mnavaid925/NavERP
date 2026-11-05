@@ -319,16 +319,16 @@
 ---
 
 ## 10.7-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO automated PostgreSQL query AST parser daemons scanning query logs** — Lineage is captured through declared edges, ETL pipeline/step bindings, and catalog relationships; automated SQL parsing is deferred to external observability adapters.
-- [ ] **NO live kernel-level or PostgreSQL dynamic data masking extension (`pg_masking`)** — Masking rules (full redaction, partial mask, SHA-256 hash, tokenization) are enforced at the application/view presentation layer.
-- [ ] **NO external CI/CD dbt git webhooks for pull-request lineage diffing** — Impact analysis is calculated in-app via recursive graph traversal over `CatalogLineageEdge`.
-- [ ] **NO ML transformer-based PII regex/NER scanning daemons** — Classification is managed through declarative metadata tags and catalog sensitivity designations.
+- [x] **NO automated PostgreSQL query AST parser daemons scanning query logs** — Lineage is captured through declared edges, ETL pipeline/step bindings, and catalog relationships; automated SQL parsing is deferred to external observability adapters.
+- [x] **NO live kernel-level or PostgreSQL dynamic data masking extension (`pg_masking`)** — Masking rules (full redaction, partial mask, SHA-256 hash, tokenization) are enforced at the application/view presentation layer.
+- [x] **NO external CI/CD dbt git webhooks for pull-request lineage diffing** — Impact analysis is calculated in-app via recursive graph traversal over `CatalogLineageEdge`.
+- [x] **NO ML transformer-based PII regex/NER scanning daemons** — Classification is managed through declarative metadata tags and catalog sensitivity designations.
 
 ---
 
 ## Models (4 models in `apps/bi/models/DataCatalog/`)
 
-- [ ] **`CatalogAsset`** [Prefix: `BCAT-`] (`apps/bi/models/DataCatalog/CatalogAssets.py`)
+- [x] **`CatalogAsset`** [Prefix: `BCAT-`] (`apps/bi/models/DataCatalog/CatalogAssets.py`)
   - **Purpose**: Centralized multi-type searchable data catalog asset representing physical warehouse tables, governed semantic models, MDM golden records, reports, metrics, and ingestion pipelines with data tiering, sensitivity labels, business glossary links, technical schema dictionary, view engagement counters, and community ratings.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -358,7 +358,7 @@
   - **Form Excludes**: `tenant`, `number`, `view_count`, `average_rating`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'domain']), models.Index(fields=['tenant', 'asset_type']), models.Index(fields=['tenant', 'enterprise_tier']), models.Index(fields=['tenant', 'data_sensitivity']), models.Index(fields=['tenant', 'certification_status']), models.Index(fields=['tenant', 'is_active'])]`
 
-- [ ] **`CatalogLineageEdge`** [Prefix: `BLIN-`] (`apps/bi/models/DataCatalog/CatalogLineageEdges.py`)
+- [x] **`CatalogLineageEdge`** [Prefix: `BLIN-`] (`apps/bi/models/DataCatalog/CatalogLineageEdges.py`)
   - **Purpose**: Directed graph lineage relationships connecting upstream producer assets to downstream consumer assets with table-level and column-level granularity, transformation expressions, ETL pipeline/step linkages, and automated impact criticality ratings.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -380,7 +380,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'upstream_asset']), models.Index(fields=['tenant', 'downstream_asset']), models.Index(fields=['tenant', 'lineage_type']), models.Index(fields=['tenant', 'impact_criticality']), models.Index(fields=['tenant', 'is_active'])]`
 
-- [ ] **`DataGovernancePolicy`** [Prefix: `BGOV-`] (`apps/bi/models/DataCatalog/DataGovernancePolicies.py`)
+- [x] **`DataGovernancePolicy`** [Prefix: `BGOV-`] (`apps/bi/models/DataCatalog/DataGovernancePolicies.py`)
   - **Purpose**: Enterprise regulatory governance policies, statutory retention schedules, enforcement modes, and column masking/redaction specifications mapped to global compliance frameworks (GDPR, HIPAA, SOX, PCI-DSS, CCPA, ISO 27001).
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -404,7 +404,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'code')]`, `indexes = [models.Index(fields=['tenant', 'policy_type']), models.Index(fields=['tenant', 'regulatory_framework']), models.Index(fields=['tenant', 'enforcement_level']), models.Index(fields=['tenant', 'effective_date']), models.Index(fields=['tenant', 'is_active'])]`
 
-- [ ] **`CatalogTrustEndorsement`** [Prefix: `BTRU-`] (`apps/bi/models/DataCatalog/CatalogTrustEndorsements.py`)
+- [x] **`CatalogTrustEndorsement`** [Prefix: `BTRU-`] (`apps/bi/models/DataCatalog/CatalogTrustEndorsements.py`)
   - **Purpose**: Formal certification attestations, peer endorsements, 5-star user reviews, deprecation decommissioning notices, and structured verification criteria checklists establishing enterprise data trust.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -428,70 +428,70 @@
 ## Backend (`apps/bi/{models,forms,views,urls}/DataCatalog/`)
 
 ### Models Package (`apps/bi/models/DataCatalog/`)
-- [ ] `apps/bi/models/DataCatalog/__init__.py` (re-exports `CatalogAsset`, `CatalogLineageEdge`, `DataGovernancePolicy`, `CatalogTrustEndorsement`)
-- [ ] `apps/bi/models/DataCatalog/CatalogAssets.py`
-- [ ] `apps/bi/models/DataCatalog/CatalogLineageEdges.py`
-- [ ] `apps/bi/models/DataCatalog/DataGovernancePolicies.py`
-- [ ] `apps/bi/models/DataCatalog/CatalogTrustEndorsements.py`
-- [ ] Update `apps/bi/models/__init__.py` to re-export all 10.7 models and include in `__all__`
+- [x] `apps/bi/models/DataCatalog/__init__.py` (re-exports `CatalogAsset`, `CatalogLineageEdge`, `DataGovernancePolicy`, `CatalogTrustEndorsement`)
+- [x] `apps/bi/models/DataCatalog/CatalogAssets.py`
+- [x] `apps/bi/models/DataCatalog/CatalogLineageEdges.py`
+- [x] `apps/bi/models/DataCatalog/DataGovernancePolicies.py`
+- [x] `apps/bi/models/DataCatalog/CatalogTrustEndorsements.py`
+- [x] Update `apps/bi/models/__init__.py` to re-export all 10.7 models and include in `__all__`
 
 ### Forms Package (`apps/bi/forms/DataCatalog/`)
-- [ ] `apps/bi/forms/DataCatalog/__init__.py` (re-exports all 10.7 forms)
-- [ ] `apps/bi/forms/DataCatalog/CatalogAssets.py` (`CatalogAssetForm` with domain/tier/sensitivity filters, JSON validation)
-- [ ] `apps/bi/forms/DataCatalog/CatalogLineageEdges.py` (`CatalogLineageEdgeForm` with upstream/downstream asset selectors)
-- [ ] `apps/bi/forms/DataCatalog/DataGovernancePolicies.py` (`DataGovernancePolicyForm` with framework/enforcement/masking fields)
-- [ ] `apps/bi/forms/DataCatalog/CatalogTrustEndorsements.py` (`CatalogTrustEndorsementForm` with verdict, rating, checklist)
-- [ ] Update `apps/bi/forms/__init__.py` to re-export all 10.7 forms and include in `__all__`
+- [x] `apps/bi/forms/DataCatalog/__init__.py` (re-exports all 10.7 forms)
+- [x] `apps/bi/forms/DataCatalog/CatalogAssets.py` (`CatalogAssetForm` with domain/tier/sensitivity filters, JSON validation)
+- [x] `apps/bi/forms/DataCatalog/CatalogLineageEdges.py` (`CatalogLineageEdgeForm` with upstream/downstream asset selectors)
+- [x] `apps/bi/forms/DataCatalog/DataGovernancePolicies.py` (`DataGovernancePolicyForm` with framework/enforcement/masking fields)
+- [x] `apps/bi/forms/DataCatalog/CatalogTrustEndorsements.py` (`CatalogTrustEndorsementForm` with verdict, rating, checklist)
+- [x] Update `apps/bi/forms/__init__.py` to re-export all 10.7 forms and include in `__all__`
 
 ### Views Package (`apps/bi/views/DataCatalog/`)
-- [ ] `apps/bi/views/DataCatalog/__init__.py` (re-exports all 10.7 views)
-- [ ] `apps/bi/views/DataCatalog/CatalogAssets.py`:
+- [x] `apps/bi/views/DataCatalog/__init__.py` (re-exports all 10.7 views)
+- [x] `apps/bi/views/DataCatalog/CatalogAssets.py`:
   - `catalog_asset_list` (filters: domain, asset_type, enterprise_tier, data_sensitivity, certification_status; search: q, name, code, tags; sort: popularity, rating, date; pagination)
   - `catalog_asset_detail` (metadata header, data steward card, schema columns table, lineage preview, quality scorecard badge, endorsements list, deprecation warning banner, view count increment)
   - `catalog_asset_create`
   - `catalog_asset_edit`
   - `catalog_asset_delete` (POST-only with confirmation & audit log)
-- [ ] `apps/bi/views/DataCatalog/CatalogLineageEdges.py`:
+- [x] `apps/bi/views/DataCatalog/CatalogLineageEdges.py`:
   - `catalog_lineage_edge_list` (filters: lineage_type, impact_criticality, is_automated_extraction; search: upstream, downstream, columns; pagination)
   - `catalog_lineage_edge_detail` (upstream vs downstream comparison, column-level mapping, transformation rule, ETL step link, impact criticality badge)
   - `catalog_lineage_edge_create`
   - `catalog_lineage_edge_edit`
   - `catalog_lineage_edge_delete` (POST-only with audit log)
-- [ ] `apps/bi/views/DataCatalog/DataGovernancePolicies.py`:
+- [x] `apps/bi/views/DataCatalog/DataGovernancePolicies.py`:
   - `data_governance_policy_list` (filters: policy_type, regulatory_framework, enforcement_level; search: name, code; pagination)
   - `data_governance_policy_detail` (policy summary, statutory citations, retention timeline, masking specification, review cycle countdown)
   - `data_governance_policy_create`
   - `data_governance_policy_edit`
   - `data_governance_policy_delete` (POST-only with audit log)
-- [ ] `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py`:
+- [x] `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py`:
   - `catalog_trust_endorsement_list` (filters: endorsement_type, verdict, rating_value; search: asset name, comments; pagination)
   - `catalog_trust_endorsement_detail` (attestation card, 5-star rating display, verification checklist breakdown, validity dates)
   - `catalog_trust_endorsement_create` (creates endorsement and recalculates `average_rating` / updates `certification_status` on asset)
   - `catalog_trust_endorsement_edit`
   - `catalog_trust_endorsement_delete` (POST-only with audit log)
-- [ ] `apps/bi/views/DataCatalog/Overview.py`:
+- [x] `apps/bi/views/DataCatalog/Overview.py`:
   - `catalog_overview` (Data Catalog command center: total assets count, certified assets %, active lineage connections, critical impact count, active governance policies, average asset rating, domain distribution breakdown, top viewed assets, recent endorsements)
-- [ ] Update `apps/bi/views/__init__.py` to re-export all 10.7 view functions and include in `__all__`
+- [x] Update `apps/bi/views/__init__.py` to re-export all 10.7 view functions and include in `__all__`
 
 ### URLs Package (`apps/bi/urls/DataCatalog/`)
-- [ ] `apps/bi/urls/DataCatalog/__init__.py` (aggregates and re-exports `urlpatterns`)
-- [ ] `apps/bi/urls/DataCatalog/CatalogAssets.py`
-- [ ] `apps/bi/urls/DataCatalog/CatalogLineageEdges.py`
-- [ ] `apps/bi/urls/DataCatalog/DataGovernancePolicies.py`
-- [ ] `apps/bi/urls/DataCatalog/CatalogTrustEndorsements.py`
-- [ ] `apps/bi/urls/DataCatalog/Overview.py`
-- [ ] Update `apps/bi/urls/__init__.py` to include `DataCatalog` routes
+- [x] `apps/bi/urls/DataCatalog/__init__.py` (aggregates and re-exports `urlpatterns`)
+- [x] `apps/bi/urls/DataCatalog/CatalogAssets.py`
+- [x] `apps/bi/urls/DataCatalog/CatalogLineageEdges.py`
+- [x] `apps/bi/urls/DataCatalog/DataGovernancePolicies.py`
+- [x] `apps/bi/urls/DataCatalog/CatalogTrustEndorsements.py`
+- [x] `apps/bi/urls/DataCatalog/Overview.py`
+- [x] Update `apps/bi/urls/__init__.py` to include `DataCatalog` routes
 
 ### Admin & Integration
-- [ ] `apps/bi/admin.py`: Register all 4 models (`CatalogAssetAdmin`, `CatalogLineageEdgeAdmin`, `DataGovernancePolicyAdmin`, `CatalogTrustEndorsementAdmin`) with search, list_filter, and tenant readonly fields
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.7"]` mapping NavERP.md feature bullets to views
-- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.7 (catalog assets across warehouse/semantic/MDM domains, column-level and table-level lineage edges with impact ratings, regulatory governance policies for GDPR/SOX/PCI-DSS, and trust endorsements with ratings and verification checklists)
+- [x] `apps/bi/admin.py`: Register all 4 models (`CatalogAssetAdmin`, `CatalogLineageEdgeAdmin`, `DataGovernancePolicyAdmin`, `CatalogTrustEndorsementAdmin`) with search, list_filter, and tenant readonly fields
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.7"]` mapping NavERP.md feature bullets to views
+- [x] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.7 (catalog assets across warehouse/semantic/MDM domains, column-level and table-level lineage edges with impact ratings, regulatory governance policies for GDPR/SOX/PCI-DSS, and trust endorsements with ratings and verification checklists)
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.7"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+- [x] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.7"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
   ```python
   "10.7": {
       "Searchable Data Catalog": "bi:catalog_asset_list",
@@ -514,33 +514,33 @@
 
 Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`) strictly used everywhere (no semantic `-success/-danger` classes, L33).
 
-- [ ] `templates/bi/data_catalog/catalog_overview.html` (Catalog command center: total asset count, certification percentage KPI, lineage graph count, critical path dependencies, governance policy breakdown, top-rated assets table, domain distribution cards)
-- [ ] `templates/bi/data_catalog/catalog_asset/list.html` (faceted filters: domain, asset_type, enterprise_tier, data_sensitivity, certification_status; search input; sorting options; cards/table view; pagination; action buttons)
-- [ ] `templates/bi/data_catalog/catalog_asset/detail.html` (asset overview header with certification badge, sensitivity label, domain tier; data steward and org unit cards; technical schema dictionary table; business glossary mapping; live quality scorecard metrics card; lineage summary; endorsements list; deprecation warning banner)
-- [ ] `templates/bi/data_catalog/catalog_asset/form.html` (name, code, domain, asset_type, foreign keys for table/model/MDM/glossary, steward, org unit, sensitivity, tier, certification status, deprecation replacement, schema JSON, tags, description)
-- [ ] `templates/bi/data_catalog/catalog_lineage_edge/list.html` (filters: lineage_type, impact_criticality, is_automated_extraction; search: upstream, downstream; table with node badges; pagination)
-- [ ] `templates/bi/data_catalog/catalog_lineage_edge/detail.html` (visual upstream -> downstream card, column-level mapping, transformation SQL rule, executing ETL pipeline/step link, impact criticality badge, automated extraction status)
-- [ ] `templates/bi/data_catalog/catalog_lineage_edge/form.html` (upstream asset, downstream asset, lineage type, upstream column, downstream column, transformation rule, ETL pipeline, step, impact criticality, automated toggle, notes)
-- [ ] `templates/bi/data_catalog/data_governance_policy/list.html` (filters: policy_type, regulatory_framework, enforcement_level; search: name, code; retention period column; pagination)
-- [ ] `templates/bi/data_catalog/data_governance_policy/detail.html` (framework badge, enforcement level alert, retention duration, masking specification, compliance notes, policy owner, review frequency countdown)
-- [ ] `templates/bi/data_catalog/data_governance_policy/form.html` (name, code, policy type, framework, enforcement level, retention days, masking algorithm, owner, effective/expiration dates, review cadence, compliance notes, description)
-- [ ] `templates/bi/data_catalog/catalog_trust_endorsement/list.html` (filters: endorsement_type, verdict, rating_value; search: asset, comments; star rating display; pagination)
-- [ ] `templates/bi/data_catalog/catalog_trust_endorsement/detail.html` (endorsement header, verdict badge, 5-star rating visual, attested by user card, validity period, verification checklist items, review comments)
-- [ ] `templates/bi/data_catalog/catalog_trust_endorsement/form.html` (asset selector, endorsement type, verdict, rating 1-5, attested by, valid until date, checklist JSON, review comments)
+- [x] `templates/bi/data_catalog/catalog_overview.html` (Catalog command center: total asset count, certification percentage KPI, lineage graph count, critical path dependencies, governance policy breakdown, top-rated assets table, domain distribution cards)
+- [x] `templates/bi/data_catalog/catalog_asset/list.html` (faceted filters: domain, asset_type, enterprise_tier, data_sensitivity, certification_status; search input; sorting options; cards/table view; pagination; action buttons)
+- [x] `templates/bi/data_catalog/catalog_asset/detail.html` (asset overview header with certification badge, sensitivity label, domain tier; data steward and org unit cards; technical schema dictionary table; business glossary mapping; live quality scorecard metrics card; lineage summary; endorsements list; deprecation warning banner)
+- [x] `templates/bi/data_catalog/catalog_asset/form.html` (name, code, domain, asset_type, foreign keys for table/model/MDM/glossary, steward, org unit, sensitivity, tier, certification status, deprecation replacement, schema JSON, tags, description)
+- [x] `templates/bi/data_catalog/catalog_lineage_edge/list.html` (filters: lineage_type, impact_criticality, is_automated_extraction; search: upstream, downstream; table with node badges; pagination)
+- [x] `templates/bi/data_catalog/catalog_lineage_edge/detail.html` (visual upstream -> downstream card, column-level mapping, transformation SQL rule, executing ETL pipeline/step link, impact criticality badge, automated extraction status)
+- [x] `templates/bi/data_catalog/catalog_lineage_edge/form.html` (upstream asset, downstream asset, lineage type, upstream column, downstream column, transformation rule, ETL pipeline, step, impact criticality, automated toggle, notes)
+- [x] `templates/bi/data_catalog/data_governance_policy/list.html` (filters: policy_type, regulatory_framework, enforcement_level; search: name, code; retention period column; pagination)
+- [x] `templates/bi/data_catalog/data_governance_policy/detail.html` (framework badge, enforcement level alert, retention duration, masking specification, compliance notes, policy owner, review frequency countdown)
+- [x] `templates/bi/data_catalog/data_governance_policy/form.html` (name, code, policy type, framework, enforcement level, retention days, masking algorithm, owner, effective/expiration dates, review cadence, compliance notes, description)
+- [x] `templates/bi/data_catalog/catalog_trust_endorsement/list.html` (filters: endorsement_type, verdict, rating_value; search: asset, comments; star rating display; pagination)
+- [x] `templates/bi/data_catalog/catalog_trust_endorsement/detail.html` (endorsement header, verdict badge, 5-star rating visual, attested by user card, validity period, verification checklist items, review comments)
+- [x] `templates/bi/data_catalog/catalog_trust_endorsement/form.html` (asset selector, endorsement type, verdict, rating 1-5, attested by, valid until date, checklist JSON, review comments)
 
 ---
 
 ## Verification & Close-out
 
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0019_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_7.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.7.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_datacatalog_models.py`, `test_datacatalog_forms.py`, `test_datacatalog_views.py`, `test_datacatalog_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.7 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.7.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0019_...` & `0020_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/test_smoke_bi_10_7.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.7.md`
+- [x] Run Phase 5 Code Fixer agent (all 19 findings C1–C2, I1–I12, M1–M5 fixed & committed one-by-one)
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_datacatalog_models.py`, `test_datacatalog_forms.py`, `test_datacatalog_views.py`, `test_datacatalog_security.py` (52 tests passed, 1,055 full BI suite passed)
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.7 models/routes/templates and update `README.md`
+- [x] Record gaps in `.claude/tasks/todo.md` review section (**Gaps**: None)
 
 ## Later passes / deferred
 - Automated SQL AST Lineage Parsing Daemon parsing PostgreSQL query execution logs and dbt manifest files -> Observability & Advanced Ingestion pass
@@ -549,8 +549,23 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
 - Automated PII Discovery ML Scanner with fine-tuned NER models -> AI/ML Analytics pass
 - Interactive Dashboards & Canvas Visualizations consuming certified catalog datasets -> Sub-module 10.8 Interactive Dashboards
 
-## Review notes
-(filled in at the end of the sub-module build)
+## Review notes (close-out 2026-11-05)
+
+- **Sub-module**: 10.7 Data Catalog, Lineage & Governance (`apps/bi`)
+- **Base SHA**: `7d343a2af8e7ae61ab20168cfdec164cec1e4ed0`
+- **Head SHA**: `HEAD`
+- **Review passes completed**:
+  - `code-reviewer`: pass 1 -> 6 Important, 2 Minor findings
+  - `explorer`: pass 2 -> 5 Important, 3 Minor findings
+  - `frontend-reviewer`: pass 3 -> 3 Important, 2 Minor findings
+  - `performance-reviewer`: pass 4 -> 2 Important, 2 Minor findings
+  - `qa-smoke-tester`: pass 5 -> 10 Important, 1 Minor findings
+  - `security-reviewer`: pass 6 -> 2 Critical, 4 Important, 1 Minor findings
+- **Findings consolidated**: 19 findings (2 Critical, 12 Important, 5 Minor) codified in `.claude/tasks/review-bi-10.7.md`.
+- **Code Fixer burn-down**: 100% resolved (19/19 fixed, 0 skipped, 0 open), verified with `manage.py check` (0 issues).
+- **Test suite**: 52 new tests across 4 modules (`test_datacatalog_models.py`, `test_datacatalog_forms.py`, `test_datacatalog_views.py`, `test_datacatalog_security.py`). Full BI suite: **1,055 passed** in 2m36s with 0 failures.
+- **Gaps**: None (all researched models, fields, choices, routes, templates, and review findings fully implemented and verified).
+
 
 ---
 # Sub-module 10.6: Master Data Management (MDM) (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.6.md` (2026-11-04)
