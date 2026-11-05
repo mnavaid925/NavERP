@@ -2982,6 +2982,20 @@ LIVE_LINKS = {
         "Catalog Overview": "bi:catalog_overview",
     },
 
+    # 10.8 Dashboards & Visualization
+    "10.8": {
+        "Interactive Dashboards": "bi:bi_dashboard_list",
+        "Visualization Library": "bi:bi_dashboard_widget_list",
+        "Drag-and-Drop Dashboard Builder": "bi:bi_dashboard_list",
+        "Personalization & Bookmarks": "bi:bi_dashboard_bookmark_list",
+        "Real-Time & Streaming Visuals": "bi:bi_dashboard_filter_list",
+        # Extra live leaves
+        "Dashboards": "bi:bi_dashboard_list",
+        "Dashboard Widgets": "bi:bi_dashboard_widget_list",
+        "View Bookmarks": "bi:bi_dashboard_bookmark_list",
+        "Dashboard Filters": "bi:bi_dashboard_filter_list",
+    },
+
 
 
 
