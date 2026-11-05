@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Governance Policies — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <span>Governance Policies</span>
+        </div>
+        <h1 class="page-title">Policy & Compliance Management</h1>
+        <p class="text-muted text-sm">Regulatory governance mandates, statutory retention schedules, automated dynamic column masking, and access classification policies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:catalog_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Catalog Overview</span>
+        </a>
+        <a href="{% url 'bi:catalog_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Catalog Assets</span>
+        </a>
+        <a href="{% url 'bi:catalog_lineage_edge_list' %}" class="btn btn-outline">
+            <i data-lucide="git-fork"></i>
+            <span>Lineage Graph</span>
+        </a>
+        <a href="{% url 'bi:data_governance_policy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Policy</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Policies</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Strict Enforcement</div>
+            <div class="text-2xl font-bold text-rose-600">{{ strict_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Mandates</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="file-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Frameworks</div>
+            <div class="text-2xl font-bold text-indigo-600">7 Standards</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Name, code, notes..." class="form-input text-sm">
+            </div>
+            <div>
+                <label class="form-label text-xs">Policy Type</label>
+                <select name="policy_type" class="form-select text-sm">
+                    <option value="">All Policy Types</option>
+                    {% for val, label in policy_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.policy_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Regulatory Framework</label>
+                <select name="framework" class="form-select text-sm">
+                    <option value="">All Frameworks</option>
+                    {% for val, label in framework_choices %}
+                    <option value="{{ val }}" {% if request.GET.framework == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1 justify-center">
+                    <i data-lucide="search"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.policy_type or request.GET.framework or request.GET.enforcement %}
+                <a href="{% url 'bi:data_governance_policy_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Policy ID</th>
+                    <th>Policy Name</th>
+                    <th>Policy Type</th>
+                    <th>Framework</th>
+                    <th>Enforcement</th>
+                    <th>Retention</th>
+                    <th>Masking</th>
+                    <th>Owner</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for policy in policies %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:data_governance_policy_detail' policy.pk %}" class="text-primary hover:underline">
+                            {{ policy.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-sm text-slate-900">{{ policy.name }}</div>
+                        <div class="font-mono text-xs text-muted">{{ policy.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ policy.get_policy_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if policy.regulatory_framework == 'sox_financial' %}
+                        <span class="badge badge-red">SOX</span>
+                        {% elif policy.regulatory_framework == 'gdpr_eu' %}
+                        <span class="badge badge-info">GDPR</span>
+                        {% elif policy.regulatory_framework == 'pci_dss' %}
+                        <span class="badge badge-amber">PCI-DSS</span>
+                        {% elif policy.regulatory_framework == 'hipaa_healthcare' %}
+                        <span class="badge badge-green">HIPAA</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ policy.get_regulatory_framework_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if policy.enforcement_level == 'strict_blocking' %}
+                        <span class="badge badge-red">Strict Blocking</span>
+                        {% elif policy.enforcement_level == 'audit_warning' %}
+                        <span class="badge badge-amber">Audit Warning</span>
+                        {% elif policy.enforcement_level == 'automated_masking' %}
+                        <span class="badge badge-green">Masking Rule</span>
+                        {% else %}
+                        <span class="badge badge-slate">Advisory</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs font-mono">
+                        {% if policy.retention_period_days %}
+                        {{ policy.retention_period_days }} days
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ policy.get_masking_algorithm_display }}</span>
+                    </td>
+                    <td class="text-xs text-muted">
+                        {% if policy.policy_owner %}
+                        {{ policy.policy_owner.get_full_name|default:policy.policy_owner.username }}
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:data_governance_policy_detail' policy.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:data_governance_policy_edit' policy.pk %}" class="btn btn-icon" title="Edit Policy" aria-label="Edit Policy">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:data_governance_policy_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete governance policy {{ policy.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Policy" aria-label="Delete Policy">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="shield-check"></i>
+                            </div>
+                            <div class="empty-title">No Governance Policies Found</div>
+                            <div class="empty-description">Establish data classification mandates, SOX financial retention rules, or GDPR privacy policies.</div>
+                            <a href="{% url 'bi:data_governance_policy_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create First Policy</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.policy_type %}&policy_type={{ request.GET.policy_type }}{% endif %}{% if request.GET.framework %}&framework={{ request.GET.framework }}{% endif %}{% if request.GET.enforcement %}&enforcement={{ request.GET.enforcement }}{% endif %}" class="btn btn-outline btn-sm">
+            Previous
+        </a>
+        {% endif %}
+        <span class="text-xs text-muted">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.policy_type %}&policy_type={{ request.GET.policy_type }}{% endif %}{% if request.GET.framework %}&framework={{ request.GET.framework }}{% endif %}{% if request.GET.enforcement %}&enforcement={{ request.GET.enforcement }}{% endif %}" class="btn btn-outline btn-sm">
+            Next
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
