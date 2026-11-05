@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 from apps.bi.forms.DataCatalog.DataGovernancePolicies import DataGovernancePolicyForm
 from apps.bi.models.DataCatalog.DataGovernancePolicies import DataGovernancePolicy
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -136,8 +137,8 @@ def data_governance_policy_edit(request, pk):
     return render(request, "bi/data_catalog/data_governance_policy/form.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def data_governance_policy_delete(request, pk):
     policy = bi_object(request, DataGovernancePolicy, pk)
     policy_number = policy.number
