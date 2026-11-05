@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ bookmark.name }}{% else %}New Bookmark{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_bookmark_list' %}">Bookmarks</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ bookmark.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Bookmark: {{ bookmark.name }}{% else %}Create View Bookmark{% endif %}</h1>
+        <p class="text-muted text-sm">Save personal or team view configuration, default landing states, and filter presets</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'bi:bi_dashboard_bookmark_detail' bookmark.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Detail</span>
+        </a>
+        {% else %}
+        <a href="{% url 'bi:bi_dashboard_bookmark_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-2xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Bookmark Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.dashboard.id_for_label }}">Target Dashboard <span class="text-red-500">*</span></label>
+                {{ form.dashboard }}
+                {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Bookmark Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="border-t border-slate-100 pt-3 space-y-2">
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.is_default }}
+                    <span>Set as my default landing view for this dashboard</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.is_shared }}
+                    <span>Share this bookmark with all authorized workspace members</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.is_active }}
+                    <span>Active Record</span>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'bi:bi_dashboard_bookmark_detail' bookmark.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'bi:bi_dashboard_bookmark_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Save Bookmark{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
