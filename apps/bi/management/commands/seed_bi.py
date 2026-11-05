@@ -2105,7 +2105,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"  Seeding BI Dashboards & Visualization for tenant: {tenant.name}...")
                 with transaction.atomic():
                     tenant_admin = (
-                        User.objects.filter(username__in=[f"admin_{tenant.subdomain}", f"admin_{tenant.slug}", "admin_acme"]).first()
+                        User.objects.filter(username__in=[f"admin_{tenant.slug}", "admin_acme", "admin_globex"]).first()
                         or User.objects.filter(is_superuser=True).first()
                     )
 
