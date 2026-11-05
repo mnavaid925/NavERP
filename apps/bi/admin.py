@@ -25,6 +25,10 @@ from apps.bi.models import (
     MdmSurvivorshipRule,
     MdmHierarchyNode,
     MdmReferenceCode,
+    CatalogAsset,
+    CatalogLineageEdge,
+    DataGovernancePolicy,
+    CatalogTrustEndorsement,
 )
 
 
@@ -235,3 +239,39 @@ class MdmReferenceCodeAdmin(admin.ModelAdmin):
     list_filter = ("code_set", "status", "source_system", "is_active", "tenant")
     search_fields = ("number", "code_set", "canonical_code", "canonical_name", "source_code")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(CatalogAsset)
+class CatalogAssetAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "domain", "asset_type", "data_sensitivity", "enterprise_tier", "certification_status", "average_rating", "view_count", "data_steward", "is_active", "tenant")
+    list_select_related = ("data_steward", "owning_org_unit", "warehouse_table", "semantic_model", "golden_record", "business_glossary_term", "quality_scorecard", "deprecation_replacement")
+    list_filter = ("domain", "asset_type", "data_sensitivity", "enterprise_tier", "certification_status", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "description")
+    readonly_fields = ("number", "tenant", "view_count", "average_rating", "created_at", "updated_at")
+
+
+@admin.register(CatalogLineageEdge)
+class CatalogLineageEdgeAdmin(admin.ModelAdmin):
+    list_display = ("number", "upstream_asset", "downstream_asset", "lineage_type", "impact_criticality", "upstream_column", "downstream_column", "is_automated_extraction", "is_active", "tenant")
+    list_select_related = ("upstream_asset", "downstream_asset", "etl_pipeline", "transformation_step")
+    list_filter = ("lineage_type", "impact_criticality", "is_automated_extraction", "is_active", "tenant")
+    search_fields = ("number", "upstream_asset__name", "downstream_asset__name", "upstream_column", "downstream_column", "transformation_rule")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(DataGovernancePolicy)
+class DataGovernancePolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "code", "policy_type", "regulatory_framework", "enforcement_level", "retention_period_days", "masking_algorithm", "policy_owner", "effective_date", "is_active", "tenant")
+    list_select_related = ("policy_owner",)
+    list_filter = ("policy_type", "regulatory_framework", "enforcement_level", "masking_algorithm", "is_active", "tenant")
+    search_fields = ("number", "name", "code", "compliance_notes", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(CatalogTrustEndorsement)
+class CatalogTrustEndorsementAdmin(admin.ModelAdmin):
+    list_display = ("number", "asset", "endorsement_type", "verdict", "rating_value", "attested_by", "attested_at", "valid_until", "is_active", "tenant")
+    list_select_related = ("asset", "attested_by")
+    list_filter = ("endorsement_type", "verdict", "is_active", "tenant")
+    search_fields = ("number", "asset__name", "review_comments")
+    readonly_fields = ("number", "tenant", "attested_at", "created_at", "updated_at")
