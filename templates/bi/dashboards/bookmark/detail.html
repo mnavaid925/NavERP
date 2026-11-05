@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}{{ bookmark.name }} — Bookmarks — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_bookmark_list' %}">Bookmarks</a>
+            <span class="sep">/</span>
+            <span>{{ bookmark.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ bookmark.name }}</h1>
+            {% if bookmark.is_default %}
+            <span class="badge badge-amber"><i data-lucide="star" class="w-3 h-3 inline"></i> Default View</span>
+            {% endif %}
+            {% if bookmark.is_shared %}
+            <span class="badge badge-info">Shared View</span>
+            {% else %}
+            <span class="badge badge-muted">Personal View</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ bookmark.number }} · Dashboard: {{ dashboard.title }} · Owner: {{ bookmark.user.username }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_bookmark_apply' bookmark.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Apply to Dashboard Canvas</span>
+        </a>
+        {% if bookmark.user == request.user or request.user.is_superuser %}
+        <a href="{% url 'bi:bi_dashboard_bookmark_edit' bookmark.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_dashboard_bookmark_delete' bookmark.pk %}" class="inline" onsubmit="return confirm('Delete bookmark \'{{ bookmark.name|escapejs }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Bookmark Metadata</h2>
+        </div>
+        <div class="card-body">
+            <dl class="space-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Target Dashboard</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">
+                        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="text-blue-600 hover:underline">
+                            {{ dashboard.title }} ({{ dashboard.number }})
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Bookmark Owner</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">{{ bookmark.user.get_full_name|default:bookmark.user.username }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Telemetry Views</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">{{ bookmark.view_count }} times applied</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Description</dt>
+                    <dd class="text-sm text-slate-700 mt-0.5">{{ bookmark.description|default:"No description recorded." }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Active Filter Selections (JSON)</h2>
+        </div>
+        <div class="card-body">
+            <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ filter_state_pretty }}</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}
