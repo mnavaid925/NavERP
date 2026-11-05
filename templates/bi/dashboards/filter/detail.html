@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}{{ filter_obj.filter_label }} — Filter Controls — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}">{{ dashboard.title }}</a>
+            <span class="sep">/</span>
+            <span>{{ filter_obj.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ filter_obj.filter_label }}</h1>
+            <span class="badge {{ filter_obj.badge_filter_type }}">{{ filter_obj.get_filter_type_display }}</span>
+            {% if filter_obj.is_required %}
+            <span class="badge badge-amber">Required Selection</span>
+            {% endif %}
+            {% if filter_obj.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Disabled</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ filter_obj.number }} · Parameter: ?{{ filter_obj.filter_key }}= · Target field: {{ filter_obj.target_field }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>View Canvas</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_filter_edit' filter_obj.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_dashboard_filter_delete' filter_obj.pk %}" class="inline" onsubmit="return confirm('Remove filter control \'{{ filter_obj.filter_label|escapejs }}\'?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Filter Control Specifications</h2>
+    </div>
+    <div class="card-body">
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Parent Dashboard</dt>
+                <dd class="text-sm font-semibold text-slate-900 mt-0.5">
+                    <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="text-blue-600 hover:underline">
+                        {{ dashboard.title }} ({{ dashboard.number }})
+                    </a>
+                </dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Query Parameter Key</dt>
+                <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ filter_obj.filter_key }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Control Widget Type</dt>
+                <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ filter_obj.get_filter_type_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Target Semantic Field</dt>
+                <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ filter_obj.target_field }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Default Selected Value</dt>
+                <dd class="text-sm font-mono text-slate-900 mt-0.5">{{ filter_obj.default_value|default:"— None —" }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Options Data Source</dt>
+                <dd class="text-sm text-slate-900 mt-0.5">{{ filter_obj.get_options_source_display }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Display Order Sequence</dt>
+                <dd class="text-sm text-slate-900 mt-0.5">{{ filter_obj.order }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-medium text-muted uppercase">Mandatory Selection</dt>
+                <dd class="text-sm text-slate-900 mt-0.5">
+                    {% if filter_obj.is_required %}Yes (Required){% else %}No (Optional){% endif %}
+                </dd>
+            </div>
+        </dl>
+    </div>
+</div>
+{% endblock %}
