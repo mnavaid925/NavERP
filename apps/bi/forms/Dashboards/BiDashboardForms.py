@@ -46,7 +46,7 @@ class BiDashboardForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["org_unit"].empty_label = "— All Departments / Org Units —"
 
     def clean(self):
