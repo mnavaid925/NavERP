@@ -8,7 +8,11 @@ from apps.accounts.models import User
 from apps.bi.models import (
     BusinessGlossaryTerm,
     CalculatedMeasure,
+    CatalogAsset,
+    CatalogLineageEdge,
+    CatalogTrustEndorsement,
     CdcSyncConfig,
+    DataGovernancePolicy,
     DataMart,
     DataQualityException,
     DataQualityProfile,
@@ -921,4 +925,158 @@ def mdm_reference_code_b(db, tenant_b):
         status="active",
         is_standard=True,
     )
+
+
+# --------------------------------------------------------------------------
+# 10.7 Data Catalog, Lineage & Governance Fixtures
+# --------------------------------------------------------------------------
+
+@pytest.fixture
+def data_governance_policy_a(db, tenant_a, admin_user):
+    return DataGovernancePolicy.objects.create(
+        tenant=tenant_a,
+        number="BGOV-00001",
+        name="Acme Enterprise Data Retention Policy",
+        code="acme_retention_policy",
+        policy_type="data_retention",
+        regulatory_framework="gdpr_eu",
+        enforcement_level="strict_blocking",
+        retention_period_days=1095,
+        policy_owner=admin_user,
+        effective_date="2026-01-01",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def data_governance_policy_b(db, tenant_b, admin_user_b):
+    return DataGovernancePolicy.objects.create(
+        tenant=tenant_b,
+        number="BGOV-00002",
+        name="Globex Financial Audit Policy",
+        code="globex_audit_policy",
+        policy_type="regulatory_compliance",
+        regulatory_framework="sox",
+        enforcement_level="strict_blocking",
+        retention_period_days=2555,
+        policy_owner=admin_user_b,
+        effective_date="2026-01-01",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_asset_src_a(db, tenant_a, admin_user):
+    return CatalogAsset.objects.create(
+        tenant=tenant_a,
+        number="BCAT-00001",
+        name="Acme Ingestion Source Ledger",
+        code="acme_src_ledger",
+        domain="finance",
+        asset_type="source_dataset",
+        data_sensitivity="restricted_pii",
+        enterprise_tier="tier_1_mission_critical",
+        certification_status="certified",
+        data_steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_asset_tgt_a(db, tenant_a, admin_user):
+    return CatalogAsset.objects.create(
+        tenant=tenant_a,
+        number="BCAT-00002",
+        name="Acme Sales Analytics Mart",
+        code="acme_sales_mart",
+        domain="sales",
+        asset_type="warehouse_table",
+        data_sensitivity="internal",
+        enterprise_tier="tier_1_mission_critical",
+        certification_status="certified",
+        data_steward=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_asset_b(db, tenant_b, admin_user_b):
+    return CatalogAsset.objects.create(
+        tenant=tenant_b,
+        number="BCAT-00003",
+        name="Globex Confidential Customer DB",
+        code="globex_confidential_db",
+        domain="customer",
+        asset_type="source_dataset",
+        data_sensitivity="highly_sensitive_pci_phi",
+        enterprise_tier="tier_1_mission_critical",
+        certification_status="certified",
+        data_steward=admin_user_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_lineage_edge_a(db, tenant_a, catalog_asset_src_a, catalog_asset_tgt_a):
+    return CatalogLineageEdge.objects.create(
+        tenant=tenant_a,
+        number="BLIN-00001",
+        upstream_asset=catalog_asset_src_a,
+        downstream_asset=catalog_asset_tgt_a,
+        lineage_type="table_level",
+        impact_criticality="critical",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_lineage_edge_b(db, tenant_b, catalog_asset_b):
+    target_b = CatalogAsset.objects.create(
+        tenant=tenant_b,
+        number="BCAT-00004",
+        name="Globex Target Vault",
+        code="globex_target_vault",
+        domain="customer",
+        asset_type="warehouse_table",
+        data_sensitivity="internal",
+        is_active=True,
+    )
+    return CatalogLineageEdge.objects.create(
+        tenant=tenant_b,
+        number="BLIN-00002",
+        upstream_asset=catalog_asset_b,
+        downstream_asset=target_b,
+        lineage_type="table_level",
+        impact_criticality="critical",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_trust_endorsement_a(db, tenant_a, catalog_asset_tgt_a, admin_user):
+    return CatalogTrustEndorsement.objects.create(
+        tenant=tenant_a,
+        number="BTRU-00001",
+        asset=catalog_asset_tgt_a,
+        endorsement_type="formal_certification",
+        verdict="approved_certified",
+        rating_value=5,
+        attested_by=admin_user,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def catalog_trust_endorsement_b(db, tenant_b, catalog_asset_b, admin_user_b):
+    return CatalogTrustEndorsement.objects.create(
+        tenant=tenant_b,
+        number="BTRU-00002",
+        asset=catalog_asset_b,
+        endorsement_type="peer_review",
+        verdict="approved_certified",
+        rating_value=4,
+        attested_by=admin_user_b,
+        is_active=True,
+    )
+
 
