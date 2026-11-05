@@ -78,7 +78,7 @@ class CatalogAssetForm(TenantUniqueMixin, TenantModelForm):
             self.fields["quality_scorecard"].queryset = DataQualityScorecard.objects.filter(tenant=self.tenant).order_by("-created_at")
             self.fields["data_steward"].queryset = get_user_model().objects.filter(tenant=self.tenant).order_by("first_name", "username")
             
-            replacement_qs = CatalogAsset.objects.filter(tenant=self.tenant)
+            replacement_qs = CatalogAsset.objects.filter(tenant=self.tenant).only("id", "number", "name")
             if self.instance and self.instance.pk:
                 replacement_qs = replacement_qs.exclude(pk=self.instance.pk)
             self.fields["deprecation_replacement"].queryset = replacement_qs.order_by("name")
@@ -151,7 +151,7 @@ class CatalogAssetDeprecateForm(forms.Form):
     def __init__(self, *args, tenant=None, current_asset=None, **kwargs):
         super().__init__(*args, **kwargs)
         if tenant is not None:
-            qs = CatalogAsset.objects.filter(tenant=tenant)
+            qs = CatalogAsset.objects.filter(tenant=tenant).only("id", "number", "name")
             if current_asset:
                 qs = qs.exclude(pk=current_asset.pk)
             self.fields["deprecation_replacement"].queryset = qs.order_by("name")
