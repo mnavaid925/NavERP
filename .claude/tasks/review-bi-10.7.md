@@ -20,3 +20,20 @@ Commit after fixing Important findings. The sub-module has excellent multi-tenan
 - **[Minor]** `templates/bi/data_catalog/catalog_lineage_edge/list.html:237-252` & `templates/bi/data_catalog/catalog_trust_endorsement/list.html:214-230`: Both list views support filtering by `?asset=...`, but pagination links in their templates omit `&asset={{ request.GET.asset }}` when navigating between pages. Fix: Add `{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}` to pagination links.
 
 ---
+
+## 2. Explorer (Architecture & Contract) Pass
+
+### Verdict
+Solid contract consistency across 23 URLs, forms, models, and admin. Identified two core spine field attribute mismatches (`overall_health_score` vs `overall_quality_score` and `step_order` vs `sequence`), corroborated filter dropdown and detail delete form omissions, and noted raw item count usage as percentage width in overview.
+
+### Findings
+- **[Important]** `templates/bi/data_catalog/catalog_asset/detail.html:326`: The detail template attempts to render `{{ asset.quality_scorecard.overall_health_score }}%` in the sidebar health scorecard badge. In `apps/bi/models/DataQuality/DataQualityScorecards.py:79`, the scorecard metric field is named `overall_quality_score`. Because the attribute does not exist on the model, Django's template engine silently renders empty text `(Overall Health: %)`. Fix: Update to `{{ asset.quality_scorecard.overall_quality_score }}%`.
+- **[Important]** `templates/bi/data_catalog/catalog_lineage_edge/detail.html:191`: The lineage edge detail template references `{{ edge.transformation_step.name }} (Step #{{ edge.transformation_step.step_order }})`. In `apps/bi/models/EtlPipelines/TransformationSteps.py:37`, the field is named `sequence` (not `step_order`). Step order renders blank. Fix: Replace with `{{ edge.transformation_step.sequence }}`.
+- **[Important]** `templates/bi/data_catalog/catalog_asset/list.html:85-137`: Form control missing for certification status filter. View parses `status` and passes `certification_status_choices`, but template has no `<select name="status">`. Fix: Add `<select name="status">` dropdown.
+- **[Important]** `templates/bi/data_catalog/data_governance_policy/list.html:81-115`: Form control missing for enforcement filter. View parses `enforcement` and passes `enforcement_choices`, but template has no `<select name="enforcement">`. Fix: Add `<select name="enforcement">` dropdown.
+- **[Important]** `templates/bi/data_catalog/catalog_asset/detail.html:36-54`, `templates/bi/data_catalog/catalog_lineage_edge/detail.html:30-39`, `templates/bi/data_catalog/data_governance_policy/detail.html:29-38`, `templates/bi/data_catalog/catalog_trust_endorsement/detail.html:39-48`: Missing POST delete button forms in detail views. Fix: Add standard POST delete form with confirmation dialog to all four detail templates.
+- **[Minor]** `apps/bi/views/DataCatalog/Overview.py:72-81, 97` & `templates/bi/data_catalog/catalog_overview.html:275-294`: View calculates `sensitivity_distribution` and injects it into context, but `catalog_overview.html` only renders `domain_distribution`. Fix: Add visual card for sensitivity distribution in template or remove calculation.
+- **[Minor]** `templates/bi/data_catalog/catalog_lineage_edge/list.html:237-252` & `templates/bi/data_catalog/catalog_trust_endorsement/list.html:214-230`: Pagination links drop `&asset={{ request.GET.asset }}`. Fix: Preserve query parameter in pagination links.
+- **[Minor]** `templates/bi/data_catalog/catalog_overview.html:287`: In "Assets by Domain", the progress bar style uses raw item count `{{ d.count|floatformat:0 }}%` as percentage width. Fix: Compute percentage `d.pct` in Python in `Overview.py` and render `style="width: {{ d.pct }}%;"`.
+
+---
