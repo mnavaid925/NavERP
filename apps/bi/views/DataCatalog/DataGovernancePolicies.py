@@ -141,7 +141,6 @@ def data_governance_policy_edit(request, pk):
 def data_governance_policy_delete(request, pk):
     policy = bi_object(request, DataGovernancePolicy, pk)
     policy_number = policy.number
-    policy.delete()
     write_audit_log(
         request.user,
         policy,
@@ -149,5 +148,6 @@ def data_governance_policy_delete(request, pk):
         changes=f"Deleted governance policy {policy_number}",
         tenant=request.tenant,
     )
+    policy.delete()
     messages.success(request, f"Governance policy {policy_number} was deleted.")
     return redirect("bi:data_governance_policy_list")
