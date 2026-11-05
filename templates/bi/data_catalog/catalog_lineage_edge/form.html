@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Lineage Edge {{ edge.number }}{% else %}Create Lineage Edge{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_lineage_edge_list' %}">Lineage Edges</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ edge.number }}{% else %}New Lineage Edge{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Lineage Edge {{ edge.number }}{% else %}Create Directional Lineage Edge{% endif %}</h1>
+        <p class="text-muted text-sm">Define source-to-target dependency mapping with column-level granularity and transformation expressions</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:catalog_lineage_edge_detail' edge.pk %}{% else %}{% url 'bi:catalog_lineage_edge_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-200 bg-red-50 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700 font-medium">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Node Connections -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">1. Upstream & Downstream Asset Linkage</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="form-label" for="{{ form.upstream_asset.id_for_label }}">Upstream Source Asset (Producer) *</label>
+                {{ form.upstream_asset }}
+                {% if form.upstream_asset.errors %}<p class="form-error">{{ form.upstream_asset.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.downstream_asset.id_for_label }}">Downstream Target Asset (Consumer) *</label>
+                {{ form.downstream_asset }}
+                {% if form.downstream_asset.errors %}<p class="form-error">{{ form.downstream_asset.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.lineage_type.id_for_label }}">Lineage Granularity *</label>
+                {{ form.lineage_type }}
+                {% if form.lineage_type.errors %}<p class="form-error">{{ form.lineage_type.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.impact_criticality.id_for_label }}">Impact Criticality *</label>
+                {{ form.impact_criticality }}
+                {% if form.impact_criticality.errors %}<p class="form-error">{{ form.impact_criticality.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.upstream_column.id_for_label }}">Upstream Column Name (Optional)</label>
+                {{ form.upstream_column }}
+                {% if form.upstream_column.errors %}<p class="form-error">{{ form.upstream_column.errors.0 }}</p>{% endif %}
+                <p class="text-xs text-muted mt-1">Specify source column if establishing column-level lineage</p>
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.downstream_column.id_for_label }}">Downstream Column Name (Optional)</label>
+                {{ form.downstream_column }}
+                {% if form.downstream_column.errors %}<p class="form-error">{{ form.downstream_column.errors.0 }}</p>{% endif %}
+                <p class="text-xs text-muted mt-1">Specify target column if establishing column-level lineage</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Transformation & Pipeline Execution -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">2. Transformation Logic & ETL Association</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="form-label" for="{{ form.etl_pipeline.id_for_label }}">Executing ETL Pipeline</label>
+                    {{ form.etl_pipeline }}
+                    {% if form.etl_pipeline.errors %}<p class="form-error">{{ form.etl_pipeline.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label class="form-label" for="{{ form.transformation_step.id_for_label }}">Pipeline Transformation Step</label>
+                    {{ form.transformation_step }}
+                    {% if form.transformation_step.errors %}<p class="form-error">{{ form.transformation_step.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.transformation_rule.id_for_label }}">Transformation Formula / SQL Expression</label>
+                {{ form.transformation_rule }}
+                {% if form.transformation_rule.errors %}<p class="form-error">{{ form.transformation_rule.errors.0 }}</p>{% endif %}
+                <p class="text-xs text-muted mt-1">Enter SQL derivation rule, casting, or aggregation expression</p>
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Steward Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<p class="form-error">{{ form.notes.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="flex items-center gap-6 pt-2">
+                <div class="flex items-center gap-2">
+                    {{ form.is_automated_extraction }}
+                    <label class="form-label mb-0 cursor-pointer" for="{{ form.is_automated_extraction.id_for_label }}">Automated Extraction Mode</label>
+                </div>
+                <div class="flex items-center gap-2">
+                    {{ form.is_active }}
+                    <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">Active Edge</label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'bi:catalog_lineage_edge_detail' edge.pk %}{% else %}{% url 'bi:catalog_lineage_edge_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save"></i>
+            <span>{% if is_edit %}Save Lineage Edge{% else %}Create Lineage Edge{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
