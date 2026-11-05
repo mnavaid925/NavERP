@@ -7,6 +7,268 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.8: Dashboards & Visualization (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.8.md` (2026-11-05)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, 10.4, 10.5, and 10.6.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0018_alter_mdmgoldenrecord_confidence_score_and_more.py`, so **10.8 claims `0019`** (or `0020` if sibling 10.7 lands first; see L43).
+> Plan written from `.claude/tasks/research-bi-10.8.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/Dashboards/`
+> Template folder name: `templates/bi/dashboards/{dashboard,widget,bookmark,filter}/` + `canvas/viewer.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Dashboards & Visualization Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical & Operational Target Scoping:
+    - `BiDashboard`:
+      - `created_by`: Links to `settings.AUTH_USER_MODEL` (`accounts.User`, set null on delete).
+      - `org_unit`: Links to verified `core.OrgUnit` (`apps/core/models/OrgUnit.py`, set null on delete) for departmental/branch dashboard scoping.
+      - Supports 12-column responsive layout, layout blueprints, theming palettes, auto-refresh intervals, kiosk mode, and tenant landing page defaults.
+    - `BiDashboardWidget`:
+      - `dashboard`: Links to `bi.BiDashboard` (CASCADE delete).
+      - `semantic_model`: Links to verified `bi.SemanticModel` (`apps/bi/models/SemanticLayer/SemanticModels.py`, set null on delete) for governed analytical dataset definitions (Sub-module 10.4).
+      - `calculated_measure`: Links to verified `bi.CalculatedMeasure` (`apps/bi/models/SemanticLayer/CalculatedMeasures.py`, set null on delete) for governed metric formulas, KPI values, and aggregations (Sub-module 10.4).
+      - `warehouse_table`: Links to verified `bi.WarehouseTable` (`apps/bi/models/DataWarehouse/WarehouseTables.py`, set null on delete) for direct analytical warehouse dimension/fact feeds (Sub-module 10.3).
+      - `drill_hierarchy`: Links to verified `bi.DrillHierarchy` (`apps/bi/models/SemanticLayer/DrillHierarchies.py`, set null on delete) for dimensional drill-down paths (Sub-module 10.4).
+      - Features 13 distinct chart types (KPI card with sparkline, line, area, bar, column, pie, donut, gauge, heatmap, funnel, treemap, table pivot, streaming counter) with coordinates (`pos_x`, `pos_y`, `width_cols`, `height_rows`).
+    - `BiDashboardBookmark`:
+      - `dashboard`: Links to `bi.BiDashboard` (CASCADE delete).
+      - `user`: Links to `settings.AUTH_USER_MODEL` (`accounts.User`, CASCADE delete).
+      - Captures user-specific serialized filter state (`filter_state_json`), active cross-filters (`crossfilter_state_json`), personal default view designation (`is_default`), and team sharing (`is_shared`).
+    - `BiDashboardFilter`:
+      - `dashboard`: Links to `bi.BiDashboard` (CASCADE delete).
+      - Controls global dashboard filter bar with options for dropdowns, multi-select badges, date ranges, relative presets, numeric ranges, and search inputs, dynamically slicing linked widgets.
+  - Operational Boundary: 10.8 owns *interactive role-based dashboards, rich visualization widget library, responsive 12-column grid canvas builder, personal user view states & filter bookmarks, centralized top filter bar controls, and parameter-preserving real-time auto-refresh capabilities*.
+  - Sibling Hand-offs & Boundaries:
+    - 10.1 (`DataIntegration`): Feeds raw operational data into analytical staging.
+    - 10.2 (`EtlPipelines`): Orchestrates transformations into analytical storage.
+    - 10.3 (`DataWarehouse`): Physical fact and dimension warehouse tables (`WarehouseTable`) queried by direct table widgets.
+    - 10.4 (`SemanticLayer`): Governed datasets (`SemanticModel`), metrics (`CalculatedMeasure`), and drill hierarchies (`DrillHierarchy`) powering dashboard widgets.
+    - 10.5 (`DataQuality`): Quality scoring preventing corrupted metrics from being visualized.
+    - 10.6 (`MasterData`): Authoritative Golden Records (`MdmGoldenRecord`) visualized in entity 360 widgets.
+    - 10.7 (`DataCatalog`): Lineage and catalog metadata for dashboard datasets.
+    - 10.8 (`Dashboards` — THIS SUB-MODULE): Interactive visual dashboards, widget library, grid canvas, bookmarks, and global filters.
+    - 10.9 (`OperationalReporting` — DOWNSTREAM): Pixel-perfect paginated PDF/Excel reports and document bursting.
+    - 10.16 (`AlertsAndSubscriptions` — DOWNSTREAM): KPI threshold alerting and scheduled email digests.
+    - 10.17 (`EmbeddedBi` — DOWNSTREAM): ERP in-app widget embedding and mobile PWA views.
+  - Audit logging: Administrative mutations (create/edit/delete/publish/duplicate) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BDSH` (BiDashboard), `BDWG` (BiDashboardWidget), `BDBM` (BiDashboardBookmark), `BDFL` (BiDashboardFilter) verified 100% collision-free repository-wide.
+
+---
+
+## 10.8-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO heavy external ASGI WebSocket streaming server daemons (Centrifugo, Django Channels)** — Real-time live updating operates via configurable client-side non-blocking HTMX interval polling (10s to 3600s) and fetch triggers.
+- [ ] **NO arbitrary user-uploaded third-party JavaScript visualization plugins (untrusted D3/JS scripts)** — Visualization library provides 13 standardized, robust, pre-built chart types fully configured via JSON options.
+- [ ] **NO server-side headless browser rasterization engine (Puppeteer/Playwright PDF/PNG export)** — Paginated print formatting and export bursting belong to Sub-module 10.9; 10.8 provides clean browser-native print styles.
+- [ ] **NO cross-tenant or public unauthenticated tokenized iFrame URL generation** — Dashboards operate strictly inside tenant session boundaries; external embedded analytics belongs to Sub-module 10.17.
+- [ ] **NO direct raw SQL execution from end-user UI** — All chart data queries resolve strictly through verified `bi.SemanticModel`, `bi.CalculatedMeasure`, or governed `bi.WarehouseTable` references.
+
+---
+
+## Models (4 models in `apps/bi/models/Dashboards/`)
+
+- [ ] **`BiDashboard`** [Prefix: `BDSH-`] (`apps/bi/models/Dashboards/BiDashboards.py`)
+  - **Purpose**: Authoritative tenant-scoped dashboard canvas supporting category classification, responsive 12-column grid layout, customizable visual themes, role/org unit gating, auto-refresh intervals, kiosk display mode, and default landing views.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `title`: `CharField(max_length=200)` (e.g. "Executive Financial Performance", "Supply Chain Fulfillment Command Center", "Customer Retention 360")
+    - `slug`: `SlugField(max_length=100)` (URL-friendly unique identifier within tenant)
+    - `category`: `CharField(max_length=40, choices=[('executive', 'Executive & C-Suite'), ('finance', 'Finance & Accounting'), ('sales_crm', 'Sales & CRM'), ('supply_chain', 'Supply Chain & Inventory'), ('operations', 'Plant & Operations'), ('hr', 'Human Resources & Talent'), ('custom', 'Custom Dashboard')], default='executive')` (driver: 10.8-DSH-01)
+    - `layout_type`: `CharField(max_length=40, choices=[('grid_12', '12-Column Responsive Grid'), ('executive_summary', 'Executive Summary Blueprint'), ('operational_monitoring', 'Operational Monitoring Board'), ('freeform', 'Flexible Fluid Layout')], default='grid_12')` (driver: 10.8-DSH-02)
+    - `refresh_interval_seconds`: `PositiveIntegerField(default=0, help_text="Auto-refresh timer in seconds (0 = manual refresh only, 10, 30, 60, 300, 900, 3600)")` (driver: 10.8-DSH-03)
+    - `theme`: `CharField(max_length=40, choices=[('slate_corporate', 'Corporate Slate (Default)'), ('indigo_modern', 'Modern Indigo'), ('emerald_growth', 'Emerald Financial'), ('amber_industrial', 'Amber Industrial / Logistics'), ('dark_observability', 'High-Contrast Dark Mode')], default='slate_corporate')` (driver: 10.8-DSH-04)
+    - `role_required`: `CharField(max_length=60, blank=True, default='all', help_text="Restricted role required to access dashboard: 'all', 'executive', 'finance_manager', 'sales_manager', etc.")` (driver: 10.8-DSH-05)
+    - `org_unit`: `ForeignKey('core.OrgUnit', null=True, blank=True, on_delete=models.SET_NULL, related_name='bi_dashboards', help_text="Optional link to internal OrgUnit / Department")` (driver: 10.8-DSH-05)
+    - `is_published`: `BooleanField(default=False, help_text="True if published and visible to authorized users; False if draft")` (driver: 10.8-DSH-06)
+    - `is_template`: `BooleanField(default=False, help_text="True if available as a starter template for new dashboards")` (driver: 10.8-DSH-07)
+    - `is_default`: `BooleanField(default=False, help_text="Tenant default landing dashboard")` (driver: 10.8-DSH-08)
+    - `is_kiosk_enabled`: `BooleanField(default=False, help_text="Permits full-screen headerless display mode for office monitors")` (driver: 10.8-DSH-09)
+    - `color_palette_json`: `JSONField(default=list, help_text="Custom hex color sequence for charts: ['#1e40af', '#0d9488', '#f59e0b', ...]")` (driver: 10.8-DSH-04)
+    - `config_json`: `JSONField(default=dict, help_text="Advanced dashboard settings: margins, default date range, animation flags")` (driver: 10.8-DSH-10)
+    - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='created_bi_dashboards')` (driver: 10.8-DSH-11)
+    - `view_count`: `PositiveIntegerField(default=0)`
+    - `last_viewed_at`: `DateTimeField(null=True, blank=True)`
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_by`, `view_count`, `last_viewed_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'slug')]`, `indexes = [models.Index(fields=['tenant', 'category']), models.Index(fields=['tenant', 'is_published']), models.Index(fields=['tenant', 'is_default']), models.Index(fields=['tenant', 'org_unit'])]`
+
+- [ ] **`BiDashboardWidget`** [Prefix: `BDWG-`] (`apps/bi/models/Dashboards/BiDashboardWidgets.py`)
+  - **Purpose**: Visualization component placed on a dashboard canvas, binding governed semantic models and calculated measures to 13 distinct chart types with 12-column grid positioning, drilldown actions, and chart configurations.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `dashboard`: `ForeignKey('bi.BiDashboard', on_delete=models.CASCADE, related_name='widgets')`
+    - `title`: `CharField(max_length=200)` (e.g. "Total Net Revenue (YTD)", "Monthly Operating Expense vs Budget", "Order Fulfillment Funnel")
+    - `subtitle`: `CharField(max_length=255, blank=True)`
+    - `widget_type`: `CharField(max_length=40, choices=[('kpi_card', 'Headline KPI Metric Card'), ('line', 'Line Trend Chart'), ('area', 'Area / Stacked Area Chart'), ('bar', 'Horizontal Bar Chart'), ('column', 'Vertical Column Chart'), ('pie', 'Pie Chart'), ('donut', 'Donut Composition Chart'), ('gauge', 'Gauge / Target Progress'), ('heatmap', 'Matrix Heatmap'), ('funnel', 'Conversion Funnel'), ('treemap', 'Hierarchical Treemap'), ('table_pivot', 'Data / Pivot Table'), ('streaming_counter', 'Live Streaming Counter / Ticker')], default='kpi_card')` (driver: 10.8-WG-01)
+    - `semantic_model`: `ForeignKey('bi.SemanticModel', null=True, blank=True, on_delete=models.SET_NULL, related_name='dashboard_widgets', help_text="Governed analytical dataset source (10.4)")` (driver: 10.8-WG-02)
+    - `calculated_measure`: `ForeignKey('bi.CalculatedMeasure', null=True, blank=True, on_delete=models.SET_NULL, related_name='dashboard_widgets', help_text="Governed metric measure for KPI value and aggregations (10.4)")` (driver: 10.8-WG-02)
+    - `warehouse_table`: `ForeignKey('bi.WarehouseTable', null=True, blank=True, on_delete=models.SET_NULL, related_name='dashboard_widgets', help_text="Direct physical analytical warehouse table (10.3)")` (driver: 10.8-WG-02)
+    - `drill_hierarchy`: `ForeignKey('bi.DrillHierarchy', null=True, blank=True, on_delete=models.SET_NULL, related_name='dashboard_widgets', help_text="Pre-configured drill path (10.4)")` (driver: 10.8-WG-03)
+    - `aggregation_type`: `CharField(max_length=30, choices=[('sum', 'Sum'), ('avg', 'Average'), ('count', 'Count'), ('count_distinct', 'Distinct Count'), ('min', 'Minimum'), ('max', 'Maximum'), ('last', 'Latest Non-Null Value')], default='sum')` (driver: 10.8-WG-04)
+    - `pos_x`: `PositiveSmallIntegerField(default=0, help_text="Horizontal column coordinate on 12-col grid (0 to 11)")` (driver: 10.8-WG-05)
+    - `pos_y`: `PositiveSmallIntegerField(default=0, help_text="Vertical row coordinate on grid (0 to 100)")` (driver: 10.8-WG-05)
+    - `width_cols`: `PositiveSmallIntegerField(default=4, help_text="Width in columns on 12-col grid (1 to 12)")` (driver: 10.8-WG-05)
+    - `height_rows`: `PositiveSmallIntegerField(default=4, help_text="Height in grid row units (1 to 12)")` (driver: 10.8-WG-05)
+    - `refresh_interval_seconds`: `PositiveIntegerField(default=0, help_text="Widget-specific auto-refresh interval (0 = inherit from dashboard)")` (driver: 10.8-WG-06)
+    - `drilldown_target_url`: `CharField(max_length=255, blank=True, help_text="Destination URL or report route triggered upon clicking widget marks")` (driver: 10.8-WG-07)
+    - `chart_config_json`: `JSONField(default=dict, help_text="Visual options: colors, axis labels, legend position, tooltip formatting, sparkline history points")` (driver: 10.8-WG-08)
+    - `filter_overrides_json`: `JSONField(default=dict, help_text="Fixed filter overrides applied exclusively to this widget")` (driver: 10.8-WG-09)
+    - `sort_order`: `PositiveIntegerField(default=10)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'dashboard']), models.Index(fields=['tenant', 'widget_type']), models.Index(fields=['tenant', 'semantic_model']), models.Index(fields=['tenant', 'calculated_measure']), models.Index(fields=['tenant', 'sort_order'])]`
+
+- [ ] **`BiDashboardBookmark`** [Prefix: `BDBM-`] (`apps/bi/models/Dashboards/BiDashboardBookmarks.py`)
+  - **Purpose**: Saved analytical view state capturing active filter bar values, cross-filtering selections, and user personalization with default view assignment and team sharing.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `dashboard`: `ForeignKey('bi.BiDashboard', on_delete=models.CASCADE, related_name='bookmarks')`
+    - `user`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='bi_dashboard_bookmarks')`
+    - `name`: `CharField(max_length=150)` (e.g. "My Western Region View", "Q3 High-Value Opportunities", "Pending Fulfillment Escalations")
+    - `filter_state_json`: `JSONField(default=dict, help_text="Serialized filter selections: {filter_key: selected_value, ...}")` (driver: 10.8-BM-01)
+    - `crossfilter_state_json`: `JSONField(default=dict, help_text="Active cross-filtering selections: {widget_id: selected_dimension_value}")` (driver: 10.8-BM-02)
+    - `is_default`: `BooleanField(default=False, help_text="If True, this bookmark automatically loads when this user accesses the dashboard")` (driver: 10.8-BM-03)
+    - `is_shared`: `BooleanField(default=False, help_text="If True, other authorized tenant users can view and apply this bookmark")` (driver: 10.8-BM-04)
+    - `view_count`: `PositiveIntegerField(default=0)`
+    - `last_viewed_at`: `DateTimeField(null=True, blank=True)`
+    - `description`: `TextField(blank=True)`
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `user`, `view_count`, `last_viewed_at`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'dashboard', 'user', 'name')]`, `indexes = [models.Index(fields=['tenant', 'dashboard']), models.Index(fields=['tenant', 'user']), models.Index(fields=['tenant', 'is_default']), models.Index(fields=['tenant', 'is_shared'])]`
+
+- [ ] **`BiDashboardFilter`** [Prefix: `BDFL-`] (`apps/bi/models/Dashboards/BiDashboardFilters.py`)
+  - **Purpose**: Global dashboard-level filter control definition placed in the top filter bar, providing dropdowns, multi-select badges, date ranges, relative presets, numeric ranges, and search inputs that dynamically slice canvas widgets.
+  - **Fields**:
+    - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
+    - `number`: `CharField(max_length=20, editable=False)`
+    - `dashboard`: `ForeignKey('bi.BiDashboard', on_delete=models.CASCADE, related_name='filters')`
+    - `filter_label`: `CharField(max_length=100)` (e.g. "Fiscal Year", "Sales Region", "Product Category", "Order Status")
+    - `filter_key`: `SlugField(max_length=60, help_text="Query parameter key passed in filter requests, e.g. 'fiscal_year', 'region'")` (driver: 10.8-FL-01)
+    - `filter_type`: `CharField(max_length=30, choices=[('dropdown', 'Single Select Dropdown'), ('multi_select', 'Multi-Select Dropdown / Badges'), ('date_range', 'Date Range Picker (From / To)'), ('date_preset', 'Relative Date Preset (Today, MTD, QTD, YTD)'), ('number_range', 'Numeric Range Slider / Min-Max'), ('search_text', 'Search Text Input')], default='dropdown')` (driver: 10.8-FL-02)
+    - `target_field`: `CharField(max_length=100, help_text="Target semantic dimension or column filtered in the dataset, e.g. 'customer_region', 'order_date'")` (driver: 10.8-FL-03)
+    - `default_value`: `CharField(max_length=255, blank=True, help_text="Default selected value or preset token (e.g. 'current_year', 'all')")` (driver: 10.8-FL-04)
+    - `options_source`: `CharField(max_length=30, choices=[('static_list', 'Static Pre-defined Choices'), ('semantic_distinct', 'Distinct Values from Semantic Model'), ('warehouse_column', 'Distinct Values from Warehouse Table')], default='static_list')` (driver: 10.8-FL-05)
+    - `static_options_json`: `JSONField(default=list, help_text="Pre-defined choices: [{'value': 'north', 'label': 'North Region'}, ...]")` (driver: 10.8-FL-05)
+    - `order`: `PositiveIntegerField(default=10, help_text="Display order in the top filter bar")` (driver: 10.8-FL-06)
+    - `is_required`: `BooleanField(default=False, help_text="If True, user must select a value before queries execute")` (driver: 10.8-FL-07)
+    - `is_active`: `BooleanField(default=True)`
+    - `created_at` / `updated_at`
+  - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
+  - **Constraints & Indexes**: `unique_together = [('tenant', 'dashboard', 'filter_key')]`, `indexes = [models.Index(fields=['tenant', 'dashboard']), models.Index(fields=['tenant', 'filter_key']), models.Index(fields=['tenant', 'order'])]`
+
+---
+
+## Backend Packages (`apps/bi/{models,forms,views,urls}/Dashboards/`)
+
+### Models (`apps/bi/models/Dashboards/`)
+- [ ] `apps/bi/models/Dashboards/__init__.py`
+- [ ] `apps/bi/models/Dashboards/BiDashboards.py` (`BiDashboard`)
+- [ ] `apps/bi/models/Dashboards/BiDashboardWidgets.py` (`BiDashboardWidget`)
+- [ ] `apps/bi/models/Dashboards/BiDashboardBookmarks.py` (`BiDashboardBookmark`)
+- [ ] `apps/bi/models/Dashboards/BiDashboardFilters.py` (`BiDashboardFilter`)
+- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
+
+### Forms (`apps/bi/forms/Dashboards/`)
+- [ ] `apps/bi/forms/Dashboards/__init__.py`
+- [ ] `apps/bi/forms/Dashboards/BiDashboardForms.py` (`BiDashboardForm`, `BiDashboardDuplicateForm`)
+- [ ] `apps/bi/forms/Dashboards/BiDashboardWidgetForms.py` (`BiDashboardWidgetForm`, `BiDashboardWidgetPositionForm`)
+- [ ] `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py` (`BiDashboardBookmarkForm`)
+- [ ] `apps/bi/forms/Dashboards/BiDashboardFilterForms.py` (`BiDashboardFilterForm`)
+- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
+
+### Views (`apps/bi/views/Dashboards/`)
+- [ ] `apps/bi/views/Dashboards/__init__.py`
+- [ ] `apps/bi/views/Dashboards/BiDashboards.py` (`bi_dashboard_list`, `bi_dashboard_create`, `bi_dashboard_detail`, `bi_dashboard_edit`, `bi_dashboard_delete`, `bi_dashboard_publish`, `bi_dashboard_duplicate`)
+- [ ] `apps/bi/views/Dashboards/BiDashboardWidgets.py` (`bi_dashboard_widget_list`, `bi_dashboard_widget_create`, `bi_dashboard_widget_detail`, `bi_dashboard_widget_edit`, `bi_dashboard_widget_delete`, `bi_dashboard_widget_data`)
+- [ ] `apps/bi/views/Dashboards/BiDashboardBookmarks.py` (`bi_dashboard_bookmark_list`, `bi_dashboard_bookmark_create`, `bi_dashboard_bookmark_detail`, `bi_dashboard_bookmark_edit`, `bi_dashboard_bookmark_delete`, `bi_dashboard_bookmark_apply`)
+- [ ] `apps/bi/views/Dashboards/BiDashboardFilters.py` (`bi_dashboard_filter_list`, `bi_dashboard_filter_create`, `bi_dashboard_filter_detail`, `bi_dashboard_filter_edit`, `bi_dashboard_filter_delete`)
+- [ ] `apps/bi/views/Dashboards/BiDashboardCanvasViews.py` (`bi_dashboard_canvas_view`, `bi_dashboard_canvas_builder`, `bi_dashboard_kiosk_view`)
+- [ ] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
+
+### URLs (`apps/bi/urls/Dashboards/`)
+- [ ] `apps/bi/urls/Dashboards/__init__.py` (aggregates and re-exports `urlpatterns`)
+- [ ] `apps/bi/urls/Dashboards/BiDashboardUrls.py`
+- [ ] `apps/bi/urls/Dashboards/BiDashboardWidgetUrls.py`
+- [ ] `apps/bi/urls/Dashboards/BiDashboardBookmarkUrls.py`
+- [ ] `apps/bi/urls/Dashboards/BiDashboardFilterUrls.py`
+- [ ] `apps/bi/urls/Dashboards/BiDashboardCanvasUrls.py`
+- [ ] Update `apps/bi/urls/__init__.py` to include `Dashboards` routes
+
+### Admin & Integration
+- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.8"]` mapping NavERP.md feature bullets to views
+- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.8 (executive KPI dashboard, operational monitoring board, sales conversion funnel, widgets across all 13 types, global filter bars, and personal bookmarks)
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.8"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+  ```python
+  "10.8": {
+      "Interactive Dashboards": "bi:bi_dashboard_list",
+      "Visualization Library": "bi:bi_dashboard_widget_list",
+      "Drag-and-Drop Dashboard Builder": "bi:bi_dashboard_canvas_view",
+      "Personalization & Bookmarks": "bi:bi_dashboard_bookmark_list",
+      "Real-Time & Streaming Visuals": "bi:bi_dashboard_list",
+      # Extra live leaves
+      "Dashboards": "bi:bi_dashboard_list",
+      "Dashboard Widgets": "bi:bi_dashboard_widget_list",
+      "Dashboard Bookmarks": "bi:bi_dashboard_bookmark_list",
+      "Dashboard Filters": "bi:bi_dashboard_filter_list",
+      "Dashboard Canvas": "bi:bi_dashboard_canvas_view",
+  },
+  ```
+
+---
+
+## Templates (`templates/bi/dashboards/`)
+
+- [ ] `templates/bi/dashboards/canvas/viewer.html` (Interactive full-featured dashboard viewer: responsive 12-column coordinate grid layout, top filter bar with dynamic slicing, saved bookmarks dropdown and drawer, widget auto-refresh polling loop, cross-filtering interaction, theme switcher, and distraction-free kiosk mode)
+- [ ] `templates/bi/dashboards/dashboard/list.html` (filters: category, layout_type, theme, is_published; search: title, number, slug; preview cards, action buttons)
+- [ ] `templates/bi/dashboards/dashboard/detail.html` (Dashboard metadata header, layout blueprint summary, linked widgets table with grid coordinates, active filters bar list, saved bookmarks list, quick-launch canvas button)
+- [ ] `templates/bi/dashboards/dashboard/form.html`
+- [ ] `templates/bi/dashboards/widget/list.html` (filters: dashboard, widget_type, aggregation_type; search: title, number; grid coordinate tags, data source badges)
+- [ ] `templates/bi/dashboards/widget/detail.html` (Widget type preview, data binding to SemanticModel/Measure/Table, 12-col coordinates, JSON chart configuration viewer, drilldown URL action)
+- [ ] `templates/bi/dashboards/widget/form.html`
+- [ ] `templates/bi/dashboards/bookmark/list.html` (filters: dashboard, is_default, is_shared; search: name, number, user; filter state JSON preview)
+- [ ] `templates/bi/dashboards/bookmark/detail.html` (Bookmark details, owner user, active filter state dictionary cards, cross-filter values, apply-to-canvas action)
+- [ ] `templates/bi/dashboards/bookmark/form.html`
+- [ ] `templates/bi/dashboards/filter/list.html` (filters: dashboard, filter_type, options_source; search: filter_label, filter_key, target_field; order sorting)
+- [ ] `templates/bi/dashboards/filter/detail.html` (Filter control configuration, target semantic field, options source, default value, sample rendered widget preview)
+- [ ] `templates/bi/dashboards/filter/form.html`
+
+---
+
+## Verification & Close-out
+
+- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0019_...` and run `python manage.py migrate`
+- [ ] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
+- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
+- [ ] Execute smoke test (`temp/smoke_bi_10_8.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.8.md`
+- [ ] Run Phase 5 Code Fixer agent
+- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dashboards_models.py`, `test_dashboards_forms.py`, `test_dashboards_views.py`, `test_dashboards_security.py`
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.8 models/routes/templates and update `README.md`
+- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.8.md`
+
+## Later passes / deferred
+- Dedicated ASGI WebSocket Streaming Server (e.g. Django Channels / Centrifugo) -> Advanced real-time streaming infrastructure pass
+- Third-Party Visualization Plugin Marketplace (Custom Web Components / D3.js plugins) -> Extensible developer plugin pass
+- Headless Chromium Server-Side PDF/PNG Dashboard Rendering -> Sub-module 10.9 & 10.16 distribution engine
+- Cross-Dashboard Tokenized URL Deep Linking -> Sub-module 10.17 Embedded & Mobile BI
+
+## Review notes
+(filled in at the end of Sub-module 10.8 execution)
+
+---
 # Sub-module 10.7: Data Catalog, Lineage & Governance (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.7.md` (2026-11-05)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, 10.4, 10.5, and 10.6.
