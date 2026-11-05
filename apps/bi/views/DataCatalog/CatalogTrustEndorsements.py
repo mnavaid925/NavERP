@@ -88,13 +88,13 @@ def catalog_trust_endorsement_create(request):
     asset_param = request.GET.get("asset")
     if asset_param and asset_param.isdigit():
         initial["asset"] = asset_param
-    initial["attested_by"] = request.user.pk
 
     if request.method == "POST":
         form = CatalogTrustEndorsementForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             endorsement = form.save(commit=False)
             endorsement.tenant = request.tenant
+            endorsement.attested_by = request.user
             endorsement.save()
 
             # Recalculate average rating on asset if rating_value was provided
