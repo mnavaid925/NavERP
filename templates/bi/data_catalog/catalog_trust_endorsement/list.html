@@ -214,7 +214,7 @@
     {% if page_obj.has_other_pages %}
     <div class="card-footer pagination">
         {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
             Previous
         </a>
         {% endif %}
@@ -222,7 +222,7 @@
             Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
         </span>
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
             Next
         </a>
         {% endif %}
