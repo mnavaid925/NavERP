@@ -25,6 +25,14 @@ from apps.bi.forms.MasterData.MdmGoldenRecordForms import (
 from apps.bi.forms.MasterData.MdmHierarchyNodeForms import MdmHierarchyNodeForm
 from apps.bi.forms.MasterData.MdmReferenceCodeForms import MdmReferenceCodeForm
 from apps.bi.forms.MasterData.MdmSurvivorshipRuleForms import MdmSurvivorshipRuleForm
+from apps.bi.forms.DataCatalog.CatalogAssets import (
+    CatalogAssetForm,
+    CatalogAssetCertifyForm,
+    CatalogAssetDeprecateForm,
+)
+from apps.bi.forms.DataCatalog.CatalogLineageEdges import CatalogLineageEdgeForm
+from apps.bi.forms.DataCatalog.DataGovernancePolicies import DataGovernancePolicyForm
+from apps.bi.forms.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsementForm
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -67,4 +75,10 @@ __all__ = [
     "MdmSurvivorshipRuleForm",
     "MdmHierarchyNodeForm",
     "MdmReferenceCodeForm",
+    "CatalogAssetForm",
+    "CatalogAssetCertifyForm",
+    "CatalogAssetDeprecateForm",
+    "CatalogLineageEdgeForm",
+    "DataGovernancePolicyForm",
+    "CatalogTrustEndorsementForm",
 ]
