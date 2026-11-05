@@ -85,7 +85,8 @@ class CatalogTrustEndorsement(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} ({self.asset.name} - {self.get_verdict_display()})"
+        asset_label = self.asset.name if "asset" in self._state.fields_cache else f"Asset #{self.asset_id}"
+        return f"{self.number} ({asset_label} - {self.get_verdict_display()})"
 
     def get_absolute_url(self):
         return reverse("bi:catalog_trust_endorsement_detail", kwargs={"pk": self.pk})
