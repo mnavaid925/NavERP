@@ -63,3 +63,23 @@ Good baseline ORM hygiene with pre-filtering, aggregated counts, and consistent 
 - **[Minor]** `apps/bi/models/DataCatalog/{CatalogAssets,CatalogLineageEdges,CatalogTrustEndorsements,DataGovernancePolicies}.py`: Missing composite ordering indexes `(tenant, -created_at)` and `(tenant, -attested_at)`. Fix: Add composite ordering indexes matching sibling BI models.
 
 ---
+
+## 5. QA Smoke Tester Pass
+
+### Verdict
+Passed 100% of route GETs (23/23), POST create/edit redirections (8/8), cross-tenant IDOR protection (18/18 -> 404), zero comment leaks, and clean pagination/junk-param handling. Uncovered two new runtime defects (AuditLog `object_id` recorded as NULL due to `obj.delete()` called before `write_audit_log`, and `average_rating_overall` missing from endorsement list context) while corroborating all previous findings.
+
+### Findings
+- **[Important]** `apps/bi/views/DataCatalog/CatalogAssets.py:199-206`, `apps/bi/views/DataCatalog/CatalogLineageEdges.py:162-169`, `apps/bi/views/DataCatalog/DataGovernancePolicies.py:144-151`, `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py:163-170`: In all four delete views, `obj.delete()` is executed BEFORE `write_audit_log`. Because `delete()` clears `obj.pk` to `None`, `AuditLog.object_id` is permanently written as `NULL`. Fix: Call `write_audit_log(...)` BEFORE calling `obj.delete()`.
+- **[Important]** `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py:57-66` & `templates/bi/data_catalog/catalog_trust_endorsement/list.html:63-71`: Contract drift on context key. The view omits `average_rating_overall` (pinned in Contract Section 4.5), and `list.html` hardcodes `5-Star System`. Fix: Calculate `average_rating_overall` in view, pass to context, and render in `list.html`.
+- **[Important]** `apps/bi/forms/DataCatalog/CatalogAssets.py:68` & `apps/bi/forms/DataCatalog/DataGovernancePolicies.py:47`: Blank `code` field blocked by Django form validation before `clean()` auto-slug. Fix: Set `self.fields["code"].required = False` on both forms.
+- **[Important]** `apps/bi/forms/DataCatalog/CatalogTrustEndorsements.py:43` & `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py:94-98`: `attested_by` trusted from POST in `CatalogTrustEndorsementForm`. Fix: Exclude `attested_by` from form and set `endorsement.attested_by = request.user` in view.
+- **[Important]** `apps/bi/views/DataCatalog/CatalogTrustEndorsements.py:132-155, 158-172`: Endorsement edit and delete do not recalculate `asset.average_rating`. Fix: Extract atomic `_recalculate_asset_rating(asset)` and call on create, edit, delete.
+- **[Important]** `apps/bi/views/DataCatalog/CatalogAssets.py:211-256`: Non-stewards / non-admins can alter certification and deprecation status. Fix: Add authorization check restricting to data steward, tenant admin, or superuser.
+- **[Important]** `templates/bi/data_catalog/catalog_asset/detail.html:326`: `overall_health_score` does not exist on `DataQualityScorecard` (field is `overall_quality_score`). Fix: Update template reference.
+- **[Important]** `templates/bi/data_catalog/catalog_lineage_edge/detail.html:191`: `step_order` does not exist on `TransformationStep` (field is `sequence`). Fix: Update template reference.
+- **[Important]** `templates/bi/data_catalog/{catalog_asset,catalog_lineage_edge,data_governance_policy,catalog_trust_endorsement}/detail.html`: Missing POST delete form buttons in `page-actions`. Fix: Add POST delete form buttons with confirm dialogs.
+- **[Important]** `templates/bi/data_catalog/catalog_asset/list.html` & `templates/bi/data_catalog/data_governance_policy/list.html`: Missing `<select name="status">` and `<select name="enforcement">` in filter forms. Fix: Add missing select controls.
+- **[Minor]** `apps/bi/views/DataCatalog/Overview.py:72-81` & `templates/bi/data_catalog/catalog_overview.html:287`: Progress bar style uses raw item count as percentage width. Fix: Compute percentage `d.pct` in Python in `Overview.py`.
+
+---
