@@ -50,10 +50,12 @@ def catalog_trust_endorsement_list(request):
         total=Count("id"),
         certified=Count("id", filter=Q(verdict="approved_certified")),
         deprecated=Count("id", filter=Q(verdict="deprecated_scheduled_retirement")),
+        avg_rating=Avg("rating_value"),
     )
     total_count = counts["total"] or 0
     certified_count = counts["certified"] or 0
     deprecated_count = counts["deprecated"] or 0
+    average_rating_overall = round(counts["avg_rating"], 2) if counts["avg_rating"] is not None else None
 
     paginator = Paginator(queryset.order_by("-created_at"), 15)
     page_number = request.GET.get("page")
@@ -67,6 +69,7 @@ def catalog_trust_endorsement_list(request):
         "total_count": total_count,
         "certified_count": certified_count,
         "deprecated_count": deprecated_count,
+        "average_rating_overall": average_rating_overall,
     }
     return render(request, "bi/data_catalog/catalog_trust_endorsement/list.html", context)
 
