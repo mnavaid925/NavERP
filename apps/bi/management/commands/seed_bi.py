@@ -29,6 +29,10 @@ from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
 from apps.bi.models.DataCatalog.CatalogLineageEdges import CatalogLineageEdge
 from apps.bi.models.DataCatalog.DataGovernancePolicies import DataGovernancePolicy
 from apps.bi.models.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsement
+from apps.bi.models.Dashboards.BiDashboards import BiDashboard
+from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
+from apps.bi.models.Dashboards.BiDashboardBookmarks import BiDashboardBookmark
+from apps.bi.models.Dashboards.BiDashboardFilters import BiDashboardFilter
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -2093,5 +2097,351 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Catalog & Governance for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Data Catalog & Governance already seeded for tenant: {tenant.name}")
+
+            # -------------------------------------------------------------
+            # Sub-module 10.8: Dashboards & Visualization
+            # -------------------------------------------------------------
+            if not BiDashboard.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"  Seeding BI Dashboards & Visualization for tenant: {tenant.name}...")
+                with transaction.atomic():
+                    tenant_admin = (
+                        User.objects.filter(username__in=[f"admin_{tenant.subdomain}", f"admin_{tenant.slug}", "admin_acme"]).first()
+                        or User.objects.filter(is_superuser=True).first()
+                    )
+
+                    sem_ref = SemanticModel.objects.filter(tenant=tenant).first()
+                    calc_ref = CalculatedMeasure.objects.filter(tenant=tenant).first()
+                    wh_ref = WarehouseTable.objects.filter(tenant=tenant).first()
+                    drill_ref = DrillHierarchy.objects.filter(tenant=tenant).first()
+
+                    # 1. Dashboards
+                    dsh_exec, _ = BiDashboard.objects.get_or_create(
+                        tenant=tenant,
+                        slug="executive-performance-command-center",
+                        defaults={
+                            "title": "Executive Performance Command Center",
+                            "category": "executive",
+                            "layout_type": "grid_12",
+                            "theme": "slate_corporate",
+                            "refresh_interval_seconds": 60,
+                            "role_required": "all",
+                            "is_published": True,
+                            "is_template": False,
+                            "is_default": True,
+                            "is_kiosk_enabled": True,
+                            "created_by": tenant_admin,
+                            "description": "C-Suite consolidated KPI overview across net revenue, operating margins, customer growth, and departmental performance.",
+                            "is_active": True,
+                        },
+                    )
+
+                    dsh_ops, _ = BiDashboard.objects.get_or_create(
+                        tenant=tenant,
+                        slug="operational-monitoring-board",
+                        defaults={
+                            "title": "Plant & Supply Chain Operational Monitoring Board",
+                            "category": "operations",
+                            "layout_type": "operational_monitoring",
+                            "theme": "amber_industrial",
+                            "refresh_interval_seconds": 30,
+                            "role_required": "operations",
+                            "is_published": True,
+                            "is_template": True,
+                            "is_default": False,
+                            "is_kiosk_enabled": True,
+                            "created_by": tenant_admin,
+                            "description": "High-frequency streaming telemetry board tracking line throughput, SLA fulfillment, and ingestion health.",
+                            "is_active": True,
+                        },
+                    )
+
+                    dsh_sales, _ = BiDashboard.objects.get_or_create(
+                        tenant=tenant,
+                        slug="sales-conversion-funnel-analytics",
+                        defaults={
+                            "title": "Sales Performance & Conversion Funnel",
+                            "category": "sales_crm",
+                            "layout_type": "executive_summary",
+                            "theme": "emerald_growth",
+                            "refresh_interval_seconds": 300,
+                            "role_required": "all",
+                            "is_published": True,
+                            "is_template": False,
+                            "is_default": False,
+                            "is_kiosk_enabled": False,
+                            "created_by": tenant_admin,
+                            "description": "Deep-dive sales analytics mapping pipeline conversion ratios, deal velocity, and regional quotas.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 2. Widgets on Executive Dashboard
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        title="Total Net Billed Revenue (YTD)",
+                        defaults={
+                            "subtitle": "Consolidated Financial Performance",
+                            "widget_type": "kpi_card",
+                            "semantic_model": sem_ref,
+                            "calculated_measure": calc_ref,
+                            "aggregation_type": "sum",
+                            "pos_x": 0,
+                            "pos_y": 0,
+                            "width_cols": 4,
+                            "height_rows": 3,
+                            "refresh_interval_seconds": 60,
+                            "drilldown_target_url": "/bi/dashboards/widgets/",
+                            "sort_order": 10,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        title="Operating Margin %",
+                        defaults={
+                            "subtitle": "EBITDA Margin Efficiency",
+                            "widget_type": "kpi_card",
+                            "calculated_measure": calc_ref,
+                            "aggregation_type": "avg",
+                            "pos_x": 4,
+                            "pos_y": 0,
+                            "width_cols": 4,
+                            "height_rows": 3,
+                            "sort_order": 20,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        title="Customer Retention & ARR Expansion",
+                        defaults={
+                            "subtitle": "Net Retention Rate (112%)",
+                            "widget_type": "kpi_card",
+                            "aggregation_type": "avg",
+                            "pos_x": 8,
+                            "pos_y": 0,
+                            "width_cols": 4,
+                            "height_rows": 3,
+                            "sort_order": 30,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        title="Quarterly Revenue Trajectory vs Target",
+                        defaults={
+                            "subtitle": "Quarterly Trend (Actual vs Budget)",
+                            "widget_type": "line",
+                            "semantic_model": sem_ref,
+                            "aggregation_type": "sum",
+                            "pos_x": 0,
+                            "pos_y": 3,
+                            "width_cols": 8,
+                            "height_rows": 6,
+                            "sort_order": 40,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        title="Revenue Distribution by Product Line",
+                        defaults={
+                            "subtitle": "Product Portfolio Composition",
+                            "widget_type": "donut",
+                            "warehouse_table": wh_ref,
+                            "aggregation_type": "sum",
+                            "pos_x": 8,
+                            "pos_y": 3,
+                            "width_cols": 4,
+                            "height_rows": 6,
+                            "sort_order": 50,
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. Widgets on Operational Monitoring Board
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_ops,
+                        title="Real-Time Data Ingestion Throughput",
+                        defaults={
+                            "subtitle": "Events Processed / Second",
+                            "widget_type": "streaming_counter",
+                            "aggregation_type": "last",
+                            "pos_x": 0,
+                            "pos_y": 0,
+                            "width_cols": 4,
+                            "height_rows": 4,
+                            "refresh_interval_seconds": 10,
+                            "sort_order": 10,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_ops,
+                        title="Pipeline Processing Latency & Volume",
+                        defaults={
+                            "subtitle": "Hourly Ingestion Micro-Batches",
+                            "widget_type": "area",
+                            "aggregation_type": "sum",
+                            "pos_x": 4,
+                            "pos_y": 0,
+                            "width_cols": 8,
+                            "height_rows": 4,
+                            "sort_order": 20,
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. Widgets on Sales Conversion Dashboard
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_sales,
+                        title="Enterprise Opportunity Conversion Funnel",
+                        defaults={
+                            "subtitle": "Lead -> Qualification -> Proposal -> Won",
+                            "widget_type": "funnel",
+                            "aggregation_type": "count",
+                            "pos_x": 0,
+                            "pos_y": 0,
+                            "width_cols": 6,
+                            "height_rows": 6,
+                            "sort_order": 10,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardWidget.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_sales,
+                        title="Regional Opportunity Velocity",
+                        defaults={
+                            "subtitle": "Quarterly Win Rates by Territory",
+                            "widget_type": "bar",
+                            "aggregation_type": "avg",
+                            "pos_x": 6,
+                            "pos_y": 0,
+                            "width_cols": 6,
+                            "height_rows": 6,
+                            "sort_order": 20,
+                            "is_active": True,
+                        },
+                    )
+
+                    # 5. Global Filter Controls on Executive Dashboard
+                    BiDashboardFilter.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        filter_key="fiscal_period",
+                        defaults={
+                            "filter_label": "Fiscal Period",
+                            "filter_type": "dropdown",
+                            "target_field": "fiscal_period",
+                            "default_value": "2026-Q4",
+                            "options_source": "static_list",
+                            "static_options_json": [
+                                {"value": "2026-Q1", "label": "FY2026 Q1"},
+                                {"value": "2026-Q2", "label": "FY2026 Q2"},
+                                {"value": "2026-Q3", "label": "FY2026 Q3"},
+                                {"value": "2026-Q4", "label": "FY2026 Q4"},
+                            ],
+                            "order": 10,
+                            "is_required": False,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardFilter.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        filter_key="region",
+                        defaults={
+                            "filter_label": "Market Region",
+                            "filter_type": "dropdown",
+                            "target_field": "market_region",
+                            "default_value": "all",
+                            "options_source": "static_list",
+                            "static_options_json": [
+                                {"value": "all", "label": "All Regions"},
+                                {"value": "na", "label": "North America"},
+                                {"value": "emea", "label": "Europe & Middle East"},
+                                {"value": "apac", "label": "Asia-Pacific"},
+                            ],
+                            "order": 20,
+                            "is_required": False,
+                            "is_active": True,
+                        },
+                    )
+
+                    BiDashboardFilter.objects.get_or_create(
+                        tenant=tenant,
+                        dashboard=dsh_exec,
+                        filter_key="date_range",
+                        defaults={
+                            "filter_label": "Date Horizon",
+                            "filter_type": "date_preset",
+                            "target_field": "transaction_date",
+                            "default_value": "ytd",
+                            "options_source": "static_list",
+                            "order": 30,
+                            "is_required": False,
+                            "is_active": True,
+                        },
+                    )
+
+                    # 6. Saved Bookmarks
+                    if tenant_admin:
+                        BiDashboardBookmark.objects.get_or_create(
+                            tenant=tenant,
+                            dashboard=dsh_exec,
+                            user=tenant_admin,
+                            name="North America Q4 Executive Focus",
+                            defaults={
+                                "filter_state_json": {
+                                    "fiscal_period": "2026-Q4",
+                                    "region": "na",
+                                    "date_range": "qtd",
+                                },
+                                "crossfilter_state_json": {},
+                                "is_default": True,
+                                "is_shared": True,
+                                "description": "Default C-suite perspective filtered to North American operations for Q4.",
+                                "is_active": True,
+                            },
+                        )
+
+                        BiDashboardBookmark.objects.get_or_create(
+                            tenant=tenant,
+                            dashboard=dsh_exec,
+                            user=tenant_admin,
+                            name="Global Full Year Baseline",
+                            defaults={
+                                "filter_state_json": {
+                                    "fiscal_period": "2026-Q4",
+                                    "region": "all",
+                                    "date_range": "ytd",
+                                },
+                                "crossfilter_state_json": {},
+                                "is_default": False,
+                                "is_shared": True,
+                                "description": "Global enterprise-wide year-to-date performance view.",
+                                "is_active": True,
+                            },
+                        )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Dashboards & Visualization for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Dashboards & Visualization already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
