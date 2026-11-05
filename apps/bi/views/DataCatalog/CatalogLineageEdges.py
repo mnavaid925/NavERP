@@ -130,7 +130,12 @@ def catalog_lineage_edge_create(request):
 
 @login_required
 def catalog_lineage_edge_edit(request, pk):
-    edge = bi_object(request, CatalogLineageEdge, pk)
+    edge = bi_object(
+        request,
+        CatalogLineageEdge,
+        pk,
+        select_related=("upstream_asset", "downstream_asset"),
+    )
     if request.method == "POST":
         form = CatalogLineageEdgeForm(request.POST, instance=edge, tenant=request.tenant)
         if form.is_valid():
@@ -158,7 +163,12 @@ def catalog_lineage_edge_edit(request, pk):
 @require_POST
 @tenant_admin_required
 def catalog_lineage_edge_delete(request, pk):
-    edge = bi_object(request, CatalogLineageEdge, pk)
+    edge = bi_object(
+        request,
+        CatalogLineageEdge,
+        pk,
+        select_related=("upstream_asset", "downstream_asset"),
+    )
     edge_number = edge.number
     write_audit_log(
         request.user,
