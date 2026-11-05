@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Avg, Count, Q
@@ -12,6 +13,7 @@ from apps.bi.forms.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndor
 from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
 from apps.bi.models.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsement
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -142,6 +144,13 @@ def catalog_trust_endorsement_create(request):
 @login_required
 def catalog_trust_endorsement_edit(request, pk):
     endorsement = bi_object(request, CatalogTrustEndorsement, pk)
+    if not (
+        endorsement.attested_by == request.user
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user.is_superuser
+    ):
+        raise PermissionDenied("Only the original reviewer or tenant administrator can edit this endorsement.")
+
     if request.method == "POST":
         form = CatalogTrustEndorsementForm(request.POST, instance=endorsement, tenant=request.tenant)
         if form.is_valid():
@@ -172,8 +181,8 @@ def catalog_trust_endorsement_edit(request, pk):
     return render(request, "bi/data_catalog/catalog_trust_endorsement/form.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def catalog_trust_endorsement_delete(request, pk):
     endorsement = bi_object(request, CatalogTrustEndorsement, pk)
     endorsement_number = endorsement.number
