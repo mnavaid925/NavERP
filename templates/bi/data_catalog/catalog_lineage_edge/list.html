@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Data Lineage Graph — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <span>Lineage Graph</span>
+        </div>
+        <h1 class="page-title">End-to-End Data Lineage & Traceability</h1>
+        <p class="text-muted text-sm">Source-to-report provenance, column-level derivations, and automated upstream root-cause / downstream blast radius analysis</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:catalog_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Catalog Overview</span>
+        </a>
+        <a href="{% url 'bi:catalog_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Catalog Assets</span>
+        </a>
+        <a href="{% url 'bi:data_governance_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-check"></i>
+            <span>Policies</span>
+        </a>
+        <a href="{% url 'bi:catalog_lineage_edge_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add Lineage Edge</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="git-fork"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Lineage Edges</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Table-Level Edges</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ table_lineage_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="columns-3"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Column-Level Lineage</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ column_lineage_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Critical Dependencies</div>
+            <div class="text-2xl font-bold text-rose-600">{{ critical_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Column, rule, asset..." class="form-input text-sm">
+            </div>
+            <div>
+                <label class="form-label text-xs">Lineage Granularity</label>
+                <select name="lineage_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in lineage_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.lineage_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Impact Criticality</label>
+                <select name="impact" class="form-select text-sm">
+                    <option value="">All Impact Levels</option>
+                    {% for val, label in impact_choices %}
+                    <option value="{{ val }}" {% if request.GET.impact == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1 justify-center">
+                    <i data-lucide="search"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.lineage_type or request.GET.impact or request.GET.asset %}
+                <a href="{% url 'bi:catalog_lineage_edge_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Edge ID</th>
+                    <th>Upstream Source</th>
+                    <th></th>
+                    <th>Downstream Consumer</th>
+                    <th>Granularity</th>
+                    <th>Criticality</th>
+                    <th>Pipeline Link</th>
+                    <th>Extraction</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for edge in lineage_edges %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:catalog_lineage_edge_detail' edge.pk %}" class="text-primary hover:underline">
+                            {{ edge.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:catalog_asset_detail' edge.upstream_asset.pk %}" class="font-medium text-sm text-slate-900 hover:text-primary">
+                            {{ edge.upstream_asset.name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">
+                            {{ edge.upstream_asset.code }}
+                            {% if edge.upstream_column %}&bull; <span class="text-indigo-600 font-semibold">.{{ edge.upstream_column }}</span>{% endif %}
+                        </div>
+                    </td>
+                    <td class="text-center text-slate-400">
+                        <i data-lucide="arrow-right" class="w-4 h-4 inline"></i>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:catalog_asset_detail' edge.downstream_asset.pk %}" class="font-medium text-sm text-slate-900 hover:text-primary">
+                            {{ edge.downstream_asset.name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">
+                            {{ edge.downstream_asset.code }}
+                            {% if edge.downstream_column %}&bull; <span class="text-indigo-600 font-semibold">.{{ edge.downstream_column }}</span>{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if edge.lineage_type == 'table_level' %}
+                        <span class="badge badge-info">Table Lineage</span>
+                        {% elif edge.lineage_type == 'column_level' %}
+                        <span class="badge badge-green">Column Lineage</span>
+                        {% elif edge.lineage_type == 'pipeline_transformation' %}
+                        <span class="badge badge-slate">ETL Pipeline</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ edge.get_lineage_type_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if edge.impact_criticality == 'critical' %}
+                        <span class="badge badge-red">Critical</span>
+                        {% elif edge.impact_criticality == 'high' %}
+                        <span class="badge badge-amber">High</span>
+                        {% elif edge.impact_criticality == 'medium' %}
+                        <span class="badge badge-info">Medium</span>
+                        {% else %}
+                        <span class="badge badge-slate">Low</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs">
+                        {% if edge.etl_pipeline %}
+                        <span class="badge badge-slate font-mono">{{ edge.etl_pipeline.number }}</span>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if edge.is_automated_extraction %}
+                        <span class="badge badge-green"><i data-lucide="cpu" class="w-3 h-3 inline mr-1"></i>Automated</span>
+                        {% else %}
+                        <span class="badge badge-slate"><i data-lucide="user" class="w-3 h-3 inline mr-1"></i>Manual</span>
+                        {% endif %}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:catalog_lineage_edge_detail' edge.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:catalog_lineage_edge_edit' edge.pk %}" class="btn btn-icon" title="Edit Edge" aria-label="Edit Edge">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:catalog_lineage_edge_delete' edge.pk %}" class="inline" onsubmit="return confirm('Delete lineage edge {{ edge.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Edge" aria-label="Delete Edge">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="git-fork"></i>
+                            </div>
+                            <div class="empty-title">No Lineage Edges Found</div>
+                            <div class="empty-description">Define directional data dependencies between source datasets and downstream consumption targets.</div>
+                            <a href="{% url 'bi:catalog_lineage_edge_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create Lineage Edge</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.lineage_type %}&lineage_type={{ request.GET.lineage_type }}{% endif %}{% if request.GET.impact %}&impact={{ request.GET.impact }}{% endif %}" class="btn btn-outline btn-sm">
+            Previous
+        </a>
+        {% endif %}
+        <span class="text-xs text-muted">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.lineage_type %}&lineage_type={{ request.GET.lineage_type }}{% endif %}{% if request.GET.impact %}&impact={{ request.GET.impact }}{% endif %}" class="btn btn-outline btn-sm">
+            Next
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
