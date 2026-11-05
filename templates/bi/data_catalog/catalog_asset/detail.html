@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}{{ asset.name }} ({{ asset.number }}) — Data Catalog — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_asset_list' %}">Assets</a>
+            <span class="sep">/</span>
+            <span>{{ asset.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title mb-0">{{ asset.name }}</h1>
+            <span class="font-mono text-sm text-muted">({{ asset.number }})</span>
+            {% if asset.certification_status == 'certified' %}
+            <span class="badge badge-green"><i data-lucide="award" class="w-3 h-3 inline mr-1"></i>Certified</span>
+            {% elif asset.certification_status == 'endorsed' %}
+            <span class="badge badge-info">Endorsed</span>
+            {% elif asset.certification_status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif asset.certification_status == 'deprecated' %}
+            <span class="badge badge-slate">Deprecated</span>
+            {% elif asset.certification_status == 'quarantined' %}
+            <span class="badge badge-red">Quarantined</span>
+            {% else %}
+            <span class="badge badge-muted">Draft</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1 font-mono">{{ asset.code }} &bull; Domain: {{ asset.get_domain_display }} &bull; Type: {{ asset.get_asset_type_display }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:catalog_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Assets</span>
+        </a>
+        <a href="{% url 'bi:catalog_asset_edit' asset.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Asset</span>
+        </a>
+        <a href="{% url 'bi:catalog_lineage_edge_create' %}?downstream={{ asset.pk }}" class="btn btn-outline">
+            <i data-lucide="git-fork"></i>
+            <span>Add Lineage Edge</span>
+        </a>
+        <a href="{% url 'bi:catalog_trust_endorsement_create' %}?asset={{ asset.pk }}" class="btn btn-primary">
+            <i data-lucide="award"></i>
+            <span>Attest / Endorse</span>
+        </a>
+    </div>
+</div>
+
+{% if asset.certification_status == 'deprecated' %}
+<div class="card mb-6 border-amber-300 bg-amber-50">
+    <div class="card-body flex items-start gap-4 text-amber-900">
+        <div class="p-2 rounded-lg bg-amber-200">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-800"></i>
+        </div>
+        <div>
+            <h3 class="font-semibold text-base">This Asset is Deprecated</h3>
+            <p class="text-sm mt-0.5">This dataset is scheduled for retirement. New analytical queries and reports should migrate to the recommended successor asset.</p>
+            {% if replacement_asset %}
+            <div class="mt-2 text-sm">
+                <strong>Recommended Successor:</strong>
+                <a href="{% url 'bi:catalog_asset_detail' replacement_asset.pk %}" class="font-medium underline hover:text-amber-950 ml-1">
+                    {{ replacement_asset.number }} — {{ replacement_asset.name }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Metadata Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Main Specifications -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Technical Details Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Governance & Classification</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Data Sensitivity</dt>
+                        <dd class="mt-1">
+                            {% if asset.data_sensitivity == 'public' %}
+                            <span class="badge badge-slate">Public</span>
+                            {% elif asset.data_sensitivity == 'internal' %}
+                            <span class="badge badge-info">Internal</span>
+                            {% elif asset.data_sensitivity == 'confidential' %}
+                            <span class="badge badge-amber">Confidential</span>
+                            {% else %}
+                            <span class="badge badge-red">{{ asset.get_data_sensitivity_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Enterprise Tier</dt>
+                        <dd class="mt-1">
+                            {% if asset.enterprise_tier == 'tier_1_mission_critical' %}
+                            <span class="badge badge-red">Tier 1 Mission-Critical</span>
+                            {% elif asset.enterprise_tier == 'tier_2_production_core' %}
+                            <span class="badge badge-info">Tier 2 Production Core</span>
+                            {% elif asset.enterprise_tier == 'tier_3_departmental' %}
+                            <span class="badge badge-slate">Tier 3 Departmental</span>
+                            {% else %}
+                            <span class="badge badge-muted">Tier 4 Sandbox</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Data Steward</dt>
+                        <dd class="mt-1 font-medium text-slate-800">
+                            {% if asset.data_steward %}
+                            {{ asset.data_steward.get_full_name|default:asset.data_steward.username }}
+                            <span class="text-xs text-muted font-normal">({{ asset.data_steward.email }})</span>
+                            {% else %}
+                            <span class="text-slate-400">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Owning Org Unit</dt>
+                        <dd class="mt-1 font-medium text-slate-800">
+                            {{ asset.owning_org_unit.name|default:"Enterprise Wide" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Average Rating</dt>
+                        <dd class="mt-1 flex items-center gap-1 font-semibold text-slate-800">
+                            <i data-lucide="star" class="w-4 h-4 text-amber-500 fill-amber-500"></i>
+                            <span>{{ asset.average_rating }} / 5.00</span>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted font-medium uppercase">Inspection Views</dt>
+                        <dd class="mt-1 font-mono font-semibold text-slate-800">{{ asset.view_count }} times</dd>
+                    </div>
+                </dl>
+                {% if asset.description %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <h4 class="text-xs text-muted font-medium uppercase mb-2">Description & Business Purpose</h4>
+                    <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{{ asset.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Schema Columns -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="card-title">Technical Schema & Data Dictionary</h3>
+                <span class="badge badge-slate">{{ schema_columns|length }} Column{{ schema_columns|length|pluralize }}</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Column Name</th>
+                            <th>Data Type</th>
+                            <th>Nullable</th>
+                            <th>PII / Sensitive</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for col in schema_columns %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold text-slate-900">{{ col.name }}</td>
+                            <td class="font-mono text-xs text-slate-600">{{ col.data_type }}</td>
+                            <td>
+                                {% if col.is_nullable %}
+                                <span class="badge badge-slate">Nullable</span>
+                                {% else %}
+                                <span class="badge badge-info">Not Null</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if col.is_pii %}
+                                <span class="badge badge-red">PII</span>
+                                {% else %}
+                                <span class="text-xs text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-xs text-slate-600">{{ col.description|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-6 text-sm text-muted">
+                                No granular schema columns cataloged. Columns are synchronized during automated schema extraction.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Lineage Dependencies -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Data Lineage Tracing</h3>
+            </div>
+            <div class="card-body space-y-6">
+                <!-- Upstream Sources -->
+                <div>
+                    <h4 class="text-xs font-semibold uppercase text-muted tracking-wider mb-3 flex items-center gap-2">
+                        <i data-lucide="arrow-down-left" class="w-4 h-4 text-primary"></i>
+                        <span>Upstream Feeder Sources (Produces Data)</span>
+                    </h4>
+                    <div class="space-y-2">
+                        {% for edge in upstream_lineage %}
+                        <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div>
+                                <a href="{% url 'bi:catalog_asset_detail' edge.upstream_asset.pk %}" class="font-medium text-sm text-primary hover:underline">
+                                    {{ edge.upstream_asset.number }} — {{ edge.upstream_asset.name }}
+                                </a>
+                                <div class="text-xs text-muted mt-0.5">
+                                    Type: <span class="badge badge-slate">{{ edge.get_lineage_type_display }}</span>
+                                    {% if edge.upstream_column %}
+                                    &bull; Column: <code class="text-xs font-mono">{{ edge.upstream_column }}</code>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <span class="badge {% if edge.impact_criticality == 'critical' %}badge-red{% elif edge.impact_criticality == 'high' %}badge-amber{% else %}badge-slate{% endif %}">
+                                {{ edge.get_impact_criticality_display }}
+                            </span>
+                        </div>
+                        {% empty %}
+                        <p class="text-xs text-muted italic">No upstream source datasets linked. This asset may be an ingestion root.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Downstream Consumers -->
+                <div>
+                    <h4 class="text-xs font-semibold uppercase text-muted tracking-wider mb-3 flex items-center gap-2">
+                        <i data-lucide="arrow-up-right" class="w-4 h-4 text-emerald-600"></i>
+                        <span>Downstream Consumers & Reports (Consumes Data)</span>
+                    </h4>
+                    <div class="space-y-2">
+                        {% for edge in downstream_lineage %}
+                        <div class="p-3 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div>
+                                <a href="{% url 'bi:catalog_asset_detail' edge.downstream_asset.pk %}" class="font-medium text-sm text-primary hover:underline">
+                                    {{ edge.downstream_asset.number }} — {{ edge.downstream_asset.name }}
+                                </a>
+                                <div class="text-xs text-muted mt-0.5">
+                                    Type: <span class="badge badge-slate">{{ edge.get_lineage_type_display }}</span>
+                                    {% if edge.downstream_column %}
+                                    &bull; Target Column: <code class="text-xs font-mono">{{ edge.downstream_column }}</code>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <span class="badge {% if edge.impact_criticality == 'critical' %}badge-red{% elif edge.impact_criticality == 'high' %}badge-amber{% else %}badge-slate{% endif %}">
+                                {{ edge.get_impact_criticality_display }}
+                            </span>
+                        </div>
+                        {% empty %}
+                        <p class="text-xs text-muted italic">No downstream consuming models or reports linked yet.</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Cards -->
+    <div class="space-y-6">
+        <!-- Physical & Logical Mappings -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Spine & Layer Links</h3>
+            </div>
+            <div class="card-body text-sm space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Warehouse Table</div>
+                    {% if asset.warehouse_table %}
+                    <a href="{% url 'bi:warehouse_table_detail' asset.warehouse_table.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ asset.warehouse_table.number }} — {{ asset.warehouse_table.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">Not linked to warehouse table</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Semantic Model</div>
+                    {% if asset.semantic_model %}
+                    <a href="{% url 'bi:semantic_model_detail' asset.semantic_model.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ asset.semantic_model.number }} — {{ asset.semantic_model.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">Not linked to semantic model</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">MDM Golden Record</div>
+                    {% if asset.golden_record %}
+                    <a href="{% url 'bi:mdm_golden_record_detail' asset.golden_record.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ asset.golden_record.number }} — {{ asset.golden_record.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">Not linked to MDM golden record</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Business Glossary Term</div>
+                    {% if asset.business_glossary_term %}
+                    <a href="{% url 'bi:business_glossary_term_detail' asset.business_glossary_term.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ asset.business_glossary_term.number }} — {{ asset.business_glossary_term.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">No business glossary term linked</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Quality Health Scorecard</div>
+                    {% if asset.quality_scorecard %}
+                    <a href="{% url 'bi:data_quality_scorecard_detail' asset.quality_scorecard.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ asset.quality_scorecard.number }} (Overall Health: {{ asset.quality_scorecard.overall_health_score }}%)
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">No quality scorecard attached</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Keywords -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Search Keywords & Tags</h3>
+            </div>
+            <div class="card-body">
+                <div class="flex flex-wrap gap-2">
+                    {% for tag in search_tags %}
+                    <span class="badge badge-slate">#{{ tag }}</span>
+                    {% empty %}
+                    <span class="text-xs text-muted">No search tags specified.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Steward Action: Certification -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Steward Certification</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:catalog_asset_certify' asset.pk %}" class="space-y-4">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs">Certification Decision</label>
+                        {{ certify_form.certification_status }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Attestation Notes</label>
+                        {{ certify_form.certification_notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full justify-center">
+                        <i data-lucide="check-circle-2"></i>
+                        <span>Update Certification</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Steward Action: Deprecate -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Mark Deprecated</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:catalog_asset_deprecate' asset.pk %}" class="space-y-4" onsubmit="return confirm('Deprecate asset {{ asset.number }}? Users will be notified to migrate to the successor.');">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs">Successor Asset</label>
+                        {{ deprecate_form.deprecation_replacement }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Deprecation Rationale</label>
+                        {{ deprecate_form.deprecation_reason }}
+                    </div>
+                    <button type="submit" class="btn btn-outline text-amber-600 border-amber-300 hover:bg-amber-50 w-full justify-center">
+                        <i data-lucide="alert-triangle"></i>
+                        <span>Deprecate Dataset</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
