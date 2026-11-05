@@ -496,3 +496,79 @@ In `apps/core/navigation.py`:
 - **Auto-Numbering**: Automatic sequence generation for `BMGR-#####`, `BMSR-#####`, `BMHR-#####`, and `BMRD-#####`.
 - **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.6"]`.
 
+
+
+---
+
+## Sub-module 10.7: Data Catalog, Lineage & Governance
+
+### Overview
+Enterprise Data Catalog, searchable metadata repository, automated dataset discovery, column- and table-level lineage graph, data governance compliance policies (GDPR, CCPA, SOX, HIPAA, ISO 27001), and multi-dimensional trust endorsements/star ratings. Provides technical metadata, sensitivity classifications, stewardship tracking, and upstream/downstream impact analysis.
+
+### Models
+1. **`CatalogAsset`** (`apps/bi/models/DataCatalog/CatalogAssets.py`)
+   - Prefix: `BCAT-`
+   - Fields: `name`, `code` (unique per tenant), `domain` (sales, finance, supply_chain, procurement, human_resources, customer, product, marketing, operations, legal_compliance), `asset_type` (warehouse_table, semantic_model, golden_record, metric, report, pipeline, source_dataset, view, ml_feature_set, file_object), `data_sensitivity` (public, internal, confidential, restricted_pii, highly_sensitive_pci_phi), `enterprise_tier` (tier_1_mission_critical, tier_2_production_core, tier_3_departmental, tier_4_sandbox), `certification_status` (draft, under_review, certified, verified, deprecated, rejected), `certification_notes`, `deprecation_reason`, `deprecation_replacement` (self-referential FK), `warehouse_table` (FK `bi.WarehouseTable`), `semantic_model` (FK `bi.SemanticModel`), `golden_record` (FK `bi.MdmGoldenRecord`), `glossary_term` (FK `bi.BusinessGlossaryTerm`), `quality_scorecard` (FK `bi.DataQualityScorecard`), `data_steward` (FK `auth.User`), `owning_org_unit` (FK `core.OrgUnit`), `schema_columns_json`, `search_tags_json`, `view_count`, `average_rating`, `description`, `is_active`.
+2. **`CatalogLineageEdge`** (`apps/bi/models/DataCatalog/CatalogLineageEdges.py`)
+   - Prefix: `BLIN-`
+   - Fields: `upstream_asset` (FK `bi.CatalogAsset`), `downstream_asset` (FK `bi.CatalogAsset`), `lineage_type` (table_level, column_level, view_derivation, etl_transformation, semantic_metric, report_source), `upstream_column`, `downstream_column`, `transformation_pipeline` (FK `bi.EtlPipeline`), `transformation_step` (FK `bi.TransformationStep`), `impact_criticality` (low, medium, high, critical), `confidence_score`, `last_verified_at`, `notes`, `is_active`.
+3. **`DataGovernancePolicy`** (`apps/bi/models/DataCatalog/DataGovernancePolicies.py`)
+   - Prefix: `BGOV-`
+   - Fields: `name`, `code` (unique per tenant), `policy_type` (regulatory_compliance, retention_archival, sensitivity_classification, data_masking, acceptable_use, sox_financial_control), `regulatory_framework` (gdpr_eu, hipaa_healthcare, sox_financial, pci_dss, ccpa_cpra, iso_27001, internal_standard), `enforcement_level` (advisory_informational, audit_warning, strict_blocking, automated_masking), `retention_period_days`, `masking_algorithm` (none, full_redaction, partial_mask_email_phone, hash_sha256, tokenization, nullify), `policy_owner` (FK `auth.User`), `effective_date`, `expiration_date`, `review_frequency_days`, `last_reviewed_at`, `compliance_notes`, `description`, `is_active`.
+4. **`CatalogTrustEndorsement`** (`apps/bi/models/DataCatalog/CatalogTrustEndorsements.py`)
+   - Prefix: `BTRU-`
+   - Fields: `asset` (FK `bi.CatalogAsset`), `endorsement_type` (formal_certification, security_clearance, steward_approval, peer_review, audit_attestation, automated_benchmark), `verdict` (approved_certified, qualified_approval, rejected_unfit, needs_remediation, revoked), `rating_value` (1–5 integer stars), `attested_by` (FK `auth.User`), `attested_at`, `valid_until`, `review_comments`, `is_active`.
+
+### URLs & Routes
+- Master Command Center: `bi:catalog_overview` (`/bi/catalog/`)
+- Catalog Assets:
+  - `bi:catalog_asset_list` (`/bi/catalog/assets/`)
+  - `bi:catalog_asset_create` (`/bi/catalog/assets/create/`)
+  - `bi:catalog_asset_detail` (`/bi/catalog/assets/<int:pk>/`)
+  - `bi:catalog_asset_edit` (`/bi/catalog/assets/<int:pk>/edit/`)
+  - `bi:catalog_asset_delete` (`/bi/catalog/assets/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+  - `bi:catalog_asset_certify` (`/bi/catalog/assets/<int:pk>/certify/` - POST only, Steward/Admin gate)
+  - `bi:catalog_asset_deprecate` (`/bi/catalog/assets/<int:pk>/deprecate/` - POST only, Steward/Admin gate)
+- Lineage Edges:
+  - `bi:catalog_lineage_edge_list` (`/bi/catalog/lineage/`)
+  - `bi:catalog_lineage_edge_create` (`/bi/catalog/lineage/create/`)
+  - `bi:catalog_lineage_edge_detail` (`/bi/catalog/lineage/<int:pk>/`)
+  - `bi:catalog_lineage_edge_edit` (`/bi/catalog/lineage/<int:pk>/edit/`)
+  - `bi:catalog_lineage_edge_delete` (`/bi/catalog/lineage/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+- Governance Policies:
+  - `bi:data_governance_policy_list` (`/bi/catalog/policies/`)
+  - `bi:data_governance_policy_create` (`/bi/catalog/policies/create/`)
+  - `bi:data_governance_policy_detail` (`/bi/catalog/policies/<int:pk>/`)
+  - `bi:data_governance_policy_edit` (`/bi/catalog/policies/<int:pk>/edit/`)
+  - `bi:data_governance_policy_delete` (`/bi/catalog/policies/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+- Trust Endorsements:
+  - `bi:catalog_trust_endorsement_list` (`/bi/catalog/endorsements/`)
+  - `bi:catalog_trust_endorsement_create` (`/bi/catalog/endorsements/create/`)
+  - `bi:catalog_trust_endorsement_detail` (`/bi/catalog/endorsements/<int:pk>/`)
+  - `bi:catalog_trust_endorsement_edit` (`/bi/catalog/endorsements/<int:pk>/edit/` - Reviewer/Admin gate)
+  - `bi:catalog_trust_endorsement_delete` (`/bi/catalog/endorsements/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/data_catalog/`:
+  - `catalog_overview.html`: Master metadata command center with KPI summary cards, domain & sensitivity distribution progress bars, recent assets, policies, lineage edges, and endorsements.
+  - `catalog_asset/` (`list.html` with filter bar and rating stars, `detail.html` with technical metadata, lineage card graph, steward certification workbench, and deprecation notices, `form.html`)
+  - `catalog_lineage_edge/` (`list.html`, `detail.html` with upstream/downstream node cards and transformation step links, `form.html`)
+  - `data_governance_policy/` (`list.html`, `detail.html` with regulatory framework details and retention timers, `form.html`)
+  - `catalog_trust_endorsement/` (`list.html`, `detail.html` with star rating pills and reviewer comments, `form.html`)
+- Design System: Colour-named badges (`.badge-green`, `.badge-info`, `.badge-amber`, `.badge-red`, `.badge-slate`, `.badge-muted`), `.stat-card`, `.stat-icon`, `.card`, and `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Data Catalog demo records:
+  - Catalog Assets: Ingestion Source Ledger, Core Sales Fact, Customer Dimension, Sales Performance Dashboard, Inactive Sandbox Table, Globex Confidential Source.
+  - Lineage Edges: Raw Ingestion -> Staging Table -> Core Fact Mart.
+  - Governance Policies: GDPR Customer PII Erasure Policy, SOX Financial Data Retention Schedule, HIPAA PHI Access Masking Standard.
+  - Trust Endorsements: Formal certification (5 stars), Security clearance (5 stars), Steward peer review (4 stars).
+- 100% idempotent with cascade flush.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: All queries scoped by `request.tenant` via `bi_scope` and `bi_object`. All forms reject foreign tenant FKs via `reject_foreign`.
+- **Workflow & Steward Authorization**: Sensitive lifecycle mutations (`catalog_asset_certify` and `catalog_asset_deprecate`) restricted to the asset's assigned `data_steward`, tenant admin, or superuser.
+- **Identity Integrity**: `attested_by` is excluded from form input and bound to `request.user` to prevent attestation spoofing.
+- **Audit Logging Before Deletion**: `write_audit_log` is executed before `obj.delete()` to ensure `obj.pk` / `AuditLog.object_id` is permanently captured in compliance logs.
+- **Atomic Star Rating Calculation**: `_recalculate_asset_rating(asset)` is wrapped in `transaction.atomic()` across endorsement create, edit, and delete operations.
+- **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.7"]`.
