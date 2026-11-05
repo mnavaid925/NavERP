@@ -348,6 +348,7 @@
             </div>
         </div>
 
+        {% if can_manage_stewardship %}
         <!-- Steward Action: Certification -->
         <div class="card">
             <div class="card-header">
@@ -395,6 +396,7 @@
                 </form>
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
