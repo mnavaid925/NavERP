@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard Filters — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <span>Filter Controls</span>
+        </div>
+        <h1 class="page-title">Global Dashboard Filters</h1>
+        <p class="text-muted text-sm">Centralized top-of-dashboard filter controls providing dropdowns, date pickers, and search bars</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_list' %}" class="btn btn-outline">
+            <i data-lucide="layout"></i>
+            <span>All Dashboards</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_filter_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Filter Control</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <input type="text" id="filter-q" name="q" value="{{ q }}" placeholder="Search by label, key, target field..." class="form-input">
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-dsh">Dashboard</label>
+                <select id="filter-dsh" name="dashboard" class="form-select">
+                    <option value="">All Dashboards</option>
+                    {% for d in dashboards %}
+                    <option value="{{ d.pk }}" {% if dashboard_id == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label text-xs" for="filter-type">Control Type</label>
+                <div class="flex gap-2">
+                    <select id="filter-type" name="filter_type" class="form-select flex-1">
+                        <option value="">All Control Types</option>
+                        {% for val, label in filter_type_choices %}
+                        <option value="{{ val }}" {% if filter_type == val %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline" title="Filter" aria-label="Filter">
+                        <i data-lucide="filter"></i>
+                    </button>
+                    {% if q or dashboard_id or filter_type %}
+                    <a href="{% url 'bi:bi_dashboard_filter_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                        <i data-lucide="x"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Control Number</th>
+                    <th>Filter Label</th>
+                    <th>Dashboard</th>
+                    <th>Query Parameter</th>
+                    <th>Control Type</th>
+                    <th>Target Field</th>
+                    <th>Default</th>
+                    <th>Order</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in filters %}
+                <tr>
+                    <td class="font-mono text-xs">{{ f.number }}</td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:bi_dashboard_filter_detail' f.pk %}" class="hover:text-blue-600">
+                                {{ f.filter_label }}
+                            </a>
+                        </div>
+                    </td>
+                    <td class="text-sm">
+                        <a href="{% url 'bi:bi_dashboard_detail' f.dashboard_id %}" class="text-blue-600 hover:underline">
+                            {{ f.dashboard.title }}
+                        </a>
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">{{ f.filter_key }}</td>
+                    <td>
+                        <span class="badge {{ f.badge_filter_type }} text-xs">{{ f.get_filter_type_display }}</span>
+                    </td>
+                    <td class="font-mono text-xs text-muted">{{ f.target_field }}</td>
+                    <td class="text-xs">{{ f.default_value|default:"—" }}</td>
+                    <td class="text-xs">{{ f.order }}</td>
+                    <td>
+                        {% if f.is_active %}
+                        <span class="badge badge-green text-xs">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted text-xs">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:bi_dashboard_filter_detail' f.pk %}" class="btn btn-icon" title="View Filter" aria-label="View Filter">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:bi_dashboard_filter_edit' f.pk %}" class="btn btn-icon" title="Edit Filter" aria-label="Edit Filter">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-8 text-muted">
+                        No global filter controls found.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination flex items-center justify-between py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-muted">
+            Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ total_filters }} filter controls
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if dashboard_id %}&dashboard={{ dashboard_id }}{% endif %}{% if filter_type %}&filter_type={{ filter_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if dashboard_id %}&dashboard={{ dashboard_id }}{% endif %}{% if filter_type %}&filter_type={{ filter_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
