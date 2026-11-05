@@ -159,7 +159,6 @@ def catalog_lineage_edge_edit(request, pk):
 def catalog_lineage_edge_delete(request, pk):
     edge = bi_object(request, CatalogLineageEdge, pk)
     edge_number = edge.number
-    edge.delete()
     write_audit_log(
         request.user,
         edge,
@@ -167,5 +166,6 @@ def catalog_lineage_edge_delete(request, pk):
         changes=f"Deleted lineage edge {edge_number}",
         tenant=request.tenant,
     )
+    edge.delete()
     messages.success(request, f"Lineage edge {edge_number} was deleted.")
     return redirect("bi:catalog_lineage_edge_list")
