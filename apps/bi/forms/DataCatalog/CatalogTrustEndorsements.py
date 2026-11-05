@@ -40,7 +40,6 @@ class CatalogTrustEndorsementForm(TenantUniqueMixin, TenantModelForm):
             "endorsement_type",
             "verdict",
             "rating_value",
-            "attested_by",
             "valid_until",
             "review_comments",
             "is_active",
@@ -50,7 +49,6 @@ class CatalogTrustEndorsementForm(TenantUniqueMixin, TenantModelForm):
             "endorsement_type": forms.Select(attrs={"class": "form-select"}),
             "verdict": forms.Select(attrs={"class": "form-select"}),
             "rating_value": forms.NumberInput(attrs={"class": "form-input", "min": 1, "max": 5, "placeholder": "5"}),
-            "attested_by": forms.Select(attrs={"class": "form-select"}),
             "valid_until": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "review_comments": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Detailed evaluation remarks and verification notes"}),
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
@@ -67,13 +65,10 @@ class CatalogTrustEndorsementForm(TenantUniqueMixin, TenantModelForm):
 
         if self.tenant is not None:
             self.fields["asset"].queryset = CatalogAsset.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["attested_by"].queryset = (
-                get_user_model().objects.filter(tenant=self.tenant).order_by("first_name", "username")
-            )
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["asset", "attested_by"])
+        reject_foreign(self, cleaned, ["asset"])
 
         self.instance.criteria_checklist_json = {
             "schema_documented": bool(cleaned.get("check_schema_documented")),
