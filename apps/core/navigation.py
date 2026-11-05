@@ -2967,6 +2967,21 @@ LIVE_LINKS = {
         "Master Data Overview": "bi:mdm_overview",
     },
 
+    # 10.7 Data Catalog, Lineage & Governance
+    "10.7": {
+        "Searchable Data Catalog": "bi:catalog_asset_list",
+        "Business & Technical Metadata": "bi:catalog_asset_list",
+        "End-to-End Data Lineage": "bi:catalog_lineage_edge_list",
+        "Policy & Compliance Management": "bi:data_governance_policy_list",
+        "Certification & Trust Indicators": "bi:catalog_trust_endorsement_list",
+        # Extra live leaves
+        "Catalog Assets": "bi:catalog_asset_list",
+        "Lineage Edges": "bi:catalog_lineage_edge_list",
+        "Governance Policies": "bi:data_governance_policy_list",
+        "Trust Endorsements": "bi:catalog_trust_endorsement_list",
+        "Catalog Overview": "bi:catalog_overview",
+    },
+
 
 
 
