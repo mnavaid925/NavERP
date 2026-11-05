@@ -91,9 +91,9 @@ def data_governance_policy_create(request):
             policy.save()
             write_audit_log(
                 request.user,
-                "create",
                 policy,
-                f"Created governance policy {policy.number} ({policy.name})",
+                "create",
+                changes=f"Created governance policy {policy.number} ({policy.name})",
                 tenant=request.tenant,
             )
             messages.success(request, f"Governance policy {policy.number} registered successfully.")
@@ -118,9 +118,9 @@ def data_governance_policy_edit(request, pk):
             policy = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 policy,
-                f"Updated governance policy {policy.number} ({policy.name})",
+                "update",
+                changes=f"Updated governance policy {policy.number} ({policy.name})",
                 tenant=request.tenant,
             )
             messages.success(request, f"Governance policy {policy.number} updated successfully.")
@@ -144,9 +144,9 @@ def data_governance_policy_delete(request, pk):
     policy.delete()
     write_audit_log(
         request.user,
-        "delete",
         policy,
-        f"Deleted governance policy {policy_number}",
+        "delete",
+        changes=f"Deleted governance policy {policy_number}",
         tenant=request.tenant,
     )
     messages.success(request, f"Governance policy {policy_number} was deleted.")
