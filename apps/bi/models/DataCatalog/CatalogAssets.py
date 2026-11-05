@@ -160,6 +160,7 @@ class CatalogAsset(TenantNumbered):
             models.Index(fields=["tenant", "enterprise_tier"], name="idx_bcat_ten_tier"),
             models.Index(fields=["tenant", "certification_status"], name="idx_bcat_ten_cert"),
             models.Index(fields=["tenant", "is_active"], name="idx_bcat_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bcat_ten_created"),
         ]
 
     def __str__(self):
