@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Trust Endorsements — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <span>Trust Endorsements</span>
+        </div>
+        <h1 class="page-title">Dataset Certification & Trust Indicators</h1>
+        <p class="text-muted text-sm">Formal steward certifications, peer reviews, community ratings, and deprecation decommission notices</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:catalog_overview' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Catalog Overview</span>
+        </a>
+        <a href="{% url 'bi:catalog_asset_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Catalog Assets</span>
+        </a>
+        <a href="{% url 'bi:catalog_trust_endorsement_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Attest / Endorse</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Endorsements</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Approved & Certified</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ certified_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Deprecated Retiring</div>
+            <div class="text-2xl font-bold text-amber-600">{{ deprecated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="star"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Community Ratings</div>
+            <div class="text-2xl font-bold text-indigo-600">5-Star System</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Asset, comments..." class="form-input text-sm">
+            </div>
+            <div>
+                <label class="form-label text-xs">Endorsement Type</label>
+                <select name="endorsement_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in endorsement_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.endorsement_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Verdict</label>
+                <select name="verdict" class="form-select text-sm">
+                    <option value="">All Verdicts</option>
+                    {% for val, label in verdict_choices %}
+                    <option value="{{ val }}" {% if request.GET.verdict == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1 justify-center">
+                    <i data-lucide="search"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.endorsement_type or request.GET.verdict or request.GET.asset %}
+                <a href="{% url 'bi:catalog_trust_endorsement_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Record ID</th>
+                    <th>Evaluated Asset</th>
+                    <th>Type</th>
+                    <th>Verdict</th>
+                    <th>Rating</th>
+                    <th>Attested By</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in endorsements %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:catalog_trust_endorsement_detail' item.pk %}" class="text-primary hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:catalog_asset_detail' item.asset.pk %}" class="font-medium text-sm text-slate-900 hover:text-primary">
+                            {{ item.asset.name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ item.asset.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ item.get_endorsement_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if item.verdict == 'approved_certified' %}
+                        <span class="badge badge-green"><i data-lucide="check-circle" class="w-3 h-3 inline mr-1"></i>Approved Certified</span>
+                        {% elif item.verdict == 'conditionally_approved' %}
+                        <span class="badge badge-amber">Conditional</span>
+                        {% elif item.verdict == 'recommended' %}
+                        <span class="badge badge-info">Recommended</span>
+                        {% elif item.verdict == 'deprecated_scheduled_retirement' %}
+                        <span class="badge badge-slate">Deprecated</span>
+                        {% elif item.verdict == 'rejected_unfit_for_use' %}
+                        <span class="badge badge-red">Rejected Unfit</span>
+                        {% else %}
+                        <span class="badge badge-muted">{{ item.get_verdict_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.rating_value %}
+                        <div class="flex items-center gap-1 text-xs font-semibold text-slate-800">
+                            <i data-lucide="star" class="w-3 h-3 text-amber-500 fill-amber-500"></i>
+                            <span>{{ item.rating_value }} / 5</span>
+                        </div>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-muted">
+                        {{ item.attested_by.get_full_name|default:item.attested_by.username }}
+                    </td>
+                    <td class="font-mono text-xs text-muted">
+                        {{ item.attested_at|date:"Y-m-d" }}
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'bi:catalog_trust_endorsement_detail' item.pk %}" class="btn btn-icon" title="View Detail" aria-label="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:catalog_trust_endorsement_edit' item.pk %}" class="btn btn-icon" title="Edit Endorsement" aria-label="Edit Endorsement">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:catalog_trust_endorsement_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete endorsement {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Endorsement" aria-label="Delete Endorsement">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i data-lucide="award"></i>
+                            </div>
+                            <div class="empty-title">No Endorsements Recorded</div>
+                            <div class="empty-description">Record steward certifications, ratings, and quality attestations for catalog assets.</div>
+                            <a href="{% url 'bi:catalog_trust_endorsement_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Record First Endorsement</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
+            Previous
+        </a>
+        {% endif %}
+        <span class="text-xs text-muted">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.endorsement_type %}&endorsement_type={{ request.GET.endorsement_type }}{% endif %}{% if request.GET.verdict %}&verdict={{ request.GET.verdict }}{% endif %}" class="btn btn-outline btn-sm">
+            Next
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
