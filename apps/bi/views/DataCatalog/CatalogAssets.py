@@ -3,6 +3,7 @@ import json
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, F, Q
@@ -121,6 +122,11 @@ def catalog_asset_detail(request, pk):
 
     certify_form = CatalogAssetCertifyForm(initial={"certification_status": asset.certification_status})
     deprecate_form = CatalogAssetDeprecateForm(tenant=request.tenant, current_asset=asset)
+    can_manage_stewardship = (
+        request.user == asset.data_steward
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user.is_superuser
+    )
 
     context = {
         "asset": asset,
@@ -132,6 +138,7 @@ def catalog_asset_detail(request, pk):
         "replacement_asset": asset.deprecation_replacement,
         "certify_form": certify_form,
         "deprecate_form": deprecate_form,
+        "can_manage_stewardship": can_manage_stewardship,
     }
     return render(request, "bi/data_catalog/catalog_asset/detail.html", context)
 
@@ -212,6 +219,13 @@ def catalog_asset_delete(request, pk):
 @require_POST
 def catalog_asset_certify(request, pk):
     asset = bi_object(request, CatalogAsset, pk)
+    if not (
+        request.user == asset.data_steward
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user.is_superuser
+    ):
+        raise PermissionDenied("Only the designated data steward or tenant administrator can certify this asset.")
+
     form = CatalogAssetCertifyForm(request.POST)
     if form.is_valid():
         new_status = form.cleaned_data["certification_status"]
@@ -236,6 +250,13 @@ def catalog_asset_certify(request, pk):
 @require_POST
 def catalog_asset_deprecate(request, pk):
     asset = bi_object(request, CatalogAsset, pk)
+    if not (
+        request.user == asset.data_steward
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user.is_superuser
+    ):
+        raise PermissionDenied("Only the designated data steward or tenant administrator can deprecate this asset.")
+
     form = CatalogAssetDeprecateForm(request.POST, tenant=request.tenant, current_asset=asset)
     if form.is_valid():
         replacement = form.cleaned_data.get("deprecation_replacement")
