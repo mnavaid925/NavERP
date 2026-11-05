@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ asset.number }} — {{ asset.name }}{% else %}Register Catalog Asset{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_asset_list' %}">Assets</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ asset.number }}{% else %}New Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Catalog Asset{% else %}Register New Catalog Asset{% endif %}</h1>
+        <p class="text-muted text-sm">Catalog analytical datasets, warehouse tables, or semantic models with governance sensitivity and metadata classification</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:catalog_asset_detail' asset.pk %}{% else %}{% url 'bi:catalog_asset_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-200 bg-red-50 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700 font-medium">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Asset Identification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">1. Identification & Architectural Domain</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Asset Name *</label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="form-error">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.code.id_for_label }}">Catalog Code / Slug *</label>
+                {{ form.code }}
+                {% if form.code.errors %}<p class="form-error">{{ form.code.errors.0 }}</p>{% endif %}
+                <p class="text-xs text-muted mt-1">Unique technical identifier (e.g. <code>dim_monthly_recurring_rev</code>)</p>
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.domain.id_for_label }}">Domain *</label>
+                {{ form.domain }}
+                {% if form.domain.errors %}<p class="form-error">{{ form.domain.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.asset_type.id_for_label }}">Asset Type *</label>
+                {{ form.asset_type }}
+                {% if form.asset_type.errors %}<p class="form-error">{{ form.asset_type.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Governance & Classification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">2. Governance, Sensitivity & Stewardship</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="{{ form.data_sensitivity.id_for_label }}">Data Sensitivity *</label>
+                {{ form.data_sensitivity }}
+                {% if form.data_sensitivity.errors %}<p class="form-error">{{ form.data_sensitivity.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.enterprise_tier.id_for_label }}">Enterprise Tier *</label>
+                {{ form.enterprise_tier }}
+                {% if form.enterprise_tier.errors %}<p class="form-error">{{ form.enterprise_tier.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status *</label>
+                {{ form.certification_status }}
+                {% if form.certification_status.errors %}<p class="form-error">{{ form.certification_status.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.data_steward.id_for_label }}">Assigned Data Steward</label>
+                {{ form.data_steward }}
+                {% if form.data_steward.errors %}<p class="form-error">{{ form.data_steward.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.owning_org_unit.id_for_label }}">Owning Org Unit</label>
+                {{ form.owning_org_unit }}
+                {% if form.owning_org_unit.errors %}<p class="form-error">{{ form.owning_org_unit.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.deprecation_replacement.id_for_label }}">Successor Asset (if deprecated)</label>
+                {{ form.deprecation_replacement }}
+                {% if form.deprecation_replacement.errors %}<p class="form-error">{{ form.deprecation_replacement.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Spine & Platform Links -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">3. Underlying Spine & Analytical Links</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Warehouse Storage Table</label>
+                {{ form.warehouse_table }}
+                {% if form.warehouse_table.errors %}<p class="form-error">{{ form.warehouse_table.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Layer Model</label>
+                {{ form.semantic_model }}
+                {% if form.semantic_model.errors %}<p class="form-error">{{ form.semantic_model.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.golden_record.id_for_label }}">MDM Golden Record</label>
+                {{ form.golden_record }}
+                {% if form.golden_record.errors %}<p class="form-error">{{ form.golden_record.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.business_glossary_term.id_for_label }}">Business Glossary Term</label>
+                {{ form.business_glossary_term }}
+                {% if form.business_glossary_term.errors %}<p class="form-error">{{ form.business_glossary_term.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="md:col-span-2">
+                <label class="form-label" for="{{ form.quality_scorecard.id_for_label }}">Data Quality Health Scorecard</label>
+                {{ form.quality_scorecard }}
+                {% if form.quality_scorecard.errors %}<p class="form-error">{{ form.quality_scorecard.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Documentation & Search -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">4. Documentation, Search Tags & Status</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <label class="form-label" for="{{ form.search_tags_raw.id_for_label }}">Search Keywords & Labels</label>
+                {{ form.search_tags_raw }}
+                {% if form.search_tags_raw.errors %}<p class="form-error">{{ form.search_tags_raw.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                {{ form.description }}
+                {% if form.description.errors %}<p class="form-error">{{ form.description.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+                {{ form.is_active }}
+                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">Active in catalog index</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'bi:catalog_asset_detail' asset.pk %}{% else %}{% url 'bi:catalog_asset_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Register Asset{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
