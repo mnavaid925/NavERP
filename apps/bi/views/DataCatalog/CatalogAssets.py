@@ -18,6 +18,7 @@ from apps.bi.forms.DataCatalog.CatalogAssets import (
 )
 from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -198,8 +199,8 @@ def catalog_asset_edit(request, pk):
     return render(request, "bi/data_catalog/catalog_asset/form.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def catalog_asset_delete(request, pk):
     asset = bi_object(request, CatalogAsset, pk)
     asset_number = asset.number
