@@ -45,6 +45,8 @@ class DataGovernancePolicyForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "code" in self.fields:
+            self.fields["code"].required = False
         if self.tenant is not None:
             self.fields["policy_owner"].queryset = (
                 get_user_model().objects.filter(tenant=self.tenant).order_by("first_name", "username")
