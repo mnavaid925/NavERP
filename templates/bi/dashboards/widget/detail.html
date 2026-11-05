@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ widget.title }} — Widgets — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}">{{ dashboard.title }}</a>
+            <span class="sep">/</span>
+            <span>{{ widget.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ widget.title }}</h1>
+            <span class="badge {{ widget.badge_widget_type }}">{{ widget.get_widget_type_display }}</span>
+            {% if widget.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ widget.number }} · {{ widget.get_aggregation_type_display }} aggregation · Grid: col {{ widget.pos_x }}, row {{ widget.pos_y }} ({{ widget.width_cols }}x{{ widget.height_rows }})</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>View on Canvas</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_widget_edit' widget.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_dashboard_widget_delete' widget.pk %}" class="inline" onsubmit="return confirm('Remove widget \'{{ widget.title|escapejs }}\' from dashboard?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Widget Configuration & Bindings</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Parent Dashboard</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">
+                        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="text-blue-600 hover:underline">
+                            {{ dashboard.title }} ({{ dashboard.number }})
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Visual Chart Type</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ widget.get_widget_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Aggregation Method</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ widget.get_aggregation_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Auto-Refresh Interval</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">
+                        {% if widget.refresh_interval_seconds %}
+                        {{ widget.refresh_interval_seconds }} seconds
+                        {% else %}
+                        Inherits Dashboard ({{ dashboard.refresh_interval_seconds|default:"Manual" }})
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Bound Calculated Measure (10.4)</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">
+                        {{ widget.calculated_measure.name|default:"— None —" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Bound Semantic Model (10.4)</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">
+                        {{ widget.semantic_model.name|default:"— None —" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Bound Warehouse Table (10.3)</dt>
+                    <dd class="text-sm font-mono text-slate-900 mt-0.5">
+                        {{ widget.warehouse_table.table_name|default:"— None —" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Drill-Down Path Hierarchy (10.4)</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">
+                        {{ widget.drill_hierarchy.name|default:"— None —" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Click Target / Drilldown Route</dt>
+                    <dd class="text-sm font-mono text-slate-700 mt-0.5">
+                        {{ widget.drilldown_target_url|default:"— None —" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Subtitle / Caption</dt>
+                    <dd class="text-sm text-slate-700 mt-0.5">{{ widget.subtitle|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">12-Column Grid Position</h2>
+        </div>
+        <div class="card-body">
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg text-center mb-4">
+                <div class="text-xs text-muted mb-1">Canvas Grid Coordinates</div>
+                <div class="text-2xl font-mono font-bold text-slate-800">
+                    X: {{ widget.pos_x }} | Y: {{ widget.pos_y }}
+                </div>
+                <div class="text-xs text-muted mt-1">
+                    Dimensions: {{ widget.width_cols }} cols wide × {{ widget.height_rows }} rows tall
+                </div>
+            </div>
+
+            <div class="text-xs text-slate-600 space-y-2">
+                <div class="flex justify-between">
+                    <span>Display Sequence:</span>
+                    <span class="font-semibold">{{ widget.sort_order }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Data Endpoint:</span>
+                    <a href="{% url 'bi:bi_dashboard_widget_data' widget.pk %}" class="text-blue-600 font-mono hover:underline" target="_blank">
+                        /data API
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Chart Options & Configuration JSON</h2>
+    </div>
+    <div class="card-body">
+        <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ chart_config_pretty }}</pre>
+    </div>
+</div>
+{% endblock %}
