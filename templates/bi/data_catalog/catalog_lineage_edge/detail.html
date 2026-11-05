@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Lineage Edge {{ edge.number }} — Data Catalog — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_lineage_edge_list' %}">Lineage Edges</a>
+            <span class="sep">/</span>
+            <span>{{ edge.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title mb-0">{{ edge.number }}</h1>
+            <span class="badge {% if edge.impact_criticality == 'critical' %}badge-red{% elif edge.impact_criticality == 'high' %}badge-amber{% else %}badge-info{% endif %}">
+                {{ edge.get_impact_criticality_display }}
+            </span>
+            <span class="badge badge-slate">{{ edge.get_lineage_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm mt-1">
+            Dependency: <span class="font-semibold text-slate-900">{{ edge.upstream_asset.name }}</span>
+            <i data-lucide="arrow-right" class="w-3.5 h-3.5 inline text-slate-400 mx-1"></i>
+            <span class="font-semibold text-slate-900">{{ edge.downstream_asset.name }}</span>
+        </p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:catalog_lineage_edge_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Lineage</span>
+        </a>
+        <a href="{% url 'bi:catalog_lineage_edge_edit' edge.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Edge</span>
+        </a>
+    </div>
+</div>
+
+<!-- Node Graph Representation -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- Upstream Node Card -->
+    <div class="card border-l-4 border-l-primary">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title flex items-center gap-2">
+                <i data-lucide="upload" class="w-4 h-4 text-primary"></i>
+                <span>Upstream Source Asset (Producer)</span>
+            </h3>
+            <span class="badge badge-slate">{{ edge.upstream_asset.number }}</span>
+        </div>
+        <div class="card-body space-y-3 text-sm">
+            <div>
+                <a href="{% url 'bi:catalog_asset_detail' edge.upstream_asset.pk %}" class="text-base font-semibold text-primary hover:underline">
+                    {{ edge.upstream_asset.name }}
+                </a>
+                <div class="font-mono text-xs text-muted mt-0.5">{{ edge.upstream_asset.code }}</div>
+            </div>
+            <dl class="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+                <div>
+                    <dt class="text-muted uppercase">Domain</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.upstream_asset.get_domain_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Type</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.upstream_asset.get_asset_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Sensitivity</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.upstream_asset.get_data_sensitivity_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Tier</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.upstream_asset.get_enterprise_tier_display }}</dd>
+                </div>
+            </dl>
+            {% if edge.upstream_column %}
+            <div class="pt-2 border-t border-slate-100">
+                <div class="text-xs text-muted uppercase font-medium">Source Column</div>
+                <div class="font-mono text-sm font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded inline-block mt-1">
+                    {{ edge.upstream_column }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Downstream Node Card -->
+    <div class="card border-l-4 border-l-emerald-500">
+        <div class="card-header flex items-center justify-between">
+            <h3 class="card-title flex items-center gap-2">
+                <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i>
+                <span>Downstream Consumer Asset (Consumer)</span>
+            </h3>
+            <span class="badge badge-slate">{{ edge.downstream_asset.number }}</span>
+        </div>
+        <div class="card-body space-y-3 text-sm">
+            <div>
+                <a href="{% url 'bi:catalog_asset_detail' edge.downstream_asset.pk %}" class="text-base font-semibold text-primary hover:underline">
+                    {{ edge.downstream_asset.name }}
+                </a>
+                <div class="font-mono text-xs text-muted mt-0.5">{{ edge.downstream_asset.code }}</div>
+            </div>
+            <dl class="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-100">
+                <div>
+                    <dt class="text-muted uppercase">Domain</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.downstream_asset.get_domain_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Type</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.downstream_asset.get_asset_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Sensitivity</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.downstream_asset.get_data_sensitivity_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted uppercase">Tier</dt>
+                    <dd class="font-medium text-slate-800">{{ edge.downstream_asset.get_enterprise_tier_display }}</dd>
+                </div>
+            </dl>
+            {% if edge.downstream_column %}
+            <div class="pt-2 border-t border-slate-100">
+                <div class="text-xs text-muted uppercase font-medium">Target Column</div>
+                <div class="font-mono text-sm font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded inline-block mt-1">
+                    {{ edge.downstream_column }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Transformation & Pipeline Details -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Transformation Rule Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Transformation Logic & SQL Expression</h3>
+            </div>
+            <div class="card-body">
+                {% if edge.transformation_rule %}
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed"><code>{{ edge.transformation_rule }}</code></pre>
+                {% else %}
+                <p class="text-sm text-muted italic">Direct 1:1 schema mapping with no intermediate transformation formula.</p>
+                {% endif %}
+
+                {% if edge.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-100">
+                    <h4 class="text-xs text-muted uppercase font-semibold mb-1">Steward Notes</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ edge.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Execution Context Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Execution Provenance</h3>
+            </div>
+            <div class="card-body text-sm space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Discovery Mode</div>
+                    <div class="mt-1">
+                        {% if edge.is_automated_extraction %}
+                        <span class="badge badge-green"><i data-lucide="cpu" class="w-3 h-3 inline mr-1"></i>Automated Parser</span>
+                        {% else %}
+                        <span class="badge badge-slate"><i data-lucide="user" class="w-3 h-3 inline mr-1"></i>Manually Curated</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">ETL Pipeline</div>
+                    {% if edge.etl_pipeline %}
+                    <a href="{% url 'bi:etl_pipeline_detail' edge.etl_pipeline.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
+                        {{ edge.etl_pipeline.number }} — {{ edge.etl_pipeline.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">No pipeline associated</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Transformation Step</div>
+                    {% if edge.transformation_step %}
+                    <span class="font-medium text-slate-800 mt-0.5 block">
+                        {{ edge.transformation_step.name }} (Step #{{ edge.transformation_step.step_order }})
+                    </span>
+                    {% else %}
+                    <span class="text-slate-400 text-xs">No granular step linked</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Last Verified</div>
+                    <div class="font-mono text-xs text-slate-700 mt-0.5">
+                        {{ edge.last_verified_at|default:"Pending Verification" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
