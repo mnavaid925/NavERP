@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ dashboard.title }}{% else %}New Dashboard{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ dashboard.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Dashboard: {{ dashboard.title }}{% else %}Create Analytical Dashboard{% endif %}</h1>
+        <p class="text-muted text-sm">Configure title, responsive layout, visual theme, role access permissions, and auto-refresh intervals</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Detail</span>
+        </a>
+        {% else %}
+        <a href="{% url 'bi:bi_dashboard_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Dashboard Properties</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Dashboard Title <span class="text-red-500">*</span></label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug <span class="text-red-500">*</span></label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Unique tenant identifier, e.g. 'c-suite-kpis'</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Domain Category <span class="text-red-500">*</span></label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.layout_type.id_for_label }}">Layout Type <span class="text-red-500">*</span></label>
+                    {{ form.layout_type }}
+                    {% if form.layout_type.errors %}<div class="form-error">{{ form.layout_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.theme.id_for_label }}">Visual Color Theme <span class="text-red-500">*</span></label>
+                    {{ form.theme }}
+                    {% if form.theme.errors %}<div class="form-error">{{ form.theme.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.refresh_interval_seconds.id_for_label }}">Auto-Refresh (Seconds)</label>
+                    {{ form.refresh_interval_seconds }}
+                    <span class="text-xs text-muted">0 for manual, or 10, 30, 60, 300, 900, 3600</span>
+                    {% if form.refresh_interval_seconds.errors %}<div class="form-error">{{ form.refresh_interval_seconds.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.role_required.id_for_label }}">Restricted Role Code</label>
+                    {{ form.role_required }}
+                    <span class="text-xs text-muted">'all' or role string like 'finance_manager'</span>
+                    {% if form.role_required.errors %}<div class="form-error">{{ form.role_required.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Department / Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Description & Context</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="border-t border-slate-100 pt-4">
+                <h3 class="text-sm font-semibold text-slate-800 mb-3">Visibility & Display Flags</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                        {{ form.is_published }}
+                        <span>Published (Live for Users)</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                        {{ form.is_template }}
+                        <span>Starter Template</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                        {{ form.is_default }}
+                        <span>Tenant Default Landing Page</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                        {{ form.is_kiosk_enabled }}
+                        <span>Enable Kiosk / TV Mode</span>
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                        {{ form.is_active }}
+                        <span>Active Record</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'bi:bi_dashboard_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Dashboard{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
