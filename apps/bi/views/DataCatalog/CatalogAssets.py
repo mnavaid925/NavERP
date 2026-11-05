@@ -146,9 +146,9 @@ def catalog_asset_create(request):
             asset.save()
             write_audit_log(
                 request.user,
-                "create",
                 asset,
-                f"Registered catalog asset {asset.number} ({asset.name})",
+                "create",
+                changes=f"Registered catalog asset {asset.number} ({asset.name})",
                 tenant=request.tenant,
             )
             messages.success(request, f"Catalog asset {asset.number} registered successfully.")
@@ -173,9 +173,9 @@ def catalog_asset_edit(request, pk):
             asset = form.save()
             write_audit_log(
                 request.user,
-                "update",
                 asset,
-                f"Updated catalog asset {asset.number} ({asset.name})",
+                "update",
+                changes=f"Updated catalog asset {asset.number} ({asset.name})",
                 tenant=request.tenant,
             )
             messages.success(request, f"Catalog asset {asset.number} updated successfully.")
@@ -199,9 +199,9 @@ def catalog_asset_delete(request, pk):
     asset.delete()
     write_audit_log(
         request.user,
-        "delete",
         asset,
-        f"Deleted catalog asset {asset_number}",
+        "delete",
+        changes=f"Deleted catalog asset {asset_number}",
         tenant=request.tenant,
     )
     messages.success(request, f"Catalog asset {asset_number} was deleted.")
@@ -221,9 +221,9 @@ def catalog_asset_certify(request, pk):
         asset.save(update_fields=["certification_status", "updated_at"])
         write_audit_log(
             request.user,
-            "status_change",
             asset,
-            f"Changed certification from {old_status} to {new_status}. Notes: {notes}",
+            "certify",
+            changes=f"Changed certification from {old_status} to {new_status}. Notes: {notes}",
             tenant=request.tenant,
         )
         messages.success(request, f"Asset certification status updated to {asset.get_certification_status_display()}.")
@@ -245,9 +245,9 @@ def catalog_asset_deprecate(request, pk):
         asset.save(update_fields=["certification_status", "deprecation_replacement", "updated_at"])
         write_audit_log(
             request.user,
-            "deprecate",
             asset,
-            f"Marked asset deprecated. Replacement: {replacement.number if replacement else 'None'}. Reason: {reason}",
+            "deprecate",
+            changes=f"Marked asset deprecated. Replacement: {replacement.number if replacement else 'None'}. Reason: {reason}",
             tenant=request.tenant,
         )
         messages.warning(request, f"Asset {asset.number} has been marked deprecated.")
