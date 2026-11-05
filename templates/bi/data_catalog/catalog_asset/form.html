@@ -83,9 +83,8 @@
                 {% if form.enterprise_tier.errors %}<p class="form-error">{{ form.enterprise_tier.errors.0 }}</p>{% endif %}
             </div>
             <div>
-                <label class="form-label" for="{{ form.certification_status.id_for_label }}">Certification Status *</label>
-                {{ form.certification_status }}
-                {% if form.certification_status.errors %}<p class="form-error">{{ form.certification_status.errors.0 }}</p>{% endif %}
+                <label class="form-label">Certification Status</label>
+                <input type="text" class="form-input bg-gray-50 cursor-not-allowed" value="{% if is_edit %}{{ asset.get_certification_status_display }}{% else %}Draft (Workflow Controlled){% endif %}" disabled readonly>
             </div>
             <div>
                 <label class="form-label" for="{{ form.data_steward.id_for_label }}">Assigned Data Steward</label>
