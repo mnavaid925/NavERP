@@ -24,6 +24,9 @@ from apps.bi.urls.MasterData import (
 from apps.bi.urls.DataCatalog import (
     urlpatterns as data_catalog_urlpatterns,
 )
+from apps.bi.urls.Dashboards import (
+    urlpatterns as dashboards_urlpatterns,
+)
 from apps.bi.urls.SemanticLayer import (
     urlpatterns as semantic_urlpatterns,
 )
@@ -61,4 +64,5 @@ urlpatterns = (
     + data_quality_urlpatterns
     + master_data_urlpatterns
     + data_catalog_urlpatterns
+    + dashboards_urlpatterns
 )
