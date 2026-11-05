@@ -293,6 +293,28 @@
             </div>
         </div>
 
+        <!-- Sensitivity Classification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Assets by Sensitivity</h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% for s in sensitivity_distribution %}
+                <div>
+                    <div class="flex items-center justify-between text-xs mb-1">
+                        <span class="font-medium text-slate-700">{{ s.label }}</span>
+                        <span class="font-mono font-semibold text-slate-900">{{ s.count }}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if s.sensitivity == 'restricted_pii' or s.sensitivity == 'highly_sensitive_pci_phi' %}bg-rose-500{% elif s.sensitivity == 'confidential' %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {% if total_assets > 0 %}{{ s.count|floatformat:0 }}{% else %}0{% endif %}%;"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-muted">No sensitivity classifications available.</p>
+                {% endfor %}
+            </div>
+        </div>
+
         <!-- Recent Governance Mandates Card -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
