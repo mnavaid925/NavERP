@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Clone Dashboard: {{ source_dashboard.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_detail' source_dashboard.pk %}">{{ source_dashboard.title }}</a>
+            <span class="sep">/</span>
+            <span>Clone</span>
+        </div>
+        <h1 class="page-title">Clone Dashboard</h1>
+        <p class="text-muted text-sm">Create an independent duplicate copy of '{{ source_dashboard.title }}' including all widgets and global filters</p>
+    </div>
+</div>
+
+<div class="card max-w-2xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">New Dashboard Details</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.new_title.id_for_label }}">New Title <span class="text-red-500">*</span></label>
+                {{ form.new_title }}
+                {% if form.new_title.errors %}<div class="form-error">{{ form.new_title.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.new_slug.id_for_label }}">New URL Slug</label>
+                {{ form.new_slug }}
+                <span class="text-xs text-muted">Leave blank to auto-generate from title</span>
+                {% if form.new_slug.errors %}<div class="form-error">{{ form.new_slug.errors }}</div>{% endif %}
+            </div>
+
+            <div class="border-t border-slate-100 pt-3 space-y-2">
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.copy_widgets }}
+                    <span>Duplicate {{ source_dashboard.widgets.count }} widgets onto new dashboard</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.copy_filters }}
+                    <span>Duplicate {{ source_dashboard.filters.count }} global filter controls</span>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'bi:bi_dashboard_detail' source_dashboard.pk %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="copy"></i>
+                    <span>Confirm & Clone Dashboard</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
