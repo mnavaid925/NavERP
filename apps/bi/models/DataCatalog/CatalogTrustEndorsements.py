@@ -82,6 +82,8 @@ class CatalogTrustEndorsement(TenantNumbered):
             models.Index(fields=["tenant", "endorsement_type"], name="idx_btru_ten_etype"),
             models.Index(fields=["tenant", "verdict"], name="idx_btru_ten_verdict"),
             models.Index(fields=["tenant", "is_active"], name="idx_btru_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_btru_ten_created"),
+            models.Index(fields=["tenant", "-attested_at"], name="idx_btru_ten_attested"),
         ]
 
     def __str__(self):
