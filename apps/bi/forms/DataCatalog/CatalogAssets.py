@@ -66,6 +66,8 @@ class CatalogAssetForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "code" in self.fields:
+            self.fields["code"].required = False
         if self.instance and self.instance.pk and self.instance.search_tags_json:
             self.fields["search_tags_raw"].initial = ", ".join(self.instance.search_tags_json)
 
