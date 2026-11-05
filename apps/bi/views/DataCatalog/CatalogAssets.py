@@ -203,7 +203,6 @@ def catalog_asset_edit(request, pk):
 def catalog_asset_delete(request, pk):
     asset = bi_object(request, CatalogAsset, pk)
     asset_number = asset.number
-    asset.delete()
     write_audit_log(
         request.user,
         asset,
@@ -211,6 +210,7 @@ def catalog_asset_delete(request, pk):
         changes=f"Deleted catalog asset {asset_number}",
         tenant=request.tenant,
     )
+    asset.delete()
     messages.success(request, f"Catalog asset {asset_number} was deleted.")
     return redirect("bi:catalog_asset_list")
 
