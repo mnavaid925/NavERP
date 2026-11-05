@@ -25,6 +25,10 @@ from apps.bi.models.MasterData.MdmGoldenRecords import MdmGoldenRecord
 from apps.bi.models.MasterData.MdmHierarchyNodes import MdmHierarchyNode
 from apps.bi.models.MasterData.MdmReferenceCodes import MdmReferenceCode
 from apps.bi.models.MasterData.MdmSurvivorshipRules import MdmSurvivorshipRule
+from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
+from apps.bi.models.DataCatalog.CatalogLineageEdges import CatalogLineageEdge
+from apps.bi.models.DataCatalog.DataGovernancePolicies import DataGovernancePolicy
+from apps.bi.models.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsement
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -48,6 +52,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                CatalogTrustEndorsement.objects.all().delete()
+                CatalogLineageEdge.objects.all().delete()
+                CatalogAsset.objects.all().delete()
+                DataGovernancePolicy.objects.all().delete()
                 MdmHierarchyNode.objects.all().delete()
                 MdmGoldenRecord.objects.all().delete()
                 MdmSurvivorshipRule.objects.all().delete()
@@ -1794,5 +1802,296 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Master Data Management for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Master Data Management already seeded for tenant: {tenant.name}")
+
+            # --- 10.7 Data Catalog, Lineage & Governance ---
+            if not CatalogAsset.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"  Seeding Data Catalog & Governance for tenant: {tenant.name}...")
+                with transaction.atomic():
+                    # Pick existing tenant entities
+                    tenant_steward = get_user_model().objects.filter(tenant=tenant).first()
+                    tbl_ref = WarehouseTable.objects.filter(tenant=tenant).first()
+                    sem_ref = SemanticModel.objects.filter(tenant=tenant).first()
+                    mdm_ref = MdmGoldenRecord.objects.filter(tenant=tenant).first()
+                    term_ref = BusinessGlossaryTerm.objects.filter(tenant=tenant).first()
+                    scorecard_ref = DataQualityScorecard.objects.filter(tenant=tenant).first()
+                    etl_pipeline_ref = EtlPipeline.objects.filter(tenant=tenant).first()
+                    etl_step_ref = TransformationStep.objects.filter(tenant=tenant).first()
+
+                    today = timezone.now().date()
+
+                    # 1. Governance Policies
+                    pol_gdpr, _ = DataGovernancePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        code="gdpr_pii_erasure_mandate",
+                        defaults={
+                            "name": "GDPR Customer PII Erasure & Redaction Mandate",
+                            "policy_type": "regulatory_compliance",
+                            "regulatory_framework": "gdpr_eu",
+                            "enforcement_level": "strict_blocking",
+                            "retention_period_days": 1095,
+                            "masking_algorithm": "full_redaction",
+                            "policy_owner": tenant_steward,
+                            "effective_date": today,
+                            "review_frequency_days": 365,
+                            "compliance_notes": "GDPR Article 17 Right to Erasure & Article 32 Security of Processing.",
+                            "description": "Enforces mandatory cryptographic masking on all customer personal identifying columns.",
+                            "is_active": True,
+                        },
+                    )
+
+                    pol_sox, _ = DataGovernancePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        code="sox_7yr_financial_retention",
+                        defaults={
+                            "name": "SOX 7-Year Financial Audit Retention Schedule",
+                            "policy_type": "retention_archival",
+                            "regulatory_framework": "sox_financial",
+                            "enforcement_level": "strict_blocking",
+                            "retention_period_days": 2555,
+                            "masking_algorithm": "none",
+                            "policy_owner": tenant_steward,
+                            "effective_date": today,
+                            "review_frequency_days": 365,
+                            "compliance_notes": "Sarbanes-Oxley Section 802 Criminal Penalties for Altering Documents.",
+                            "description": "Mandates immutable retention of general ledger, billing marts, and journal line dimensions for 7 years.",
+                            "is_active": True,
+                        },
+                    )
+
+                    pol_pci, _ = DataGovernancePolicy.objects.get_or_create(
+                        tenant=tenant,
+                        code="pci_dss_payment_tokenization",
+                        defaults={
+                            "name": "PCI-DSS Cardholder Data Tokenization Standard",
+                            "policy_type": "data_masking",
+                            "regulatory_framework": "pci_dss",
+                            "enforcement_level": "automated_masking",
+                            "retention_period_days": 730,
+                            "masking_algorithm": "hash_sha256",
+                            "policy_owner": tenant_steward,
+                            "effective_date": today,
+                            "review_frequency_days": 180,
+                            "compliance_notes": "PCI DSS Requirement 3: Protect Stored Cardholder Data.",
+                            "description": "Requires SHA-256 cryptographic one-way hashing on all stored credit card primary account numbers.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 2. Catalog Assets
+                    asset_cust, _ = CatalogAsset.objects.get_or_create(
+                        tenant=tenant,
+                        code="dim_customer_golden_master",
+                        defaults={
+                            "name": "Customer 360 Golden Dimension",
+                            "domain": "customer",
+                            "asset_type": "golden_record",
+                            "golden_record": mdm_ref,
+                            "warehouse_table": tbl_ref,
+                            "business_glossary_term": term_ref,
+                            "data_steward": tenant_steward,
+                            "data_sensitivity": "restricted_pii",
+                            "enterprise_tier": "tier_1_mission_critical",
+                            "certification_status": "certified",
+                            "average_rating": Decimal("4.85"),
+                            "view_count": 142,
+                            "quality_scorecard": scorecard_ref,
+                            "schema_columns_json": [
+                                {"name": "customer_key", "data_type": "varchar(64)", "is_nullable": False, "is_pii": True, "description": "Surrogate golden master key"},
+                                {"name": "legal_company_name", "data_type": "varchar(255)", "is_nullable": False, "is_pii": False, "description": "Authoritative company legal entity"},
+                                {"name": "tax_registration_id", "data_type": "varchar(40)", "is_nullable": True, "is_pii": True, "description": "Federal or state tax ID"},
+                                {"name": "contact_email", "data_type": "varchar(120)", "is_nullable": True, "is_pii": True, "description": "Primary operational contact email"},
+                            ],
+                            "search_tags_json": ["customer", "golden_master", "mdm", "pii", "certified"],
+                            "description": "Authoritative single-version-of-truth customer master record consolidating ERP and CRM entities.",
+                            "is_active": True,
+                        },
+                    )
+
+                    asset_sales, _ = CatalogAsset.objects.get_or_create(
+                        tenant=tenant,
+                        code="fct_sales_orders_mart",
+                        defaults={
+                            "name": "Enterprise Sales & Billing Ledger Mart",
+                            "domain": "sales",
+                            "asset_type": "warehouse_table",
+                            "warehouse_table": tbl_ref,
+                            "data_steward": tenant_steward,
+                            "data_sensitivity": "internal",
+                            "enterprise_tier": "tier_1_mission_critical",
+                            "certification_status": "certified",
+                            "average_rating": Decimal("4.90"),
+                            "view_count": 215,
+                            "quality_scorecard": scorecard_ref,
+                            "schema_columns_json": [
+                                {"name": "order_id", "data_type": "bigint", "is_nullable": False, "is_pii": False, "description": "Unique transaction identifier"},
+                                {"name": "customer_key", "data_type": "varchar(64)", "is_nullable": False, "is_pii": True, "description": "Foreign key to dim_customer_master"},
+                                {"name": "net_amount", "data_type": "decimal(18,2)", "is_nullable": False, "is_pii": False, "description": "Net billed sales amount"},
+                                {"name": "transaction_date", "data_type": "date", "is_nullable": False, "is_pii": False, "description": "Accounting transaction date"},
+                            ],
+                            "search_tags_json": ["sales", "revenue", "orders", "sox", "tier1"],
+                            "description": "Consolidated fact table containing customer orders and invoicing lines.",
+                            "is_active": True,
+                        },
+                    )
+
+                    asset_arr, _ = CatalogAsset.objects.get_or_create(
+                        tenant=tenant,
+                        code="sem_arr_performance_model",
+                        defaults={
+                            "name": "Annual Recurring Revenue (ARR) Analytics",
+                            "domain": "finance",
+                            "asset_type": "semantic_model",
+                            "semantic_model": sem_ref,
+                            "business_glossary_term": term_ref,
+                            "data_steward": tenant_steward,
+                            "data_sensitivity": "confidential",
+                            "enterprise_tier": "tier_2_production_core",
+                            "certification_status": "endorsed",
+                            "average_rating": Decimal("4.70"),
+                            "view_count": 94,
+                            "search_tags_json": ["finance", "arr", "saas", "mrr", "kpi"],
+                            "description": "Governed semantic layer model calculating normalized ARR, expansion revenue, and churn.",
+                            "is_active": True,
+                        },
+                    )
+
+                    asset_legacy, _ = CatalogAsset.objects.get_or_create(
+                        tenant=tenant,
+                        code="stg_legacy_crm_raw",
+                        defaults={
+                            "name": "Legacy CRM Ingestion Staging Dump",
+                            "domain": "customer",
+                            "asset_type": "source_dataset",
+                            "data_steward": tenant_steward,
+                            "data_sensitivity": "restricted_pii",
+                            "enterprise_tier": "tier_4_sandbox",
+                            "certification_status": "deprecated",
+                            "deprecation_replacement": asset_cust,
+                            "average_rating": Decimal("2.50"),
+                            "view_count": 18,
+                            "search_tags_json": ["deprecated", "raw", "staging", "legacy"],
+                            "description": "Historical pre-MDM CRM dump table. Deprecated; migrate all analytics to Customer 360 Golden Dimension.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. Lineage Edges
+                    CatalogLineageEdge.objects.get_or_create(
+                        tenant=tenant,
+                        upstream_asset=asset_legacy,
+                        downstream_asset=asset_cust,
+                        lineage_type="pipeline_transformation",
+                        defaults={
+                            "upstream_column": "client_raw_name",
+                            "downstream_column": "legal_company_name",
+                            "transformation_rule": "SELECT standardize_name(client_raw_name), dedupe_tax_id(raw_tax) FROM stg_legacy_crm_raw",
+                            "etl_pipeline": etl_pipeline_ref,
+                            "transformation_step": etl_step_ref,
+                            "impact_criticality": "critical",
+                            "is_automated_extraction": True,
+                            "last_verified_at": timezone.now(),
+                            "notes": "Automated ETL cleansing step converting raw staging strings into validated golden records.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CatalogLineageEdge.objects.get_or_create(
+                        tenant=tenant,
+                        upstream_asset=asset_cust,
+                        downstream_asset=asset_sales,
+                        lineage_type="column_level",
+                        defaults={
+                            "upstream_column": "customer_key",
+                            "downstream_column": "customer_key",
+                            "transformation_rule": "JOIN dim_customer_golden_master ON fct_sales.customer_key = dim_customer.customer_key",
+                            "impact_criticality": "high",
+                            "is_automated_extraction": True,
+                            "last_verified_at": timezone.now(),
+                            "notes": "Dimensional foreign key constraint linking sales ledger to master customer record.",
+                            "is_active": True,
+                        },
+                    )
+
+                    CatalogLineageEdge.objects.get_or_create(
+                        tenant=tenant,
+                        upstream_asset=asset_sales,
+                        downstream_asset=asset_arr,
+                        lineage_type="semantic_abstraction",
+                        defaults={
+                            "upstream_column": "net_amount",
+                            "downstream_column": "normalized_arr",
+                            "transformation_rule": "SELECT SUM(net_amount * (12.0 / contract_months)) AS normalized_arr GROUP BY customer_key, fiscal_period",
+                            "impact_criticality": "critical",
+                            "is_automated_extraction": False,
+                            "last_verified_at": timezone.now(),
+                            "notes": "Governed calculation formula computing recurring revenue streams.",
+                            "is_active": True,
+                        },
+                    )
+
+                    # 4. Trust Endorsements
+                    if tenant_steward:
+                        CatalogTrustEndorsement.objects.get_or_create(
+                            tenant=tenant,
+                            asset=asset_cust,
+                            endorsement_type="formal_certification",
+                            defaults={
+                                "verdict": "approved_certified",
+                                "rating_value": 5,
+                                "attested_by": tenant_steward,
+                                "valid_until": today.replace(year=today.year + 1),
+                                "criteria_checklist_json": {
+                                    "schema_documented": True,
+                                    "quality_sla_passed": True,
+                                    "ownership_verified": True,
+                                    "lineage_complete": True,
+                                },
+                                "review_comments": "Formal annual certification completed. 100% attribute provenance verified with full GDPR erasure compliance.",
+                                "is_active": True,
+                            },
+                        )
+
+                        CatalogTrustEndorsement.objects.get_or_create(
+                            tenant=tenant,
+                            asset=asset_sales,
+                            endorsement_type="audit_clearance",
+                            defaults={
+                                "verdict": "approved_certified",
+                                "rating_value": 5,
+                                "attested_by": tenant_steward,
+                                "valid_until": today.replace(year=today.year + 1),
+                                "criteria_checklist_json": {
+                                    "schema_documented": True,
+                                    "quality_sla_passed": True,
+                                    "ownership_verified": True,
+                                    "lineage_complete": True,
+                                },
+                                "review_comments": "SOX Section 404 internal audit sign-off completed. Provenance and lineage fully audited.",
+                                "is_active": True,
+                            },
+                        )
+
+                        CatalogTrustEndorsement.objects.get_or_create(
+                            tenant=tenant,
+                            asset=asset_legacy,
+                            endorsement_type="deprecation_notice",
+                            defaults={
+                                "verdict": "deprecated_scheduled_retirement",
+                                "rating_value": 2,
+                                "attested_by": tenant_steward,
+                                "criteria_checklist_json": {
+                                    "schema_documented": False,
+                                    "quality_sla_passed": False,
+                                    "ownership_verified": True,
+                                    "lineage_complete": True,
+                                },
+                                "review_comments": "Superseded by Customer 360 Golden Dimension. Do not use for new reporting.",
+                                "is_active": True,
+                            },
+                        )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Data Catalog & Governance for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  BI Data Catalog & Governance already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
