@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Canvas Builder: {{ dashboard.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}">{{ dashboard.title }}</a>
+            <span class="sep">/</span>
+            <span>Visual Builder</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title text-2xl font-bold text-slate-900">Canvas Layout Builder</h1>
+            <span class="badge {{ dashboard.badge_theme }} text-xs">{{ dashboard.get_theme_display }}</span>
+        </div>
+        <p class="text-muted text-sm">Arrange widgets across the 12-column grid and configure dimensions</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_widget_create' %}?dashboard={{ dashboard.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Add New Widget</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="eye"></i>
+            <span>View Live Canvas</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="settings"></i>
+            <span>Settings</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-12 gap-6">
+    <!-- Main 12-col Layout Editor -->
+    <div class="col-span-12 lg:col-span-9">
+        <div class="card mb-6">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold">12-Column Responsive Grid Canvas</h2>
+                    <p class="text-xs text-muted">Widgets arranged in order of coordinates (pos_y, pos_x)</p>
+                </div>
+                <span class="badge badge-info text-xs">{{ widgets.count }} Placed Widgets</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-12 gap-4 p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl" id="grid-canvas">
+                    {% for w in widgets %}
+                    <div class="col-span-12 sm:col-span-6 lg:col-span-{{ w.width_cols }} bg-white border border-slate-200 rounded-lg p-4 shadow-sm flex flex-col justify-between" id="widget-card-{{ w.pk }}">
+                        <div class="flex items-start justify-between mb-3">
+                            <div>
+                                <span class="badge {{ w.badge_widget_type }} text-[10px] mb-1">{{ w.get_widget_type_display }}</span>
+                                <h4 class="text-sm font-semibold text-slate-900">{{ w.title }}</h4>
+                                {% if w.subtitle %}<p class="text-xs text-muted">{{ w.subtitle }}</p>{% endif %}
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <a href="{% url 'bi:bi_dashboard_widget_edit' w.pk %}" class="btn btn-icon p-1 text-slate-500 hover:text-blue-600" title="Edit">
+                                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="p-3 bg-slate-50 rounded border border-slate-100 text-center my-2">
+                            <span class="text-xs font-mono text-slate-600">
+                                Col {{ w.pos_x }} | Row {{ w.pos_y }} | {{ w.width_cols }} cols wide × {{ w.height_rows }} rows tall
+                            </span>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs text-muted">
+                            <span class="font-mono text-[10px]">{{ w.number }}</span>
+                            <span>Order: {{ w.sort_order }}</span>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-span-12 text-center py-12 text-muted">
+                        <i data-lucide="layout-grid" class="w-10 h-10 mx-auto text-slate-300 mb-2"></i>
+                        <p class="text-sm">No widgets placed yet. Use the sidebar or click "Add New Widget" above.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Toolbox -->
+    <div class="col-span-12 lg:col-span-3 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Available Metric Sources</h3>
+            </div>
+            <div class="card-body text-xs space-y-3">
+                <div>
+                    <span class="font-medium text-slate-700 block mb-1">Calculated Measures (10.4):</span>
+                    <ul class="space-y-1 text-muted">
+                        {% for m in calculated_measures|slice:":5" %}
+                        <li class="flex items-center gap-1">
+                            <i data-lucide="hash" class="w-3 h-3 text-emerald-500"></i>
+                            <span>{{ m.name }}</span>
+                        </li>
+                        {% empty %}
+                        <li>No calculated measures found.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <span class="font-medium text-slate-700 block mb-1">Semantic Models (10.4):</span>
+                    <ul class="space-y-1 text-muted">
+                        {% for sm in semantic_models|slice:":5" %}
+                        <li class="flex items-center gap-1">
+                            <i data-lucide="layers" class="w-3 h-3 text-blue-500"></i>
+                            <span>{{ sm.name }}</span>
+                        </li>
+                        {% empty %}
+                        <li>No semantic models found.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold">Top Filter Controls</h3>
+            </div>
+            <div class="card-body text-xs">
+                {% if filters %}
+                <ul class="space-y-2">
+                    {% for f in filters %}
+                    <li class="flex items-center justify-between p-2 bg-slate-50 rounded">
+                        <div>
+                            <div class="font-medium text-slate-800">{{ f.filter_label }}</div>
+                            <div class="font-mono text-[10px] text-muted">{{ f.filter_key }}</div>
+                        </div>
+                        <span class="badge {{ f.badge_filter_type }} text-[9px]">{{ f.get_filter_type_display }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">No filter controls added yet.</p>
+                {% endif %}
+                <div class="mt-3 pt-2 border-t border-slate-100">
+                    <a href="{% url 'bi:bi_dashboard_filter_create' %}?dashboard={{ dashboard.pk }}" class="text-blue-600 hover:underline flex items-center gap-1">
+                        <i data-lucide="plus" class="w-3 h-3"></i>
+                        <span>Add Filter Control</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
