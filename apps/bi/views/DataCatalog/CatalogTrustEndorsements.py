@@ -160,7 +160,6 @@ def catalog_trust_endorsement_edit(request, pk):
 def catalog_trust_endorsement_delete(request, pk):
     endorsement = bi_object(request, CatalogTrustEndorsement, pk)
     endorsement_number = endorsement.number
-    endorsement.delete()
     write_audit_log(
         request.user,
         endorsement,
@@ -168,5 +167,6 @@ def catalog_trust_endorsement_delete(request, pk):
         changes=f"Deleted endorsement {endorsement_number}",
         tenant=request.tenant,
     )
+    endorsement.delete()
     messages.success(request, f"Endorsement {endorsement_number} was deleted.")
     return redirect("bi:catalog_trust_endorsement_list")
