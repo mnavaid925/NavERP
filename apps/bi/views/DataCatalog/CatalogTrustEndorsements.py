@@ -146,7 +146,12 @@ def catalog_trust_endorsement_create(request):
 
 @login_required
 def catalog_trust_endorsement_edit(request, pk):
-    endorsement = bi_object(request, CatalogTrustEndorsement, pk)
+    endorsement = bi_object(
+        request,
+        CatalogTrustEndorsement,
+        pk,
+        select_related=("asset", "attested_by"),
+    )
     if not (
         endorsement.attested_by == request.user
         or getattr(request.user, "is_tenant_admin", False)
@@ -187,7 +192,12 @@ def catalog_trust_endorsement_edit(request, pk):
 @require_POST
 @tenant_admin_required
 def catalog_trust_endorsement_delete(request, pk):
-    endorsement = bi_object(request, CatalogTrustEndorsement, pk)
+    endorsement = bi_object(
+        request,
+        CatalogTrustEndorsement,
+        pk,
+        select_related=("asset", "attested_by"),
+    )
     endorsement_number = endorsement.number
     asset = endorsement.asset
     with transaction.atomic():
