@@ -50,3 +50,16 @@ Exemplary structure and design-system fidelity across all 13 templates. Zero com
 - **[Minor]** `templates/bi/data_catalog/catalog_lineage_edge/list.html:239, 247` & `templates/bi/data_catalog/catalog_trust_endorsement/list.html:217, 225`: Pagination links omit `{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}` parameter preservation. Fix: Append asset query parameter to previous/next pagination links.
 
 ---
+
+## 4. Performance Reviewer Pass
+
+### Verdict
+Good baseline ORM hygiene with pre-filtering, aggregated counts, and consistent Paginator usage. Identified redundant `refresh_from_db` on asset detail, chained FK traversal in `__str__` without cached check (Lesson L18), heavy JSON column loading in form dropdowns, and missing composite ordering indexes matching the app-wide pattern.
+
+### Findings
+- **[Important]** `apps/bi/views/DataCatalog/CatalogAssets.py:112-113`: Redundant `refresh_from_db` query on every `catalog_asset_detail` load immediately after atomic `update()`. Fix: Update in-memory attribute directly `asset.view_count = (asset.view_count or 0) + 1` without executing a redundant SELECT.
+- **[Important]** `apps/bi/models/DataCatalog/CatalogLineageEdges.py:103-110` & `apps/bi/models/DataCatalog/CatalogTrustEndorsements.py:87-88`: Chained FK traversal in `__str__` without checking `self._state.fields_cache` (Lesson L18). Triggers un-prefetched queries during edit/delete audit logging. Fix: Make `__str__` defensive using `fields_cache` check with fallback ID, and pass `select_related` to `bi_object` in edit/delete views.
+- **[Minor]** `apps/bi/forms/DataCatalog/CatalogAssets.py:84, 157`: Heavy JSON columns (`schema_columns_json`, `search_tags_json`) loaded in `deprecation_replacement` dropdown querysets. Fix: Apply `.only("id", "number", "name")` to the replacement queryset.
+- **[Minor]** `apps/bi/models/DataCatalog/{CatalogAssets,CatalogLineageEdges,CatalogTrustEndorsements,DataGovernancePolicies}.py`: Missing composite ordering indexes `(tenant, -created_at)` and `(tenant, -attested_at)`. Fix: Add composite ordering indexes matching sibling BI models.
+
+---
