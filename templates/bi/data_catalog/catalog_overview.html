@@ -284,7 +284,7 @@
                         <span class="font-mono font-semibold text-slate-900">{{ d.count }}</span>
                     </div>
                     <div class="progress">
-                        <div class="progress-bar bg-blue-500" style="width: {% if total_assets > 0 %}{{ d.count|floatformat:0 }}{% else %}0{% endif %}%;"></div>
+                        <div class="progress-bar bg-blue-500" style="width: {{ d.pct }}%;"></div>
                     </div>
                 </div>
                 {% empty %}
@@ -306,7 +306,7 @@
                         <span class="font-mono font-semibold text-slate-900">{{ s.count }}</span>
                     </div>
                     <div class="progress">
-                        <div class="progress-bar {% if s.sensitivity == 'restricted_pii' or s.sensitivity == 'highly_sensitive_pci_phi' %}bg-rose-500{% elif s.sensitivity == 'confidential' %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {% if total_assets > 0 %}{{ s.count|floatformat:0 }}{% else %}0{% endif %}%;"></div>
+                        <div class="progress-bar {% if s.sensitivity == 'restricted_pii' or s.sensitivity == 'highly_sensitive_pci_phi' %}bg-rose-500{% elif s.sensitivity == 'confidential' %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {{ s.pct }}%;"></div>
                     </div>
                 </div>
                 {% empty %}
