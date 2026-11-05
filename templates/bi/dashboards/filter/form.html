@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ filter_obj.filter_label }}{% else %}New Filter Control{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_filter_list' %}">Filters</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ filter_obj.number }}{% else %}Create{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Control: {{ filter_obj.filter_label }}{% else %}Create Filter Control{% endif %}</h1>
+        <p class="text-muted text-sm">Define a centralized top-level filter control slicing widgets across the canvas</p>
+    </div>
+    <div class="page-actions">
+        {% if is_edit %}
+        <a href="{% url 'bi:bi_dashboard_filter_detail' filter_obj.pk %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Detail</span>
+        </a>
+        {% else %}
+        <a href="{% url 'bi:bi_dashboard_filter_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card max-w-3xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Filter Control Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.dashboard.id_for_label }}">Target Dashboard <span class="text-red-500">*</span></label>
+                {{ form.dashboard }}
+                {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.filter_label.id_for_label }}">Control Label <span class="text-red-500">*</span></label>
+                    {{ form.filter_label }}
+                    {% if form.filter_label.errors %}<div class="form-error">{{ form.filter_label.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.filter_key.id_for_label }}">Query Parameter Key</label>
+                    {{ form.filter_key }}
+                    <span class="text-xs text-muted">e.g. 'region', 'fiscal_period'</span>
+                    {% if form.filter_key.errors %}<div class="form-error">{{ form.filter_key.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.filter_type.id_for_label }}">Control Type <span class="text-red-500">*</span></label>
+                    {{ form.filter_type }}
+                    {% if form.filter_type.errors %}<div class="form-error">{{ form.filter_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_field.id_for_label }}">Target Semantic Field <span class="text-red-500">*</span></label>
+                    {{ form.target_field }}
+                    <span class="text-xs text-muted">Field sliced across datasets</span>
+                    {% if form.target_field.errors %}<div class="form-error">{{ form.target_field.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_value.id_for_label }}">Default Selected Value</label>
+                    {{ form.default_value }}
+                    <span class="text-xs text-muted">Preset token or string, e.g. 'current_year'</span>
+                    {% if form.default_value.errors %}<div class="form-error">{{ form.default_value.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.options_source.id_for_label }}">Options Source <span class="text-red-500">*</span></label>
+                    {{ form.options_source }}
+                    {% if form.options_source.errors %}<div class="form-error">{{ form.options_source.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.order.id_for_label }}">Display Order</label>
+                    {{ form.order }}
+                    {% if form.order.errors %}<div class="form-error">{{ form.order.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="border-t border-slate-100 pt-3 space-y-2">
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.is_required }}
+                    <span>Mandatory Selection (User must choose value before query runs)</span>
+                </label>
+                <label class="flex items-center gap-2 text-sm text-slate-800 cursor-pointer">
+                    {{ form.is_active }}
+                    <span>Active Control</span>
+                </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'bi:bi_dashboard_filter_detail' filter_obj.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'bi:bi_dashboard_filter_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Create Filter{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
