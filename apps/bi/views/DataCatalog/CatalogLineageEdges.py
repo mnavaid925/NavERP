@@ -9,6 +9,7 @@ from apps.bi.forms.DataCatalog.CatalogLineageEdges import CatalogLineageEdgeForm
 from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
 from apps.bi.models.DataCatalog.CatalogLineageEdges import CatalogLineageEdge
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -154,8 +155,8 @@ def catalog_lineage_edge_edit(request, pk):
     return render(request, "bi/data_catalog/catalog_lineage_edge/form.html", context)
 
 
-@login_required
 @require_POST
+@tenant_admin_required
 def catalog_lineage_edge_delete(request, pk):
     edge = bi_object(request, CatalogLineageEdge, pk)
     edge_number = edge.number
