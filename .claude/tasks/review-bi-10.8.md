@@ -5,7 +5,7 @@
 1. Code Reviewer — Completed
 2. Explorer (Architecture & Contract) — Completed
 3. Frontend Reviewer — Completed
-4. Performance Reviewer — Pending
+4. Performance Reviewer — Completed
 5. QA Smoke Tester — Pending
 6. Security Reviewer — Pending
 
@@ -82,5 +82,30 @@ None. Multi-tenant data isolation is strictly enforced across models via `Tenant
 1. `templates/bi/dashboards/canvas/viewer.html:83,137,161` & `templates/bi/dashboards/canvas/builder.html:32,61` — Missing `aria-label` Attributes on Icon-Only Buttons. Fix: Add descriptive `aria-label`.
 2. `templates/bi/dashboards/canvas/viewer.html:33-38` — Missing Outside Click Dismissal on Bookmark Menu. Fix: Add document click listener to close dropdown when clicking outside.
 3. `templates/bi/dashboards/canvas/builder.html:51` — Builder Template Lacks Client-Side Drag-and-Drop Script for Coordinates AJAX Endpoint. Fix: Add interactive JS grid script to POST updated coordinates to builder endpoint.
+
+---
+
+## Pass 4: Performance Reviewer
+
+### Critical
+None. Multi-tenant isolation is strictly enforced across all querysets (`tenant=request.tenant`), list views are paginated with `Paginator`, mutating actions run within `transaction.atomic()`, and no unconstrained Cartesian joins or memory-exhausting operations exist.
+
+### Important
+1. `templates/bi/dashboards/dashboard/list.html:151` & `apps/bi/views/Dashboards/BiDashboards.py:20` — N+1 Queries on Dashboard Card Grid (`{{ d.widgets.count }}`). Fix: Annotate `widget_count` in view with `Count('widgets', filter=Q(widgets__is_active=True))`.
+2. `apps/bi/views/Dashboards/BiDashboards.py:90` & `templates/bi/dashboards/dashboard/detail.html:202-210` — N+1 Queries on Dashboard Detail Widgets Table (`calculated_measure`, `semantic_model`, `warehouse_table`). Fix: Add `.select_related("calculated_measure", "semantic_model", "warehouse_table")`.
+3. `apps/bi/views/Dashboards/BiDashboards.py:92-94` & `templates/bi/dashboards/dashboard/detail.html:147` — N+1 Queries on Dashboard Detail Bookmarks List (`bm.user.username`). Fix: Add `.select_related("user")`.
+4. `apps/bi/views/Dashboards/BiDashboards.py:81` & `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:27, 102, 125` — Redundant Prefetches Discarded by Sub-queries in `bi_object`. Fix: Remove redundant `prefetch_related` from `bi_object` calls when queries re-filter.
+5. `apps/bi/views/Dashboards/BiDashboards.py:21-23` — Multiple Unaggregated Stat Count Queries in Dashboard List View. Fix: Consolidate 3 `.count()` queries into single `.aggregate()`.
+6. `apps/bi/models/Dashboards/BiDashboardBookmarks.py:61-62` — Chained N+1 Risk via Foreign Key Hop in `__str__` (`self.dashboard.title`). Fix: Simplify `__str__` to `f"{self.name} ({self.number})"` without FK traversal.
+7. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:151-153` & `templates/bi/dashboards/canvas/builder.html:90-125` — Unbounded Unindexed Full-Table Queryset Fetch in Canvas Builder. Fix: Remove unused `warehouse_tables` and slice `.only("id", "name")[:10]` on models and measures.
+
+### Minor
+1. `templates/bi/dashboards/canvas/viewer.html:35, 41` & `templates/bi/dashboards/canvas/builder.html:48, 52` — Dual Query Trigger via `.count` Followed by Immediate Iteration. Fix: Use `{{ bookmarks|length }}` and `{{ widgets|length }}` in templates.
+2. `apps/bi/views/Dashboards/BiDashboardWidgets.py:50` — Unused Related Model Queryset `semantic_models` in Widget List View. Fix: Remove unrendered query from view.
+3. `apps/bi/views/Dashboards/BiDashboardWidgets.py:49`, `apps/bi/views/Dashboards/BiDashboardBookmarks.py:49`, `apps/bi/views/Dashboards/BiDashboardFilters.py:44` — Heavy Field Loading on Filter Dropdown Querysets. Fix: Add `.only("id", "title")` to `dashboards` dropdown querysets.
+4. `apps/bi/views/Dashboards/BiDashboardWidgets.py:23`, `apps/bi/views/Dashboards/BiDashboardBookmarks.py:21`, `apps/bi/views/Dashboards/BiDashboardFilters.py:19` — Omission of `.defer()` on Unrendered JSON Fields in List Views. Fix: Defer heavy unrendered JSON fields on list querysets.
+5. `apps/bi/models/Dashboards/BiDashboards.py:95-108` & `apps/bi/models/Dashboards/BiDashboardWidgets.py:117-130` — Missing Composite Tenant Indexes for Hot Ordering and Foreign Keys. Fix: Add `(tenant, -created_at)` on `BiDashboard` and `(tenant, warehouse_table)` on `BiDashboardWidget`.
+6. `apps/bi/management/commands/seed_bi.py:2115` — Dead Query in Seeder Command (`drill_ref`). Fix: Remove unused query line.
+
 
 
