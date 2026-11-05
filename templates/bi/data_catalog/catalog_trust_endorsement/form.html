@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Endorsement {{ endorsement.number }}{% else %}Record Trust Endorsement{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_trust_endorsement_list' %}">Endorsements</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ endorsement.number }}{% else %}New Endorsement{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Endorsement {{ endorsement.number }}{% else %}Attest Dataset Endorsement{% endif %}</h1>
+        <p class="text-muted text-sm">Submit formal data steward certification, peer recommendations, quality reviews, or deprecation warnings</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:catalog_trust_endorsement_detail' endorsement.pk %}{% else %}{% url 'bi:catalog_trust_endorsement_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-200 bg-red-50 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700 font-medium">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Asset & Certification Verdict -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">1. Target Dataset & Certification Verdict</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="form-label" for="{{ form.asset.id_for_label }}">Evaluated Catalog Asset *</label>
+                {{ form.asset }}
+                {% if form.asset.errors %}<p class="form-error">{{ form.asset.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.endorsement_type.id_for_label }}">Endorsement Type *</label>
+                {{ form.endorsement_type }}
+                {% if form.endorsement_type.errors %}<p class="form-error">{{ form.endorsement_type.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.verdict.id_for_label }}">Evaluation Verdict *</label>
+                {{ form.verdict }}
+                {% if form.verdict.errors %}<p class="form-error">{{ form.verdict.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.rating_value.id_for_label }}">Numerical Rating (1 to 5 Stars)</label>
+                {{ form.rating_value }}
+                {% if form.rating_value.errors %}<p class="form-error">{{ form.rating_value.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.attested_by.id_for_label }}">Attesting Steward / Reviewer *</label>
+                {{ form.attested_by }}
+                {% if form.attested_by.errors %}<p class="form-error">{{ form.attested_by.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.valid_until.id_for_label }}">Certification Expiration Date</label>
+                {{ form.valid_until }}
+                {% if form.valid_until.errors %}<p class="form-error">{{ form.valid_until.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Governance Verification Checklist -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">2. Verification Attestation Checklist</h3>
+        </div>
+        <div class="card-body space-y-3">
+            <div class="flex items-start gap-3">
+                {{ form.check_schema_documented }}
+                <div>
+                    <label class="form-label mb-0 cursor-pointer font-medium" for="{{ form.check_schema_documented.id_for_label }}">1. Schema Documented</label>
+                    <p class="text-xs text-muted">Columns, data types, nullability, and primary keys have been reviewed and validated.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-3">
+                {{ form.check_quality_sla_passed }}
+                <div>
+                    <label class="form-label mb-0 cursor-pointer font-medium" for="{{ form.check_quality_sla_passed.id_for_label }}">2. Quality SLA Compliance</label>
+                    <p class="text-xs text-muted">Dataset completeness, accuracy, freshness, and validity satisfy operational SLAs.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-3">
+                {{ form.check_ownership_verified }}
+                <div>
+                    <label class="form-label mb-0 cursor-pointer font-medium" for="{{ form.check_ownership_verified.id_for_label }}">3. Stewardship & Accountability</label>
+                    <p class="text-xs text-muted">A named business unit and individual data steward have accepted responsibility for data integrity.</p>
+                </div>
+            </div>
+            <div class="flex items-start gap-3">
+                {{ form.check_lineage_complete }}
+                <div>
+                    <label class="form-label mb-0 cursor-pointer font-medium" for="{{ form.check_lineage_complete.id_for_label }}">4. Lineage Completeness</label>
+                    <p class="text-xs text-muted">Source-to-target dependencies and transformation formulas are verified end-to-end.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Feedback & Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">3. Evaluation Remarks & Reviewer Feedback</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <label class="form-label" for="{{ form.review_comments.id_for_label }}">Review Comments & Justification</label>
+                {{ form.review_comments }}
+                {% if form.review_comments.errors %}<p class="form-error">{{ form.review_comments.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+                {{ form.is_active }}
+                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">Active endorsement record</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'bi:catalog_trust_endorsement_detail' endorsement.pk %}{% else %}{% url 'bi:catalog_trust_endorsement_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save"></i>
+            <span>{% if is_edit %}Save Endorsement{% else %}Record Endorsement{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
