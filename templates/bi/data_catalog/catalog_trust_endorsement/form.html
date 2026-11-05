@@ -63,9 +63,8 @@
                 {% if form.rating_value.errors %}<p class="form-error">{{ form.rating_value.errors.0 }}</p>{% endif %}
             </div>
             <div>
-                <label class="form-label" for="{{ form.attested_by.id_for_label }}">Attesting Steward / Reviewer *</label>
-                {{ form.attested_by }}
-                {% if form.attested_by.errors %}<p class="form-error">{{ form.attested_by.errors.0 }}</p>{% endif %}
+                <label class="form-label">Attesting Steward / Reviewer</label>
+                <input type="text" class="form-input bg-gray-50 cursor-not-allowed" value="{% if is_edit %}{{ endorsement.attested_by.get_full_name|default:endorsement.attested_by.username }}{% else %}{{ request.user.get_full_name|default:request.user.username }}{% endif %}" disabled readonly>
             </div>
             <div>
                 <label class="form-label" for="{{ form.valid_until.id_for_label }}">Certification Expiration Date</label>
