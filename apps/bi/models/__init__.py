@@ -19,6 +19,10 @@ from apps.bi.models.MasterData.MdmGoldenRecords import MdmGoldenRecord
 from apps.bi.models.MasterData.MdmHierarchyNodes import MdmHierarchyNode
 from apps.bi.models.MasterData.MdmReferenceCodes import MdmReferenceCode
 from apps.bi.models.MasterData.MdmSurvivorshipRules import MdmSurvivorshipRule
+from apps.bi.models.DataCatalog.CatalogAssets import CatalogAsset
+from apps.bi.models.DataCatalog.CatalogLineageEdges import CatalogLineageEdge
+from apps.bi.models.DataCatalog.DataGovernancePolicies import DataGovernancePolicy
+from apps.bi.models.DataCatalog.CatalogTrustEndorsements import CatalogTrustEndorsement
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -51,4 +55,8 @@ __all__ = [
     "MdmSurvivorshipRule",
     "MdmHierarchyNode",
     "MdmReferenceCode",
+    "CatalogAsset",
+    "CatalogLineageEdge",
+    "DataGovernancePolicy",
+    "CatalogTrustEndorsement",
 ]
