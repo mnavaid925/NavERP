@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{{ policy.name }} ({{ policy.number }}) — Governance Policies — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_governance_policy_list' %}">Policies</a>
+            <span class="sep">/</span>
+            <span>{{ policy.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title mb-0">{{ policy.name }}</h1>
+            <span class="font-mono text-sm text-muted">({{ policy.number }})</span>
+            {% if policy.is_active %}
+            <span class="badge badge-green">Active</span>
+            {% else %}
+            <span class="badge badge-muted">Inactive</span>
+            {% endif %}
+            <span class="badge badge-info">{{ policy.get_policy_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm mt-1 font-mono">Code: {{ policy.code }} &bull; Framework: {{ policy.get_regulatory_framework_display }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:data_governance_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Policies</span>
+        </a>
+        <a href="{% url 'bi:data_governance_policy_edit' policy.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Policy</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Main Policy Rules -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Enforcement & Retention Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Enforcement & Compliance Specifications</h3>
+            </div>
+            <div class="card-body">
+                <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted uppercase font-medium">Regulatory Framework</dt>
+                        <dd class="mt-1">
+                            <span class="badge badge-info">{{ policy.get_regulatory_framework_display }}</span>
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase font-medium">Enforcement Gate</dt>
+                        <dd class="mt-1">
+                            {% if policy.enforcement_level == 'strict_blocking' %}
+                            <span class="badge badge-red">Strict Blocking Gate</span>
+                            {% elif policy.enforcement_level == 'audit_warning' %}
+                            <span class="badge badge-amber">Audit Warning</span>
+                            {% elif policy.enforcement_level == 'automated_masking' %}
+                            <span class="badge badge-green">Dynamic Masking</span>
+                            {% else %}
+                            <span class="badge badge-slate">Advisory</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase font-medium">Statutory Retention</dt>
+                        <dd class="mt-1 font-mono font-semibold text-slate-800">
+                            {% if policy.retention_period_days %}
+                            {{ policy.retention_period_days }} Days (~{{ policy.retention_period_days|floatformat:0 }} days)
+                            {% else %}
+                            <span class="text-muted font-normal font-sans">No fixed retention schedule</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted uppercase font-medium">Masking Algorithm</dt>
+                        <dd class="mt-1">
+                            <span class="badge badge-slate">{{ policy.get_masking_algorithm_display }}</span>
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if policy.compliance_notes %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <h4 class="text-xs text-muted uppercase font-semibold mb-2">Legal Citations & Regulatory References</h4>
+                    <p class="text-sm text-slate-700 bg-slate-50 p-4 rounded-lg font-mono text-xs whitespace-pre-line leading-relaxed">
+                        {{ policy.compliance_notes }}
+                    </p>
+                </div>
+                {% endif %}
+
+                {% if policy.description %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <h4 class="text-xs text-muted uppercase font-semibold mb-2">Policy Overview & Guidelines</h4>
+                    <p class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ policy.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lifecycle & Accountable Owner -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Stewardship & Governance Timeline</h3>
+            </div>
+            <div class="card-body text-sm space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Policy Owner / DPO</div>
+                    <div class="font-medium text-slate-800 mt-0.5">
+                        {% if policy.policy_owner %}
+                        {{ policy.policy_owner.get_full_name|default:policy.policy_owner.username }}
+                        <span class="text-xs text-muted block font-normal">{{ policy.policy_owner.email }}</span>
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Effective Date</div>
+                    <div class="font-mono text-xs text-slate-800 mt-0.5 font-semibold">
+                        {{ policy.effective_date|date:"Y-m-d" }}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Expiration / Sunset Date</div>
+                    <div class="font-mono text-xs text-slate-800 mt-0.5">
+                        {{ policy.expiration_date|date:"Y-m-d"|default:"Perpetual / Ongoing" }}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Review Cadence</div>
+                    <div class="font-mono text-xs text-slate-800 mt-0.5">
+                        Every {{ policy.review_frequency_days }} days
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-medium">Last Audit Review</div>
+                    <div class="font-mono text-xs text-slate-800 mt-0.5">
+                        {{ policy.last_reviewed_at|default:"Pending Annual Review" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
