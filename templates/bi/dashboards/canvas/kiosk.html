@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ dashboard.title }} — Kiosk Wallboard — NavERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body class="p-6">
+    <header class="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+            <span class="p-2 rounded-lg bg-blue-600 text-white">
+                <i data-lucide="layout" class="w-6 h-6"></i>
+            </span>
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight text-white">{{ dashboard.title }}</h1>
+                <p class="text-xs text-slate-400 font-mono">{{ dashboard.number }} · {{ dashboard.get_category_display }} · NavERP Wallboard</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="text-right">
+                <div class="text-lg font-mono font-bold text-white" id="live-clock">--:--:--</div>
+                <div class="text-xs text-slate-400">Live Telemetry</div>
+            </div>
+            <div class="flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-xs font-mono text-slate-300">Auto-refresh: {{ refresh_interval }}s</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-12 gap-6">
+        {% for w in widgets %}
+        <div class="col-span-12 sm:col-span-6 lg:col-span-{{ w.width_cols }} bg-slate-800/80 border border-slate-700 rounded-xl p-5 shadow-lg flex flex-col justify-between" style="min-height: 280px;">
+            <div class="flex items-start justify-between mb-2">
+                <div>
+                    <h3 class="text-base font-semibold text-white">{{ w.title }}</h3>
+                    {% if w.subtitle %}<p class="text-xs text-slate-400">{{ w.subtitle }}</p>{% endif %}
+                </div>
+                <span class="text-xs uppercase tracking-wider font-mono px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                    {{ w.get_widget_type_display }}
+                </span>
+            </div>
+
+            <div class="flex-1 flex flex-col justify-center py-4">
+                {% if w.widget_type == "kpi_card" %}
+                <div class="text-center py-4">
+                    <div class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-1">{{ w.subtitle|default:"Current Pace" }}</div>
+                    <div class="text-5xl font-extrabold text-white tracking-tight">$248,500</div>
+                    <div class="text-sm font-semibold text-emerald-400 flex items-center justify-center gap-1 mt-2">
+                        <i data-lucide="trending-up" class="w-4 h-4"></i>
+                        <span>+14.2% vs target</span>
+                    </div>
+                </div>
+                {% elif w.widget_type == "streaming_counter" %}
+                <div class="text-center py-4">
+                    <div class="text-xs uppercase font-semibold text-slate-400 tracking-wider mb-1">Throughput Events</div>
+                    <div class="text-6xl font-mono font-bold text-blue-400">1,842</div>
+                    <div class="text-xs text-emerald-400 mt-2 flex items-center justify-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>0 errors / nominal</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="relative w-full h-56">
+                    <canvas id="kiosk-canvas-{{ w.pk }}"></canvas>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="pt-3 border-t border-slate-700/60 flex items-center justify-between text-xs text-slate-400 font-mono">
+                <span>{{ w.number }}</span>
+                <span>{{ w.get_aggregation_type_display }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('live-clock').textContent = now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        setTimeout(function() {
+            window.location.reload();
+        }, {{ refresh_interval }} * 1000);
+
+        const colors = ["#38bdf8", "#34d399", "#fbbf24", "#818cf8", "#f87171", "#a78bfa"];
+
+        {% for w in widgets %}
+        {% if w.widget_type != "kpi_card" and w.widget_type != "streaming_counter" %}
+        const ctx{{ w.pk }} = document.getElementById("kiosk-canvas-{{ w.pk }}");
+        if (ctx{{ w.pk }}) {
+            let chartType = "bar";
+            if ("{{ w.widget_type }}" === "line" || "{{ w.widget_type }}" === "area") chartType = "line";
+            else if ("{{ w.widget_type }}" === "pie") chartType = "pie";
+            else if ("{{ w.widget_type }}" === "donut") chartType = "doughnut";
+
+            new Chart(ctx{{ w.pk }}, {
+                type: chartType,
+                data: {
+                    labels: ["Q1", "Q2", "Q3", "Q4"],
+                    datasets: [{
+                        label: "{{ w.title|escapejs }}",
+                        data: [42000, 58000, 71000, 96000],
+                        backgroundColor: chartType === "pie" || chartType === "doughnut" ? colors : "#38bdf8",
+                        borderColor: "#38bdf8",
+                        borderWidth: 1,
+                        fill: "{{ w.widget_type }}" === "area",
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: "#94a3b8" } }
+                    },
+                    scales: (chartType !== "pie" && chartType !== "doughnut") ? {
+                        x: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } },
+                        y: { ticks: { color: "#94a3b8" }, grid: { color: "#334155" } }
+                    } : {}
+                }
+            });
+        }
+        {% endif %}
+        {% endfor %}
+    </script>
+</body>
+</html>
