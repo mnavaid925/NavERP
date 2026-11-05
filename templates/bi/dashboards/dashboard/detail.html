@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard.title }} — Dashboards & Visualization — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <span>{{ dashboard.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ dashboard.title }}</h1>
+            <span class="badge {{ dashboard.badge_category }}">{{ dashboard.get_category_display }}</span>
+            {% if dashboard.is_published %}
+            <span class="badge badge-green">Published Live</span>
+            {% else %}
+            <span class="badge badge-muted">Draft</span>
+            {% endif %}
+            {% if dashboard.is_default %}
+            <span class="badge badge-amber"><i data-lucide="star" class="w-3 h-3 inline"></i> Workspace Default</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ dashboard.number }} · Slug: /{{ dashboard.slug }} · Layout: {{ dashboard.get_layout_type_display }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Open Canvas</span>
+        </a>
+        <a href="{% url 'bi:bi_dashboard_canvas_builder' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="palette"></i>
+            <span>Visual Builder</span>
+        </a>
+        {% if dashboard.is_kiosk_enabled %}
+        <a href="{% url 'bi:bi_dashboard_kiosk_view' dashboard.pk %}" class="btn btn-outline" target="_blank">
+            <i data-lucide="monitor"></i>
+            <span>Kiosk Mode</span>
+        </a>
+        {% endif %}
+        <a href="{% url 'bi:bi_dashboard_duplicate' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="copy"></i>
+            <span>Clone</span>
+        </a>
+        {% if can_edit %}
+        <form method="post" action="{% url 'bi:bi_dashboard_publish' dashboard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                {% if dashboard.is_published %}
+                <i data-lucide="eye-off"></i>
+                <span>Unpublish</span>
+                {% else %}
+                <i data-lucide="globe"></i>
+                <span>Publish</span>
+                {% endif %}
+            </button>
+        </form>
+        <a href="{% url 'bi:bi_dashboard_edit' dashboard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_dashboard_delete' dashboard.pk %}" class="inline" onsubmit="return confirm('Delete dashboard \'{{ dashboard.title|escapejs }}\'? All placed widgets will be removed.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Specification Cards -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold">Dashboard Specifications & Configuration</h2>
+            <span class="badge {{ dashboard.badge_theme }} text-xs">{{ dashboard.get_theme_display }}</span>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Layout Blueprint</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">{{ dashboard.get_layout_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Auto-Refresh Interval</dt>
+                    <dd class="text-sm font-semibold text-slate-900 mt-0.5">
+                        {% if dashboard.refresh_interval_seconds %}
+                        {{ dashboard.refresh_interval_seconds }} seconds (Live Polling)
+                        {% else %}
+                        Manual Refresh Only
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Restricted Role Access</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5 font-mono">{{ dashboard.role_required|default:"All Workspace Roles" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Owning Department / Org Unit</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">{{ dashboard.org_unit.name|default:"Enterprise-wide (Global)" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Created By</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username|default:"System Seed" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs font-medium text-muted uppercase">Telemetry Views</dt>
+                    <dd class="text-sm text-slate-900 mt-0.5">{{ dashboard.view_count }} total view events</dd>
+                </div>
+            </dl>
+
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <h4 class="text-xs font-medium text-muted uppercase mb-1">Description & Business Purpose</h4>
+                <p class="text-sm text-slate-700 leading-relaxed">{{ dashboard.description|default:"No description recorded." }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold">Saved Bookmarks</h2>
+            <a href="{% url 'bi:bi_dashboard_bookmark_create' %}?dashboard={{ dashboard.pk }}" class="btn btn-sm btn-outline">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>New</span>
+            </a>
+        </div>
+        <div class="card-body">
+            {% if bookmarks %}
+            <ul class="divide-y divide-slate-100 text-sm">
+                {% for bm in bookmarks %}
+                <li class="py-2.5 flex items-center justify-between">
+                    <div>
+                        <div class="font-medium text-slate-900 flex items-center gap-1.5">
+                            {{ bm.name }}
+                            {% if bm.is_default %}
+                            <span class="badge badge-amber text-[10px] py-0 px-1">My Default</span>
+                            {% endif %}
+                            {% if bm.is_shared %}
+                            <span class="badge badge-info text-[10px] py-0 px-1">Shared</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-muted">{{ bm.number }} · {{ bm.user.username }}</div>
+                    </div>
+                    <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}?bookmark={{ bm.pk }}" class="btn btn-sm btn-outline text-xs">
+                        Apply
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-xs text-muted text-center py-4">No personal or team bookmarks created yet.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Widgets Section -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold">Configured Dashboard Widgets ({{ total_widgets }})</h2>
+            <p class="text-xs text-muted">Tiles displayed on this dashboard's 12-column grid layout</p>
+        </div>
+        <a href="{% url 'bi:bi_dashboard_widget_create' %}?dashboard={{ dashboard.pk }}" class="btn btn-primary btn-sm">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add Widget</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Widget Number</th>
+                    <th>Title & Subtitle</th>
+                    <th>Chart Type</th>
+                    <th>Data Source Binding</th>
+                    <th>Grid Coordinates</th>
+                    <th>Order</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in widgets %}
+                <tr>
+                    <td class="font-mono text-xs">{{ w.number }}</td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ w.title }}</div>
+                        {% if w.subtitle %}
+                        <div class="text-xs text-muted">{{ w.subtitle }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ w.get_widget_type_display }}</span>
+                    </td>
+                    <td class="text-xs">
+                        {% if w.calculated_measure %}
+                        <div class="text-slate-800 font-medium">{{ w.calculated_measure.name }}</div>
+                        <div class="text-muted">Calculated Measure (10.4)</div>
+                        {% elif w.semantic_model %}
+                        <div class="text-slate-800 font-medium">{{ w.semantic_model.name }}</div>
+                        <div class="text-muted">Semantic Model (10.4)</div>
+                        {% elif w.warehouse_table %}
+                        <div class="text-slate-800 font-mono">{{ w.warehouse_table.table_name }}</div>
+                        <div class="text-muted">Warehouse Fact/Dim (10.3)</div>
+                        {% else %}
+                        <span class="text-muted">Independent Mock / Static</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                        col {{ w.pos_x }}, row {{ w.pos_y }} · {{ w.width_cols }}x{{ w.height_rows }}
+                    </td>
+                    <td class="text-xs">{{ w.sort_order }}</td>
+                    <td>
+                        {% if w.is_active %}
+                        <span class="badge badge-green text-xs">Active</span>
+                        {% else %}
+                        <span class="badge badge-muted text-xs">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:bi_dashboard_widget_detail' w.pk %}" class="btn btn-icon" title="View Widget" aria-label="View Widget">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:bi_dashboard_widget_edit' w.pk %}" class="btn btn-icon" title="Edit Widget" aria-label="Edit Widget">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-muted text-sm">
+                        No widgets added yet. Click "Add Widget" or launch the Visual Builder to add chart tiles.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Global Filters Section -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold">Global Top Filter Bar Controls ({{ filters.count }})</h2>
+            <p class="text-xs text-muted">Centralized dropdowns, date pickers, and search bars that slice canvas widgets</p>
+        </div>
+        <a href="{% url 'bi:bi_dashboard_filter_create' %}?dashboard={{ dashboard.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add Filter Control</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Control Number</th>
+                    <th>Label</th>
+                    <th>Query Key</th>
+                    <th>Control Type</th>
+                    <th>Target Field</th>
+                    <th>Default</th>
+                    <th>Order</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in filters %}
+                <tr>
+                    <td class="font-mono text-xs">{{ f.number }}</td>
+                    <td class="font-medium text-slate-900">{{ f.filter_label }}</td>
+                    <td class="font-mono text-xs text-slate-700">{{ f.filter_key }}</td>
+                    <td>
+                        <span class="badge badge-slate text-xs">{{ f.get_filter_type_display }}</span>
+                    </td>
+                    <td class="font-mono text-xs text-muted">{{ f.target_field }}</td>
+                    <td class="text-xs">{{ f.default_value|default:"—" }}</td>
+                    <td class="text-xs">{{ f.order }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:bi_dashboard_filter_detail' f.pk %}" class="btn btn-icon" title="View Filter" aria-label="View Filter">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:bi_dashboard_filter_edit' f.pk %}" class="btn btn-icon" title="Edit Filter" aria-label="Edit Filter">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-muted text-sm">
+                        No global filter controls configured on this dashboard.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
