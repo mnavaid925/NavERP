@@ -6,7 +6,7 @@
 2. Explorer (Architecture & Contract) — Completed
 3. Frontend Reviewer — Completed
 4. Performance Reviewer — Completed
-5. QA Smoke Tester — Pending
+5. QA Smoke Tester — Completed
 6. Security Reviewer — Pending
 
 ---
@@ -106,6 +106,67 @@ None. Multi-tenant isolation is strictly enforced across all querysets (`tenant=
 4. `apps/bi/views/Dashboards/BiDashboardWidgets.py:23`, `apps/bi/views/Dashboards/BiDashboardBookmarks.py:21`, `apps/bi/views/Dashboards/BiDashboardFilters.py:19` — Omission of `.defer()` on Unrendered JSON Fields in List Views. Fix: Defer heavy unrendered JSON fields on list querysets.
 5. `apps/bi/models/Dashboards/BiDashboards.py:95-108` & `apps/bi/models/Dashboards/BiDashboardWidgets.py:117-130` — Missing Composite Tenant Indexes for Hot Ordering and Foreign Keys. Fix: Add `(tenant, -created_at)` on `BiDashboard` and `(tenant, warehouse_table)` on `BiDashboardWidget`.
 6. `apps/bi/management/commands/seed_bi.py:2115` — Dead Query in Seeder Command (`drill_ref`). Fix: Remove unused query line.
+
+---
+
+## Pass 5: QA Smoke Tester
+
+### Critical
+1. `apps/bi/views/Dashboards/BiDashboards.py:128,158,186,207,270`, `apps/bi/views/Dashboards/BiDashboardWidgets.py:118,148,177`, `apps/bi/views/Dashboards/BiDashboardBookmarks.py:117,159,191`, `apps/bi/views/Dashboards/BiDashboardFilters.py:90,120,149` — Systemic HTTP 500 on All Mutating Actions: `write_audit_log` is called with invalid keyword argument `actor=request.user` instead of signature `(user, obj, action, changes=None, tenant=None)` (`apps/core/utils.py:10`), raising `TypeError: write_audit_log() got an unexpected keyword argument 'actor'` across every dashboard create, edit, delete, publish, duplicate, widget create/edit/delete, bookmark create/edit/delete, and filter create/edit/delete. Fix: Call `write_audit_log(request.user, <instance>, "<action>", changes=..., tenant=request.tenant)`.
+2. `templates/bi/dashboards/dashboard/detail.html:109` — Runtime HTTP 500 on Dashboard Detail when `created_by` is None: `{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username|default:"System Seed" }}` resolves the filter argument `dashboard.created_by.username` before evaluating `default:`, raising `VariableDoesNotExist: Failed lookup for key [username] in None` and 500ing on any system-seeded or null-creator dashboard (Lesson L10). Fix: Guard with `{% if dashboard.created_by %}{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username }}{% else %}System Seed{% endif %}`.
+
+### Important
+1. `apps/bi/views/Dashboards/BiDashboardWidgets.py:38` — Unhandled `ValueError` 500 on non-numeric filter input: `dashboard_id = request.GET.get("dashboard")` passed to `.filter(dashboard_id=dashboard_id)` raises unhandled `ValueError: Field 'id' expected a number but got 'invalid_id'` on junk query parameters like `?dashboard=invalid` (Lesson L11). Fix: Guard with `if dashboard_id and dashboard_id.isdigit():`.
+2. `apps/bi/views/Dashboards/BiDashboardBookmarks.py:36` — Unhandled `ValueError` 500 on non-numeric filter input: `dashboard_id = request.GET.get("dashboard")` passed to `.filter(dashboard_id=dashboard_id)` raises unhandled `ValueError: Field 'id' expected a number but got 'invalid_id'` on junk query parameters like `?dashboard=invalid` (Lesson L11). Fix: Guard with `if dashboard_id and dashboard_id.isdigit():`.
+3. `apps/bi/views/Dashboards/BiDashboardFilters.py:33` — Unhandled `ValueError` 500 on non-numeric filter input: `dashboard_id = request.GET.get("dashboard")` passed to `.filter(dashboard_id=dashboard_id)` raises unhandled `ValueError: Field 'id' expected a number but got 'invalid_id'` on junk query parameters like `?dashboard=invalid` (Lesson L11). Fix: Guard with `if dashboard_id and dashboard_id.isdigit():`.
+4. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:59` — Unhandled `ValueError` 500 on non-numeric bookmark query param: `bookmark_id = request.GET.get("bookmark")` passed directly to `dashboard.bookmarks.filter(pk=bookmark_id)` raises unhandled `ValueError: Field 'id' expected a number but got 'invalid_bm_id'` on junk query parameters like `?bookmark=abc` (Lesson L11). Fix: Guard with `if bookmark_id and bookmark_id.isdigit():`.
+5. `templates/bi/dashboards/canvas/viewer.html:111,127` — Broken Dynamic Filter Selection in Viewer UI: `request.GET|dictsort:f.filter_key` on a `QueryDict` silently evaluates to empty string `""`, completely ignoring active GET filter parameters in dropdowns and text inputs. Fix: Attach `current_value` to each filter in `bi_dashboard_canvas_view` and compare `{% if f.current_value == opt.value %}selected{% endif %}` and `value="{{ f.current_value }}"`.
+6. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:60` & `apps/bi/views/Dashboards/BiDashboardBookmarks.py:205` — Cross-User Bookmark Privacy Leak (IDOR): `?bookmark=<id>` on canvas view and `bi_dashboard_bookmark_apply` load and apply private bookmarks belonging to other users without scoping to `Q(user=request.user) | Q(is_shared=True)`. Fix: Filter active bookmark with `.filter(Q(user=request.user) | Q(is_shared=True))`.
+7. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:120` — Missing Authorization Check on Canvas Builder: `bi_dashboard_canvas_builder` uses `@login_required` instead of `@tenant_admin_required`, allowing non-admin tenant members to access the visual builder and modify widget positions/dimensions via AJAX POST. Fix: Add `@tenant_admin_required` (or restrict to author/admin).
+8. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:21-40` — Unpublished Draft Dashboards Accessible to Regular Users: `bi_dashboard_canvas_view` lacks a check on `dashboard.is_published`, allowing non-creator non-admin users to view unfinished draft dashboards. Fix: Return 403 if `not dashboard.is_published and not is_admin_or_author`.
+
+### Minor
+1. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:97` — Kiosk View Ignores Disabled Flag: `bi_dashboard_kiosk_view` renders full-screen wallboard even when `dashboard.is_kiosk_enabled=False`. Fix: Return 403 if `not dashboard.is_kiosk_enabled`.
+2. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134-143` — Unvalidated Coordinate Ingestion in Drag-and-Drop Handler: AJAX handler updates `pos_x`, `pos_y`, `width_cols`, `height_rows` without boundary validation (e.g., negative coords or `width_cols > 12`). Fix: Validate with bounds checks `max(0, min(11, pos_x))` and `max(1, min(12, width_cols))`.
+3. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:33-36` — Role Restriction Attribute Check: `user_roles = getattr(request.user, "roles", None)` checks `.filter(code=...)`, but NavERP user model has single `role` FK (`request.user.role.name`). Fix: Check `request.user.role and request.user.role.name.lower() == dashboard.role_required.lower()`.
+4. `apps/bi/views/Dashboards/BiDashboardBookmarks.py:211` — Hardcoded URL in Bookmark Apply: Redirect string `/bi/dashboards/{bookmark.dashboard_id}/view/?bookmark={bookmark.pk}` bypasses reverse routing. Fix: Use `reverse("bi:bi_dashboard_canvas_view", kwargs={"pk": bookmark.dashboard_id}) + f"?bookmark={bookmark.pk}"`.
+
+### Route Verification Table
+
+| Route Name | Method | Status | Cross-Tenant IDOR | Comment Leak | Notes |
+|---|---|---|---|---|---|
+| `bi:bi_dashboard_list` | GET | 200 PASS | N/A | PASS | Base dashboard list view |
+| `bi:bi_dashboard_list (filtered)` | GET | 200 PASS | N/A | PASS | Filtered by category, status, query |
+| `bi:bi_dashboard_list (junk params)` | GET | 200 PASS | N/A | PASS | Junk parameters handled safely |
+| `bi:bi_dashboard_list (page 2)` | GET | 200 PASS | N/A | PASS | Pagination guard verified |
+| `bi:bi_dashboard_create` | GET | 200 PASS | N/A | PASS | Dashboard create form |
+| `bi:bi_dashboard_detail` | GET | 200 PASS | 404 PASS | PASS | Detail view & IDOR (500 if `created_by=None`) |
+| `bi:bi_dashboard_edit` | GET | 200 PASS | 404 PASS | PASS | Dashboard edit form & cross-tenant IDOR |
+| `bi:bi_dashboard_duplicate` | GET | 200 PASS | 404 PASS | PASS | Dashboard clone form & IDOR (POST 500 on audit log) |
+| `bi:bi_dashboard_canvas_view` | GET | 200 PASS | 404 PASS | PASS | Visual canvas viewer & IDOR (500 if `?bookmark=invalid`) |
+| `bi:bi_dashboard_canvas_builder` | GET | 200 PASS | 404 PASS | PASS | Drag-and-drop layout builder & IDOR |
+| `bi:bi_dashboard_kiosk_view` | GET | 200 PASS | 404 PASS | PASS | Kiosk fullscreen wallboard & IDOR |
+| `bi:bi_dashboard_publish` | POST | 500 FAIL | 404 PASS | PASS | Dashboard publish toggle (500 on audit log keyword) |
+| `bi:bi_dashboard_delete` | POST | 500 FAIL | 404 PASS | PASS | Dashboard delete action (500 on audit log keyword) |
+| `bi:bi_dashboard_widget_list` | GET | 200 PASS | N/A | PASS | Widget list view (500 if `?dashboard=invalid`) |
+| `bi:bi_dashboard_widget_list (filtered)` | GET | 200 PASS | N/A | PASS | Filtered by dashboard, widget_type |
+| `bi:bi_dashboard_widget_create` | GET | 200 PASS | N/A | PASS | Widget create form |
+| `bi:bi_dashboard_widget_detail` | GET | 200 PASS | 404 PASS | PASS | Widget detail view & cross-tenant IDOR |
+| `bi:bi_dashboard_widget_edit` | GET | 200 PASS | 404 PASS | PASS | Widget edit form & cross-tenant IDOR |
+| `bi:bi_dashboard_widget_data` | GET | 200 PASS | 404 PASS | PASS | Widget JSON telemetry API & cross-tenant IDOR |
+| `bi:bi_dashboard_widget_delete` | POST | 500 FAIL | 404 PASS | PASS | Widget delete action (500 on audit log keyword) |
+| `bi:bi_dashboard_bookmark_list` | GET | 200 PASS | N/A | PASS | Bookmark list view (500 if `?dashboard=invalid`) |
+| `bi:bi_dashboard_bookmark_create` | GET | 200 PASS | N/A | PASS | Bookmark create form |
+| `bi:bi_dashboard_bookmark_detail` | GET | 200 PASS | 404 PASS | PASS | Bookmark detail view & cross-tenant IDOR |
+| `bi:bi_dashboard_bookmark_edit` | GET | 200 PASS | 404 PASS | PASS | Bookmark edit form & cross-tenant IDOR |
+| `bi:bi_dashboard_bookmark_apply` | GET | 302 PASS | 404 PASS | PASS | Bookmark apply redirect & cross-tenant IDOR |
+| `bi:bi_dashboard_bookmark_delete` | POST | 500 FAIL | 404 PASS | PASS | Bookmark delete action (500 on audit log keyword) |
+| `bi:bi_dashboard_filter_list` | GET | 200 PASS | N/A | PASS | Filter list view (500 if `?dashboard=invalid`) |
+| `bi:bi_dashboard_filter_create` | GET | 200 PASS | N/A | PASS | Filter create form |
+| `bi:bi_dashboard_filter_detail` | GET | 200 PASS | 404 PASS | PASS | Filter detail view & cross-tenant IDOR |
+| `bi:bi_dashboard_filter_edit` | GET | 200 PASS | 404 PASS | PASS | Filter edit form & cross-tenant IDOR |
+| `bi:bi_dashboard_filter_delete` | POST | 500 FAIL | 404 PASS | PASS | Filter delete action (500 on audit log keyword) |
+
 
 
 
