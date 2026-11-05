@@ -4,7 +4,7 @@
 **Review Passes:**
 1. Code Reviewer — Completed
 2. Explorer (Architecture & Contract) — Completed
-3. Frontend Reviewer — Pending
+3. Frontend Reviewer — Completed
 4. Performance Reviewer — Pending
 5. QA Smoke Tester — Pending
 6. Security Reviewer — Pending
@@ -63,4 +63,24 @@ None. Multi-tenant data isolation is strictly enforced across models via `Tenant
 6. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134-144` — Unvalidated Coordinate Ingestion in Canvas Builder AJAX Handler. Fix: Validate with `BiDashboardWidgetPositionForm`.
 7. `templates/bi/dashboards/canvas/viewer.html:226` — Duplicate Chart.js Script Inclusion (already loaded by `base.html`). Fix: Remove redundant CDN script tag.
 8. `templates/bi/dashboards/dashboard/list.html:70-112` — Theme Filter Omitted in Dashboard List UI. Fix: Add Theme select dropdown and preserve in pagination.
+
+---
+
+## Pass 3: Frontend Reviewer
+
+### Critical
+1. `templates/bi/dashboards/dashboard/detail.html:109` — Lesson L10 Violation: Nullable FK in Filter Argument `{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username|default:"System Seed" }}` raises `VariableDoesNotExist` and 500s when `created_by` is None. Fix: Guard with `{% if dashboard.created_by %}{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username }}{% else %}System Seed{% endif %}`.
+2. `templates/bi/dashboards/canvas/viewer.html:111,127` — Invalid `|dictsort` filter on `request.GET` evaluates to empty string, breaking active filter choices and search terms. Fix: Attach active filter value to filter object in view and compare in template.
+
+### Important
+1. `templates/bi/dashboards/widget/list.html:132-139` — Missing Standardized POST-Delete Form with CSRF and confirm prompt in Widget List Actions Column. Fix: Add inline POST delete form.
+2. `templates/bi/dashboards/bookmark/list.html:125-138` — Missing Standardized POST-Delete Form with CSRF and confirm prompt in Bookmark List Actions Column. Fix: Add ownership-guarded POST delete form.
+3. `templates/bi/dashboards/filter/list.html:118-126` — Missing Standardized POST-Delete Form with CSRF and confirm prompt in Filter List Actions Column. Fix: Add inline POST delete form.
+4. `templates/bi/dashboards/dashboard/list.html:168-180` — Missing Direct Edit and Delete Actions on Dashboard Card Grid footer. Fix: Add edit and delete actions to card footer cluster.
+
+### Minor
+1. `templates/bi/dashboards/canvas/viewer.html:83,137,161` & `templates/bi/dashboards/canvas/builder.html:32,61` — Missing `aria-label` Attributes on Icon-Only Buttons. Fix: Add descriptive `aria-label`.
+2. `templates/bi/dashboards/canvas/viewer.html:33-38` — Missing Outside Click Dismissal on Bookmark Menu. Fix: Add document click listener to close dropdown when clicking outside.
+3. `templates/bi/dashboards/canvas/builder.html:51` — Builder Template Lacks Client-Side Drag-and-Drop Script for Coordinates AJAX Endpoint. Fix: Add interactive JS grid script to POST updated coordinates to builder endpoint.
+
 
