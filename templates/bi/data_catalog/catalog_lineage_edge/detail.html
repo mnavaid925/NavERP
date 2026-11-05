@@ -188,7 +188,7 @@
                     <div class="text-xs text-muted uppercase font-medium">Transformation Step</div>
                     {% if edge.transformation_step %}
                     <span class="font-medium text-slate-800 mt-0.5 block">
-                        {{ edge.transformation_step.name }} (Step #{{ edge.transformation_step.step_order }})
+                        {{ edge.transformation_step.name }} (Step #{{ edge.transformation_step.sequence }})
                     </span>
                     {% else %}
                     <span class="text-slate-400 text-xs">No granular step linked</span>
