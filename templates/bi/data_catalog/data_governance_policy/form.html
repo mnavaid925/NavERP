@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Policy {{ policy.number }}{% else %}Create Governance Policy{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:catalog_overview' %}">Data Catalog</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_governance_policy_list' %}">Policies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ policy.number }}{% else %}New Policy{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Governance Policy {{ policy.number }}{% else %}Establish Governance Policy{% endif %}</h1>
+        <p class="text-muted text-sm">Configure regulatory compliance mandates, statutory retention schedules, and dynamic column masking rules</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_governance_policy_detail' policy.pk %}{% else %}{% url 'bi:data_governance_policy_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card border-red-200 bg-red-50 p-4">
+        {% for error in form.non_field_errors %}
+        <p class="text-sm text-red-700 font-medium">{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Policy Identification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">1. Policy Classification & Regulatory Framework</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Policy Name *</label>
+                {{ form.name }}
+                {% if form.name.errors %}<p class="form-error">{{ form.name.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.code.id_for_label }}">Policy Code / Slug *</label>
+                {{ form.code }}
+                {% if form.code.errors %}<p class="form-error">{{ form.code.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.policy_type.id_for_label }}">Policy Type *</label>
+                {{ form.policy_type }}
+                {% if form.policy_type.errors %}<p class="form-error">{{ form.policy_type.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.regulatory_framework.id_for_label }}">Regulatory Framework *</label>
+                {{ form.regulatory_framework }}
+                {% if form.regulatory_framework.errors %}<p class="form-error">{{ form.regulatory_framework.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.policy_owner.id_for_label }}">Designated Policy Owner / DPO</label>
+                {{ form.policy_owner }}
+                {% if form.policy_owner.errors %}<p class="form-error">{{ form.policy_owner.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Enforcement & Retention Specifications -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">2. Enforcement Action & Masking Rules</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="form-label" for="{{ form.enforcement_level.id_for_label }}">Enforcement Level *</label>
+                {{ form.enforcement_level }}
+                {% if form.enforcement_level.errors %}<p class="form-error">{{ form.enforcement_level.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.masking_algorithm.id_for_label }}">Dynamic Column Masking</label>
+                {{ form.masking_algorithm }}
+                {% if form.masking_algorithm.errors %}<p class="form-error">{{ form.masking_algorithm.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.retention_period_days.id_for_label }}">Retention Schedule (Days)</label>
+                {{ form.retention_period_days }}
+                {% if form.retention_period_days.errors %}<p class="form-error">{{ form.retention_period_days.errors.0 }}</p>{% endif %}
+                <p class="text-xs text-muted mt-1">e.g. 2555 days for 7-year SOX compliance</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Timeline & Compliance Citations -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">3. Effective Timeline & Legal Citations</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date *</label>
+                    {{ form.effective_date }}
+                    {% if form.effective_date.errors %}<p class="form-error">{{ form.effective_date.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label class="form-label" for="{{ form.expiration_date.id_for_label }}">Expiration Date (Optional)</label>
+                    {{ form.expiration_date }}
+                    {% if form.expiration_date.errors %}<p class="form-error">{{ form.expiration_date.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label class="form-label" for="{{ form.review_frequency_days.id_for_label }}">Review Cadence (Days)</label>
+                    {{ form.review_frequency_days }}
+                    {% if form.review_frequency_days.errors %}<p class="form-error">{{ form.review_frequency_days.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.compliance_notes.id_for_label }}">Legal Citations & Regulatory References</label>
+                {{ form.compliance_notes }}
+                {% if form.compliance_notes.errors %}<p class="form-error">{{ form.compliance_notes.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label class="form-label" for="{{ form.description.id_for_label }}">Detailed Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<p class="form-error">{{ form.description.errors.0 }}</p>{% endif %}
+            </div>
+            <div class="flex items-center gap-2 pt-2">
+                {{ form.is_active }}
+                <label class="form-label mb-0 cursor-pointer" for="{{ form.is_active.id_for_label }}">Active governance policy</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'bi:data_governance_policy_detail' policy.pk %}{% else %}{% url 'bi:data_governance_policy_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save"></i>
+            <span>{% if is_edit %}Save Policy{% else %}Create Policy{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
