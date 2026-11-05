@@ -107,6 +107,7 @@ class DataGovernancePolicy(TenantNumbered):
             models.Index(fields=["tenant", "regulatory_framework"], name="idx_bgov_ten_rframe"),
             models.Index(fields=["tenant", "enforcement_level"], name="idx_bgov_ten_enforce"),
             models.Index(fields=["tenant", "is_active"], name="idx_bgov_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bgov_ten_created"),
         ]
 
     def __str__(self):
