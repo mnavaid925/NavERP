@@ -82,7 +82,7 @@
 <!-- Filter Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Name, code, tag..." class="form-input text-sm">
@@ -120,6 +120,15 @@
                     <option value="">All Tiers</option>
                     {% for val, label in tier_choices %}
                     <option value="{{ val }}" {% if request.GET.tier == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in certification_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
