@@ -3,7 +3,7 @@
 **Commit Range:** `7d343a2af8e7ae61ab20168cfdec164cec1e4ed0...HEAD`  
 **Review Passes:**
 1. Code Reviewer — Completed
-2. Explorer (Architecture & Contract) — Pending
+2. Explorer (Architecture & Contract) — Completed
 3. Frontend Reviewer — Pending
 4. Performance Reviewer — Pending
 5. QA Smoke Tester — Pending
@@ -36,3 +36,31 @@ None. Multi-tenant isolation is strict (all 4 models inherit `TenantNumbered`, u
 2. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:97` — `bi_dashboard_kiosk_view` renders full-screen wallboard without checking `dashboard.is_kiosk_enabled`. Fix: Return `HttpResponseForbidden` if `not dashboard.is_kiosk_enabled`.
 3. `apps/bi/views/Dashboards/BiDashboards.py:227` — `bi_dashboard_duplicate` does not catch or handle duplicate slug collisions for `request.tenant` prior to `BiDashboard.objects.create()`. Fix: Check slug existence and append incremental suffix if slug already exists.
 4. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134` — Bulk widget repositioning AJAX action does not write an `AuditLog` entry. Fix: Add `write_audit_log` call inside the transaction.
+
+---
+
+## Pass 2: Explorer (Architecture & Contract)
+
+### Critical
+None. Multi-tenant data isolation is strictly enforced across models via `TenantNumbered` and `TenantUniqueMixin`, SQL injection and XSS protections are standard, and no schema corruption or system crashes exist.
+
+### Important
+1. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:33-36` — Broken Role Resolution on Role-Restricted Dashboards: View checks `user_roles.filter(code=dashboard.role_required)`, but NavERP User model has single `role` FK with `name`. Fix: Use `request.user.role and request.user.role.name.lower() == dashboard.role_required.lower()`.
+2. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:60` — Cross-User Bookmark Privacy Leak (IDOR): `?bookmark=<id>` retrieves bookmark without checking ownership or sharing scope. Fix: Scope with `Q(user=request.user) | Q(is_shared=True)`.
+3. `templates/bi/dashboards/canvas/viewer.html:111,127` — Invalid `dictsort` template filter on QueryDict silently evaluates to `""`, causing query filters to be ignored. Fix: Attach `current_value` to filters in view and compare in template.
+4. `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py:9-37` — Unhandled DB IntegrityError on Duplicate Bookmark Submission: Excluded `user` field bypasses validation, triggering 500 on duplicate name for same user. Fix: Accept `user` in `__init__` and validate uniqueness in `clean()`.
+5. `templates/bi/dashboards/dashboard/detail.html:48-73` vs `apps/bi/views/Dashboards/BiDashboards.py:118, 150, 180, 200` — Creator Action Buttons Result in 403 PermissionDenied: `detail.html` shows buttons to author, but views enforce `@tenant_admin_required`. Fix: Align permissions between views and templates.
+6. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:120-146` — Missing Authorization Check on Visual Builder and Drag-and-Drop Layout AJAX Endpoint. Fix: Add `@tenant_admin_required` or author/admin check.
+7. `apps/bi/views/Dashboards/BiDashboardBookmarks.py:205-211` — Missing Shared Scope Check and Hardcoded URL in Bookmark Apply. Fix: Enforce `bookmark.user == request.user or bookmark.is_shared or is_tenant_admin` and reverse URL.
+8. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:21-40, 97-116` — Unpublished Draft Dashboards Accessible to Regular Users without publish guard. Fix: Return 403 if `not dashboard.is_published and not is_admin_or_author`.
+
+### Minor
+1. `templates/bi/dashboards/widget/detail.html:47-157` — Unrendered Pinned Context Variable `data_preview`. Fix: Add sample dataset preview card.
+2. `templates/bi/dashboards/bookmark/detail.html:82-90` — Unrendered Pinned Context Variable `crossfilter_state_pretty`. Fix: Add JSON preformatted block.
+3. `templates/bi/dashboards/canvas/builder.html:90-125` — Omission of `warehouse_tables` in Builder Sidebar Toolbox. Fix: Add Analytical Warehouse Tables section under Available Metric Sources.
+4. `templates/bi/dashboards/dashboard/list.html:151` & `apps/bi/views/Dashboards/BiDashboards.py:20` — N+1 Queries on Dashboard List Page (`d.widgets.count`). Fix: Annotate `widget_count` in view.
+5. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:97-104` — Kiosk Mode Verification Missing (`is_kiosk_enabled`). Fix: Guard with 403 when kiosk is disabled.
+6. `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134-144` — Unvalidated Coordinate Ingestion in Canvas Builder AJAX Handler. Fix: Validate with `BiDashboardWidgetPositionForm`.
+7. `templates/bi/dashboards/canvas/viewer.html:226` — Duplicate Chart.js Script Inclusion (already loaded by `base.html`). Fix: Remove redundant CDN script tag.
+8. `templates/bi/dashboards/dashboard/list.html:70-112` — Theme Filter Omitted in Dashboard List UI. Fix: Add Theme select dropdown and preserve in pagination.
+
