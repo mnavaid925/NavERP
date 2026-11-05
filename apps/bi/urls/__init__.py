@@ -21,6 +21,9 @@ from apps.bi.urls.DataWarehouse import (
 from apps.bi.urls.MasterData import (
     urlpatterns as master_data_urlpatterns,
 )
+from apps.bi.urls.DataCatalog import (
+    urlpatterns as data_catalog_urlpatterns,
+)
 from apps.bi.urls.SemanticLayer import (
     urlpatterns as semantic_urlpatterns,
 )
@@ -57,4 +60,5 @@ urlpatterns = (
     + semantic_urlpatterns
     + data_quality_urlpatterns
     + master_data_urlpatterns
+    + data_catalog_urlpatterns
 )
