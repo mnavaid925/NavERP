@@ -65,8 +65,8 @@
             <i data-lucide="star"></i>
         </div>
         <div>
-            <div class="text-muted text-xs font-medium uppercase tracking-wider">Community Ratings</div>
-            <div class="text-2xl font-bold text-indigo-600">5-Star System</div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Average Rating</div>
+            <div class="text-2xl font-bold text-indigo-600">{% if average_rating_overall %}{{ average_rating_overall|floatformat:2 }} &#9733;{% else %}&mdash;{% endif %}</div>
         </div>
     </div>
 </div>
