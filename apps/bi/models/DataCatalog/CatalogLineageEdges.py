@@ -98,6 +98,7 @@ class CatalogLineageEdge(TenantNumbered):
             models.Index(fields=["tenant", "lineage_type"], name="idx_blin_ten_type"),
             models.Index(fields=["tenant", "impact_criticality"], name="idx_blin_ten_crit"),
             models.Index(fields=["tenant", "is_active"], name="idx_blin_ten_active"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_blin_ten_created"),
         ]
 
     def __str__(self):
