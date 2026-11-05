@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dashboard.title }} — Interactive Canvas — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_dashboard_list' %}">Dashboards</a>
+            <span class="sep">/</span>
+            <span>{{ dashboard.title }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title text-2xl font-bold text-slate-900">{{ dashboard.title }}</h1>
+            <span class="badge {{ dashboard.badge_category }}">{{ dashboard.get_category_display }}</span>
+            {% if dashboard.is_published %}
+            <span class="badge badge-green text-xs">Live</span>
+            {% else %}
+            <span class="badge badge-muted text-xs">Draft</span>
+            {% endif %}
+            {% if active_bookmark %}
+            <span class="badge badge-info text-xs">
+                <i data-lucide="bookmark" class="w-3 h-3 inline"></i> {{ active_bookmark.name }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions">
+        <!-- Bookmark Selector -->
+        <div class="relative inline-block text-left" id="bookmark-dropdown-wrap">
+            <button type="button" class="btn btn-outline flex items-center gap-1.5" id="bookmark-btn" onclick="document.getElementById('bookmark-menu').classList.toggle('hidden');">
+                <i data-lucide="bookmark"></i>
+                <span>Bookmarks ({{ bookmarks.count }})</span>
+                <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+            </button>
+            <div id="bookmark-menu" class="hidden absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20 divide-y divide-slate-100">
+                <div class="p-2">
+                    <span class="text-xs font-semibold text-muted uppercase tracking-wider px-2 block mb-1">Saved Views</span>
+                    {% for bm in bookmarks %}
+                    <a href="?bookmark={{ bm.pk }}" class="block px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 rounded {% if active_bookmark.pk == bm.pk %}bg-blue-50 font-semibold text-blue-700{% endif %}">
+                        <div class="flex items-center justify-between">
+                            <span>{{ bm.name }}</span>
+                            {% if bm.is_default %}<span class="badge badge-amber text-[9px] py-0">Default</span>{% endif %}
+                        </div>
+                    </a>
+                    {% empty %}
+                    <span class="px-3 py-2 text-xs text-muted block">No saved bookmarks.</span>
+                    {% endfor %}
+                </div>
+                <div class="p-2">
+                    <a href="{% url 'bi:bi_dashboard_bookmark_create' %}?dashboard={{ dashboard.pk }}" class="flex items-center gap-1.5 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded">
+                        <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+                        <span>Save Current View as Bookmark</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Refresh Countdown / Button -->
+        <button type="button" class="btn btn-outline" onclick="window.location.reload();" title="Refresh Now">
+            <i data-lucide="refresh-cw"></i>
+            {% if refresh_interval %}
+            <span id="refresh-timer" class="text-xs font-mono">{{ refresh_interval }}s</span>
+            {% else %}
+            <span>Refresh</span>
+            {% endif %}
+        </button>
+
+        {% if dashboard.is_kiosk_enabled %}
+        <a href="{% url 'bi:bi_dashboard_kiosk_view' dashboard.pk %}" class="btn btn-outline" target="_blank" title="Full-screen Wallboard">
+            <i data-lucide="monitor"></i>
+            <span>Kiosk</span>
+        </a>
+        {% endif %}
+
+        <a href="{% url 'bi:bi_dashboard_canvas_builder' dashboard.pk %}" class="btn btn-outline" title="Edit Grid Layout">
+            <i data-lucide="palette"></i>
+            <span>Builder</span>
+        </a>
+
+        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline" title="Dashboard Specs">
+            <i data-lucide="settings"></i>
+        </a>
+    </div>
+</div>
+
+<!-- Global Top Filter Bar -->
+{% if filters %}
+<div class="card mb-6 bg-slate-50 border-slate-200">
+    <div class="card-body py-3 px-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            {% if active_bookmark %}
+            <input type="hidden" name="bookmark" value="{{ active_bookmark.pk }}">
+            {% endif %}
+
+            <div class="flex items-center gap-1.5 text-xs font-semibold text-muted uppercase tracking-wider pr-2 border-r border-slate-200">
+                <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                <span>Filters</span>
+            </div>
+
+            {% for f in filters %}
+            <div class="flex items-center gap-1.5">
+                <label for="fl-{{ f.filter_key }}" class="text-xs font-medium text-slate-700 whitespace-nowrap">{{ f.filter_label }}:</label>
+                {% if f.filter_type == "dropdown" or f.filter_type == "multi_select" %}
+                <select id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" class="form-select py-1 text-xs">
+                    <option value="">All</option>
+                    {% if f.static_options_json %}
+                        {% for opt in f.static_options_json %}
+                        <option value="{{ opt.value }}" {% if request.GET|dictsort:f.filter_key == opt.value or f.default_value == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="current" selected>Current Active</option>
+                        <option value="previous">Previous Period</option>
+                    {% endif %}
+                </select>
+                {% elif f.filter_type == "date_preset" %}
+                <select id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" class="form-select py-1 text-xs">
+                    <option value="today">Today</option>
+                    <option value="mtd" selected>Month to Date</option>
+                    <option value="qtd">Quarter to Date</option>
+                    <option value="ytd">Year to Date (YTD)</option>
+                    <option value="all">All Time</option>
+                </select>
+                {% else %}
+                <input type="text" id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" value="{{ request.GET|dictsort:f.filter_key|default:f.default_value }}" class="form-input py-1 text-xs w-32" placeholder="Value...">
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="flex items-center gap-2 ml-auto">
+                <button type="submit" class="btn btn-sm btn-primary">
+                    <i data-lucide="filter" class="w-3.5 h-3.5"></i>
+                    <span>Apply</span>
+                </button>
+                <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-sm btn-outline" title="Reset">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<!-- 12-Column Responsive Grid Canvas -->
+{% if widgets %}
+<div class="grid grid-cols-12 gap-4 mb-8">
+    {% for w in widgets %}
+    <div class="col-span-12 sm:col-span-6 lg:col-span-{{ w.width_cols }} card flex flex-col justify-between" style="min-height: 240px;">
+        <div class="card-header py-3 px-4 flex items-center justify-between border-b border-slate-100">
+            <div>
+                <h3 class="text-sm font-semibold text-slate-800">{{ w.title }}</h3>
+                {% if w.subtitle %}
+                <p class="text-[11px] text-muted">{{ w.subtitle }}</p>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-1">
+                <span class="badge {{ w.badge_widget_type }} text-[10px]">{{ w.get_widget_type_display }}</span>
+                {% if w.drilldown_target_url %}
+                <a href="{{ w.drilldown_target_url }}" class="text-slate-400 hover:text-blue-600 p-1" title="Drill Down">
+                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card-body p-4 flex-1 flex flex-col justify-center">
+            {% if w.widget_type == "kpi_card" %}
+            <div class="text-center py-2">
+                <div class="text-xs uppercase font-medium tracking-wider text-muted mb-1">{{ w.subtitle|default:"Current Period" }}</div>
+                <div class="text-3xl font-extrabold text-slate-900 tracking-tight">$248,500</div>
+                <div class="text-xs font-semibold text-emerald-600 flex items-center justify-center gap-1 mt-1.5">
+                    <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+                    <span>+12.4% vs last period</span>
+                </div>
+            </div>
+            {% elif w.widget_type == "streaming_counter" %}
+            <div class="text-center py-2">
+                <div class="text-xs uppercase font-medium tracking-wider text-muted mb-1">Live Processing Stream</div>
+                <div class="text-4xl font-mono font-bold text-blue-600" id="counter-{{ w.pk }}">1,842</div>
+                <div class="text-[11px] text-muted mt-1 flex items-center justify-center gap-1">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Streaming active</span>
+                </div>
+            </div>
+            {% else %}
+            <div class="relative w-full h-48">
+                <canvas id="chart-canvas-{{ w.pk }}"></canvas>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card-footer py-2 px-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[11px] text-muted">
+            <span>
+                {% if w.calculated_measure %}
+                Metric: {{ w.calculated_measure.name }}
+                {% elif w.semantic_model %}
+                Source: {{ w.semantic_model.name }}
+                {% elif w.warehouse_table %}
+                Table: {{ w.warehouse_table.table_name }}
+                {% else %}
+                Mocked Chart Data
+                {% endif %}
+            </span>
+            <span class="font-mono text-[10px]">{{ w.number }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state card p-12 text-center">
+    <div class="stat-icon blue mx-auto mb-4">
+        <i data-lucide="layout-grid"></i>
+    </div>
+    <h3 class="text-lg font-semibold text-slate-800 mb-1">Dashboard Has No Widgets</h3>
+    <p class="text-muted text-sm max-w-md mx-auto mb-6">Open the Visual Builder to add chart tiles, KPI cards, and conversion funnels to this canvas.</p>
+    <a href="{% url 'bi:bi_dashboard_canvas_builder' dashboard.pk %}" class="btn btn-primary">
+        <i data-lucide="palette"></i>
+        <span>Launch Visual Builder</span>
+    </a>
+</div>
+{% endif %}
+
+<!-- Chart.js Client Rendering & Auto-Refresh Script -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    {% if refresh_interval %}
+    let secondsLeft = {{ refresh_interval }};
+    const timerEl = document.getElementById("refresh-timer");
+    setInterval(function() {
+        secondsLeft--;
+        if (timerEl) { timerEl.textContent = secondsLeft + "s"; }
+        if (secondsLeft <= 0) { window.location.reload(); }
+    }, 1000);
+    {% endif %}
+
+    // Palette colors
+    const colors = ["#1e40af", "#0d9488", "#f59e0b", "#6366f1", "#10b981", "#ef4444", "#8b5cf6"];
+
+    {% for w in widgets %}
+    {% if w.widget_type != "kpi_card" and w.widget_type != "streaming_counter" %}
+    const ctx{{ w.pk }} = document.getElementById("chart-canvas-{{ w.pk }}");
+    if (ctx{{ w.pk }}) {
+        let chartType = "bar";
+        if ("{{ w.widget_type }}" === "line") chartType = "line";
+        else if ("{{ w.widget_type }}" === "area") chartType = "line";
+        else if ("{{ w.widget_type }}" === "pie") chartType = "pie";
+        else if ("{{ w.widget_type }}" === "donut") chartType = "doughnut";
+        else if ("{{ w.widget_type }}" === "column") chartType = "bar";
+        else if ("{{ w.widget_type }}" === "bar") chartType = "bar";
+
+        new Chart(ctx{{ w.pk }}, {
+            type: chartType,
+            data: {
+                labels: ["Q1", "Q2", "Q3", "Q4"],
+                datasets: [{
+                    label: "{{ w.title|escapejs }}",
+                    data: [35000, 48000, 62000, 89000],
+                    backgroundColor: chartType === "pie" || chartType === "doughnut" ? colors : "#1e40af",
+                    borderColor: "#1e40af",
+                    borderWidth: 1,
+                    fill: "{{ w.widget_type }}" === "area",
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: chartType === "pie" || chartType === "doughnut" }
+                }
+            }
+        });
+    }
+    {% endif %}
+    {% endfor %}
+});
+</script>
+{% endblock %}
