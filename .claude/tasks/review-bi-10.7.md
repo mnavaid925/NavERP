@@ -37,3 +37,16 @@ Solid contract consistency across 23 URLs, forms, models, and admin. Identified 
 - **[Minor]** `templates/bi/data_catalog/catalog_overview.html:287`: In "Assets by Domain", the progress bar style uses raw item count `{{ d.count|floatformat:0 }}%` as percentage width. Fix: Compute percentage `d.pct` in Python in `Overview.py` and render `style="width: {{ d.pct }}%;"`.
 
 ---
+
+## 3. Frontend Reviewer Pass
+
+### Verdict
+Exemplary structure and design-system fidelity across all 13 templates. Zero comment leaks, zero non-existent theme.css classes, zero unsafe None lookups, and zero NoReverseMatch risks. Identified missing detail POST delete buttons, two missing list filter selects, and pagination query preservation for asset filters.
+
+### Findings
+- **[Important]** `templates/bi/data_catalog/catalog_asset/detail.html:36`, `templates/bi/data_catalog/catalog_lineage_edge/detail.html:30`, `templates/bi/data_catalog/catalog_trust_endorsement/detail.html:39`, `templates/bi/data_catalog/data_governance_policy/detail.html:29`: Missing POST delete button with confirmation dialog on all 4 detail pages. Fix: Add standard POST delete form with confirmation dialog to `.page-actions`.
+- **[Important]** `templates/bi/data_catalog/catalog_asset/list.html:85-137`: Missing `<select name="status">` in list filter form despite view passing `certification_status_choices` and handling `status` GET filter. Fix: Add certification status `<select>` dropdown.
+- **[Important]** `templates/bi/data_catalog/data_governance_policy/list.html:81-115`: Missing `<select name="enforcement">` in list filter form despite view passing `enforcement_choices` and handling `enforcement` GET filter. Fix: Add enforcement level `<select>` dropdown.
+- **[Minor]** `templates/bi/data_catalog/catalog_lineage_edge/list.html:239, 247` & `templates/bi/data_catalog/catalog_trust_endorsement/list.html:217, 225`: Pagination links omit `{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}` parameter preservation. Fix: Append asset query parameter to previous/next pagination links.
+
+---
