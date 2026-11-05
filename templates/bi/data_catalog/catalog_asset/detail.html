@@ -323,7 +323,7 @@
                     <div class="text-xs text-muted uppercase font-medium">Quality Health Scorecard</div>
                     {% if asset.quality_scorecard %}
                     <a href="{% url 'bi:data_quality_scorecard_detail' asset.quality_scorecard.pk %}" class="font-medium text-primary hover:underline mt-0.5 block">
-                        {{ asset.quality_scorecard.number }} (Overall Health: {{ asset.quality_scorecard.overall_health_score }}%)
+                        {{ asset.quality_scorecard.number }} (Overall Health: {{ asset.quality_scorecard.overall_quality_score }}%)
                     </a>
                     {% else %}
                     <span class="text-slate-400 text-xs">No quality scorecard attached</span>
