@@ -78,7 +78,7 @@
 <!-- Filter Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Name, code, notes..." class="form-input text-sm">
@@ -98,6 +98,15 @@
                     <option value="">All Frameworks</option>
                     {% for val, label in framework_choices %}
                     <option value="{{ val }}" {% if request.GET.framework == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Enforcement Level</label>
+                <select name="enforcement" class="form-select text-sm">
+                    <option value="">All Levels</option>
+                    {% for val, label in enforcement_choices %}
+                    <option value="{{ val }}" {% if request.GET.enforcement == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
