@@ -203,85 +203,101 @@
 ## Sub-module 10.9 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.9.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.9.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: ReportDefinition (`BRPT-`)**
-  - [ ] Model: `apps/bi/models/OperationalReporting/ReportDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRPT"`)
-  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportDefinitions.py` (`ReportDefinitionForm`, `ReportCloneForm`)
-  - [ ] Views: `apps/bi/views/OperationalReporting/ReportDefinitions.py` (list, detail, create, edit, delete, clone, preview/interactive viewer)
-  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportDefinitions.py` (`report_definition_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/operational_reporting/report_definition/list.html`
-    - [ ] `templates/bi/operational_reporting/report_definition/detail.html`
-    - [ ] `templates/bi/operational_reporting/report_definition/form.html`
-    - [ ] `templates/bi/operational_reporting/report_definition/viewer.html`
-    - [ ] `templates/bi/operational_reporting/report_definition/print.html`
-- [ ] **Entity 2: ReportParameter (`BPAR-`)**
-  - [ ] Model: `apps/bi/models/OperationalReporting/ReportParameters.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPAR"`)
-  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportParameters.py` (`ReportParameterForm`)
-  - [ ] Views: `apps/bi/views/OperationalReporting/ReportParameters.py` (list, detail, create, edit, delete)
-  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportParameters.py` (`report_parameter_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/operational_reporting/report_parameter/list.html`
-    - [ ] `templates/bi/operational_reporting/report_parameter/detail.html`
-    - [ ] `templates/bi/operational_reporting/report_parameter/form.html`
-- [ ] **Entity 3: ReportExecution (`BRUN-`)**
-  - [ ] Model: `apps/bi/models/OperationalReporting/ReportExecutions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRUN"`)
-  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportExecutions.py` (`ReportExecutionRunForm`)
-  - [ ] Views: `apps/bi/views/OperationalReporting/ReportExecutions.py` (list, detail, create/run, delete, download export)
-  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportExecutions.py` (`report_execution_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/operational_reporting/report_execution/list.html`
-    - [ ] `templates/bi/operational_reporting/report_execution/detail.html`
-    - [ ] `templates/bi/operational_reporting/report_execution/form.html`
-- [ ] **Entity 4: ReportDrillPath (`BDRP-`)**
-  - [ ] Model: `apps/bi/models/OperationalReporting/ReportDrillPaths.py` (`TenantNumbered`, `NUMBER_PREFIX = "BDRP"`)
-  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportDrillPaths.py` (`ReportDrillPathForm`)
-  - [ ] Views: `apps/bi/views/OperationalReporting/ReportDrillPaths.py` (list, detail, create, edit, delete)
-  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportDrillPaths.py` (`report_drill_path_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/operational_reporting/report_drill_path/list.html`
-    - [ ] `templates/bi/operational_reporting/report_drill_path/detail.html`
-    - [ ] `templates/bi/operational_reporting/report_drill_path/form.html`
+- [x] **Entity 1: ReportDefinition (`BRPT-`)**
+  - [x] Model: `apps/bi/models/OperationalReporting/ReportDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRPT"`)
+  - [x] Form: `apps/bi/forms/OperationalReporting/ReportDefinitions.py` (`ReportDefinitionForm`, `ReportCloneForm`)
+  - [x] Views: `apps/bi/views/OperationalReporting/ReportDefinitions.py` (list, detail, create, edit, delete, clone, preview/interactive viewer)
+  - [x] URLs: `apps/bi/urls/OperationalReporting/ReportDefinitions.py` (`report_definition_*`)
+  - [x] Templates:
+    - [x] `templates/bi/operational_reporting/report_definition/list.html`
+    - [x] `templates/bi/operational_reporting/report_definition/detail.html`
+    - [x] `templates/bi/operational_reporting/report_definition/form.html`
+    - [x] `templates/bi/operational_reporting/report_definition/viewer.html`
+    - [x] `templates/bi/operational_reporting/report_definition/print.html`
+- [x] **Entity 2: ReportParameter (`BPAR-`)**
+  - [x] Model: `apps/bi/models/OperationalReporting/ReportParameters.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPAR"`)
+  - [x] Form: `apps/bi/forms/OperationalReporting/ReportParameters.py` (`ReportParameterForm`)
+  - [x] Views: `apps/bi/views/OperationalReporting/ReportParameters.py` (list, detail, create, edit, delete)
+  - [x] URLs: `apps/bi/urls/OperationalReporting/ReportParameters.py` (`report_parameter_*`)
+  - [x] Templates:
+    - [x] `templates/bi/operational_reporting/report_parameter/list.html`
+    - [x] `templates/bi/operational_reporting/report_parameter/detail.html`
+    - [x] `templates/bi/operational_reporting/report_parameter/form.html`
+- [x] **Entity 3: ReportExecution (`BRUN-`)**
+  - [x] Model: `apps/bi/models/OperationalReporting/ReportExecutions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRUN"`)
+  - [x] Form: `apps/bi/forms/OperationalReporting/ReportExecutions.py` (`ReportExecutionRunForm`)
+  - [x] Views: `apps/bi/views/OperationalReporting/ReportExecutions.py` (list, detail, create/run, delete, download export)
+  - [x] URLs: `apps/bi/urls/OperationalReporting/ReportExecutions.py` (`report_execution_*`)
+  - [x] Templates:
+    - [x] `templates/bi/operational_reporting/report_execution/list.html`
+    - [x] `templates/bi/operational_reporting/report_execution/detail.html`
+    - [x] `templates/bi/operational_reporting/report_execution/form.html`
+- [x] **Entity 4: ReportDrillPath (`BDRP-`)**
+  - [x] Model: `apps/bi/models/OperationalReporting/ReportDrillPaths.py` (`TenantNumbered`, `NUMBER_PREFIX = "BDRP"`)
+  - [x] Form: `apps/bi/forms/OperationalReporting/ReportDrillPaths.py` (`ReportDrillPathForm`)
+  - [x] Views: `apps/bi/views/OperationalReporting/ReportDrillPaths.py` (list, detail, create, edit, delete)
+  - [x] URLs: `apps/bi/urls/OperationalReporting/ReportDrillPaths.py` (`report_drill_path_*`)
+  - [x] Templates:
+    - [x] `templates/bi/operational_reporting/report_drill_path/list.html`
+    - [x] `templates/bi/operational_reporting/report_drill_path/detail.html`
+    - [x] `templates/bi/operational_reporting/report_drill_path/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Add re-exports in `apps/bi/models/OperationalReporting/__init__.py` and `apps/bi/models/__init__.py`
-- [ ] Add re-exports in `apps/bi/forms/OperationalReporting/__init__.py` and `apps/bi/forms/__init__.py`
-- [ ] Add re-exports in `apps/bi/views/OperationalReporting/__init__.py` and `apps/bi/views/__init__.py`
-- [ ] Assemble URL patterns in `apps/bi/urls/OperationalReporting/__init__.py` and wire into `apps/bi/urls/__init__.py`
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Add `LIVE_LINKS["10.9"]` in `apps/core/navigation.py`
-- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data
-- [ ] Run `makemigrations bi` (claiming `0022`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+- [x] Add re-exports in `apps/bi/models/OperationalReporting/__init__.py` and `apps/bi/models/__init__.py`
+- [x] Add re-exports in `apps/bi/forms/OperationalReporting/__init__.py` and `apps/bi/forms/__init__.py`
+- [x] Add re-exports in `apps/bi/views/OperationalReporting/__init__.py` and `apps/bi/views/__init__.py`
+- [x] Assemble URL patterns in `apps/bi/urls/OperationalReporting/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Add `LIVE_LINKS["10.9"]` in `apps/core/navigation.py`
+- [x] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data
+- [x] Run `makemigrations bi` (claiming `0022`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
 
 ### Phase 3.5: Smoke Testing
-- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+- [x] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
 
 ### Phase 4: Six-Pass Serial Review
-- [ ] Pass 1: Code Reviewer
-- [ ] Pass 2: Explorer
-- [ ] Pass 3: Frontend Reviewer
-- [ ] Pass 4: Performance Reviewer
-- [ ] Pass 5: QA Smoke Tester
-- [ ] Pass 6: Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.9.md`
+- [x] Pass 1: Code Reviewer
+- [x] Pass 2: Explorer
+- [x] Pass 3: Frontend Reviewer
+- [x] Pass 4: Performance Reviewer
+- [x] Pass 5: QA Smoke Tester
+- [x] Pass 6: Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.9.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+- [x] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
 
 ### Phase 6: Automated Test Suite
-- [ ] Add shared 10.9 fixtures to `conftest.py`
-- [ ] Write `test_operationalreporting_models.py`
-- [ ] Write `test_operationalreporting_forms.py`
-- [ ] Write `test_operationalreporting_views.py`
-- [ ] Write `test_operationalreporting_security.py`
-- [ ] Run full unfiltered test suite and ensure 100% green
+- [x] Add shared 10.9 fixtures to `conftest.py`
+- [x] Write `test_operationalreporting_models.py`
+- [x] Write `test_operationalreporting_forms.py`
+- [x] Write `test_operationalreporting_views.py`
+- [x] Write `test_operationalreporting_security.py`
+- [x] Run full unfiltered test suite and ensure 100% green
 
 ### Phase 7: Skill & Documentation Close-out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.9 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.9 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.9.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.9 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.9 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.9.md`
+
+### Sub-module 10.9 Review & Close-out
+- **Status**: Completed (All 7 Phases finished, 100% green)
+- **Base SHA**: `c17d2e0e632e3147e25610d88a12ebb011aeea51`
+- **Models Built**:
+  - `ReportDefinition` (`BRPT-`)
+  - `ReportParameter` (`BPAR-`)
+  - `ReportExecution` (`BRUN-`)
+  - `ReportDrillPath` (`BDRP-`)
+- **Review Passes**: 6 serial passes recorded in `.claude/tasks/review-bi-10.9.md`
+- **Review Fixes**: 18 findings resolved (`C1`–`C3`, `I1`–`I8`, `M1`–`M7`) in Phase 5
+- **Migrations**: `0022_reportdefinition_reportdrillpath_reportexecution_and_more.py` & `0023_reportexecution_idx_brun_ten_rpt_start_and_more.py`
+- **Tests**: 153 passing dedicated tests (21 models + 55 forms + 51 views + 26 security) in SQLite in-memory; 1,259 full unfiltered suite tests passing (100% green)
+- **Documentation**: Updated `.claude/skills/bi/SKILL.md` and `README.md`
+- **Gaps**: None (All core features delivered, deferred items recorded in `.agents/tasks/gaps-bi-10.9.md`)
+
 
 ---
 
