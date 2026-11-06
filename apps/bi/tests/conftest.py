@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.bi.models import (
+    AdHocCalculatedField,
+    AdHocQuery,
     BiDashboard,
     BiDashboardBookmark,
     BiDashboardFilter,
@@ -23,6 +25,7 @@ from apps.bi.models import (
     DataQualityRule,
     DataQualityScorecard,
     DataSourceConnector,
+    DataBlendDefinition,
     DrillHierarchy,
     EtlPipeline,
     EtlPipelineRun,
@@ -38,6 +41,7 @@ from apps.bi.models import (
     ReportDrillPath,
     ReportExecution,
     ReportParameter,
+    SavedAnalysisView,
     SemanticModel,
     TransformationStep,
     WarehouseStoragePolicy,
@@ -1366,6 +1370,134 @@ def report_drill_path_b(db, tenant_b, report_definition_b):
         target_type="operational_report",
         target_report=report_definition_b,
         sort_order=1,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10.10 Self-Service & Ad-Hoc Analytics Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def adhoc_query_a(db, tenant_a, admin_user_a):
+    return AdHocQuery.objects.create(
+        tenant=tenant_a,
+        name="Acme Monthly Revenue",
+        slug="acme-monthly-revenue",
+        query_type="visual_builder",
+        source_type="semantic_model",
+        fields_config_json=[{"name": "period", "type": "string"}, {"name": "revenue", "type": "currency"}],
+        filter_criteria_json={"status": "completed"},
+        limit_rows=100,
+        status="active",
+        created_by=admin_user_a,
+    )
+
+
+@pytest.fixture
+def adhoc_query_b(db, tenant_b, admin_user_b):
+    return AdHocQuery.objects.create(
+        tenant=tenant_b,
+        name="Globex Monthly Revenue",
+        slug="globex-monthly-revenue",
+        query_type="visual_builder",
+        source_type="semantic_model",
+        fields_config_json=[{"name": "period", "type": "string"}, {"name": "revenue", "type": "currency"}],
+        filter_criteria_json={"status": "completed"},
+        limit_rows=100,
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def adhoc_calculated_field_a(db, tenant_a, adhoc_query_a):
+    return AdHocCalculatedField.objects.create(
+        tenant=tenant_a,
+        query=adhoc_query_a,
+        field_name="profit_margin",
+        display_label="Profit Margin",
+        formula_expression="[revenue] - [cost]",
+        return_type="currency",
+        aggregation_mode="sum",
+        is_valid=True,
+    )
+
+
+@pytest.fixture
+def adhoc_calculated_field_b(db, tenant_b, adhoc_query_b):
+    return AdHocCalculatedField.objects.create(
+        tenant=tenant_b,
+        query=adhoc_query_b,
+        field_name="globex_margin",
+        display_label="Globex Margin",
+        formula_expression="[revenue] - [cost]",
+        return_type="currency",
+        aggregation_mode="sum",
+        is_valid=True,
+    )
+
+
+@pytest.fixture
+def data_blend_definition_a(db, tenant_a, admin_user_a):
+    return DataBlendDefinition.objects.create(
+        tenant=tenant_a,
+        name="Acme Sales & Inventory Blend",
+        slug="acme-sales-inventory-blend",
+        primary_source_type="semantic_model",
+        secondary_source_type="warehouse_table",
+        join_type="left_outer",
+        cardinality="many_to_one",
+        join_conditions_json=[{"left": "item_id", "operator": "eq", "right": "id"}],
+        status="active",
+        created_by=admin_user_a,
+    )
+
+
+@pytest.fixture
+def data_blend_definition_b(db, tenant_b, admin_user_b):
+    return DataBlendDefinition.objects.create(
+        tenant=tenant_b,
+        name="Globex Sales & Inventory Blend",
+        slug="globex-sales-inventory-blend",
+        primary_source_type="semantic_model",
+        secondary_source_type="warehouse_table",
+        join_type="left_outer",
+        cardinality="many_to_one",
+        join_conditions_json=[{"left": "item_id", "operator": "eq", "right": "id"}],
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def saved_analysis_view_a(db, tenant_a, adhoc_query_a, admin_user_a):
+    return SavedAnalysisView.objects.create(
+        tenant=tenant_a,
+        query=adhoc_query_a,
+        name="Acme Executive View",
+        slug="acme-executive-view",
+        description="Executive sales performance overview",
+        sharing_scope="tenant_public",
+        view_state_json={"chart_type": "bar", "time_range": "last_30_days"},
+        is_template=False,
+        is_favorite=True,
+        created_by=admin_user_a,
+    )
+
+
+@pytest.fixture
+def saved_analysis_view_b(db, tenant_b, adhoc_query_b, admin_user_b):
+    return SavedAnalysisView.objects.create(
+        tenant=tenant_b,
+        query=adhoc_query_b,
+        name="Globex Executive View",
+        slug="globex-executive-view",
+        description="Executive sales performance overview",
+        sharing_scope="tenant_public",
+        view_state_json={"chart_type": "bar", "time_range": "last_30_days"},
+        is_template=False,
+        is_favorite=True,
+        created_by=admin_user_b,
     )
 
 
