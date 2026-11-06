@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}KPI Library & Definitions — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>KPI & Performance Scorecards</span>
+        </div>
+        <h1 class="page-title">KPI Library & Definitions</h1>
+        <p class="text-muted text-sm">Centralized catalog of organizational Key Performance Indicators with formulas, targets, threshold bands, ownership, and industry benchmarks</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:performance_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Scorecards</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_list' %}" class="btn btn-outline">
+            <i data-lucide="target"></i>
+            <span>Goal Tracking</span>
+        </a>
+        <a href="{% url 'bi:strategic_objective_list' %}" class="btn btn-outline">
+            <i data-lucide="compass"></i>
+            <span>Strategy Objectives</span>
+        </a>
+        <a href="{% url 'bi:kpi_definition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New KPI Definition</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total KPIs</div>
+            <div class="text-2xl font-bold">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active In Production</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ stats.active }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Under Review</div>
+            <div class="text-2xl font-bold text-amber-600">{{ stats.under_review }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Meeting Target</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ stats.on_target }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Code, name, category..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Perspective</label>
+                <select name="perspective" class="form-select">
+                    <option value="">All Perspectives</option>
+                    {% for val, label in perspective_choices %}
+                    <option value="{{ val }}" {% if request.GET.perspective == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Direction</label>
+                <select name="target_direction" class="form-select">
+                    <option value="">All Directions</option>
+                    {% for val, label in direction_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_direction == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Calculation</label>
+                <select name="calculation_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in calc_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.calculation_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Department</label>
+                <select name="department" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.perspective or request.GET.target_direction or request.GET.calculation_type or request.GET.department or request.GET.status %}
+                <a href="{% url 'bi:kpi_definition_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- KPI Table -->
+<div class="card">
+    {% if kpis %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>KPI Code / Number</th>
+                    <th>Name & Category</th>
+                    <th>Perspective</th>
+                    <th>Direction & Cadence</th>
+                    <th class="text-right">Target</th>
+                    <th class="text-right">Current Value</th>
+                    <th class="text-right">Benchmark</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for kpi in kpis %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-xs font-semibold text-primary">
+                            <a href="{{ kpi.get_absolute_url }}">{{ kpi.number }}</a>
+                        </div>
+                        <div class="text-xs text-muted">{{ kpi.code }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{{ kpi.get_absolute_url }}" class="hover:underline">{{ kpi.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted">{{ kpi.category|capfirst }} {% if kpi.department %}· {{ kpi.department.name }}{% endif %}</div>
+                    </td>
+                    <td>
+                        {% if kpi.perspective == 'financial' %}
+                        <span class="badge badge-green">Financial</span>
+                        {% elif kpi.perspective == 'customer' %}
+                        <span class="badge badge-info">Customer</span>
+                        {% elif kpi.perspective == 'internal_process' %}
+                        <span class="badge badge-amber">Internal Process</span>
+                        {% else %}
+                        <span class="badge badge-purple">Learning & Growth</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">{{ kpi.get_target_direction_display }}</div>
+                        <div class="text-xs text-muted">{{ kpi.get_tracking_frequency_display }} · {{ kpi.get_unit_of_measure_display }}</div>
+                    </td>
+                    <td class="text-right font-mono text-sm">
+                        {{ kpi.target_value|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-sm font-semibold">
+                        {{ kpi.current_value|floatformat:2 }}
+                        {% with rag=kpi.calculate_rag_status %}
+                        {% if rag == 'green' %}
+                        <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 ml-1" title="On Track"></span>
+                        {% elif rag == 'amber' %}
+                        <span class="inline-block w-2 h-2 rounded-full bg-amber-500 ml-1" title="Needs Attention"></span>
+                        {% elif rag == 'red' %}
+                        <span class="inline-block w-2 h-2 rounded-full bg-rose-500 ml-1" title="Critical / Off Track"></span>
+                        {% else %}
+                        <span class="inline-block w-2 h-2 rounded-full bg-slate-400 ml-1" title="Not Evaluated"></span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td class="text-right font-mono text-xs text-muted">
+                        {% if kpi.industry_benchmark_value %}
+                        {{ kpi.industry_benchmark_value|floatformat:2 }}
+                        {% if kpi.benchmark_percentile %}
+                        <div class="text-[10px] text-indigo-600">{{ kpi.benchmark_percentile }}th %ile</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if kpi.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif kpi.status == 'draft' %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% elif kpi.status == 'under_review' %}
+                        <span class="badge badge-amber">Under Review</span>
+                        {% elif kpi.status == 'deprecated' %}
+                        <span class="badge badge-muted">Deprecated</span>
+                        {% else %}
+                        <span class="badge badge-red">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{{ kpi.get_absolute_url }}" class="btn btn-icon btn-outline" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:kpi_definition_edit' kpi.pk %}" class="btn btn-icon btn-outline" title="Edit KPI">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:kpi_definition_delete' kpi.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete KPI {{ kpi.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete KPI">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if kpis.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if kpis.has_previous %}
+            <a href="?page={{ kpis.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.perspective %}&perspective={{ request.GET.perspective }}{% endif %}{% if request.GET.target_direction %}&target_direction={{ request.GET.target_direction }}{% endif %}{% if request.GET.calculation_type %}&calculation_type={{ request.GET.calculation_type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </span>
+            {% endif %}
+
+            <span class="text-xs text-muted">
+                Page {{ kpis.number }} of {{ kpis.paginator.num_pages }} ({{ kpis.paginator.count }} items)
+            </span>
+
+            {% if kpis.has_next %}
+            <a href="?page={{ kpis.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.perspective %}&perspective={{ request.GET.perspective }}{% endif %}{% if request.GET.target_direction %}&target_direction={{ request.GET.target_direction }}{% endif %}{% if request.GET.calculation_type %}&calculation_type={{ request.GET.calculation_type }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">
+            <i data-lucide="activity"></i>
+        </div>
+        <h3>No KPI Definitions Found</h3>
+        <p class="text-muted text-sm">Define strategic and operational Key Performance Indicators with target bands, calculation logic, and benchmarking baselines.</p>
+        <a href="{% url 'bi:kpi_definition_create' %}" class="btn btn-primary mt-4">
+            <i data-lucide="plus"></i>
+            <span>Create First KPI</span>
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
