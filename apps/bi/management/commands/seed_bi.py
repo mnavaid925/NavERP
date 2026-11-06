@@ -2701,6 +2701,9 @@ class Command(BaseCommand):
             # =========================================================================
             if not AdHocQuery.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
+                    User = get_user_model()
+                    tenant_admin = User.objects.filter(tenant=tenant, username__startswith=f"admin_{tenant.slug}").first() or User.objects.filter(tenant=tenant).first()
+
                     # Reference semantic models from 10.4 if available
                     smdl_sales = SemanticModel.objects.filter(tenant=tenant).first()
                     smdl_procure = SemanticModel.objects.filter(tenant=tenant).exclude(pk=smdl_sales.pk).first() if smdl_sales else smdl_sales
