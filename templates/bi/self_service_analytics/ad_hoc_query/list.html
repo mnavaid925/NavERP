@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}Ad-Hoc Queries & Visual Exploration — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Self-Service & Ad-Hoc Analytics</span>
+        </div>
+        <h1 class="page-title">Ad-Hoc Queries & Exploration</h1>
+        <p class="text-muted text-sm">Visual drag-and-drop query building, multidimensional drill-down, on-the-fly formulas, and cross-dataset mashups</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_calculated_field_list' %}" class="btn btn-outline">
+            <i data-lucide="calculator"></i>
+            <span>Calculated Fields</span>
+        </a>
+        <a href="{% url 'bi:data_blend_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="shuffle"></i>
+            <span>Data Blends</span>
+        </a>
+        <a href="{% url 'bi:saved_analysis_view_list' %}" class="btn btn-outline">
+            <i data-lucide="bookmark"></i>
+            <span>Saved Views</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_query_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Query</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="search"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Ad-Hoc Queries</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Explorations</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="bar-chart-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Visual Analytics</div>
+            <div class="text-2xl font-bold text-purple-600">Dynamic Charts</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Queries</label>
+                <div class="relative">
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Name, slug, number..." class="form-input">
+                </div>
+            </div>
+            <div>
+                <label for="id_source_type" class="form-label">Source Type</label>
+                <select id="id_source_type" name="source_type" class="form-select">
+                    <option value="">All Source Types</option>
+                    {% for code, label in source_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.source_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_visualization_type" class="form-label">Visualization</label>
+                <select id="id_visualization_type" name="visualization_type" class="form-select">
+                    <option value="">All Visualizations</option>
+                    {% for code, label in viz_choices %}
+                    <option value="{{ code }}" {% if request.GET.visualization_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label">Status</label>
+                <select id="id_status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:ad_hoc_query_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Query Number</th>
+                    <th>Query Name & Details</th>
+                    <th>Source Dataset</th>
+                    <th>Visual Type</th>
+                    <th>Execution Stats</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for qry in queries %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ad_hoc_query_detail' qry.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ qry.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:ad_hoc_query_detail' qry.pk %}" class="hover:underline">{{ qry.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ qry.slug }}</div>
+                        {% if qry.description %}
+                        <div class="text-xs text-slate-500 truncate max-w-xs mt-0.5">{{ qry.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.badge_source }}">
+                            {{ qry.get_source_type_display }}
+                        </span>
+                        <div class="text-xs text-slate-600 mt-1">
+                            {% if qry.semantic_model %}
+                                {{ qry.semantic_model.name }}
+                            {% elif qry.warehouse_table %}
+                                {{ qry.warehouse_table.name }}
+                            {% elif qry.data_blend %}
+                                {{ qry.data_blend.name }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.badge_viz }}">
+                            {{ qry.get_visualization_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        <div>{{ qry.row_count }} rows</div>
+                        <div class="text-muted">{{ qry.execution_duration_ms }} ms</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.badge_status }}">
+                            {{ qry.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:ad_hoc_query_composer' qry.pk %}" class="btn btn-icon text-blue-600" title="Open Visual Query Composer">
+                            <i data-lucide="sliders"></i>
+                        </a>
+                        <a href="{% url 'bi:ad_hoc_query_export' qry.pk %}" class="btn btn-icon" title="Export CSV Data">
+                            <i data-lucide="download"></i>
+                        </a>
+                        <a href="{% url 'bi:ad_hoc_query_detail' qry.pk %}" class="btn btn-icon" title="Inspect Query Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:ad_hoc_query_edit' qry.pk %}" class="btn btn-icon" title="Edit Metadata">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:ad_hoc_query_delete' qry.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete ad-hoc query {{ qry.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Query">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="search" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Ad-Hoc Queries Found</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Create your first ad-hoc query to begin exploring business metrics, applying custom formulas, and generating dynamic charts.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:ad_hoc_query_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Ad-Hoc Query</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.source_type %}&source_type={{ request.GET.source_type }}{% endif %}{% if request.GET.visualization_type %}&visualization_type={{ request.GET.visualization_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.source_type %}&source_type={{ request.GET.source_type }}{% endif %}{% if request.GET.visualization_type %}&visualization_type={{ request.GET.visualization_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
