@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ calculated_field.display_label }} ({{ calculated_field.number }}) — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_detail' query.pk %}">{{ query.number }}</a>
+            <span class="sep">/</span>
+            <span>Calculated Field</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ calculated_field.display_label }}</h1>
+            <span class="badge {{ calculated_field.badge_return_type }}">{{ calculated_field.get_return_type_display }}</span>
+            <span class="badge {{ calculated_field.badge_mode }}">{{ calculated_field.get_aggregation_mode_display }}</span>
+            {% if calculated_field.is_valid %}
+            <span class="badge badge-green">Valid Syntax</span>
+            {% else %}
+            <span class="badge badge-red">Syntax Error</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ calculated_field.number }} · {{ calculated_field.field_name }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_composer' query.pk %}" class="btn btn-primary">
+            <i data-lucide="sliders"></i>
+            <span>Open in Query Composer</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_calculated_field_edit' calculated_field.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:ad_hoc_calculated_field_delete' calculated_field.pk %}" class="inline" onsubmit="return confirm('Delete calculated field {{ calculated_field.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title text-base">Formula Specification</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <dt class="text-xs text-muted uppercase font-medium">Expression</dt>
+                <dd class="mt-1">
+                    <pre class="bg-slate-900 text-emerald-400 p-4 rounded text-sm font-mono overflow-x-auto">{{ calculated_field.formula_expression }}</pre>
+                </dd>
+            </div>
+
+            {% if not calculated_field.is_valid and calculated_field.error_message %}
+            <div class="bg-red-50 border border-red-200 text-red-700 p-3 rounded text-sm">
+                <strong>Syntax Error:</strong> {{ calculated_field.error_message }}
+            </div>
+            {% endif %}
+
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm pt-4 border-t border-slate-100">
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Return Data Type</dt>
+                    <dd class="mt-1 font-semibold text-slate-800">{{ calculated_field.get_return_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Aggregation Mode</dt>
+                    <dd class="mt-1 font-semibold text-slate-800">{{ calculated_field.get_aggregation_mode_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Internal Field Token</dt>
+                    <dd class="mt-1 font-mono text-slate-800">{{ calculated_field.field_name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Parent Query</dt>
+                    <dd class="mt-1">
+                        <a href="{% url 'bi:ad_hoc_query_detail' query.pk %}" class="text-blue-600 hover:underline font-medium">
+                            {{ query.name }} ({{ query.number }})
+                        </a>
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Metadata Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base">Metadata</h2>
+        </div>
+        <div class="card-body text-sm space-y-3">
+            <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                <span class="text-muted">Author:</span>
+                <span class="font-medium text-slate-800">
+                    {% if calculated_field.created_by %}
+                        {{ calculated_field.created_by.get_full_name|default:calculated_field.created_by.username }}
+                    {% else %}
+                        System
+                    {% endif %}
+                </span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                <span class="text-muted">Created:</span>
+                <span class="text-slate-800">{{ calculated_field.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+                <span class="text-muted">Last Updated:</span>
+                <span class="text-slate-800">{{ calculated_field.updated_at|date:"Y-m-d H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
