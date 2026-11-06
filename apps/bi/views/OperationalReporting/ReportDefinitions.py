@@ -92,17 +92,21 @@ def report_definition_detail(request, pk):
         select_related=("created_by", "org_unit", "semantic_model", "warehouse_table"),
     )
 
-    parameters = report.parameters.filter(is_active=True).order_by("prompt_order")
-    drill_paths = report.source_drill_paths.filter(is_enabled=True).select_related("target_report").order_by("sort_order")
-    executions = report.executions.select_related("executed_by").order_by("-started_at")[:10]
+    parameters = list(report.parameters.filter(is_active=True).order_by("prompt_order"))
+    drill_paths = list(report.source_drill_paths.filter(is_enabled=True).select_related("target_report").order_by("sort_order"))
+    total_executions_count = report.executions.count()
+    executions = list(report.executions.select_related("executed_by").order_by("-started_at")[:10])
 
     can_edit = request.user.is_superuser or getattr(request, "is_tenant_admin", False)
 
     context = {
         "report": report,
         "parameters": parameters,
+        "parameters_count": len(parameters),
         "drill_paths": drill_paths,
+        "drill_paths_count": len(drill_paths),
         "executions": executions,
+        "total_executions_count": total_executions_count,
         "can_edit": can_edit,
     }
     return render(request, "bi/operational_reporting/report_definition/detail.html", context)
