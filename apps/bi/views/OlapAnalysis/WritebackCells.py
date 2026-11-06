@@ -105,7 +105,7 @@ def writeback_cell_create(request):
             cell.tenant = request.tenant
             cell.created_by = request.user
             cell.save()
-            write_audit_log(request.user, "create", cell, {"number": cell.number, "scenario": cell.scenario.name})
+            write_audit_log(request.user, cell, "create", changes={"number": cell.number, "scenario": cell.scenario.name}, tenant=request.tenant)
             messages.success(request, f"Writeback Cell '{cell.number}' created successfully.")
             return redirect("bi:what_if_scenario_simulate", pk=cell.scenario.pk)
     else:
@@ -128,7 +128,7 @@ def writeback_cell_edit(request, pk):
         form = ScenarioWritebackCellForm(request.POST, instance=cell, tenant=request.tenant)
         if form.is_valid():
             cell = form.save()
-            write_audit_log(request.user, "update", cell, {"number": cell.number})
+            write_audit_log(request.user, cell, "update", changes={"number": cell.number}, tenant=request.tenant)
             messages.success(request, f"Writeback Cell '{cell.number}' updated successfully.")
             return redirect("bi:what_if_scenario_simulate", pk=cell.scenario.pk)
     else:
@@ -152,6 +152,6 @@ def writeback_cell_delete(request, pk):
     scenario_pk = cell.scenario.pk
     number = cell.number
     cell.delete()
-    write_audit_log(request.user, "delete", cell, {"number": number})
+    write_audit_log(request.user, cell, "delete", changes={"number": number}, tenant=request.tenant)
     messages.success(request, f"Writeback Cell '{number}' deleted successfully.")
     return redirect("bi:what_if_scenario_simulate", pk=scenario_pk)
