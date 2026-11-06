@@ -131,6 +131,9 @@ def what_if_scenario_create(request):
 @login_required
 def what_if_scenario_edit(request, pk):
     scenario = bi_object(request, WhatIfScenario, pk)
+    if scenario.status == "committed":
+        messages.error(request, f"What-If Scenario '{scenario.name}' is committed and cannot be edited.")
+        return redirect("bi:what_if_scenario_detail", pk=scenario.pk)
     if request.method == "POST":
         form = WhatIfScenarioForm(request.POST, instance=scenario, tenant=request.tenant)
         if form.is_valid():
@@ -156,6 +159,9 @@ def what_if_scenario_edit(request, pk):
 @require_POST
 def what_if_scenario_delete(request, pk):
     scenario = bi_object(request, WhatIfScenario, pk)
+    if scenario.status == "committed":
+        messages.error(request, f"What-If Scenario '{scenario.name}' is committed and cannot be deleted.")
+        return redirect("bi:what_if_scenario_detail", pk=scenario.pk)
     name = scenario.name
     number = scenario.number
     scenario.delete()
