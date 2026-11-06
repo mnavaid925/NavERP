@@ -82,9 +82,10 @@ def what_if_scenario_detail(request, pk):
         pk,
         select_related=["cube", "baseline_budget", "fiscal_period", "created_by", "committed_by"],
     )
+    writeback_cells_count = scenario.writeback_cells.filter(tenant=request.tenant).count()
     writeback_cells = scenario.writeback_cells.filter(tenant=request.tenant).select_related(
         "gl_account", "org_unit"
-    ).order_by("-created_at")
+    ).order_by("-created_at")[:50]
 
     return render(
         request,
@@ -92,6 +93,7 @@ def what_if_scenario_detail(request, pk):
         {
             "scenario": scenario,
             "writeback_cells": writeback_cells,
+            "writeback_cells_count": writeback_cells_count,
         },
     )
 
