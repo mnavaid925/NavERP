@@ -3023,6 +3023,18 @@ LIVE_LINKS = {
         "Data Blends": "bi:data_blend_definition_list",
         "Saved Views": "bi:saved_analysis_view_list",
     },
+    "10.12": {
+        "OLAP Cubes & Aggregations": "bi:olap_cube_list",
+        "Pivot & Cross-Tab Analysis": "bi:pivot_view_list",
+        "Drill-Down, Up & Through": "bi:pivot_view_list",
+        "Time Intelligence": "bi:olap_cube_list",
+        "What-If & Writeback": "bi:what_if_scenario_list",
+        # Extra live leaves
+        "OLAP Cubes": "bi:olap_cube_list",
+        "Pivot Views": "bi:pivot_view_list",
+        "What-If Scenarios": "bi:what_if_scenario_list",
+        "Writeback Cells": "bi:writeback_cell_list",
+    },
 
 
 
