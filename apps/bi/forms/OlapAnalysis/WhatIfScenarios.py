@@ -52,6 +52,10 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
             args = (data,) + args[1:]
 
         super().__init__(*args, **kwargs)
+        if "slug" in self.fields:
+            self.fields["slug"].required = False
+        if "default_disaggregation" in self.fields:
+            self.fields["default_disaggregation"].required = False
         if "status" in self.fields:
             self.fields["status"].choices = [
                 (k, v) for k, v in WhatIfScenario.STATUS_CHOICES if k != "committed"
@@ -102,6 +106,9 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
             slug = base_slug[:120]
             cleaned["slug"] = slug
             self.instance.slug = slug
+        if not cleaned.get("default_disaggregation"):
+            cleaned["default_disaggregation"] = "pro_rata"
+            self.instance.default_disaggregation = "pro_rata"
         return cleaned
 
     def save(self, commit=True):
