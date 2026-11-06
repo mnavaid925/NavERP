@@ -42,7 +42,11 @@ def report_drill_path_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    reports = ReportDefinition.objects.filter(tenant=request.tenant).order_by("name")
+    reports = (
+        ReportDefinition.objects.filter(tenant=request.tenant)
+        .only("id", "name", "number")
+        .order_by("name")
+    )
 
     context = {
         "page_obj": page_obj,
