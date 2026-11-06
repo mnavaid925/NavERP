@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}{{ drill_path.drill_label }} — Drill Path Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_drill_path_list' %}">Drill Paths</a>
+            <span class="sep">/</span>
+            <span class="font-mono">{{ drill_path.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ drill_path.drill_label }}</h1>
+            <span class="badge {{ drill_path.badge_target_type }}">{{ drill_path.get_target_type_display }}</span>
+            {% if drill_path.is_enabled %}
+            <span class="badge badge-green">Enabled</span>
+            {% else %}
+            <span class="badge badge-muted">Disabled</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted mt-1">Trigger Column: <code class="font-mono text-purple-700 bg-purple-50 px-1 py-0.5 rounded">{{ drill_path.source_field }}</code></div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_definition_detail' drill_path.source_report.pk %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i>
+            <span>Source Report</span>
+        </a>
+        {% if can_edit %}
+        <a href="{% url 'bi:report_drill_path_edit' drill_path.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:report_drill_path_delete' drill_path.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this drill path?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Drill-Through Action Specifications</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Drill ID</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ drill_path.number }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Source Operational Report</span>
+                    <a href="{% url 'bi:report_definition_detail' drill_path.source_report.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ drill_path.source_report.name }}
+                    </a>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Trigger Column / Field</span>
+                    <code class="font-mono text-xs text-purple-700 bg-purple-50 px-1 py-0.5 rounded">{{ drill_path.source_field }}</code>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Target Navigation Type</span>
+                    <span class="font-medium text-slate-800">{{ drill_path.get_target_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Target Report Destination</span>
+                    {% if drill_path.target_report %}
+                    <a href="{% url 'bi:report_definition_detail' drill_path.target_report.pk %}" class="font-medium text-blue-600 hover:underline">
+                        {{ drill_path.target_report.name }} ({{ drill_path.target_report.number }})
+                    </a>
+                    {% else %}
+                    <span class="text-muted italic">None (External / ERP Record URL)</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Direct ERP URL Pattern</span>
+                    {% if drill_path.target_url_pattern %}
+                    <code class="font-mono text-xs bg-slate-100 px-2 py-1 rounded block text-slate-800">{{ drill_path.target_url_pattern }}</code>
+                    {% else %}
+                    <span class="text-muted italic">None</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Priority Order</span>
+                    <span class="font-mono text-slate-800">{{ drill_path.sort_order }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Operational State</span>
+                    <span class="font-medium text-slate-800">{% if drill_path.is_enabled %}Active & Navigable{% else %}Disabled{% endif %}</span>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-200">
+                <span class="text-muted block text-xs uppercase font-medium mb-2">Parameter Context Mapping Matrix (JSON)</span>
+                <p class="text-xs text-slate-500 mb-2">Maps row-level values in the source dataset into target parameter tokens:</p>
+                <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ drill_path.parameter_mapping_json }}</pre>
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm">Source Report Link</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Report Category</span>
+                    <span class="font-medium">{{ drill_path.source_report.get_category_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Layout Type</span>
+                    <span>{{ drill_path.source_report.get_report_type_display }}</span>
+                </div>
+                <div class="pt-3 border-t border-slate-100">
+                    <a href="{% url 'bi:report_definition_viewer' drill_path.source_report.pk %}" class="btn btn-primary w-full text-xs">
+                        <i data-lucide="play"></i>
+                        <span>Test in Interactive Viewer</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
