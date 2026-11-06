@@ -14,6 +14,7 @@ from apps.bi.models.DataWarehouse.WarehouseTables import WarehouseTable
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.SemanticModels import SemanticModel
 from apps.bi.views._common import bi_object
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -24,16 +25,24 @@ def bi_dashboard_canvas_view(request, pk):
         BiDashboard,
         pk,
         select_related=("created_by", "org_unit"),
-        prefetch_related=("widgets", "filters", "bookmarks"),
     )
 
+    # Published status guard
+    if not dashboard.is_published and not (
+        request.user.is_superuser
+        or getattr(request, "is_tenant_admin", False)
+        or dashboard.created_by == request.user
+    ):
+        return HttpResponseForbidden("Dashboard is currently in draft status.")
+
     # Permission check for role restriction
-    if dashboard.role_required and dashboard.role_required != "all":
-        # Check if user has role or is admin/superuser
-        user_roles = getattr(request.user, "roles", None)
-        has_role = request.user.is_superuser or getattr(request, "is_tenant_admin", False)
-        if user_roles and hasattr(user_roles, "filter"):
-            has_role = has_role or user_roles.filter(code=dashboard.role_required).exists()
+    if dashboard.role_required and dashboard.role_required.lower() != "all":
+        user_role_name = getattr(getattr(request.user, "role", None), "name", "")
+        has_role = (
+            request.user.is_superuser
+            or getattr(request, "is_tenant_admin", False)
+            or (user_role_name and user_role_name.lower() == dashboard.role_required.lower())
+        )
         if not has_role and dashboard.created_by != request.user:
             return HttpResponseForbidden("Access restricted by dashboard role policy.")
 
@@ -56,8 +65,12 @@ def bi_dashboard_canvas_view(request, pk):
     # Apply bookmark if specified in GET query
     active_bookmark = None
     bookmark_id = request.GET.get("bookmark")
-    if bookmark_id:
-        active_bookmark = dashboard.bookmarks.filter(pk=bookmark_id, is_active=True).first()
+    if bookmark_id and bookmark_id.isdigit():
+        active_bookmark = dashboard.bookmarks.filter(
+            Q(user=request.user) | Q(is_shared=True),
+            pk=int(bookmark_id),
+            is_active=True,
+        ).first()
         if active_bookmark:
             active_bookmark.view_count += 1
             active_bookmark.last_viewed_at = timezone.now()
@@ -75,9 +88,16 @@ def bi_dashboard_canvas_view(request, pk):
 
     for f in filters:
         if f.filter_key in request.GET:
-            filter_values[f.filter_key] = request.GET[f.filter_key]
-        elif f.filter_key not in filter_values and f.default_value:
+            val = request.GET[f.filter_key]
+            filter_values[f.filter_key] = val
+            f.current_value = val
+        elif f.filter_key in filter_values:
+            f.current_value = filter_values[f.filter_key]
+        elif f.default_value:
             filter_values[f.filter_key] = f.default_value
+            f.current_value = f.default_value
+        else:
+            f.current_value = ""
 
     context = {
         "dashboard": dashboard,
@@ -99,8 +119,17 @@ def bi_dashboard_kiosk_view(request, pk):
         request,
         BiDashboard,
         pk,
-        prefetch_related=("widgets",),
     )
+
+    if not dashboard.is_kiosk_enabled:
+        return HttpResponseForbidden("Kiosk mode is disabled for this dashboard.")
+
+    if not dashboard.is_published and not (
+        request.user.is_superuser
+        or getattr(request, "is_tenant_admin", False)
+        or dashboard.created_by == request.user
+    ):
+        return HttpResponseForbidden("Dashboard is currently in draft status.")
 
     widgets = dashboard.widgets.filter(is_active=True).select_related(
         "calculated_measure", "semantic_model", "warehouse_table"
@@ -117,12 +146,12 @@ def bi_dashboard_kiosk_view(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def bi_dashboard_canvas_builder(request, pk):
     dashboard = bi_object(
         request,
         BiDashboard,
         pk,
-        prefetch_related=("widgets", "filters"),
     )
 
     if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
@@ -130,27 +159,41 @@ def bi_dashboard_canvas_builder(request, pk):
         try:
             payload = json.loads(request.body.decode("utf-8"))
             widget_positions = payload.get("positions", [])
+            updated_count = 0
             with transaction.atomic():
                 for item in widget_positions:
                     w_id = item.get("id")
+                    if not w_id:
+                        continue
+                    pos_x = max(0, min(11, int(item.get("pos_x", 0))))
+                    pos_y = max(0, min(100, int(item.get("pos_y", 0))))
+                    width_cols = max(1, min(12, int(item.get("width_cols", 4))))
+                    height_rows = max(1, min(12, int(item.get("height_rows", 4))))
                     BiDashboardWidget.objects.filter(
                         pk=w_id, dashboard=dashboard, tenant=request.tenant
                     ).update(
-                        pos_x=item.get("pos_x", 0),
-                        pos_y=item.get("pos_y", 0),
-                        width_cols=item.get("width_cols", 4),
-                        height_rows=item.get("height_rows", 4),
+                        pos_x=pos_x,
+                        pos_y=pos_y,
+                        width_cols=width_cols,
+                        height_rows=height_rows,
                     )
+                    updated_count += 1
+                write_audit_log(
+                    request.user,
+                    dashboard,
+                    "update",
+                    changes={"widget_positions_updated": updated_count},
+                    tenant=request.tenant,
+                )
             return JsonResponse({"status": "ok", "message": "Positions saved"})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        except Exception:
+            return JsonResponse({"status": "error", "message": "Failed to update widget positions."}, status=400)
 
     widgets = dashboard.widgets.filter(is_active=True).order_by("pos_y", "pos_x", "sort_order")
     filters = dashboard.filters.filter(is_active=True).order_by("order")
 
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant).order_by("table_name")
-    calculated_measures = CalculatedMeasure.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
+    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True).only("id", "name")[:10]
+    calculated_measures = CalculatedMeasure.objects.filter(tenant=request.tenant, is_active=True).only("id", "name")[:10]
 
     context = {
         "dashboard": dashboard,
@@ -158,7 +201,6 @@ def bi_dashboard_canvas_builder(request, pk):
         "filters": filters,
         "widget_type_choices": BiDashboardWidget.WIDGET_TYPE_CHOICES,
         "semantic_models": semantic_models,
-        "warehouse_tables": warehouse_tables,
         "calculated_measures": calculated_measures,
     }
     return render(request, "bi/dashboards/canvas/builder.html", context)
