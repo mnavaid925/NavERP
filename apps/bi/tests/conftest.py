@@ -1378,18 +1378,17 @@ def report_drill_path_b(db, tenant_b, report_definition_b):
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def adhoc_query_a(db, tenant_a, admin_user_a):
+def adhoc_query_a(db, tenant_a, admin_user):
     return AdHocQuery.objects.create(
         tenant=tenant_a,
         name="Acme Monthly Revenue",
         slug="acme-monthly-revenue",
-        query_type="visual_builder",
         source_type="semantic_model",
-        fields_config_json=[{"name": "period", "type": "string"}, {"name": "revenue", "type": "currency"}],
-        filter_criteria_json={"status": "completed"},
-        limit_rows=100,
+        fields_config_json=[{"field": "period", "label": "Period", "type": "string"}, {"field": "revenue", "label": "Revenue", "type": "currency"}],
+        filter_criteria_json=[{"field": "status", "operator": "equals", "value": "completed"}],
+        row_limit=100,
         status="active",
-        created_by=admin_user_a,
+        created_by=admin_user,
     )
 
 
@@ -1399,11 +1398,10 @@ def adhoc_query_b(db, tenant_b, admin_user_b):
         tenant=tenant_b,
         name="Globex Monthly Revenue",
         slug="globex-monthly-revenue",
-        query_type="visual_builder",
         source_type="semantic_model",
-        fields_config_json=[{"name": "period", "type": "string"}, {"name": "revenue", "type": "currency"}],
-        filter_criteria_json={"status": "completed"},
-        limit_rows=100,
+        fields_config_json=[{"field": "period", "label": "Period", "type": "string"}, {"field": "revenue", "label": "Revenue", "type": "currency"}],
+        filter_criteria_json=[{"field": "status", "operator": "equals", "value": "completed"}],
+        row_limit=100,
         status="active",
         created_by=admin_user_b,
     )
@@ -1438,7 +1436,7 @@ def adhoc_calculated_field_b(db, tenant_b, adhoc_query_b):
 
 
 @pytest.fixture
-def data_blend_definition_a(db, tenant_a, admin_user_a):
+def data_blend_definition_a(db, tenant_a, admin_user):
     return DataBlendDefinition.objects.create(
         tenant=tenant_a,
         name="Acme Sales & Inventory Blend",
@@ -1447,9 +1445,9 @@ def data_blend_definition_a(db, tenant_a, admin_user_a):
         secondary_source_type="warehouse_table",
         join_type="left_outer",
         cardinality="many_to_one",
-        join_conditions_json=[{"left": "item_id", "operator": "eq", "right": "id"}],
+        join_keys_mapping_json=[{"left": "item_id", "right": "id"}],
         status="active",
-        created_by=admin_user_a,
+        created_by=admin_user,
     )
 
 
@@ -1463,14 +1461,14 @@ def data_blend_definition_b(db, tenant_b, admin_user_b):
         secondary_source_type="warehouse_table",
         join_type="left_outer",
         cardinality="many_to_one",
-        join_conditions_json=[{"left": "item_id", "operator": "eq", "right": "id"}],
+        join_keys_mapping_json=[{"left": "item_id", "right": "id"}],
         status="active",
         created_by=admin_user_b,
     )
 
 
 @pytest.fixture
-def saved_analysis_view_a(db, tenant_a, adhoc_query_a, admin_user_a):
+def saved_analysis_view_a(db, tenant_a, adhoc_query_a, admin_user):
     return SavedAnalysisView.objects.create(
         tenant=tenant_a,
         query=adhoc_query_a,
@@ -1478,10 +1476,9 @@ def saved_analysis_view_a(db, tenant_a, adhoc_query_a, admin_user_a):
         slug="acme-executive-view",
         description="Executive sales performance overview",
         sharing_scope="tenant_public",
-        view_state_json={"chart_type": "bar", "time_range": "last_30_days"},
         is_template=False,
         is_favorite=True,
-        created_by=admin_user_a,
+        created_by=admin_user,
     )
 
 
@@ -1494,7 +1491,6 @@ def saved_analysis_view_b(db, tenant_b, adhoc_query_b, admin_user_b):
         slug="globex-executive-view",
         description="Executive sales performance overview",
         sharing_scope="tenant_public",
-        view_state_json={"chart_type": "bar", "time_range": "last_30_days"},
         is_template=False,
         is_favorite=True,
         created_by=admin_user_b,
