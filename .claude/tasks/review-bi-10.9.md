@@ -36,3 +36,22 @@
 
 ---
 
+## Pass 2: Codebase Explorer (`explorer`)
+
+### Critical
+*None.* All 24 URL routes, 24 views, 5 forms, and 15 templates resolve cleanly. System check reports 0 issues.
+
+### Important
+1. `templates/bi/operational_reporting/report_definition/viewer.html:56, 61, 65, 161` & `print.html:117` — **Duplicate/Confirmed: `dictsort` filter used on dictionary instances returns empty string.**
+   - Confirmed `{{ row|dictsort:col.field }}` in fallback column branch causes `description` and non-standard fields to render as blank `<td></td>`.
+   - Confirmed `{{ applied_params|dictsort:param.parameter_name }}` fails to restore user prompt values.
+
+### Minor
+1. `apps/bi/views/OperationalReporting/ReportParameters.py:112`, `ReportDrillPaths.py:108` — **Redirect target variance for parameter and drill path deletions:**
+   - Both redirect to `bi:report_definition_detail` (parent report) instead of entity list. (Good UX, but slight variance from contract).
+2. `apps/bi/views/OperationalReporting/ReportDefinitions.py:195` — **Context key alias in `clone.html`:**
+   - View passes `source_report`; contract listed `report`.
+3. `apps/bi/views/OperationalReporting/ReportExecutions.py:165` — **`report_execution_export` serves `xlsx` format with CSV MIME and contents.**
+   - Export logic outputs delimited text regardless of whether CSV or XLSX was chosen.
+
+---
