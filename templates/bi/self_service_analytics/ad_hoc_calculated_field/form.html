@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Formula{% else %}New Calculated Field{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_calculated_field_list' %}">Calculated Fields</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ calculated_field.number }}{% else %}New Formula{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Calculated Field: {{ calculated_field.display_label }}{% else %}Create Calculated Field{% endif %}</h1>
+        <p class="text-muted text-sm">Define dynamic formulas, growth metrics, profit percentages, or custom measures using bracketed field references</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:ad_hoc_calculated_field_detail' calculated_field.pk %}{% else %}{% url 'bi:ad_hoc_calculated_field_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Formula Details</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="id_query" class="form-label">Parent Ad-Hoc Query <span class="text-red-500">*</span></label>
+                {{ form.query }}
+                {% if form.query.errors %}<div class="form-error">{{ form.query.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_display_label" class="form-label">Display Label <span class="text-red-500">*</span></label>
+                {{ form.display_label }}
+                {% if form.display_label.errors %}<div class="form-error">{{ form.display_label.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_field_name" class="form-label">Internal Field Token (Auto-generated if blank)</label>
+                {{ form.field_name }}
+                {% if form.field_name.errors %}<div class="form-error">{{ form.field_name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_return_type" class="form-label">Return Data Type</label>
+                {{ form.return_type }}
+                {% if form.return_type.errors %}<div class="form-error">{{ form.return_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_aggregation_mode" class="form-label">Aggregation Mode</label>
+                {{ form.aggregation_mode }}
+                {% if form.aggregation_mode.errors %}<div class="form-error">{{ form.aggregation_mode.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <div class="flex justify-between items-center mb-1">
+                    <label for="id_formula_expression" class="form-label mb-0">Formula Expression <span class="text-red-500">*</span></label>
+                    <button type="button" id="btn-validate-syntax" class="text-xs text-blue-600 hover:underline flex items-center space-x-1">
+                        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+                        <span>Validate Syntax</span>
+                    </button>
+                </div>
+                {{ form.formula_expression }}
+                {% if form.formula_expression.errors %}<div class="form-error">{{ form.formula_expression.errors }}</div>{% endif %}
+                <div id="validation-feedback" class="mt-2 text-xs hidden"></div>
+                <p class="text-xs text-muted mt-1">Reference fields in brackets, e.g. <code>[revenue] - [cost]</code> or <code>([orders] * 1.0) / [visits]</code>.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'bi:ad_hoc_calculated_field_detail' calculated_field.pk %}{% else %}{% url 'bi:ad_hoc_calculated_field_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Field{% endif %}</span>
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var validateBtn = document.getElementById("btn-validate-syntax");
+    if (validateBtn) {
+        validateBtn.addEventListener("click", function() {
+            var input = document.getElementById("id_formula_expression");
+            var fb = document.getElementById("validation-feedback");
+            fb.classList.remove("hidden");
+            fb.innerText = "Validating expression...";
+
+            fetch("{% url 'bi:ad_hoc_calculated_field_validate' %}?formula=" + encodeURIComponent(input.value))
+                .then(function(res) { return res.json(); })
+                .then(function(data) {
+                    if (data.valid) {
+                        fb.className = "mt-2 text-xs text-emerald-700 bg-emerald-50 p-2 rounded";
+                        fb.innerText = "✓ Formula syntax is balanced and valid.";
+                    } else {
+                        fb.className = "mt-2 text-xs text-red-700 bg-red-50 p-2 rounded";
+                        fb.innerText = "✗ Syntax errors: " + data.errors.join(", ");
+                    }
+                })
+                .catch(function(err) {
+                    fb.className = "mt-2 text-xs text-red-700 bg-red-50 p-2 rounded";
+                    fb.innerText = "Validation request failed: " + err;
+                });
+        });
+    }
+});
+</script>
+{% endblock %}
