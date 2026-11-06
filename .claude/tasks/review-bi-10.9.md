@@ -34,7 +34,7 @@
 
 ### Important Findings
 
-- [ ] **[I1] Unvalidated integer FK GET parameter crashes with `ValueError` (500) on non-numeric queries (L11)**
+- [x] **[I1] Unvalidated integer FK GET parameter crashes with `ValueError` (500) on non-numeric queries (L11)** (Fixed: guarded all `report` GET parameters with `report_id.isdigit()` across parameters, executions, and drill paths views)
   - **Locations**: `apps/bi/views/OperationalReporting/ReportParameters.py:34-36, 77-80`, `ReportExecutions.py:52-54`, `ReportDrillPaths.py:37-39, 79-82`
   - **Issue**: `report_id = request.GET.get("report", "").strip()` is queried directly against `report_id=report_id` or `get_object_or_404(..., pk=report_id)` without checking `.isdigit()`. Submitting `?report=abc` crashes with `ValueError: Field 'id' expected a number`.
   - **Fix**: Guard with `if report_id and report_id.isdigit():` before applying the filter or `get_object_or_404`.
