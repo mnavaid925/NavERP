@@ -103,6 +103,7 @@ def test_dashboards_edit_view(client_a, bi_dashboard_a):
             "slug": bi_dashboard_a.slug,
             "category": "custom",
             "layout_type": "grid_12",
+            "refresh_interval_seconds": 0,
             "theme": "dark_observability",
             "is_active": True,
         },
@@ -219,7 +220,7 @@ def test_dashboards_canvas_builder_get_and_ajax_post(client_a, bi_dashboard_a, b
     )
     assert resp_ajax.status_code == 200
     data = resp_ajax.json()
-    assert data["status"] == "success"
+    assert data["status"] == "ok"
 
     bi_widget_a.refresh_from_db()
     assert bi_widget_a.pos_x == 4
@@ -273,10 +274,13 @@ def test_dashboards_widget_create_view(client_a, bi_dashboard_a):
         "dashboard": bi_dashboard_a.pk,
         "title": "Gross Margin Widget",
         "widget_type": "kpi_card",
+        "aggregation_type": "sum",
         "pos_x": 0,
         "pos_y": 0,
         "width_cols": 4,
         "height_rows": 2,
+        "refresh_interval_seconds": 0,
+        "sort_order": 1,
         "is_active": True,
     }
     resp = client_a.post(url, data=post_data)
@@ -298,7 +302,7 @@ def test_dashboards_widget_detail_and_data_api(client_a, bi_widget_a):
     resp_data = client_a.get(url_data)
     assert resp_data.status_code == 200
     telemetry = resp_data.json()
-    assert "widget" in telemetry
+    assert "widget_id" in telemetry
     assert "payload" in telemetry
 
 
@@ -372,7 +376,9 @@ def test_dashboards_filter_list_and_create(client_a, bi_dashboard_a, bi_filter_a
             "filter_label": "Fiscal Quarter",
             "filter_key": "fiscal_quarter",
             "filter_type": "dropdown",
+            "target_field": "fiscal_quarter",
             "options_source": "static_list",
+            "order": 1,
             "is_active": True,
         },
     )
