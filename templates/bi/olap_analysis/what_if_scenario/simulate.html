@@ -16,7 +16,7 @@
         </div>
         <div class="flex items-center gap-3">
             <h1 class="page-title">Simulation Workbench: {{ scenario.name }}</h1>
-            <span class="badge badge-purple">{{ scenario.get_status_display }}</span>
+            <span class="badge badge-info">{{ scenario.get_status_display }}</span>
             <span class="badge badge-info">{{ scenario.get_default_disaggregation_display }}</span>
         </div>
         <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
@@ -88,7 +88,7 @@
 <div class="card mb-6">
     <div class="card-header flex items-center justify-between">
         <h3 class="font-semibold text-slate-800">Active Macroeconomic Driver Multipliers</h3>
-        <span class="badge badge-purple">Scenario Drivers</span>
+        <span class="badge badge-info">Scenario Drivers</span>
     </div>
     <div class="card-body p-4 bg-slate-50">
         {% if driver_parameters %}
