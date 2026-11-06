@@ -7,6 +7,193 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.12: OLAP & Multidimensional Analysis (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.12.md` (2026-11-06)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.10.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0025_datablenddefinition_idx_bbld_ten_user_and_more.py`, so **10.12 claims `0026`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.12.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/OlapAnalysis/`
+> Template folder name: `templates/bi/olap_analysis/{olap_cube,pivot_view,what_if_scenario,writeback_cell}/` + `matrix.html` / `simulate.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **OLAP & Multidimensional Analysis Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical & Modeling Scope:
+    - `OlapCube`:
+      - Multidimensional analytical cube specification defining grain, dimension axes, and measure aggregation rules.
+      - Fact source: Links to governed `bi.SemanticModel` (10.4) or physical `bi.WarehouseTable` (10.3).
+      - Hierarchy navigation: Primary drill path linked to `bi.DrillHierarchy` (10.4).
+      - Multidimensional schema:
+        - `dimensions_config` (JSON list of dimension definitions: name, field, type [`time`, `org`, `gl`, `geography`, `product`]).
+        - `measures_config` (JSON list of metric aggregations: name, field, agg [`sum`, `avg`, `count`, `min`, `max`], format [`currency`, `number`, `percentage`]).
+        - `aggregations_config` (JSON list of pre-calculated cuboid specifications to accelerate frequent rollup queries).
+      - Storage & Performance:
+        - `storage_mode` (`rolap`, `summary_rollup`, `hybrid`).
+        - `time_intelligence_enabled` (Boolean flag enabling built-in MTD, QTD, YTD, YoY, and QoQ time calculations).
+        - `cache_ttl_minutes` (Positive integer for pre-aggregation cache invalidation).
+        - `is_active` (Boolean status flag), `last_refreshed_at` (timestamp of last cuboid refresh).
+      - Authorship: `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL).
+    - `PivotAnalysisView`:
+      - Interactive multidimensional pivot/cross-tab matrix view with hierarchical row/column nesting and collapsible subtotals.
+      - Cube link: `cube` (`OlapCube`, CASCADE).
+      - Matrix geometry:
+        - `row_dimensions` (JSON ordered list of nested vertical dimension keys, e.g. `["org_unit", "gl_account"]`).
+        - `column_dimensions` (JSON ordered list of nested horizontal dimension keys, e.g. `["fiscal_year", "fiscal_quarter"]`).
+        - `selected_measures` (JSON list of active metric keys evaluated in matrix intersection cells).
+        - `filters_json` (JSON dictionary of dimensional slicers and filter criteria).
+      - Aggregation & Totals:
+        - `show_row_subtotals` (Boolean), `show_col_subtotals` (Boolean), `show_grand_totals` (Boolean).
+        - `total_position` (`bottom_right`, `top_left`).
+      - Visual presentation:
+        - `formatting_rules` (JSON conditional formatting rules for thresholds, gradients, and variance heatmaps).
+      - Drill navigation:
+        - `drill_through_enabled` (Boolean toggle for row-level drill-through).
+        - `drill_through_target` (URL name for transaction detail, default `accounting:journal_entry_list`).
+      - Sharing & Visibility:
+        - `is_shared` (Boolean tenant-wide visibility flag), `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL).
+    - `WhatIfScenario`:
+      - Isolated simulation sandbox for sensitivity analysis, macro projections, and planning adjustments.
+      - Cube link: `cube` (`OlapCube`, CASCADE).
+      - Baseline anchoring: `baseline_budget` (`accounting.Budget`, optional, SET_NULL) and `fiscal_period` (`accounting.FiscalPeriod`, optional, SET_NULL).
+      - Scenario status: `status` (`draft`, `simulated`, `approved`, `committed`, `archived`).
+      - Planning parameters:
+        - `driver_parameters` (JSON dictionary of macro growth/inflation multipliers, e.g. `{"revenue_multiplier": 1.08, "cost_inflation_pct": 5.0}`).
+        - `default_disaggregation` (`pro_rata`, `equal`, `delta` for spreading top-down adjustments).
+      - Governance & Commit:
+        - `notes` (justification text), `committed_at` (timestamp), `committed_by` (`settings.AUTH_USER_MODEL`, SET_NULL), `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL).
+    - `ScenarioWritebackCell`:
+      - Granular cell-level writeback adjustments recording delta values at multidimensional intersections.
+      - Scenario link: `scenario` (`WhatIfScenario`, CASCADE).
+      - Dimensional coordinates: `cell_coordinates` (JSON dictionary of dimensional keys and member IDs).
+      - Spine anchors: Optional direct FKs `gl_account` (`accounting.GLAccount`, SET_NULL) and `org_unit` (`core.OrgUnit`, SET_NULL) for financial accounting and cost center scoping.
+      - Numerical balance:
+        - `measure_name` (CharField, default `"amount"`).
+        - `baseline_value` (DecimalField, original value before adjustment).
+        - `adjusted_value` (DecimalField, user-entered target value).
+        - `variance_amount` (DecimalField, `adjusted_value - baseline_value`, non-editable calculated field).
+      - Allocation & Workflow:
+        - `disaggregation_method` (`direct_leaf`, `pro_rata`, `equal`, `delta`).
+        - `is_committed` (Boolean flag indicating synchronization with `accounting.BudgetLine`).
+        - `commentary` (TextField for cell-level planner notes), `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL).
+  - Sibling Hand-offs & Boundaries:
+    - 2.2 (`GeneralLedger`): `accounting.FiscalPeriod` (time intelligence calendar backbone, open/closed period validation), `accounting.GLAccount` (financial chart of accounts), `accounting.JournalLine` (drill-through transaction target).
+    - 2.13 (`Budgeting`): `accounting.Budget` (scenario baseline plan), `accounting.BudgetLine` (target committed ledger entries created on scenario writeback commit; enforces L29: accounting owns the financial ledger).
+    - 10.3 (`DataWarehouse`): `bi.WarehouseTable` (physical fact and dimension star/snowflake tables).
+    - 10.4 (`SemanticLayer`): `bi.SemanticModel` (governed datasets), `bi.DrillHierarchy` (navigation paths across time, org, and product).
+    - 10.8 (`Dashboards`): Visual dashboards where pivot matrix widgets can be embedded as live analytical tiles.
+    - 10.10 (`SelfServiceAnalytics`): Ad-hoc queries and blend definitions that can be promoted into multidimensional OLAP cubes.
+    - 10.12 (`OlapAnalysis` — THIS SUB-MODULE): OLAP cubes, pre-aggregated cuboids, interactive pivot cross-tab matrices, drill-down/through, time intelligence, what-if scenarios, and budget writeback.
+    - 10.13 (`PredictiveAnalytics` — DOWNSTREAM): Automated machine-learning forecasting, trend regression, and statistical anomaly detection.
+  - Audit logging: Administrative, recalculation, and commit actions write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log`.
+- **Prefix Collision Sweep**: `BOCB` (OlapCube), `BPIV` (PivotAnalysisView), `BWIF` (WhatIfScenario), `BWBC` (ScenarioWritebackCell) verified 100% collision-free repository-wide.
+
+---
+
+## 10.12-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO heavy external XMLA/Mondrian XML-RPC server or external Java/C++ OLAP daemon** — Native relational OLAP (ROLAP) query generation and database summary rollups provide sub-second responses without external daemons.
+- [ ] **NO writeback adjustments into closed or locked fiscal periods** — Writeback commits strictly validate that `accounting.FiscalPeriod.is_open` is True, preventing financial calendar tampering.
+- [ ] **NO machine-learning forecast regressors or neural network time-series prediction** — Belongs downstream in Sub-module 10.13 Predictive & Advanced Analytics.
+
+---
+
+## Sub-module 10.12 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.12.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: OlapCube (`BOCB-`)**
+  - [ ] Model: `apps/bi/models/OlapAnalysis/OlapCubes.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOCB"`)
+  - [ ] Form: `apps/bi/forms/OlapAnalysis/OlapCubes.py` (`OlapCubeForm`, `OlapCubeRebuildForm`)
+  - [ ] Views: `apps/bi/views/OlapAnalysis/OlapCubes.py` (list, detail, create, edit, delete, rebuild)
+  - [ ] URLs: `apps/bi/urls/OlapAnalysis/OlapCubes.py` (`olap_cube_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/olap_analysis/olap_cube/list.html`
+    - [ ] `templates/bi/olap_analysis/olap_cube/detail.html`
+    - [ ] `templates/bi/olap_analysis/olap_cube/form.html`
+- [ ] **Entity 2: PivotAnalysisView (`BPIV-`)**
+  - [ ] Model: `apps/bi/models/OlapAnalysis/PivotViews.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPIV"`)
+  - [ ] Form: `apps/bi/forms/OlapAnalysis/PivotViews.py` (`PivotAnalysisViewForm`)
+  - [ ] Views: `apps/bi/views/OlapAnalysis/PivotViews.py` (list, detail, create, edit, delete, matrix, drill_through)
+  - [ ] URLs: `apps/bi/urls/OlapAnalysis/PivotViews.py` (`pivot_view_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/olap_analysis/pivot_view/list.html`
+    - [ ] `templates/bi/olap_analysis/pivot_view/detail.html`
+    - [ ] `templates/bi/olap_analysis/pivot_view/form.html`
+    - [ ] `templates/bi/olap_analysis/pivot_view/matrix.html`
+- [ ] **Entity 3: WhatIfScenario (`BWIF-`)**
+  - [ ] Model: `apps/bi/models/OlapAnalysis/WhatIfScenarios.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWIF"`)
+  - [ ] Form: `apps/bi/forms/OlapAnalysis/WhatIfScenarios.py` (`WhatIfScenarioForm`, `WhatIfScenarioSimulateForm`, `WhatIfScenarioCommitForm`)
+  - [ ] Views: `apps/bi/views/OlapAnalysis/WhatIfScenarios.py` (list, detail, create, edit, delete, simulate, commit)
+  - [ ] URLs: `apps/bi/urls/OlapAnalysis/WhatIfScenarios.py` (`what_if_scenario_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/olap_analysis/what_if_scenario/list.html`
+    - [ ] `templates/bi/olap_analysis/what_if_scenario/detail.html`
+    - [ ] `templates/bi/olap_analysis/what_if_scenario/form.html`
+    - [ ] `templates/bi/olap_analysis/what_if_scenario/simulate.html`
+- [ ] **Entity 4: ScenarioWritebackCell (`BWBC-`)**
+  - [ ] Model: `apps/bi/models/OlapAnalysis/WritebackCells.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWBC"`)
+  - [ ] Form: `apps/bi/forms/OlapAnalysis/WritebackCells.py` (`ScenarioWritebackCellForm`, `ScenarioWritebackSplashForm`)
+  - [ ] Views: `apps/bi/views/OlapAnalysis/WritebackCells.py` (list, detail, create, edit, delete, splash)
+  - [ ] URLs: `apps/bi/urls/OlapAnalysis/WritebackCells.py` (`writeback_cell_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/olap_analysis/writeback_cell/list.html`
+    - [ ] `templates/bi/olap_analysis/writeback_cell/detail.html`
+    - [ ] `templates/bi/olap_analysis/writeback_cell/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Add re-exports in `apps/bi/models/OlapAnalysis/__init__.py` and `apps/bi/models/__init__.py`
+- [ ] Add re-exports in `apps/bi/forms/OlapAnalysis/__init__.py` and `apps/bi/forms/__init__.py`
+- [ ] Add re-exports in `apps/bi/views/OlapAnalysis/__init__.py` and `apps/bi/views/__init__.py`
+- [ ] Assemble URL patterns in `apps/bi/urls/OlapAnalysis/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Add `LIVE_LINKS["10.12"]` in `apps/core/navigation.py`:
+  - `"OLAP Cubes & Aggregations"`: `bi:olap_cube_list`
+  - `"Pivot & Cross-Tab Analysis"`: `bi:pivot_view_list`
+  - `"Drill-Down, Up & Through"`: `bi:pivot_view_list`
+  - `"Time Intelligence"`: `bi:olap_cube_list`
+  - `"What-If & Writeback"`: `bi:what_if_scenario_list`
+- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with idempotent demo cubes, pivot matrices, what-if scenarios, and writeback cells
+- [ ] Run `makemigrations bi` (claiming `0026`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+
+### Phase 3.5: Smoke Testing
+- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+
+### Phase 4: Six-Pass Serial Review
+- [ ] Pass 1: Code Reviewer
+- [ ] Pass 2: Explorer
+- [ ] Pass 3: Frontend Reviewer
+- [ ] Pass 4: Performance Reviewer
+- [ ] Pass 5: QA Smoke Tester
+- [ ] Pass 6: Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.12.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+
+### Phase 6: Automated Test Suite
+- [ ] Add shared 10.12 fixtures to `conftest.py`
+- [ ] Write `test_olapanalysis_models.py`
+- [ ] Write `test_olapanalysis_forms.py`
+- [ ] Write `test_olapanalysis_views.py`
+- [ ] Write `test_olapanalysis_security.py`
+- [ ] Run full unfiltered test suite and ensure 100% green
+
+### Phase 7: Skill & Documentation Close-out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.12 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.12 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.12.md`
+
+## Later passes / deferred
+- **External XMLA Protocol Endpoint Listener**: Emulating an SSAS XMLA endpoint for direct Excel / Power BI Desktop external tool connectivity requires a dedicated daemon; deferred in favor of native web pivot grids and XLSX/CSV exports.
+- **Distributed Spark / Hadoop Pre-Computation**: Pre-computing cuboids across Spark clusters deferred until multi-node tenant deployment infrastructure is commissioned.
+- **Automated Genetic Pre-Aggregation Index Synthesis**: Autonomous query pattern machine learning for automatic aggregate index creation deferred to a future optimization pass.
+
+## Review notes
+(to be filled in at close-out)
+
+---
 # Sub-module 10.10: Self-Service & Ad-Hoc Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.10.md` (2026-11-06)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.9.
