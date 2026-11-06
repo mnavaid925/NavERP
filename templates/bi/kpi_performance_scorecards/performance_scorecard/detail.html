@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scorecard.name }} — Performance Scorecard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:performance_scorecard_list' %}">Scorecards</a>
+            <span class="sep">/</span>
+            <span>{{ scorecard.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scorecard.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ scorecard.number }}</span>
+            {% if scorecard.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif scorecard.status == 'draft' %}
+            <span class="badge badge-slate">Draft</span>
+            {% elif scorecard.status == 'in_review' %}
+            <span class="badge badge-amber">In Review</span>
+            {% elif scorecard.status == 'closed' %}
+            <span class="badge badge-muted">Closed</span>
+            {% else %}
+            <span class="badge badge-red">Archived</span>
+            {% endif %}
+
+            {% if scorecard.overall_rag_status == 'green' %}
+            <span class="badge badge-green flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> On Track</span>
+            {% elif scorecard.overall_rag_status == 'amber' %}
+            <span class="badge badge-amber flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Needs Attention</span>
+            {% elif scorecard.overall_rag_status == 'red' %}
+            <span class="badge badge-red flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Critical</span>
+            {% else %}
+            <span class="badge badge-muted flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Not Evaluated</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ scorecard.get_scorecard_type_display }} · Fiscal Year {{ scorecard.fiscal_year }} · {{ scorecard.get_review_period_display }} Cadence</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:performance_scorecard_recalculate' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Recalculate weighted scores and RAG status">
+                <i data-lucide="refresh-cw"></i>
+                <span>Recalculate</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:performance_scorecard_strategy_map' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="map"></i>
+            <span>Strategy Map</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_create' %}?scorecard={{ scorecard.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Assign KPI</span>
+        </a>
+        <a href="{% url 'bi:performance_scorecard_edit' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:performance_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Delete this scorecard?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Executive Summary Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if scorecard.overall_score >= 85 %}green{% elif scorecard.overall_score >= 70 %}orange{% elif scorecard.overall_score > 0 %}slate{% else %}blue{% endif %}">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Overall Index</div>
+            <div class="text-2xl font-bold font-mono {% if scorecard.overall_score >= 85 %}text-emerald-600{% elif scorecard.overall_score >= 70 %}text-amber-600{% elif scorecard.overall_score > 0 %}text-rose-600{% else %}text-slate-800{% endif %}">
+                {{ scorecard.overall_score|floatformat:1 }}%
+            </div>
+            {% if scorecard.last_recalculated_at %}
+            <div class="text-[10px] text-muted mt-1">Calculated: {{ scorecard.last_recalculated_at|date:"M d, H:i" }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="dollar-sign"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Financial ({{ scorecard.financial_weight }}%)</div>
+            <div class="text-xl font-bold font-mono text-emerald-700">
+                {{ perspective_summary.financial.avg_score|floatformat:1 }}%
+            </div>
+            <div class="text-[11px] text-muted">{{ perspective_summary.financial.on_track }} of {{ perspective_summary.financial.count }} on target</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Customer ({{ scorecard.customer_weight }}%)</div>
+            <div class="text-xl font-bold font-mono text-blue-700">
+                {{ perspective_summary.customer.avg_score|floatformat:1 }}%
+            </div>
+            <div class="text-[11px] text-muted">{{ perspective_summary.customer.on_track }} of {{ perspective_summary.customer.count }} on target</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="cog"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Processes ({{ scorecard.internal_process_weight }}%)</div>
+            <div class="text-xl font-bold font-mono text-amber-700">
+                {{ perspective_summary.internal_process.avg_score|floatformat:1 }}%
+            </div>
+            <div class="text-[11px] text-muted">{{ perspective_summary.internal_process.on_track }} of {{ perspective_summary.internal_process.count }} on target</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="book-open"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Learning ({{ scorecard.learning_growth_weight }}%)</div>
+            <div class="text-xl font-bold font-mono text-indigo-700">
+                {{ perspective_summary.learning_growth.avg_score|floatformat:1 }}%
+            </div>
+            <div class="text-[11px] text-muted">{{ perspective_summary.learning_growth.on_track }} of {{ perspective_summary.learning_growth.count }} on target</div>
+        </div>
+    </div>
+</div>
+
+<!-- 4 Perspectives Section Breakdown -->
+<div class="space-y-6">
+
+    <!-- 1. Financial Perspective -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center bg-emerald-50/40 border-b border-emerald-100">
+            <div class="flex items-center gap-2">
+                <i data-lucide="dollar-sign" class="text-emerald-600"></i>
+                <h3 class="font-bold text-slate-900">1. Financial Perspective</h3>
+                <span class="text-xs text-muted">Weight: {{ scorecard.financial_weight }}%</span>
+            </div>
+            <a href="{% url 'bi:scorecard_kpi_assignment_create' %}?scorecard={{ scorecard.pk }}&perspective=financial" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Add Financial KPI</span>
+            </a>
+        </div>
+        {% if financial_kpis %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Metric Code & Name</th>
+                        <th>Strategic Objective</th>
+                        <th class="text-right">Weight</th>
+                        <th class="text-right">Target</th>
+                        <th class="text-right">Actual</th>
+                        <th class="text-right">Variance</th>
+                        <th class="text-center">Trend</th>
+                        <th>RAG Health</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in financial_kpis %}
+                    {% include "bi/kpi_performance_scorecards/performance_scorecard/_kpi_row.html" with a=a %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-muted text-sm">No KPIs assigned to the Financial perspective yet.</div>
+        {% endif %}
+    </div>
+
+    <!-- 2. Customer Perspective -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center bg-blue-50/40 border-b border-blue-100">
+            <div class="flex items-center gap-2">
+                <i data-lucide="users" class="text-blue-600"></i>
+                <h3 class="font-bold text-slate-900">2. Customer Perspective</h3>
+                <span class="text-xs text-muted">Weight: {{ scorecard.customer_weight }}%</span>
+            </div>
+            <a href="{% url 'bi:scorecard_kpi_assignment_create' %}?scorecard={{ scorecard.pk }}&perspective=customer" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Add Customer KPI</span>
+            </a>
+        </div>
+        {% if customer_kpis %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Metric Code & Name</th>
+                        <th>Strategic Objective</th>
+                        <th class="text-right">Weight</th>
+                        <th class="text-right">Target</th>
+                        <th class="text-right">Actual</th>
+                        <th class="text-right">Variance</th>
+                        <th class="text-center">Trend</th>
+                        <th>RAG Health</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in customer_kpis %}
+                    {% include "bi/kpi_performance_scorecards/performance_scorecard/_kpi_row.html" with a=a %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-muted text-sm">No KPIs assigned to the Customer perspective yet.</div>
+        {% endif %}
+    </div>
+
+    <!-- 3. Internal Business Process Perspective -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center bg-amber-50/40 border-b border-amber-100">
+            <div class="flex items-center gap-2">
+                <i data-lucide="cog" class="text-amber-600"></i>
+                <h3 class="font-bold text-slate-900">3. Internal Business Process Perspective</h3>
+                <span class="text-xs text-muted">Weight: {{ scorecard.internal_process_weight }}%</span>
+            </div>
+            <a href="{% url 'bi:scorecard_kpi_assignment_create' %}?scorecard={{ scorecard.pk }}&perspective=internal_process" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Add Process KPI</span>
+            </a>
+        </div>
+        {% if process_kpis %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Metric Code & Name</th>
+                        <th>Strategic Objective</th>
+                        <th class="text-right">Weight</th>
+                        <th class="text-right">Target</th>
+                        <th class="text-right">Actual</th>
+                        <th class="text-right">Variance</th>
+                        <th class="text-center">Trend</th>
+                        <th>RAG Health</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in process_kpis %}
+                    {% include "bi/kpi_performance_scorecards/performance_scorecard/_kpi_row.html" with a=a %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-muted text-sm">No KPIs assigned to the Internal Process perspective yet.</div>
+        {% endif %}
+    </div>
+
+    <!-- 4. Learning & Growth Perspective -->
+    <div class="card mb-6">
+        <div class="card-header flex justify-between items-center bg-indigo-50/40 border-b border-indigo-100">
+            <div class="flex items-center gap-2">
+                <i data-lucide="book-open" class="text-indigo-600"></i>
+                <h3 class="font-bold text-slate-900">4. Learning & Growth Perspective</h3>
+                <span class="text-xs text-muted">Weight: {{ scorecard.learning_growth_weight }}%</span>
+            </div>
+            <a href="{% url 'bi:scorecard_kpi_assignment_create' %}?scorecard={{ scorecard.pk }}&perspective=learning_growth" class="btn btn-outline btn-sm">
+                <i data-lucide="plus"></i>
+                <span>Add Learning KPI</span>
+            </a>
+        </div>
+        {% if learning_kpis %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Metric Code & Name</th>
+                        <th>Strategic Objective</th>
+                        <th class="text-right">Weight</th>
+                        <th class="text-right">Target</th>
+                        <th class="text-right">Actual</th>
+                        <th class="text-right">Variance</th>
+                        <th class="text-center">Trend</th>
+                        <th>RAG Health</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in learning_kpis %}
+                    {% include "bi/kpi_performance_scorecards/performance_scorecard/_kpi_row.html" with a=a %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-6 text-center text-muted text-sm">No KPIs assigned to the Learning & Growth perspective yet.</div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
