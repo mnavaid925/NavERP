@@ -24,7 +24,7 @@
 | **I2** | Important | `apps/bi/views/PerformanceScorecards/KpiDefinitions.py` | Full-table scan and model object instantiation in Python for `on_target_count` in list view | [x] fixed — computed on_target via Count filter inside SQL aggregate |
 | **I3** | Important | `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py` | Context variable mismatch: `perspective_scores` missing from `performance_scorecard_detail` view context | [x] fixed — added perspective_scores to view context |
 | **I4** | Important | `apps/bi/management/commands/seed_bi.py` | `seed_bi --flush` omits 10.11 entities from flush transaction | [x] fixed — added scorecard and kpi entities to seed_bi flush block |
-| **I5** | Important | `templates/bi/kpi_performance_scorecards/kpi_definition/list.html` | Filter bar omission & dropped `status` filter on pagination in `kpi_definition_list` | [ ] open |
+| **I5** | Important | `templates/bi/kpi_performance_scorecards/kpi_definition/list.html` | Filter bar omission & dropped `status` filter on pagination in `kpi_definition_list` | [x] fixed — added status dropdown and preserved in pagination links |
 | **I6** | Important | `templates/bi/kpi_performance_scorecards/performance_scorecard/list.html` | Filter bar omission & dropped `status` filter on pagination in `performance_scorecard_list` | [ ] open |
 | **I7** | Important | `templates/bi/kpi_performance_scorecards/**/*.html` | Design system palette violation: `badge-purple` is invalid in `theme.css` (L33) | [ ] open |
 | **I8** | Important | `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py` | Unused heavy prefetches (`child_objectives`, `scorecard_kpis__kpi`) in strategy map | [ ] open |
