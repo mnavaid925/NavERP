@@ -66,7 +66,6 @@ def ad_hoc_calculated_field_detail(request, pk):
 
 @login_required
 def ad_hoc_calculated_field_create(request):
-    queries = AdHocQuery.objects.filter(tenant=request.tenant)
     initial = {}
     q_param = request.GET.get("query")
     if q_param and q_param.isdigit():
@@ -98,7 +97,6 @@ def ad_hoc_calculated_field_create(request):
         {
             "form": form,
             "is_edit": False,
-            "queries": queries,
         },
     )
 
@@ -106,7 +104,6 @@ def ad_hoc_calculated_field_create(request):
 @login_required
 def ad_hoc_calculated_field_edit(request, pk):
     cf = bi_object(request, AdHocCalculatedField, pk)
-    queries = AdHocQuery.objects.filter(tenant=request.tenant)
 
     if request.method == "POST":
         form = AdHocCalculatedFieldForm(request.POST, instance=cf, tenant=request.tenant)
@@ -131,7 +128,6 @@ def ad_hoc_calculated_field_edit(request, pk):
             "form": form,
             "calculated_field": cf,
             "is_edit": True,
-            "queries": queries,
         },
     )
 
