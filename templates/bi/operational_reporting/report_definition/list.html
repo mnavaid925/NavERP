@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Operational & Standard Reports — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Standard & Operational Reporting</span>
+        </div>
+        <h1 class="page-title">Operational & Standard Reports</h1>
+        <p class="text-muted text-sm">Enterprise banded pixel-perfect documents, pre-built domain templates, parameterized prompt filtering, and multi-format exports</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_parameter_list' %}" class="btn btn-outline">
+            <i data-lucide="sliders-horizontal"></i>
+            <span>Parameters</span>
+        </a>
+        <a href="{% url 'bi:report_execution_list' %}" class="btn btn-outline">
+            <i data-lucide="history"></i>
+            <span>Run History</span>
+        </a>
+        <a href="{% url 'bi:report_drill_path_list' %}" class="btn btn-outline">
+            <i data-lucide="git-branch"></i>
+            <span>Drill Paths</span>
+        </a>
+        <a href="{% url 'bi:report_definition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Report</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Reports</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Published Live</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ published_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pre-Built Templates</div>
+            <div class="text-2xl font-bold text-purple-600">{{ prebuilt_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Reports</label>
+                <div class="relative">
+                    <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Name, slug, number..." class="form-input">
+                </div>
+            </div>
+            <div>
+                <label for="id_category" class="form-label">Domain Category</label>
+                <select id="id_category" name="category" class="form-select">
+                    <option value="">— All Categories —</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_report_type" class="form-label">Report Type</label>
+                <select id="id_report_type" name="report_type" class="form-select">
+                    <option value="">— All Types —</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if report_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label">Publishing Status</label>
+                <select id="id_status" name="status" class="form-select">
+                    <option value="">— All Statuses —</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:report_definition_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Report Catalog Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Report Number</th>
+                    <th>Report Name & Details</th>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Page Setup</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rpt in reports %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:report_definition_detail' rpt.pk %}" class="font-mono text-sm font-semibold text-blue-600 hover:underline">
+                            {{ rpt.number }}
+                        </a>
+                        {% if rpt.is_prebuilt_template %}
+                        <span class="block text-xs text-purple-600 font-medium">Pre-Built Template</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:report_definition_detail' rpt.pk %}" class="hover:underline">{{ rpt.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ rpt.slug }}</div>
+                        {% if rpt.description %}
+                        <div class="text-xs text-slate-500 truncate max-w-xs mt-0.5">{{ rpt.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.badge_category }}">
+                            {{ rpt.get_category_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.badge_type }}">
+                            {{ rpt.get_report_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        <div>{{ rpt.get_paper_size_display }}</div>
+                        <div class="text-muted capitalize">{{ rpt.get_orientation_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rpt.badge_status }}">
+                            {{ rpt.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_definition_viewer' rpt.pk %}" class="btn btn-icon" title="Open Interactive Viewer">
+                            <i data-lucide="play"></i>
+                        </a>
+                        <a href="{% url 'bi:report_definition_print' rpt.pk %}" target="_blank" class="btn btn-icon" title="Print-Ready View">
+                            <i data-lucide="printer"></i>
+                        </a>
+                        <a href="{% url 'bi:report_definition_detail' rpt.pk %}" class="btn btn-icon" title="Inspect Specs & Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_definition_clone' rpt.pk %}" class="btn btn-icon" title="Clone / Fork Report">
+                            <i data-lucide="copy"></i>
+                        </a>
+                        <a href="{% url 'bi:report_definition_edit' rpt.pk %}" class="btn btn-icon" title="Edit Configuration">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:report_definition_delete' rpt.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete report {{ rpt.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Report">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="file-question" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Operational Reports Found</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Get started by creating a new standard or regulatory report definition, or adjust your filter query.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:report_definition_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Report</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if report_type %}&report_type={{ report_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if report_type %}&report_type={{ report_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
