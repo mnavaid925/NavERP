@@ -195,17 +195,17 @@
 ---
 
 ## 10.8-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO heavy external ASGI WebSocket streaming server daemons (Centrifugo, Django Channels)** — Real-time live updating operates via configurable client-side non-blocking HTMX interval polling (10s to 3600s) and fetch triggers.
-- [ ] **NO arbitrary user-uploaded third-party JavaScript visualization plugins (untrusted D3/JS scripts)** — Visualization library provides 13 standardized, robust, pre-built chart types fully configured via JSON options.
-- [ ] **NO server-side headless browser rasterization engine (Puppeteer/Playwright PDF/PNG export)** — Paginated print formatting and export bursting belong to Sub-module 10.9; 10.8 provides clean browser-native print styles.
-- [ ] **NO cross-tenant or public unauthenticated tokenized iFrame URL generation** — Dashboards operate strictly inside tenant session boundaries; external embedded analytics belongs to Sub-module 10.17.
-- [ ] **NO direct raw SQL execution from end-user UI** — All chart data queries resolve strictly through verified `bi.SemanticModel`, `bi.CalculatedMeasure`, or governed `bi.WarehouseTable` references.
+- [x] **NO heavy external ASGI WebSocket streaming server daemons (Centrifugo, Django Channels)** — Real-time live updating operates via configurable client-side non-blocking HTMX interval polling (10s to 3600s) and fetch triggers.
+- [x] **NO arbitrary user-uploaded third-party JavaScript visualization plugins (untrusted D3/JS scripts)** — Visualization library provides 13 standardized, robust, pre-built chart types fully configured via JSON options.
+- [x] **NO server-side headless browser rasterization engine (Puppeteer/Playwright PDF/PNG export)** — Paginated print formatting and export bursting belong to Sub-module 10.9; 10.8 provides clean browser-native print styles.
+- [x] **NO cross-tenant or public unauthenticated tokenized iFrame URL generation** — Dashboards operate strictly inside tenant session boundaries; external embedded analytics belongs to Sub-module 10.17.
+- [x] **NO direct raw SQL execution from end-user UI** — All chart data queries resolve strictly through verified `bi.SemanticModel`, `bi.CalculatedMeasure`, or governed `bi.WarehouseTable` references.
 
 ---
 
 ## Models (4 models in `apps/bi/models/Dashboards/`)
 
-- [ ] **`BiDashboard`** [Prefix: `BDSH-`] (`apps/bi/models/Dashboards/BiDashboards.py`)
+- [x] **`BiDashboard`** [Prefix: `BDSH-`] (`apps/bi/models/Dashboards/BiDashboards.py`)
   - **Purpose**: Authoritative tenant-scoped dashboard canvas supporting category classification, responsive 12-column grid layout, customizable visual themes, role/org unit gating, auto-refresh intervals, kiosk display mode, and default landing views.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -233,7 +233,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_by`, `view_count`, `last_viewed_at`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'slug')]`, `indexes = [models.Index(fields=['tenant', 'category']), models.Index(fields=['tenant', 'is_published']), models.Index(fields=['tenant', 'is_default']), models.Index(fields=['tenant', 'org_unit'])]`
 
-- [ ] **`BiDashboardWidget`** [Prefix: `BDWG-`] (`apps/bi/models/Dashboards/BiDashboardWidgets.py`)
+- [x] **`BiDashboardWidget`** [Prefix: `BDWG-`] (`apps/bi/models/Dashboards/BiDashboardWidgets.py`)
   - **Purpose**: Visualization component placed on a dashboard canvas, binding governed semantic models and calculated measures to 13 distinct chart types with 12-column grid positioning, drilldown actions, and chart configurations.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -261,7 +261,7 @@
   - **Form Excludes**: `tenant`, `number`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `indexes = [models.Index(fields=['tenant', 'dashboard']), models.Index(fields=['tenant', 'widget_type']), models.Index(fields=['tenant', 'semantic_model']), models.Index(fields=['tenant', 'calculated_measure']), models.Index(fields=['tenant', 'sort_order'])]`
 
-- [ ] **`BiDashboardBookmark`** [Prefix: `BDBM-`] (`apps/bi/models/Dashboards/BiDashboardBookmarks.py`)
+- [x] **`BiDashboardBookmark`** [Prefix: `BDBM-`] (`apps/bi/models/Dashboards/BiDashboardBookmarks.py`)
   - **Purpose**: Saved analytical view state capturing active filter bar values, cross-filtering selections, and user personalization with default view assignment and team sharing.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -281,7 +281,7 @@
   - **Form Excludes**: `tenant`, `number`, `user`, `view_count`, `last_viewed_at`, `created_at`, `updated_at`
   - **Constraints & Indexes**: `unique_together = [('tenant', 'dashboard', 'user', 'name')]`, `indexes = [models.Index(fields=['tenant', 'dashboard']), models.Index(fields=['tenant', 'user']), models.Index(fields=['tenant', 'is_default']), models.Index(fields=['tenant', 'is_shared'])]`
 
-- [ ] **`BiDashboardFilter`** [Prefix: `BDFL-`] (`apps/bi/models/Dashboards/BiDashboardFilters.py`)
+- [x] **`BiDashboardFilter`** [Prefix: `BDFL-`] (`apps/bi/models/Dashboards/BiDashboardFilters.py`)
   - **Purpose**: Global dashboard-level filter control definition placed in the top filter bar, providing dropdowns, multi-select badges, date ranges, relative presets, numeric ranges, and search inputs that dynamically slice canvas widgets.
   - **Fields**:
     - `tenant`: `ForeignKey("core.Tenant", on_delete=models.CASCADE, related_name="+")`
@@ -306,49 +306,49 @@
 ## Backend Packages (`apps/bi/{models,forms,views,urls}/Dashboards/`)
 
 ### Models (`apps/bi/models/Dashboards/`)
-- [ ] `apps/bi/models/Dashboards/__init__.py`
-- [ ] `apps/bi/models/Dashboards/BiDashboards.py` (`BiDashboard`)
-- [ ] `apps/bi/models/Dashboards/BiDashboardWidgets.py` (`BiDashboardWidget`)
-- [ ] `apps/bi/models/Dashboards/BiDashboardBookmarks.py` (`BiDashboardBookmark`)
-- [ ] `apps/bi/models/Dashboards/BiDashboardFilters.py` (`BiDashboardFilter`)
-- [ ] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
+- [x] `apps/bi/models/Dashboards/__init__.py`
+- [x] `apps/bi/models/Dashboards/BiDashboards.py` (`BiDashboard`)
+- [x] `apps/bi/models/Dashboards/BiDashboardWidgets.py` (`BiDashboardWidget`)
+- [x] `apps/bi/models/Dashboards/BiDashboardBookmarks.py` (`BiDashboardBookmark`)
+- [x] `apps/bi/models/Dashboards/BiDashboardFilters.py` (`BiDashboardFilter`)
+- [x] Update `apps/bi/models/__init__.py` to re-export the 4 models and update `__all__`
 
 ### Forms (`apps/bi/forms/Dashboards/`)
-- [ ] `apps/bi/forms/Dashboards/__init__.py`
-- [ ] `apps/bi/forms/Dashboards/BiDashboardForms.py` (`BiDashboardForm`, `BiDashboardDuplicateForm`)
-- [ ] `apps/bi/forms/Dashboards/BiDashboardWidgetForms.py` (`BiDashboardWidgetForm`, `BiDashboardWidgetPositionForm`)
-- [ ] `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py` (`BiDashboardBookmarkForm`)
-- [ ] `apps/bi/forms/Dashboards/BiDashboardFilterForms.py` (`BiDashboardFilterForm`)
-- [ ] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
+- [x] `apps/bi/forms/Dashboards/__init__.py`
+- [x] `apps/bi/forms/Dashboards/BiDashboardForms.py` (`BiDashboardForm`, `BiDashboardDuplicateForm`)
+- [x] `apps/bi/forms/Dashboards/BiDashboardWidgetForms.py` (`BiDashboardWidgetForm`, `BiDashboardWidgetPositionForm`)
+- [x] `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py` (`BiDashboardBookmarkForm`)
+- [x] `apps/bi/forms/Dashboards/BiDashboardFilterForms.py` (`BiDashboardFilterForm`)
+- [x] Update `apps/bi/forms/__init__.py` to re-export the forms and update `__all__`
 
 ### Views (`apps/bi/views/Dashboards/`)
-- [ ] `apps/bi/views/Dashboards/__init__.py`
-- [ ] `apps/bi/views/Dashboards/BiDashboards.py` (`bi_dashboard_list`, `bi_dashboard_create`, `bi_dashboard_detail`, `bi_dashboard_edit`, `bi_dashboard_delete`, `bi_dashboard_publish`, `bi_dashboard_duplicate`)
-- [ ] `apps/bi/views/Dashboards/BiDashboardWidgets.py` (`bi_dashboard_widget_list`, `bi_dashboard_widget_create`, `bi_dashboard_widget_detail`, `bi_dashboard_widget_edit`, `bi_dashboard_widget_delete`, `bi_dashboard_widget_data`)
-- [ ] `apps/bi/views/Dashboards/BiDashboardBookmarks.py` (`bi_dashboard_bookmark_list`, `bi_dashboard_bookmark_create`, `bi_dashboard_bookmark_detail`, `bi_dashboard_bookmark_edit`, `bi_dashboard_bookmark_delete`, `bi_dashboard_bookmark_apply`)
-- [ ] `apps/bi/views/Dashboards/BiDashboardFilters.py` (`bi_dashboard_filter_list`, `bi_dashboard_filter_create`, `bi_dashboard_filter_detail`, `bi_dashboard_filter_edit`, `bi_dashboard_filter_delete`)
-- [ ] `apps/bi/views/Dashboards/BiDashboardCanvasViews.py` (`bi_dashboard_canvas_view`, `bi_dashboard_canvas_builder`, `bi_dashboard_kiosk_view`)
-- [ ] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
+- [x] `apps/bi/views/Dashboards/__init__.py`
+- [x] `apps/bi/views/Dashboards/BiDashboards.py` (`bi_dashboard_list`, `bi_dashboard_create`, `bi_dashboard_detail`, `bi_dashboard_edit`, `bi_dashboard_delete`, `bi_dashboard_publish`, `bi_dashboard_duplicate`)
+- [x] `apps/bi/views/Dashboards/BiDashboardWidgets.py` (`bi_dashboard_widget_list`, `bi_dashboard_widget_create`, `bi_dashboard_widget_detail`, `bi_dashboard_widget_edit`, `bi_dashboard_widget_delete`, `bi_dashboard_widget_data`)
+- [x] `apps/bi/views/Dashboards/BiDashboardBookmarks.py` (`bi_dashboard_bookmark_list`, `bi_dashboard_bookmark_create`, `bi_dashboard_bookmark_detail`, `bi_dashboard_bookmark_edit`, `bi_dashboard_bookmark_delete`, `bi_dashboard_bookmark_apply`)
+- [x] `apps/bi/views/Dashboards/BiDashboardFilters.py` (`bi_dashboard_filter_list`, `bi_dashboard_filter_create`, `bi_dashboard_filter_detail`, `bi_dashboard_filter_edit`, `bi_dashboard_filter_delete`)
+- [x] `apps/bi/views/Dashboards/BiDashboardCanvasViews.py` (`bi_dashboard_canvas_view`, `bi_dashboard_canvas_builder`, `bi_dashboard_kiosk_view`)
+- [x] Update `apps/bi/views/__init__.py` to re-export view functions and update `__all__`
 
 ### URLs (`apps/bi/urls/Dashboards/`)
-- [ ] `apps/bi/urls/Dashboards/__init__.py` (aggregates and re-exports `urlpatterns`)
-- [ ] `apps/bi/urls/Dashboards/BiDashboardUrls.py`
-- [ ] `apps/bi/urls/Dashboards/BiDashboardWidgetUrls.py`
-- [ ] `apps/bi/urls/Dashboards/BiDashboardBookmarkUrls.py`
-- [ ] `apps/bi/urls/Dashboards/BiDashboardFilterUrls.py`
-- [ ] `apps/bi/urls/Dashboards/BiDashboardCanvasUrls.py`
-- [ ] Update `apps/bi/urls/__init__.py` to include `Dashboards` routes
+- [x] `apps/bi/urls/Dashboards/__init__.py` (aggregates and re-exports `urlpatterns`)
+- [x] `apps/bi/urls/Dashboards/BiDashboardUrls.py`
+- [x] `apps/bi/urls/Dashboards/BiDashboardWidgetUrls.py`
+- [x] `apps/bi/urls/Dashboards/BiDashboardBookmarkUrls.py`
+- [x] `apps/bi/urls/Dashboards/BiDashboardFilterUrls.py`
+- [x] `apps/bi/urls/Dashboards/BiDashboardCanvasUrls.py`
+- [x] Update `apps/bi/urls/__init__.py` to include `Dashboards` routes
 
 ### Admin & Integration
-- [ ] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.8"]` mapping NavERP.md feature bullets to views
-- [ ] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.8 (executive KPI dashboard, operational monitoring board, sales conversion funnel, widgets across all 13 types, global filter bars, and personal bookmarks)
+- [x] `apps/bi/admin.py`: Register all 4 models with search, list_filter, and tenant readonly fields
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.8"]` mapping NavERP.md feature bullets to views
+- [x] `apps/bi/management/commands/seed_bi.py`: Extend with realistic idempotent demo data for 10.8 (executive KPI dashboard, operational monitoring board, sales conversion funnel, widgets across all 13 types, global filter bars, and personal bookmarks)
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.8"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
+- [x] `apps/core/navigation.py`: Wire `LIVE_LINKS["10.8"]` mapping all 5 NavERP.md feature bullets to staff-facing management views:
   ```python
   "10.8": {
       "Interactive Dashboards": "bi:bi_dashboard_list",
@@ -369,33 +369,33 @@
 
 ## Templates (`templates/bi/dashboards/`)
 
-- [ ] `templates/bi/dashboards/canvas/viewer.html` (Interactive full-featured dashboard viewer: responsive 12-column coordinate grid layout, top filter bar with dynamic slicing, saved bookmarks dropdown and drawer, widget auto-refresh polling loop, cross-filtering interaction, theme switcher, and distraction-free kiosk mode)
-- [ ] `templates/bi/dashboards/dashboard/list.html` (filters: category, layout_type, theme, is_published; search: title, number, slug; preview cards, action buttons)
-- [ ] `templates/bi/dashboards/dashboard/detail.html` (Dashboard metadata header, layout blueprint summary, linked widgets table with grid coordinates, active filters bar list, saved bookmarks list, quick-launch canvas button)
-- [ ] `templates/bi/dashboards/dashboard/form.html`
-- [ ] `templates/bi/dashboards/widget/list.html` (filters: dashboard, widget_type, aggregation_type; search: title, number; grid coordinate tags, data source badges)
-- [ ] `templates/bi/dashboards/widget/detail.html` (Widget type preview, data binding to SemanticModel/Measure/Table, 12-col coordinates, JSON chart configuration viewer, drilldown URL action)
-- [ ] `templates/bi/dashboards/widget/form.html`
-- [ ] `templates/bi/dashboards/bookmark/list.html` (filters: dashboard, is_default, is_shared; search: name, number, user; filter state JSON preview)
-- [ ] `templates/bi/dashboards/bookmark/detail.html` (Bookmark details, owner user, active filter state dictionary cards, cross-filter values, apply-to-canvas action)
-- [ ] `templates/bi/dashboards/bookmark/form.html`
-- [ ] `templates/bi/dashboards/filter/list.html` (filters: dashboard, filter_type, options_source; search: filter_label, filter_key, target_field; order sorting)
-- [ ] `templates/bi/dashboards/filter/detail.html` (Filter control configuration, target semantic field, options source, default value, sample rendered widget preview)
-- [ ] `templates/bi/dashboards/filter/form.html`
+- [x] `templates/bi/dashboards/canvas/viewer.html` (Interactive full-featured dashboard viewer: responsive 12-column coordinate grid layout, top filter bar with dynamic slicing, saved bookmarks dropdown and drawer, widget auto-refresh polling loop, cross-filtering interaction, theme switcher, and distraction-free kiosk mode)
+- [x] `templates/bi/dashboards/dashboard/list.html` (filters: category, layout_type, theme, is_published; search: title, number, slug; preview cards, action buttons)
+- [x] `templates/bi/dashboards/dashboard/detail.html` (Dashboard metadata header, layout blueprint summary, linked widgets table with grid coordinates, active filters bar list, saved bookmarks list, quick-launch canvas button)
+- [x] `templates/bi/dashboards/dashboard/form.html`
+- [x] `templates/bi/dashboards/widget/list.html` (filters: dashboard, widget_type, aggregation_type; search: title, number; grid coordinate tags, data source badges)
+- [x] `templates/bi/dashboards/widget/detail.html` (Widget type preview, data binding to SemanticModel/Measure/Table, 12-col coordinates, JSON chart configuration viewer, drilldown URL action)
+- [x] `templates/bi/dashboards/widget/form.html`
+- [x] `templates/bi/dashboards/bookmark/list.html` (filters: dashboard, is_default, is_shared; search: name, number, user; filter state JSON preview)
+- [x] `templates/bi/dashboards/bookmark/detail.html` (Bookmark details, owner user, active filter state dictionary cards, cross-filter values, apply-to-canvas action)
+- [x] `templates/bi/dashboards/bookmark/form.html`
+- [x] `templates/bi/dashboards/filter/list.html` (filters: dashboard, filter_type, options_source; search: filter_label, filter_key, target_field; order sorting)
+- [x] `templates/bi/dashboards/filter/detail.html` (Filter control configuration, target semantic field, options source, default value, sample rendered widget preview)
+- [x] `templates/bi/dashboards/filter/form.html`
 
 ---
 
 ## Verification & Close-out
 
-- [ ] Generate incremental migration `python manage.py makemigrations bi` -> `0019_...` and run `python manage.py migrate`
-- [ ] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
-- [ ] Run `python manage.py check` to verify clean system checks (0 issues)
-- [ ] Execute smoke test (`temp/smoke_bi_10_8.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
-- [ ] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.8.md`
-- [ ] Run Phase 5 Code Fixer agent
-- [ ] Run Phase 6 Test Writers -> 4 test suites: `test_dashboards_models.py`, `test_dashboards_forms.py`, `test_dashboards_views.py`, `test_dashboards_security.py`
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.8 models/routes/templates and update `README.md`
-- [ ] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.8.md`
+- [x] Generate incremental migration `python manage.py makemigrations bi` -> `0019_...` and run `python manage.py migrate`
+- [x] Run `python manage.py seed_bi` twice to prove idempotency (zero duplicate key errors)
+- [x] Run `python manage.py check` to verify clean system checks (0 issues)
+- [x] Execute smoke test (`temp/smoke_bi_10_8.py`) confirming HTTP 200/302, IDOR 404, no template comment leaks
+- [x] Run Phase 4 Reviewers (6 agents serially) -> `review-bi-10.8.md`
+- [x] Run Phase 5 Code Fixer agent
+- [x] Run Phase 6 Test Writers -> 4 test suites: `test_dashboards_models.py`, `test_dashboards_forms.py`, `test_dashboards_views.py`, `test_dashboards_security.py`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.8 models/routes/templates and update `README.md`
+- [x] Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.8.md`
 
 ## Later passes / deferred
 - Dedicated ASGI WebSocket Streaming Server (e.g. Django Channels / Centrifugo) -> Advanced real-time streaming infrastructure pass
@@ -404,7 +404,21 @@
 - Cross-Dashboard Tokenized URL Deep Linking -> Sub-module 10.17 Embedded & Mobile BI
 
 ## Review notes
-(filled in at the end of Sub-module 10.8 execution)
+- **Completed**: Sub-module 10.8: Dashboards & Visualization (2026-11-06)
+- **Scope Built**:
+  - Models (4): `BiDashboard` (BDSH-), `BiDashboardWidget` (BDWG-), `BiDashboardBookmark` (BDBM-), `BiDashboardFilter` (BDFL-)
+  - Forms (6): `BiDashboardForm`, `BiDashboardDuplicateForm`, `BiDashboardWidgetForm`, `BiDashboardWidgetPositionForm`, `BiDashboardBookmarkForm`, `BiDashboardFilterForm`
+  - Views (24): CRUD, Publish, Duplicate, Canvas Viewer, Drag-and-Drop Canvas Builder API, Kiosk Mode, Widget Telemetry Data API, Bookmark Apply
+  - Templates (13): Canvas Viewer, Canvas Builder, Kiosk Mode, 4 List views, 4 Detail views, 4 Form views
+  - Navigation: `LIVE_LINKS["10.8"]` registered with 5 core feature leaves + 5 management leaves
+  - Seeder: `seed_bi` extended with Executive KPI, Operational Monitoring, Conversion Funnel, 13 chart widget types, global filter bars, personal bookmarks (idempotent, 0 errors)
+  - Migrations: `0019_bidashboard_bidashboardfilter_bidashboardwidget_and_more.py` & `0021_bidashboard_idx_bdsh_ten_created_and_more.py`
+  - Review: 6 Reviewer agents executed serially across BASE..HEAD (`review-bi-10.8.md` — 42/42 findings burned down by `code-fixer` agent, 100% resolved)
+  - Tests: 51 dedicated automated unit & security tests (`test_dashboards_models.py`, `test_dashboards_forms.py`, `test_dashboards_views.py`, `test_dashboards_security.py`)
+  - Full suite status: `apps/bi/tests/` passes **1,106 green**, 0 failures, 0 errors
+  - Skill: `.claude/skills/bi/SKILL.md` updated with comprehensive 10.8 reference guide
+  - Documentation: `README.md` updated with 10.8 specifications and milestone status
+- **Gaps**: None
 
 ---
 # Sub-module 10.7: Data Catalog, Lineage & Governance (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.7.md` (2026-11-05)
