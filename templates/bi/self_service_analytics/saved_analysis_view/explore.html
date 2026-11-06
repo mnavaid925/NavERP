@@ -26,10 +26,13 @@
             <i data-lucide="sliders"></i>
             <span>Edit in Query Composer</span>
         </a>
-        <a href="{% url 'bi:saved_analysis_view_clone' view_obj.pk %}" class="btn btn-outline">
-            <i data-lucide="copy"></i>
-            <span>Fork to My Workspace</span>
-        </a>
+        <form method="post" action="{% url 'bi:saved_analysis_view_clone' view_obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="copy"></i>
+                <span>Fork to My Workspace</span>
+            </button>
+        </form>
         <a href="{% url 'bi:ad_hoc_query_export' query.pk %}" class="btn btn-outline">
             <i data-lucide="download"></i>
             <span>Export CSV</span>
