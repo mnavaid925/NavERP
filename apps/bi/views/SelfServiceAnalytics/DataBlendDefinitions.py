@@ -98,10 +98,11 @@ def data_blend_definition_create(request):
             blend.save()
 
             write_audit_log(
-                request,
+                user=request.user,
+                obj=blend,
                 action="create",
-                instance=blend,
-                description=f"Created data blend definition {blend.name} ({blend.number})",
+                tenant=request.tenant,
+                changes={"description": f"Created data blend definition {blend.name} ({blend.number})"},
             )
             messages.success(request, f"Data blend '{blend.name}' created successfully.")
             return redirect("bi:data_blend_definition_detail", pk=blend.pk)
@@ -131,10 +132,11 @@ def data_blend_definition_edit(request, pk):
         if form.is_valid():
             blend = form.save()
             write_audit_log(
-                request,
+                user=request.user,
+                obj=blend,
                 action="update",
-                instance=blend,
-                description=f"Updated data blend definition {blend.name} ({blend.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated data blend definition {blend.name} ({blend.number})"},
             )
             messages.success(request, f"Data blend '{blend.name}' updated successfully.")
             return redirect("bi:data_blend_definition_detail", pk=blend.pk)
@@ -162,10 +164,11 @@ def data_blend_definition_delete(request, pk):
     number = blend.number
 
     write_audit_log(
-        request,
+        user=request.user,
+        obj=blend,
         action="delete",
-        instance=blend,
-        description=f"Deleted data blend definition {name} ({number})",
+        tenant=request.tenant,
+        changes={"description": f"Deleted data blend definition {name} ({number})"},
     )
     blend.delete()
     messages.success(request, f"Data blend '{name}' ({number}) deleted.")
