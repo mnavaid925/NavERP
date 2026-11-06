@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Strategic Objectives — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Strategic Objectives & Strategy Maps</span>
+        </div>
+        <h1 class="page-title">Strategic Objectives</h1>
+        <p class="text-muted text-sm">Strategic intentions, cause-and-effect alignment hierarchies, and cross-perspective organizational goal cascading</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:kpi_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>KPI Library</span>
+        </a>
+        <a href="{% url 'bi:performance_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="layout-grid"></i>
+            <span>Scorecards</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_list' %}" class="btn btn-outline">
+            <i data-lucide="target"></i>
+            <span>Goal Tracking</span>
+        </a>
+        <a href="{% url 'bi:strategic_objective_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Objective</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="compass"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Objectives</div>
+            <div class="text-2xl font-bold">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="flag"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Strategic Goals</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ stats.active }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Achieved Milestones</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ stats.achieved }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">On Track (Green)</div>
+            <div class="text-2xl font-bold text-amber-600">{{ stats.on_track }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Code, name, intent..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Perspective</label>
+                <select name="perspective" class="form-select">
+                    <option value="">All Perspectives</option>
+                    {% for val, label in perspective_choices %}
+                    <option value="{{ val }}" {% if request.GET.perspective == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">RAG Health</label>
+                <select name="rag_status" class="form-select">
+                    <option value="">All Health Statuses</option>
+                    {% for val, label in rag_choices %}
+                    <option value="{{ val }}" {% if request.GET.rag_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Department</label>
+                <select name="org_unit" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for org in org_units %}
+                    <option value="{{ org.pk }}" {% if request.GET.org_unit == org.pk|stringformat:"d" %}selected{% endif %}>{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.perspective or request.GET.status or request.GET.rag_status or request.GET.org_unit %}
+                <a href="{% url 'bi:strategic_objective_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Objectives Table -->
+<div class="card">
+    {% if objectives %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Objective Code</th>
+                    <th>Strategic Objective Name</th>
+                    <th>Perspective</th>
+                    <th>Upstream Driver (Parent)</th>
+                    <th>Target Date</th>
+                    <th class="text-right">Health Score</th>
+                    <th>RAG Health</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for obj in objectives %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-xs font-semibold text-primary">
+                            <a href="{{ obj.get_absolute_url }}">{{ obj.code }}</a>
+                        </div>
+                        <div class="text-[10px] text-muted">{{ obj.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{{ obj.get_absolute_url }}" class="hover:underline">{{ obj.name }}</a>
+                        </div>
+                        {% if obj.statement_of_intent %}
+                        <div class="text-xs text-muted line-clamp-1">{{ obj.statement_of_intent }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if obj.perspective == 'financial' %}badge-green{% elif obj.perspective == 'customer' %}badge-info{% elif obj.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                            {{ obj.get_perspective_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if obj.parent_objective %}
+                        <a href="{{ obj.parent_objective.get_absolute_url }}" class="text-xs text-primary font-medium hover:underline flex items-center gap-1">
+                            <i data-lucide="corner-right-up" class="w-3 h-3 text-slate-400"></i>
+                            <span>{{ obj.parent_objective.name }}</span>
+                        </a>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">
+                            {% if obj.target_date %}{{ obj.target_date|date:"M d, Y" }}{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td class="text-right font-mono text-sm font-bold text-slate-800">
+                        {{ obj.alignment_score|floatformat:0 }}%
+                    </td>
+                    <td>
+                        {% if obj.rag_status == 'green' %}
+                        <span class="badge badge-green">On Track</span>
+                        {% elif obj.rag_status == 'amber' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% elif obj.rag_status == 'red' %}
+                        <span class="badge badge-red">Off Track</span>
+                        {% else %}
+                        <span class="badge badge-muted">Not Evaluated</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if obj.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif obj.status == 'achieved' %}
+                        <span class="badge badge-info">Achieved</span>
+                        {% elif obj.status == 'proposed' %}
+                        <span class="badge badge-slate">Proposed</span>
+                        {% elif obj.status == 'postponed' %}
+                        <span class="badge badge-amber">Postponed</span>
+                        {% else %}
+                        <span class="badge badge-red">Canceled</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{{ obj.get_absolute_url }}" class="btn btn-icon btn-outline" title="View Objective">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:strategic_objective_edit' obj.pk %}" class="btn btn-icon btn-outline" title="Edit Objective">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:strategic_objective_delete' obj.pk %}" class="inline" onsubmit="return confirm('Delete objective {{ obj.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Objective">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if objectives.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if objectives.has_previous %}
+            <a href="?page={{ objectives.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.perspective %}&perspective={{ request.GET.perspective }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </span>
+            {% endif %}
+
+            <span class="text-xs text-muted">
+                Page {{ objectives.number }} of {{ objectives.paginator.num_pages }} ({{ objectives.paginator.count }} items)
+            </span>
+
+            {% if objectives.has_next %}
+            <a href="?page={{ objectives.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.perspective %}&perspective={{ request.GET.perspective }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">
+            <i data-lucide="compass"></i>
+        </div>
+        <h3>No Strategic Objectives Defined</h3>
+        <p class="text-muted text-sm">Define corporate strategic goals across Financial, Customer, Internal Process, and Learning & Growth perspectives to populate your strategy map.</p>
+        <a href="{% url 'bi:strategic_objective_create' %}" class="btn btn-primary mt-4">
+            <i data-lucide="plus"></i>
+            <span>Create Strategic Objective</span>
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
