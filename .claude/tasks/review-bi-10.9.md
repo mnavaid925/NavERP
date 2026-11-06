@@ -102,7 +102,7 @@
   - **Issue**: `bi_object(request, ReportExecution, pk)` lacks `select_related=("report",)`, causing an avoidable query when recording audit log changes.
   - **Fix**: Add `select_related=("report",)` to `bi_object(...)`.
 
-- [ ] **[M5] Privileged tenant-admin action buttons exposed to non-admins in list tables**
+- [x] **[M5] Privileged tenant-admin action buttons exposed to non-admins in list tables** (Fixed: wrapped admin action and create buttons in `{% if request.user.is_superuser or request.is_tenant_admin %}` across all four list templates)
   - **Locations**: `templates/bi/operational_reporting/*/*/list.html`
   - **Issue**: Edit/delete/clone buttons for `@tenant_admin_required` views are shown to staff members who lack admin privileges.
   - **Fix**: Wrap action buttons in `{% if request.user.is_superuser or request.is_tenant_admin %}`.
