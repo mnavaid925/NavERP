@@ -169,7 +169,7 @@
                         <div class="text-xs font-mono text-muted">{{ a.kpi.code }} · {{ a.kpi.get_unit_of_measure_display }}</div>
                     </td>
                     <td>
-                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ a.get_perspective_display }}
                         </span>
                     </td>
