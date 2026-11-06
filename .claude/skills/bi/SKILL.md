@@ -734,3 +734,96 @@ Enterprise pixel-perfect, banded operational reports, dynamic runtime parameter 
 - **Unique Slugs on Clone**: `ReportCloneForm` enforces uniqueness of `new_slug` within the tenant to prevent unhandled database constraint crashes.
 - **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.9"]`.
 
+---
+
+## Sub-module 10.10: Self-Service & Ad-Hoc Analytics
+
+### Overview
+Sub-module 10.10 provides business and analytical users with visual query composition, ad-hoc metrics computation, multi-source dataset blending, and interactive analysis exploration with personal and team workspace sharing.
+
+App Path: `apps/bi/`
+Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
+
+### Models
+1. **`AdHocQuery`** (`apps/bi/models/SelfServiceAnalytics/AdHocQueries.py`):
+   - Table: `bi_ad_hoc_query`, Prefix: `BAHQ` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `source_type` (`semantic_model`, `warehouse_table`, `blend`), `semantic_model` (FK `SemanticModel`), `warehouse_table` (FK `WarehouseTable`), `data_blend` (FK `DataBlendDefinition`), `fields_config_json` (selected dimensions and measures with aggregations), `filter_criteria_json` (rules with operators), `sort_config_json`, `visualization_type` (`table`, `bar_chart`, `line_chart`, `area_chart`, `pie_chart`, `kpi_card`, `pivot_table`), `chart_config_json`, `row_limit`, `status` (`draft`, `active`, `archived`), `last_executed_at`, `execution_duration_ms`, `row_count`, `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, source_type)`, `(tenant, visualization_type)`, `(tenant, status)`, `(tenant, created_by)`.
+
+2. **`AdHocCalculatedField`** (`apps/bi/models/SelfServiceAnalytics/AdHocCalculatedFields.py`):
+   - Table: `bi_ad_hoc_calculated_field`, Prefix: `BACF` (`TenantNumbered`).
+   - Fields: `query` (FK `AdHocQuery`), `field_name`, `display_label`, `formula_expression`, `return_type` (`decimal`, `integer`, `percentage`, `currency`, `string`, `boolean`), `aggregation_mode` (`formula`, `pre_agg`, `post_agg`), `is_valid`, `error_message`, `created_by` (FK `User`).
+   - UniqueConstraint: `(tenant, query, field_name)`.
+   - Badge Properties: `badge_return_type` (`badge-info`, `badge-green`, `badge-slate`, `badge-amber`), `badge_mode`.
+
+3. **`DataBlendDefinition`** (`apps/bi/models/SelfServiceAnalytics/DataBlendDefinitions.py`):
+   - Table: `bi_data_blend_definition`, Prefix: `BBLD` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `primary_source_type`, `primary_semantic_model`, `primary_warehouse_table`, `secondary_source_type`, `secondary_semantic_model`, `secondary_warehouse_table`, `join_type` (`inner`, `left_outer`, `right_outer`, `full_outer`), `join_keys_mapping_json`, `cardinality` (`one_to_one`, `one_to_many`, `many_to_one`), `collision_resolution`, `status` (`active`, `draft`, `deprecated`), `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, status)`, `(tenant, join_type)`, `(tenant, created_by)`, `(tenant, created_at)`.
+   - Badge Properties: `badge_join`, `badge_status`.
+
+4. **`SavedAnalysisView`** (`apps/bi/models/SelfServiceAnalytics/SavedAnalysisViews.py`):
+   - Table: `bi_saved_analysis_view`, Prefix: `BSAV` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `query` (FK `AdHocQuery`), `sharing_scope` (`personal`, `team`, `tenant_public`), `org_unit` (FK `core.OrgUnit`), `is_template`, `is_favorite`, `parent_view` (self-referential FK), `share_token`, `view_count`, `last_viewed_at`, `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, sharing_scope)`, `(tenant, org_unit)`, `(tenant, created_by)`, `(tenant, is_template)`, `(tenant, query)`, `(tenant, created_at)`.
+   - Badge Property: `badge_scope` (`badge-slate`, `badge-info`, `badge-green`).
+
+### URLs & Routes
+- Ad-Hoc Queries:
+  - `bi:ad_hoc_query_list` (`/bi/queries/`)
+  - `bi:ad_hoc_query_create` (`/bi/queries/create/`)
+  - `bi:ad_hoc_query_detail` (`/bi/queries/<int:pk>/`)
+  - `bi:ad_hoc_query_edit` (`/bi/queries/<int:pk>/edit/`)
+  - `bi:ad_hoc_query_delete` (`/bi/queries/<int:pk>/delete/` - `@require_POST`)
+  - `bi:ad_hoc_query_composer` (`/bi/queries/<int:pk>/composer/`)
+  - `bi:ad_hoc_query_execute` (`/bi/queries/<int:pk>/execute/` - `@require_POST`)
+  - `bi:ad_hoc_query_export` (`/bi/queries/<int:pk>/export/`)
+- Calculated Fields:
+  - `bi:ad_hoc_calculated_field_list` (`/bi/calculated-fields/`)
+  - `bi:ad_hoc_calculated_field_validate` (`/bi/calculated-fields/validate/` - JSON formula validator)
+  - `bi:ad_hoc_calculated_field_create` (`/bi/calculated-fields/create/`)
+  - `bi:ad_hoc_calculated_field_detail` (`/bi/calculated-fields/<int:pk>/`)
+  - `bi:ad_hoc_calculated_field_edit` (`/bi/calculated-fields/<int:pk>/edit/`)
+  - `bi:ad_hoc_calculated_field_delete` (`/bi/calculated-fields/<int:pk>/delete/` - `@require_POST`)
+- Data Blends:
+  - `bi:data_blend_definition_list` (`/bi/data-blends/`)
+  - `bi:data_blend_definition_create` (`/bi/data-blends/create/`)
+  - `bi:data_blend_definition_detail` (`/bi/data-blends/<int:pk>/`)
+  - `bi:data_blend_definition_edit` (`/bi/data-blends/<int:pk>/edit/`)
+  - `bi:data_blend_definition_delete` (`/bi/data-blends/<int:pk>/delete/` - `@require_POST`)
+  - `bi:data_blend_definition_preview` (`/bi/data-blends/<int:pk>/preview/`)
+- Saved Analysis Views:
+  - `bi:saved_analysis_view_list` (`/bi/saved-views/`)
+  - `bi:saved_analysis_view_create` (`/bi/saved-views/create/`)
+  - `bi:saved_analysis_view_detail` (`/bi/saved-views/<int:pk>/`)
+  - `bi:saved_analysis_view_edit` (`/bi/saved-views/<int:pk>/edit/`)
+  - `bi:saved_analysis_view_delete` (`/bi/saved-views/<int:pk>/delete/` - `@require_POST`)
+  - `bi:saved_analysis_view_share` (`/bi/saved-views/<int:pk>/share/`)
+  - `bi:saved_analysis_view_explore` (`/bi/saved-views/<int:pk>/explore/`)
+  - `bi:saved_analysis_view_clone` (`/bi/saved-views/<int:pk>/clone/` - `@require_POST`, atomic, unique slug de-duplication)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/self_service_analytics/`:
+  - `ad_hoc_query/` (`list.html`, `detail.html`, `form.html`, `composer.html`).
+  - `ad_hoc_calculated_field/` (`list.html`, `detail.html`, `form.html`).
+  - `data_blend_definition/` (`list.html`, `detail.html`, `form.html`).
+  - `saved_analysis_view/` (`list.html`, `detail.html`, `form.html`, `explore.html`, `share.html`).
+- Design System: Pure colour-named badge modifiers (`.badge-green`, `.badge-info`, `.badge-amber`, `.badge-slate`, `.badge-muted`), `.card`, `.stat-card`, `.table-wrap`, and `.btn`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Self-Service & Ad-Hoc records:
+  - Demo ad-hoc queries: Monthly Revenue Trend by Region (visual builder with simulated execution telemetry).
+  - Calculated fields: Net Margin Percentage, Gross Profit per Unit.
+  - Data blends: Sales and Procurement Orders Mashup.
+  - Saved views: Executive Revenue Run Rate (with personal and tenant public scopes).
+- 100% idempotent with `--flush` support.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Intra-Tenant Authorization**: Personal views (`sharing_scope="personal"`) are restricted to the owner and tenant administrators; other tenant members attempting to view or modify receive 403 Forbidden.
+- **CSRF & State Mutation Protection**: All mutating actions (`delete`, `clone`, `execute`) strictly require POST requests and validate CSRF tokens.
+- **Slug De-duplication on Clone**: View cloning generates a unique tenant-scoped slug in a loop (`copy-of-...-<counter>`) avoiding database unique constraint collisions.
+- **CSV Formula Injection Mitigation**: All exported columns and cells are sanitized via `csv_safe(...)`.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.10"]`.
+
+
