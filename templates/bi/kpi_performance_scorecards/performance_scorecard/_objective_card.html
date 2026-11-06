@@ -1,0 +1,34 @@
+<div class="p-4 rounded-xl border border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow relative">
+    <div class="flex items-start justify-between gap-2 mb-2">
+        <span class="font-mono text-xs font-bold text-primary">{{ obj.code }}</span>
+        {% if obj.rag_status == 'green' %}
+        <span class="badge badge-green flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> On Track</span>
+        {% elif obj.rag_status == 'amber' %}
+        <span class="badge badge-amber flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> In Progress</span>
+        {% elif obj.rag_status == 'red' %}
+        <span class="badge badge-red flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Off Track</span>
+        {% else %}
+        <span class="badge badge-muted flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Proposed</span>
+        {% endif %}
+    </div>
+
+    <h4 class="font-semibold text-slate-900 text-sm mb-1 leading-snug">
+        <a href="{% url 'bi:strategic_objective_detail' obj.pk %}" class="hover:text-primary hover:underline">{{ obj.name }}</a>
+    </h4>
+
+    {% if obj.statement_of_intent %}
+    <p class="text-xs text-slate-600 line-clamp-2 mb-3">{{ obj.statement_of_intent }}</p>
+    {% endif %}
+
+    {% if obj.parent_objective %}
+    <div class="text-[11px] bg-slate-50 border border-slate-100 rounded p-1.5 mb-2 text-slate-600 flex items-center gap-1">
+        <i data-lucide="corner-right-up" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+        <span class="truncate">Drives: <span class="font-medium text-slate-800">{{ obj.parent_objective.name }}</span></span>
+    </div>
+    {% endif %}
+
+    <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-muted">
+        <div>Alignment: <span class="font-bold text-slate-800">{{ obj.alignment_score|floatformat:0 }}%</span></div>
+        <a href="{% url 'bi:strategic_objective_detail' obj.pk %}" class="text-primary hover:underline font-medium">Details &rarr;</a>
+    </div>
+</div>
