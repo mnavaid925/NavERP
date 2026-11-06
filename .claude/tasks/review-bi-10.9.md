@@ -97,7 +97,7 @@
   - **Issue**: When a printed report returns 0 rows, the table body is empty without an explanatory note.
   - **Fix**: Add `{% empty %}` row: `<td colspan="10" class="text-center py-6 text-slate-500 italic">No records found matching prompt criteria.</td>`.
 
-- [ ] **[M4] Unselected foreign key lookup in `report_execution_delete`**
+- [x] **[M4] Unselected foreign key lookup in `report_execution_delete`** (Fixed: added `select_related=("report",)` in `report_execution_delete`)
   - **Location**: `apps/bi/views/OperationalReporting/ReportExecutions.py:150-158`
   - **Issue**: `bi_object(request, ReportExecution, pk)` lacks `select_related=("report",)`, causing an avoidable query when recording audit log changes.
   - **Fix**: Add `select_related=("report",)` to `bi_object(...)`.
