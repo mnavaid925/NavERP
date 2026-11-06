@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}What-If & Planning Scenarios — OLAP Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:olap_cube_list' %}">OLAP & Multidimensional</a>
+            <span class="sep">/</span>
+            <span>What-If Scenarios</span>
+        </div>
+        <h1 class="page-title">What-If & Planning Scenarios</h1>
+        <p class="text-muted text-sm">Simulation sandboxes, macro driver modelling, top-down splashing, and planning writeback adjustments</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:olap_cube_list' %}" class="btn btn-outline">
+            <i data-lucide="box"></i>
+            <span>OLAP Cubes</span>
+        </a>
+        <a href="{% url 'bi:pivot_view_list' %}" class="btn btn-outline">
+            <i data-lucide="table"></i>
+            <span>Pivot Views</span>
+        </a>
+        <a href="{% url 'bi:writeback_cell_list' %}" class="btn btn-outline">
+            <i data-lucide="edit-3"></i>
+            <span>Writeback Cells</span>
+        </a>
+        <a href="{% url 'bi:what_if_scenario_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Scenario</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="sliders"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Scenarios</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="play-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Simulated</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ simulated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Approved</div>
+            <div class="text-2xl font-bold text-amber-600">{{ approved_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Committed to Budget</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ committed_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search scenarios..." class="form-input pl-9 w-full">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                </div>
+            </div>
+            <div class="w-48">
+                <select name="fiscal_period" class="form-select w-full">
+                    <option value="">All Fiscal Periods</option>
+                    {% for p in fiscal_periods %}
+                    <option value="{{ p.pk }}" {% if request.GET.fiscal_period == p.pk|stringformat:"d" %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-40">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.fiscal_period or request.GET.status %}
+            <a href="{% url 'bi:what_if_scenario_list' %}" class="btn btn-outline">
+                <i data-lucide="x"></i>
+                <span>Clear</span>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scenario</th>
+                    <th>Fiscal Period & Baseline</th>
+                    <th>Disaggregation</th>
+                    <th class="text-right">Baseline Total</th>
+                    <th class="text-right">Adjusted Total</th>
+                    <th class="text-right">Net Variance</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sc in scenarios %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:what_if_scenario_detail' sc.pk %}" class="hover:text-blue-600 transition-colors">
+                                {{ sc.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-0.5">
+                            <span>{{ sc.number }}</span>
+                            {% if sc.cube %}
+                            <span class="text-slate-300">•</span>
+                            <span>{{ sc.cube.name }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if sc.fiscal_period %}
+                        <div class="text-xs font-semibold text-slate-800">{{ sc.fiscal_period.name }}</div>
+                        {% endif %}
+                        {% if sc.baseline_budget %}
+                        <div class="text-xs text-muted">Budget: {{ sc.baseline_budget.name }}</div>
+                        {% else %}
+                        <div class="text-xs text-muted italic">No Baseline Budget</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ sc.get_default_disaggregation_display }}</span>
+                    </td>
+                    <td class="text-right font-mono text-xs text-slate-600">
+                        ${{ sc.total_baseline_amount|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-xs font-medium text-slate-900">
+                        ${{ sc.total_adjusted_amount|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-xs font-bold {% if sc.total_variance_amount >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                        {% if sc.total_variance_amount > 0 %}+{% endif %}${{ sc.total_variance_amount|floatformat:2 }}
+                    </td>
+                    <td>
+                        {% if sc.status == 'committed' %}
+                        <span class="badge badge-green">Committed</span>
+                        {% elif sc.status == 'approved' %}
+                        <span class="badge badge-info">Approved</span>
+                        {% elif sc.status == 'simulated' %}
+                        <span class="badge badge-purple">Simulated</span>
+                        {% elif sc.status == 'draft' %}
+                        <span class="badge badge-amber">Draft</span>
+                        {% else %}
+                        <span class="badge badge-muted">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:what_if_scenario_simulate' sc.pk %}" class="btn btn-outline btn-sm text-indigo-600 hover:bg-indigo-50" title="Open Simulation Workbench">
+                                <i data-lucide="play"></i>
+                                <span>Simulate</span>
+                            </a>
+                            <a href="{% url 'bi:what_if_scenario_detail' sc.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:what_if_scenario_edit' sc.pk %}" class="btn btn-icon" title="Edit Scenario">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:what_if_scenario_delete' sc.pk %}" onsubmit="return confirm('Delete What-If Scenario {{ sc.name|escapejs }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Scenario">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="sliders" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No What-If Scenarios Configured</h3>
+                            <p class="text-sm text-muted max-w-sm mx-auto mb-4">Create your first scenario simulation to test macroeconomic drivers, modify budget cells, and review top-down splashing.</p>
+                            <a href="{% url 'bi:what_if_scenario_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Scenario</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} scenarios
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.fiscal_period %}&fiscal_period={{ request.GET.fiscal_period }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.fiscal_period %}&fiscal_period={{ request.GET.fiscal_period }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
