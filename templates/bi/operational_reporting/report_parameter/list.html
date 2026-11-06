@@ -20,10 +20,12 @@
             <i data-lucide="file-text"></i>
             <span>Reports Catalog</span>
         </a>
+        {% if request.user.is_superuser or request.is_tenant_admin %}
         <a href="{% url 'bi:report_parameter_create' %}" class="btn btn-primary">
             <i data-lucide="plus"></i>
             <span>New Parameter</span>
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -128,6 +130,7 @@
                         <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="btn btn-icon" title="View Details">
                             <i data-lucide="eye"></i>
                         </a>
+                        {% if request.user.is_superuser or request.is_tenant_admin %}
                         <a href="{% url 'bi:report_parameter_edit' param.pk %}" class="btn btn-icon" title="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
@@ -137,6 +140,7 @@
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -146,12 +150,14 @@
                             <i data-lucide="sliders-horizontal" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-900">No Parameters Configured</h3>
                             <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Create runtime prompt parameters to allow operational users to filter report results dynamically.</p>
+                            {% if request.user.is_superuser or request.is_tenant_admin %}
                             <div class="mt-4">
                                 <a href="{% url 'bi:report_parameter_create' %}" class="btn btn-primary">
                                     <i data-lucide="plus"></i>
                                     <span>Add Parameter</span>
                                 </a>
                             </div>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
