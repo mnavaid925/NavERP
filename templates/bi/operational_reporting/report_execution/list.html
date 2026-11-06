@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Report Execution History — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <span>Execution History</span>
+        </div>
+        <h1 class="page-title">Report Execution History & Audit</h1>
+        <p class="text-muted text-sm">Audit log of interactive runs, batch exports, query execution latencies, and generated document artifacts</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i>
+            <span>Reports Catalog</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Runs</label>
+                <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Run #, report, user..." class="form-input">
+            </div>
+            <div>
+                <label for="id_report" class="form-label">Report</label>
+                <select id="id_report" name="report" class="form-select">
+                    <option value="">— All Reports —</option>
+                    {% for rpt in reports %}
+                    <option value="{{ rpt.pk }}" {% if report_id == rpt.pk|stringformat:"d" %}selected{% endif %}>{{ rpt.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_execution_status" class="form-label">Status</label>
+                <select id="id_execution_status" name="execution_status" class="form-select">
+                    <option value="">— All Statuses —</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if execution_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_output_format" class="form-label">Format</label>
+                <select id="id_output_format" name="output_format" class="form-select">
+                    <option value="">— All Formats —</option>
+                    {% for val, label in format_choices %}
+                    <option value="{{ val }}" {% if output_format == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:report_execution_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Executions Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Execution ID</th>
+                    <th>Report Name</th>
+                    <th>Requester</th>
+                    <th>Mode</th>
+                    <th>Format</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Rows</th>
+                    <th>Execution Timestamp</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exec in executions %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:report_execution_detail' exec.pk %}" class="text-blue-600 hover:underline">
+                            {{ exec.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:report_definition_detail' exec.report.pk %}" class="hover:underline">{{ exec.report.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ exec.report.number }}</div>
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {% if exec.executed_by %}
+                        {{ exec.executed_by.get_full_name|default:exec.executed_by.username }}
+                        {% else %}
+                        <span class="text-muted italic">System Automated</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ exec.badge_mode }}">
+                            {{ exec.get_execution_mode_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-info uppercase font-mono text-xs">
+                            {{ exec.output_format }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ exec.badge_status }}">
+                            {{ exec.get_execution_status_display }}
+                        </span>
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">
+                        {{ exec.duration_ms }} ms
+                    </td>
+                    <td class="font-mono text-xs font-medium text-slate-800">
+                        {{ exec.row_count }}
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {{ exec.started_at|date:"Y-m-d H:i:s" }}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_execution_detail' exec.pk %}" class="btn btn-icon" title="View Audit Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_execution_export' exec.pk 'csv' %}" class="btn btn-icon" title="Download CSV">
+                            <i data-lucide="download"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:report_execution_delete' exec.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete execution record {{ exec.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Execution Record">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="history" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Execution Records Found</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">No report runs have been recorded yet. Launch an interactive report viewer or trigger an on-demand export.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:report_definition_list' %}" class="btn btn-primary">
+                                    <i data-lucide="play"></i>
+                                    <span>Browse Reports</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if report_id %}&report={{ report_id }}{% endif %}{% if execution_status %}&execution_status={{ execution_status }}{% endif %}{% if execution_mode %}&execution_mode={{ execution_mode }}{% endif %}{% if output_format %}&output_format={{ output_format }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if report_id %}&report={{ report_id }}{% endif %}{% if execution_status %}&execution_status={{ execution_status }}{% endif %}{% if execution_mode %}&execution_mode={{ execution_mode }}{% endif %}{% if output_format %}&output_format={{ output_format }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
