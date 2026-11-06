@@ -95,6 +95,7 @@ class DataBlendDefinition(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_bbld_ten_stat"),
             models.Index(fields=["tenant", "join_type"], name="idx_bbld_ten_jtype"),
+            models.Index(fields=["tenant", "created_by"], name="idx_bbld_ten_user"),
             models.Index(fields=["tenant", "created_at"], name="idx_bbld_ten_created"),
         ]
 
