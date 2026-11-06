@@ -41,6 +41,11 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "status" in self.fields:
+            self.fields["status"].choices = [
+                (k, v) for k, v in WhatIfScenario.STATUS_CHOICES if k != "committed"
+            ]
+
         if self.tenant is not None:
             self.fields["cube"].queryset = OlapCube.objects.filter(tenant=self.tenant)
             self.fields["baseline_budget"].queryset = Budget.objects.filter(tenant=self.tenant)
@@ -67,6 +72,15 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
             return parsed
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}")
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status == "committed":
+            if not self.instance or self.instance.status != "committed":
+                raise forms.ValidationError(
+                    "Status cannot be manually set to 'committed'. Please use the formal 'Commit Simulation to Budget' workflow."
+                )
+        return status
 
     def clean(self):
         cleaned = super().clean()
