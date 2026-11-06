@@ -103,8 +103,8 @@ def scorecard_kpi_assignment_detail(request, pk):
 def scorecard_kpi_assignment_create(request):
     initial = {}
     scorecard_id = request.GET.get("scorecard")
-    if scorecard_id:
-        initial["scorecard"] = scorecard_id
+    if scorecard_id and scorecard_id.isdigit():
+        initial["scorecard"] = int(scorecard_id)
     perspective = request.GET.get("perspective")
     if perspective:
         initial["perspective"] = perspective
