@@ -94,6 +94,12 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
             args = (data,) + args[1:]
 
         super().__init__(*args, **kwargs)
+        if "slug" in self.fields:
+            self.fields["slug"].required = False
+        if "total_position" in self.fields:
+            self.fields["total_position"].required = False
+        if "drill_through_target" in self.fields:
+            self.fields["drill_through_target"].required = False
         if self.tenant is not None:
             self.fields["cube"].queryset = OlapCube.objects.filter(tenant=self.tenant)
 
@@ -196,6 +202,12 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
             slug = base_slug[:120]
             cleaned["slug"] = slug
             self.instance.slug = slug
+        if not cleaned.get("total_position"):
+            cleaned["total_position"] = "bottom_right"
+            self.instance.total_position = "bottom_right"
+        if not cleaned.get("drill_through_target"):
+            cleaned["drill_through_target"] = "accounting:journal_entry_list"
+            self.instance.drill_through_target = "accounting:journal_entry_list"
         return cleaned
 
     def save(self, commit=True):
