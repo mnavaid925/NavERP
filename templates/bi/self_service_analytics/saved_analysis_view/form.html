@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ view_obj.name }}{% else %}New Saved View{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:saved_analysis_view_list' %}">Saved Views</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ view_obj.number }}{% else %}New View{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Saved View: {{ view_obj.name }}{% else %}Create Saved Analysis View{% endif %}</h1>
+        <p class="text-muted text-sm">Save a personal query exploration or publish a verified departmental exploration template</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:saved_analysis_view_detail' view_obj.pk %}{% else %}{% url 'bi:saved_analysis_view_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">View Properties</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="id_query" class="form-label">Underlying Ad-Hoc Query <span class="text-red-500">*</span></label>
+                {{ form.query }}
+                {% if form.query.errors %}<div class="form-error">{{ form.query.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_name" class="form-label">View Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_slug" class="form-label">URL Slug (Auto-generated if blank)</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_sharing_scope" class="form-label">Sharing Scope</label>
+                {{ form.sharing_scope }}
+                {% if form.sharing_scope.errors %}<div class="form-error">{{ form.sharing_scope.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_org_unit" class="form-label">Department / Team Unit (Optional)</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_description" class="form-label">Description & Context</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group flex items-center space-x-2 pt-2">
+                {{ form.is_favorite }}
+                <label for="id_is_favorite" class="form-label mb-0">Mark as Personal Favorite</label>
+            </div>
+            <div class="form-group flex items-center space-x-2 pt-2">
+                {{ form.is_template }}
+                <label for="id_is_template" class="form-label mb-0">Publish as Departmental Template</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'bi:saved_analysis_view_detail' view_obj.pk %}{% else %}{% url 'bi:saved_analysis_view_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create View{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
