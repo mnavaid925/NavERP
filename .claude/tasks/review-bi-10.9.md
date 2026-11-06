@@ -112,7 +112,7 @@
   - **Issue**: Malformed regular expression strings in `validation_regex` cause unhandled `re.error` at runtime.
   - **Fix**: Add `clean_validation_regex` to verify `re.compile(pattern)` succeeds.
 
-- [ ] **[M7] Discrepant `report` field in `ReportExecutionRunForm`**
+- [x] **[M7] Discrepant `report` field in `ReportExecutionRunForm`** (Fixed: excluded `report` from `ReportExecutionRunForm.Meta.fields`, rendered fixed report definition title in execution form)
   - **Location**: `apps/bi/forms/OperationalReporting/ReportExecutions.py:11-16`
   - **Issue**: `ReportExecutionRunForm` includes a `report` dropdown even though the report is already fixed by URL kwarg `report_pk`.
   - **Fix**: Exclude `report` from `ReportExecutionRunForm.Meta.fields`.
