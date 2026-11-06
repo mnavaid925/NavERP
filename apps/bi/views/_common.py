@@ -16,9 +16,10 @@ from apps.core.utils import write_audit_log
 
 
 def bi_scope(queryset, request, owner_field=None):
+    base_qs = queryset.filter(tenant=request.tenant)
     if owner_field:
-        return apply_data_scope(queryset, request, "bi", owner_field)
-    return queryset.filter(tenant=request.tenant)
+        return apply_data_scope(base_qs, request, "bi", owner_field)
+    return base_qs
 
 
 def bi_object(request, model, pk, queryset=None, select_related=(), prefetch_related=()):
