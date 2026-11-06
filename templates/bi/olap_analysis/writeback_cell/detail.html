@@ -165,7 +165,7 @@
                 {% endif %}
                 <div class="border-t border-slate-100 pt-3">
                     <div class="text-muted text-xs">Created By</div>
-                    <div class="font-medium text-slate-800 mt-0.5">{{ cell.created_by.get_full_name|default:cell.created_by.username|default:"System" }}</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{% if cell.created_by %}{{ cell.created_by.get_full_name|default:cell.created_by.username }}{% else %}System{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-muted text-xs">Created At</div>
