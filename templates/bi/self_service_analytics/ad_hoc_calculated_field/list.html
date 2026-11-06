@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Custom Calculated Fields — Self-Service Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Analytics</a>
+            <span class="sep">/</span>
+            <span>Calculated Fields</span>
+        </div>
+        <h1 class="page-title">Custom Calculated Fields</h1>
+        <p class="text-muted text-sm">User-defined formulas, ratios, growth metrics, and customized calculations evaluated dynamically during ad-hoc exploration</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Queries</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_calculated_field_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Calculated Field</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Formulas</label>
+                <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Field label, name, formula..." class="form-input">
+            </div>
+            <div>
+                <label for="id_return_type" class="form-label">Return Data Type</label>
+                <select id="id_return_type" name="return_type" class="form-select">
+                    <option value="">All Return Types</option>
+                    {% for code, label in return_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.return_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:ad_hoc_calculated_field_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number & Label</th>
+                    <th>Parent Query</th>
+                    <th>Formula Expression</th>
+                    <th>Return Type</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cf in calculated_fields %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ad_hoc_calculated_field_detail' cf.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ cf.display_label }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ cf.number }} · {{ cf.field_name }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:ad_hoc_query_detail' cf.query.pk %}" class="text-blue-600 hover:underline text-xs font-medium">
+                            {{ cf.query.name }}
+                        </a>
+                        <div class="font-mono text-[11px] text-muted">{{ cf.query.number }}</div>
+                    </td>
+                    <td>
+                        <code class="text-xs bg-slate-100 text-slate-800 px-2 py-1 rounded block max-w-sm truncate">
+                            {{ cf.formula_expression }}
+                        </code>
+                    </td>
+                    <td>
+                        <span class="badge {{ cf.badge_return_type }}">
+                            {{ cf.get_return_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ cf.badge_mode }}">
+                            {{ cf.get_aggregation_mode_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if cf.is_valid %}
+                        <span class="badge badge-green">Valid</span>
+                        {% else %}
+                        <span class="badge badge-red" title="{{ cf.error_message }}">Error</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:ad_hoc_calculated_field_detail' cf.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:ad_hoc_calculated_field_edit' cf.pk %}" class="btn btn-icon" title="Edit Formula">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:ad_hoc_calculated_field_delete' cf.pk %}" class="inline" onsubmit="return confirm('Delete calculated field {{ cf.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Field">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="calculator" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Custom Calculated Fields</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Define your first calculated field to perform custom ratios, growth margins, and custom formula arithmetic.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:ad_hoc_calculated_field_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Calculated Field</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
