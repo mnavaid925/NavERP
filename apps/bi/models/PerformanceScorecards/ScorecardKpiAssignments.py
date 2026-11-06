@@ -94,7 +94,9 @@ class ScorecardKpiAssignment(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} - {self.scorecard.name} / {self.kpi.name}"
+        sc_label = self.scorecard.name if self.scorecard_id and "scorecard" in getattr(self._state, "fields_cache", {}) else f"Scorecard #{self.scorecard_id}"
+        kpi_label = self.kpi.name if self.kpi_id and "kpi" in getattr(self._state, "fields_cache", {}) else f"KPI #{self.kpi_id}"
+        return f"{self.number} - {sc_label} / {kpi_label}"
 
     def get_absolute_url(self):
         return reverse("bi:scorecard_kpi_assignment_detail", kwargs={"pk": self.pk})
