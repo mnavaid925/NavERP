@@ -156,6 +156,7 @@ def what_if_scenario_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def what_if_scenario_delete(request, pk):
     scenario = bi_object(request, WhatIfScenario, pk)
@@ -225,6 +226,7 @@ def what_if_scenario_simulate(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def what_if_scenario_commit(request, pk):
     scenario = bi_object(
