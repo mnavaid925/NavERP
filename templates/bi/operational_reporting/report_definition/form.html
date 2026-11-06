@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ report.name }}{% else %}New Report Definition{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ report.number }}{% else %}New Report{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Report: {{ report.name }}{% else %}Create New Report Definition{% endif %}</h1>
+        <p class="text-muted text-sm">Configure report metadata, precision paper dimensions, data source feeds, and banded layout options</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:report_definition_detail' report.pk %}{% else %}{% url 'bi:report_definition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Basic Information -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">1. General Information</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_name" class="form-label">Report Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_slug" class="form-label">URL Slug (Auto-generated if blank)</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_category" class="form-label">Domain Category</label>
+                {{ form.category }}
+                {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_status" class="form-label">Publishing Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_description" class="form-label">Description & Scope</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Paper Geometry & Format -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">2. Document Geometry & Page Setup</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label for="id_report_type" class="form-label">Report Type</label>
+                {{ form.report_type }}
+                {% if form.report_type.errors %}<div class="form-error">{{ form.report_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_paper_size" class="form-label">Paper Size</label>
+                {{ form.paper_size }}
+                {% if form.paper_size.errors %}<div class="form-error">{{ form.paper_size.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_orientation" class="form-label">Page Orientation</label>
+                {{ form.orientation }}
+                {% if form.orientation.errors %}<div class="form-error">{{ form.orientation.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_watermark_text" class="form-label">Watermark Security Text</label>
+                {{ form.watermark_text }}
+                {% if form.watermark_text.errors %}<div class="form-error">{{ form.watermark_text.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Source Feeds -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">3. Primary Data Source & Scoping</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="id_semantic_model" class="form-label">Governed Semantic Model (10.4)</label>
+                {{ form.semantic_model }}
+                {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_warehouse_table" class="form-label">Direct Warehouse Table (10.3)</label>
+                {{ form.warehouse_table }}
+                {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_org_unit" class="form-label">Department / Org Unit Scoping</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label for="id_raw_query" class="form-label">Custom Analytical SQL / Query Specification</label>
+                {{ form.raw_query }}
+                <p class="text-xs text-muted mt-1">Optional direct query syntax used when reporting across multiple warehouse marts.</p>
+                {% if form.raw_query.errors %}<div class="form-error">{{ form.raw_query.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Layout & Configurations -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">4. Banded Layout & Styling (JSON)</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_margins_json" class="form-label">Page Margins JSON (mm)</label>
+                {{ form.margins_json }}
+                {% if form.margins_json.errors %}<div class="form-error">{{ form.margins_json.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_columns_config_json" class="form-label">Columns Configuration JSON</label>
+                {{ form.columns_config_json }}
+                {% if form.columns_config_json.errors %}<div class="form-error">{{ form.columns_config_json.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_bands_config_json" class="form-label">Bands Configuration JSON</label>
+                {{ form.bands_config_json }}
+                {% if form.bands_config_json.errors %}<div class="form-error">{{ form.bands_config_json.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_styling_css" class="form-label">Printable CSS Overrides</label>
+                {{ form.styling_css }}
+                {% if form.styling_css.errors %}<div class="form-error">{{ form.styling_css.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Flags -->
+    <div class="card">
+        <div class="card-body flex space-x-8">
+            <div class="flex items-center space-x-2">
+                {{ form.is_prebuilt_template }}
+                <label for="id_is_prebuilt_template" class="text-sm font-medium text-slate-700">Pre-Built Out-of-the-Box System Template</label>
+            </div>
+            <div class="flex items-center space-x-2">
+                {{ form.is_active }}
+                <label for="id_is_active" class="text-sm font-medium text-slate-700">Is Active</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end space-x-3">
+        <a href="{% if is_edit %}{% url 'bi:report_definition_detail' report.pk %}{% else %}{% url 'bi:report_definition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Report{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
