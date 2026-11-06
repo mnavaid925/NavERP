@@ -43,7 +43,10 @@ def writeback_cell_list(request):
 
     scenario_id = request.GET.get("scenario", "").strip()
     if scenario_id:
-        qs = qs.filter(scenario_id=scenario_id)
+        if scenario_id.isdigit():
+            qs = qs.filter(scenario_id=int(scenario_id))
+        else:
+            qs = qs.none()
 
     spread_method = request.GET.get("spread_method", "").strip()
     if spread_method:
@@ -91,7 +94,7 @@ def writeback_cell_detail(request, pk):
 def writeback_cell_create(request):
     scenario_id = request.GET.get("scenario")
     initial = {}
-    if scenario_id:
+    if scenario_id and str(scenario_id).isdigit():
         scenario = get_object_or_404(WhatIfScenario, pk=scenario_id, tenant=request.tenant)
         initial["scenario"] = scenario
 
