@@ -32,7 +32,7 @@ def report_parameter_list(request):
         qs = qs.filter(parameter_type=parameter_type)
 
     report_id = request.GET.get("report", "").strip()
-    if report_id:
+    if report_id and report_id.isdigit():
         qs = qs.filter(report_id=report_id)
 
     paginator = Paginator(qs, 15)
@@ -74,9 +74,9 @@ def report_parameter_detail(request, pk):
 @login_required
 @tenant_admin_required
 def report_parameter_create(request):
-    report_id = request.GET.get("report")
+    report_id = request.GET.get("report", "").strip()
     initial = {}
-    if report_id:
+    if report_id and report_id.isdigit():
         report = get_object_or_404(ReportDefinition.objects.filter(tenant=request.tenant), pk=report_id)
         initial["report"] = report
 
