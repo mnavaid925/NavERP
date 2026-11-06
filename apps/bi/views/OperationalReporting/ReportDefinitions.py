@@ -309,22 +309,6 @@ def report_definition_viewer(request, pk):
     columns, rows = _evaluate_report_data(report, applied_params)
     duration_ms = int((time.time() - start_time) * 1000)
 
-    # Optional recording of execution
-    record_execution = request.GET.get("record_run", "1") == "1"
-    execution = None
-    if record_execution:
-        execution = ReportExecution.objects.create(
-            tenant=request.tenant,
-            report=report,
-            executed_by=request.user,
-            execution_mode="interactive_view",
-            execution_status="completed",
-            duration_ms=max(duration_ms, 12),
-            parameter_values_json=applied_params,
-            row_count=len(rows),
-            output_format="html",
-        )
-
     context = {
         "report": report,
         "parameters": parameters,
@@ -333,7 +317,8 @@ def report_definition_viewer(request, pk):
         "rows": rows,
         "row_count": len(rows),
         "drill_paths": drill_paths,
-        "execution": execution,
+        "execution": None,
+        "duration_ms": max(duration_ms, 1),
         "is_print": False,
     }
     return render(request, "bi/operational_reporting/report_definition/viewer.html", context)
