@@ -2702,8 +2702,8 @@ class Command(BaseCommand):
             if not AdHocQuery.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
                     # Reference semantic models from 10.4 if available
-                    smdl_sales = SemanticModel.objects.filter(tenant=tenant, slug="sales-performance-cube").first() or SemanticModel.objects.filter(tenant=tenant).first()
-                    smdl_procure = SemanticModel.objects.filter(tenant=tenant, slug="procurement-spend-analytics").first() or smdl_sales
+                    smdl_sales = SemanticModel.objects.filter(tenant=tenant).first()
+                    smdl_procure = SemanticModel.objects.filter(tenant=tenant).exclude(pk=smdl_sales.pk).first() if smdl_sales else smdl_sales
                     wtbl_fin = WarehouseTable.objects.filter(tenant=tenant, table_type="fact").first()
 
                     # 1. Data Blend Definition
