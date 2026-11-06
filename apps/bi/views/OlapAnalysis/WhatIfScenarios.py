@@ -179,37 +179,38 @@ def what_if_scenario_simulate(request, pk):
         pk,
         select_related=["cube", "baseline_budget", "fiscal_period", "created_by"],
     )
-    writeback_cells = scenario.writeback_cells.filter(tenant=request.tenant).select_related(
+    writeback_cells = list(scenario.writeback_cells.filter(tenant=request.tenant).select_related(
         "gl_account", "org_unit"
-    ).order_by("created_at")
+    ).order_by("created_at"))
 
-    aggregates = writeback_cells.aggregate(
-        base_tot=Sum("baseline_value"),
-        adj_tot=Sum("adjusted_value"),
-        var_tot=Sum("variance_amount"),
-    )
-    baseline_total = aggregates["base_tot"] or Decimal("0.00")
-    adjusted_total = aggregates["adj_tot"] or Decimal("0.00")
-    variance_total = aggregates["var_tot"] or Decimal("0.00")
+    if writeback_cells:
+        baseline_total = sum((c.baseline_value for c in writeback_cells), Decimal("0.00"))
+        adjusted_total = sum((c.adjusted_value for c in writeback_cells), Decimal("0.00"))
+        variance_total = sum((c.variance_amount for c in writeback_cells), Decimal("0.00"))
+    else:
+        baseline_total = Decimal("0.00")
+        adjusted_total = Decimal("0.00")
+        variance_total = Decimal("0.00")
 
-    # Update summary figures on scenario
-    if (
-        scenario.total_baseline_amount != baseline_total
-        or scenario.total_adjusted_amount != adjusted_total
-        or scenario.total_variance_amount != variance_total
-    ):
-        scenario.total_baseline_amount = baseline_total
-        scenario.total_adjusted_amount = adjusted_total
-        scenario.total_variance_amount = variance_total
-        if scenario.status == "draft" and writeback_cells.exists():
-            scenario.status = "simulated"
-        scenario.save(update_fields=[
-            "total_baseline_amount",
-            "total_adjusted_amount",
-            "total_variance_amount",
-            "status",
-            "updated_at",
-        ])
+    # Update summary figures on scenario only when not committed
+    if scenario.status != "committed":
+        if (
+            scenario.total_baseline_amount != baseline_total
+            or scenario.total_adjusted_amount != adjusted_total
+            or scenario.total_variance_amount != variance_total
+        ):
+            scenario.total_baseline_amount = baseline_total
+            scenario.total_adjusted_amount = adjusted_total
+            scenario.total_variance_amount = variance_total
+            if scenario.status == "draft" and len(writeback_cells) > 0:
+                scenario.status = "simulated"
+            scenario.save(update_fields=[
+                "total_baseline_amount",
+                "total_adjusted_amount",
+                "total_variance_amount",
+                "status",
+                "updated_at",
+            ])
 
     return render(
         request,
