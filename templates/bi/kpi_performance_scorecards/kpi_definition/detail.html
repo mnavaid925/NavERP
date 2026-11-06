@@ -229,11 +229,11 @@
                 <form method="post" action="{% url 'bi:kpi_definition_refresh' kpi.pk %}" class="space-y-3">
                     {% csrf_token %}
                     <div>
-                        <label class="form-label text-xs">New Actual Value</label>
+                        <label for="id_new_value" class="form-label text-xs">New Actual Value</label>
                         {{ refresh_form.new_value }}
                     </div>
                     <div>
-                        <label class="form-label text-xs">Measurement Notes</label>
+                        <label for="id_notes" class="form-label text-xs">Measurement Notes</label>
                         {{ refresh_form.notes }}
                     </div>
                     <button type="submit" class="btn btn-primary w-full">
