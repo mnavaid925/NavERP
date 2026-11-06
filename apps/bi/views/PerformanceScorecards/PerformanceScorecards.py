@@ -117,6 +117,7 @@ def performance_scorecard_detail(request, pk):
         "process_kpis": process_kpis,
         "learning_kpis": learning_kpis,
         "perspective_summary": perspective_summary,
+        "perspective_scores": perspective_summary,
         "recalculate_form": PerformanceScorecardRecalculateForm(),
     }
     return render(request, "bi/kpi_performance_scorecards/performance_scorecard/detail.html", context)
