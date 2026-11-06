@@ -18,7 +18,7 @@
             <h1 class="page-title">{{ view_obj.name }}</h1>
             <span class="badge {{ view_obj.badge_scope }}">{{ view_obj.get_sharing_scope_display }}</span>
             {% if view_obj.is_template %}
-            <span class="badge badge-purple">Verified Template</span>
+            <span class="badge badge-info">Verified Template</span>
             {% endif %}
             {% if view_obj.is_favorite %}
             <span class="badge badge-amber">Favorite</span>
