@@ -67,7 +67,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
             <div class="form-group sm:col-span-2 md:col-span-1">
                 <label class="form-label text-xs" for="filter-q">Search</label>
                 <input type="text" id="filter-q" name="q" value="{{ q }}" placeholder="Search by title, slug, number..." class="form-input">
@@ -91,6 +91,15 @@
                 </select>
             </div>
             <div class="form-group">
+                <label class="form-label text-xs" for="filter-theme">Visual Theme</label>
+                <select id="filter-theme" name="theme" class="form-select">
+                    <option value="">All Themes</option>
+                    {% for val, label in theme_choices %}
+                    <option value="{{ val }}" {% if theme == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
                 <label class="form-label text-xs" for="filter-pub">Status</label>
                 <div class="flex gap-2">
                     <select id="filter-pub" name="is_published" class="form-select flex-1">
@@ -101,7 +110,7 @@
                     <button type="submit" class="btn btn-outline" title="Filter" aria-label="Filter">
                         <i data-lucide="filter"></i>
                     </button>
-                    {% if q or category or layout_type or is_published %}
+                    {% if q or category or layout_type or theme or is_published %}
                     <a href="{% url 'bi:bi_dashboard_list' %}" class="btn btn-outline" title="Reset Filters" aria-label="Reset Filters">
                         <i data-lucide="x"></i>
                     </a>
@@ -148,7 +157,7 @@
             <div class="flex items-center justify-between text-xs text-muted pt-3 border-t border-slate-100">
                 <span class="flex items-center gap-1">
                     <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
-                    {{ d.widgets.count }} widgets
+                    {{ d.widget_count }} widgets
                 </span>
                 <span class="flex items-center gap-1">
                     <i data-lucide="eye" class="w-3.5 h-3.5"></i>
@@ -177,6 +186,17 @@
                 <a href="{% url 'bi:bi_dashboard_detail' d.pk %}" class="btn btn-sm btn-outline" title="Settings & Specs" aria-label="Settings & Specs">
                     <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                 </a>
+                {% if request.user.is_superuser or request.is_tenant_admin %}
+                <a href="{% url 'bi:bi_dashboard_edit' d.pk %}" class="btn btn-sm btn-outline" title="Edit Dashboard" aria-label="Edit Dashboard">
+                    <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+                </a>
+                <form method="post" action="{% url 'bi:bi_dashboard_delete' d.pk %}" class="inline" onsubmit="return confirm('Delete dashboard \'{{ d.title|escapejs }}\'? All placed widgets will be removed.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline text-red-600 hover:bg-red-50" title="Delete Dashboard" aria-label="Delete Dashboard">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -191,12 +211,12 @@
     </div>
     <div class="flex gap-2">
         {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if layout_type %}&layout_type={{ layout_type }}{% endif %}{% if is_published %}&is_published={{ is_published }}{% endif %}" class="btn btn-outline btn-sm">
+        <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if layout_type %}&layout_type={{ layout_type }}{% endif %}{% if theme %}&theme={{ theme }}{% endif %}{% if is_published %}&is_published={{ is_published }}{% endif %}" class="btn btn-outline btn-sm">
             Previous
         </a>
         {% endif %}
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if layout_type %}&layout_type={{ layout_type }}{% endif %}{% if is_published %}&is_published={{ is_published }}{% endif %}" class="btn btn-outline btn-sm">
+        <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if layout_type %}&layout_type={{ layout_type }}{% endif %}{% if theme %}&theme={{ theme }}{% endif %}{% if is_published %}&is_published={{ is_published }}{% endif %}" class="btn btn-outline btn-sm">
             Next
         </a>
         {% endif %}
