@@ -15,6 +15,7 @@ class ScenarioWritebackCell(TenantNumbered):
         ("pro_rata", "Pro-Rata Top-Down Splash"),
         ("equal", "Equal Split"),
         ("delta", "Incremental Delta"),
+        ("absolute", "Absolute Adjustment"),
     ]
 
     scenario = models.ForeignKey(
