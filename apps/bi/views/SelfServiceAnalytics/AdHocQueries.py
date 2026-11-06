@@ -143,10 +143,11 @@ def ad_hoc_query_create(request):
             query.save()
 
             write_audit_log(
-                request,
+                user=request.user,
+                obj=query,
                 action="create",
-                instance=query,
-                description=f"Created ad-hoc query {query.name} ({query.number})",
+                tenant=request.tenant,
+                changes={"description": f"Created ad-hoc query {query.name} ({query.number})"},
             )
             messages.success(request, f"Ad-hoc query '{query.name}' created. Open composer to explore fields.")
             return redirect("bi:ad_hoc_query_composer", pk=query.pk)
@@ -178,10 +179,11 @@ def ad_hoc_query_edit(request, pk):
         if form.is_valid():
             query = form.save()
             write_audit_log(
-                request,
+                user=request.user,
+                obj=query,
                 action="update",
-                instance=query,
-                description=f"Updated ad-hoc query {query.name} ({query.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated ad-hoc query {query.name} ({query.number})"},
             )
             messages.success(request, f"Ad-hoc query '{query.name}' updated successfully.")
             return redirect("bi:ad_hoc_query_detail", pk=query.pk)
@@ -210,10 +212,11 @@ def ad_hoc_query_delete(request, pk):
     number = query.number
 
     write_audit_log(
-        request,
+        user=request.user,
+        obj=query,
         action="delete",
-        instance=query,
-        description=f"Deleted ad-hoc query {name} ({number})",
+        tenant=request.tenant,
+        changes={"description": f"Deleted ad-hoc query {name} ({number})"},
     )
     query.delete()
     messages.success(request, f"Ad-hoc query '{name}' ({number}) deleted.")
@@ -247,10 +250,11 @@ def ad_hoc_query_composer(request, pk):
             query.save()
 
             write_audit_log(
-                request,
+                user=request.user,
+                obj=query,
                 action="update",
-                instance=query,
-                description=f"Updated query composition for {query.name} ({query.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated query composition for {query.name} ({query.number})"},
             )
             messages.success(request, f"Query '{query.name}' composition saved & executed in {duration_ms}ms.")
             return redirect("bi:ad_hoc_query_composer", pk=query.pk)
