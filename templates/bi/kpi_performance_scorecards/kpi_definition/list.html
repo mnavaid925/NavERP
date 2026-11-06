@@ -78,12 +78,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-end">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Code, name, category..." class="form-input">
+                <label for="kpi-filter-q" class="form-label text-xs">Search</label>
+                <input type="text" id="kpi-filter-q" name="q" value="{{ request.GET.q }}" placeholder="Code, name, category..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select">
+                <label for="kpi-filter-status" class="form-label text-xs">Status</label>
+                <select id="kpi-filter-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -91,8 +91,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Perspective</label>
-                <select name="perspective" class="form-select">
+                <label for="kpi-filter-perspective" class="form-label text-xs">Perspective</label>
+                <select id="kpi-filter-perspective" name="perspective" class="form-select">
                     <option value="">All Perspectives</option>
                     {% for val, label in perspective_choices %}
                     <option value="{{ val }}" {% if request.GET.perspective == val %}selected{% endif %}>{{ label }}</option>
@@ -100,8 +100,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Direction</label>
-                <select name="target_direction" class="form-select">
+                <label for="kpi-filter-direction" class="form-label text-xs">Direction</label>
+                <select id="kpi-filter-direction" name="target_direction" class="form-select">
                     <option value="">All Directions</option>
                     {% for val, label in direction_choices %}
                     <option value="{{ val }}" {% if request.GET.target_direction == val %}selected{% endif %}>{{ label }}</option>
@@ -109,8 +109,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Calculation</label>
-                <select name="calculation_type" class="form-select">
+                <label for="kpi-filter-calc-type" class="form-label text-xs">Calculation</label>
+                <select id="kpi-filter-calc-type" name="calculation_type" class="form-select">
                     <option value="">All Types</option>
                     {% for val, label in calc_type_choices %}
                     <option value="{{ val }}" {% if request.GET.calculation_type == val %}selected{% endif %}>{{ label }}</option>
@@ -118,8 +118,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Department</label>
-                <select name="department" class="form-select">
+                <label for="kpi-filter-department" class="form-label text-xs">Department</label>
+                <select id="kpi-filter-department" name="department" class="form-select">
                     <option value="">All Departments</option>
                     {% for dept in departments %}
                     <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
