@@ -152,10 +152,10 @@
         </div>
         <div class="flex space-x-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.return_type %}&return_type={{ request.GET.return_type }}{% endif %}{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
             {% endif %}
         </div>
     </div>
