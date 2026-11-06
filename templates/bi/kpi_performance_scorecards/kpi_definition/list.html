@@ -236,7 +236,7 @@
                         <a href="{% url 'bi:kpi_definition_edit' kpi.pk %}" class="btn btn-icon btn-outline" title="Edit KPI">
                             <i data-lucide="pencil"></i>
                         </a>
-                        <form method="post" action="{% url 'bi:kpi_definition_delete' kpi.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete KPI {{ kpi.name }}?');">
+                        <form method="post" action="{% url 'bi:kpi_definition_delete' kpi.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this KPI?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon btn-danger" title="Delete KPI">
                                 <i data-lucide="trash-2"></i>
