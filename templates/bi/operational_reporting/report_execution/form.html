@@ -38,9 +38,8 @@
                 {% endif %}
 
                 <div class="form-group">
-                    <label for="id_report" class="form-label">Report Definition</label>
-                    {{ form.report }}
-                    {% if form.report.errors %}<div class="form-error">{{ form.report.errors }}</div>{% endif %}
+                    <label class="form-label">Report Definition</label>
+                    <input type="text" class="form-input bg-slate-100 text-slate-700 cursor-not-allowed" value="{{ report.name }} ({{ report.number }})" disabled readonly>
                 </div>
 
                 <div class="form-group">
