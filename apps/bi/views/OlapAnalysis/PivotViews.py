@@ -145,6 +145,7 @@ def pivot_view_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def pivot_view_delete(request, pk):
     view = bi_object(request, PivotAnalysisView, pk)
