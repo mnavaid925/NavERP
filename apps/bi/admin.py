@@ -33,6 +33,10 @@ from apps.bi.models import (
     BiDashboardWidget,
     BiDashboardBookmark,
     BiDashboardFilter,
+    ReportDefinition,
+    ReportParameter,
+    ReportExecution,
+    ReportDrillPath,
 )
 
 
@@ -315,4 +319,41 @@ class BiDashboardFilterAdmin(admin.ModelAdmin):
     list_filter = ("filter_type", "options_source", "is_required", "is_active", "tenant")
     search_fields = ("number", "filter_label", "filter_key", "target_field", "dashboard__title")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(ReportDefinition)
+class ReportDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "category", "report_type", "paper_size", "orientation", "status", "is_prebuilt_template", "tenant")
+    list_select_related = ("tenant", "semantic_model", "warehouse_table", "org_unit")
+    list_filter = ("category", "report_type", "paper_size", "orientation", "status", "is_prebuilt_template", "is_active", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(ReportParameter)
+class ReportParameterAdmin(admin.ModelAdmin):
+    list_display = ("number", "prompt_label", "parameter_name", "report", "parameter_type", "choices_source", "prompt_order", "is_required", "is_active", "tenant")
+    list_select_related = ("report", "tenant")
+    list_filter = ("parameter_type", "choices_source", "is_required", "is_hidden", "is_active", "tenant")
+    search_fields = ("number", "prompt_label", "parameter_name", "report__name")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(ReportExecution)
+class ReportExecutionAdmin(admin.ModelAdmin):
+    list_display = ("number", "report", "executed_by", "execution_mode", "output_format", "execution_status", "duration_ms", "row_count", "started_at", "tenant")
+    list_select_related = ("report", "executed_by", "tenant")
+    list_filter = ("execution_mode", "output_format", "execution_status", "is_cached", "tenant")
+    search_fields = ("number", "report__name", "executed_by__username", "output_file_name")
+    readonly_fields = ("number", "tenant", "started_at", "created_at", "updated_at")
+
+
+@admin.register(ReportDrillPath)
+class ReportDrillPathAdmin(admin.ModelAdmin):
+    list_display = ("number", "drill_label", "source_report", "source_field", "target_type", "target_report", "sort_order", "is_enabled", "tenant")
+    list_select_related = ("source_report", "target_report", "tenant")
+    list_filter = ("target_type", "is_enabled", "tenant")
+    search_fields = ("number", "drill_label", "source_field", "source_report__name", "target_report__name")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
 
