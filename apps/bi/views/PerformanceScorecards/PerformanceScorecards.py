@@ -62,12 +62,12 @@ def performance_scorecard_list(request):
         qs = qs.filter(review_period=review_period)
 
     fiscal_year = request.GET.get("fiscal_year", "").strip()
-    if fiscal_year:
-        qs = qs.filter(fiscal_year=fiscal_year)
+    if fiscal_year and fiscal_year.isdigit():
+        qs = qs.filter(fiscal_year=int(fiscal_year))
 
     org_unit = request.GET.get("org_unit", "").strip()
-    if org_unit:
-        qs = qs.filter(org_unit_id=org_unit)
+    if org_unit and org_unit.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit))
 
     paginator = Paginator(qs, 25)
     page_number = request.GET.get("page")
