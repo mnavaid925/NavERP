@@ -57,7 +57,7 @@ class PerformanceScorecardForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant
             ).order_by("name")
             self.fields["owner"].queryset = User.objects.filter(
-                is_active=True
+                tenant=self.tenant, is_active=True
             ).order_by("username")
         self.fields["slug"].required = False
 
@@ -70,7 +70,7 @@ class PerformanceScorecardForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["org_unit"])
+        reject_foreign(self, cleaned, ["org_unit", "owner"])
 
         # Check total weights sum to 100%
         fw = cleaned.get("financial_weight") or Decimal("0.00")
