@@ -262,7 +262,13 @@ document.addEventListener("DOMContentLoaded", function() {
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Executing...';
 
-        fetch("{% url 'bi:ad_hoc_query_execute' query.pk %}")
+        fetch("{% url 'bi:ad_hoc_query_execute' query.pk %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]') ? document.querySelector('[name=csrfmiddlewaretoken]').value : '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        })
             .then(function(res) { return res.json(); })
             .then(function(data) {
                 btn.disabled = false;
