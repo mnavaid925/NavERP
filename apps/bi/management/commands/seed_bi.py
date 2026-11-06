@@ -56,6 +56,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                BiDashboardBookmark.objects.all().delete()
+                BiDashboardFilter.objects.all().delete()
+                BiDashboardWidget.objects.all().delete()
+                BiDashboard.objects.all().delete()
                 CatalogTrustEndorsement.objects.all().delete()
                 CatalogLineageEdge.objects.all().delete()
                 CatalogAsset.objects.all().delete()
@@ -2112,7 +2116,6 @@ class Command(BaseCommand):
                     sem_ref = SemanticModel.objects.filter(tenant=tenant).first()
                     calc_ref = CalculatedMeasure.objects.filter(tenant=tenant).first()
                     wh_ref = WarehouseTable.objects.filter(tenant=tenant).first()
-                    drill_ref = DrillHierarchy.objects.filter(tenant=tenant).first()
 
                     # 1. Dashboards
                     dsh_exec, _ = BiDashboard.objects.get_or_create(
