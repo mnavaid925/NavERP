@@ -20,8 +20,10 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_dashboard_widget_list(request):
-    qs = bi_scope(BiDashboardWidget.objects.all(), request).select_related(
-        "dashboard", "semantic_model", "calculated_measure", "warehouse_table"
+    qs = (
+        bi_scope(BiDashboardWidget.objects.all(), request)
+        .select_related("dashboard", "semantic_model", "calculated_measure", "warehouse_table")
+        .defer("chart_config_json", "filter_overrides_json")
     )
     total_widgets = qs.count()
 
@@ -35,7 +37,7 @@ def bi_dashboard_widget_list(request):
         )
 
     dashboard_id = request.GET.get("dashboard", "").strip()
-    if dashboard_id:
+    if dashboard_id and dashboard_id.isdigit():
         qs = qs.filter(dashboard_id=dashboard_id)
 
     widget_type = request.GET.get("widget_type", "").strip()
@@ -46,14 +48,12 @@ def bi_dashboard_widget_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).order_by("title")
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).only("id", "title").order_by("title")
 
     context = {
         "page_obj": page_obj,
         "widgets": page_obj,
         "dashboards": dashboards,
-        "semantic_models": semantic_models,
         "widget_type_choices": BiDashboardWidget.WIDGET_TYPE_CHOICES,
         "total_widgets": total_widgets,
         "q": q,
@@ -116,12 +116,11 @@ def bi_dashboard_widget_create(request):
 
                 widget.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="create",
-                    target_model="BiDashboardWidget",
-                    target_id=str(widget.pk),
+                    request.user,
+                    widget,
+                    "create",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Widget '{widget.title}' created successfully.")
             return redirect("bi:bi_dashboard_detail", pk=widget.dashboard_id)
@@ -146,12 +145,11 @@ def bi_dashboard_widget_edit(request, pk):
             with transaction.atomic():
                 widget = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="update",
-                    target_model="BiDashboardWidget",
-                    target_id=str(widget.pk),
+                    request.user,
+                    widget,
+                    "update",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Widget '{widget.title}' updated successfully.")
             return redirect("bi:bi_dashboard_detail", pk=widget.dashboard_id)
@@ -175,12 +173,11 @@ def bi_dashboard_widget_delete(request, pk):
     title = widget.title
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
-            actor=request.user,
-            action="delete",
-            target_model="BiDashboardWidget",
-            target_id=str(widget.pk),
+            request.user,
+            widget,
+            "delete",
             changes={"title": title, "number": widget.number},
+            tenant=request.tenant,
         )
         widget.delete()
     messages.success(request, f"Widget '{title}' deleted successfully.")
