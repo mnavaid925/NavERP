@@ -258,7 +258,7 @@
             <div class="card-body p-5 space-y-3 text-sm">
                 <div>
                     <div class="text-muted text-xs">Author</div>
-                    <div class="font-medium text-slate-800 mt-0.5">{{ scenario.created_by.get_full_name|default:scenario.created_by.username|default:"System" }}</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{% if scenario.created_by %}{{ scenario.created_by.get_full_name|default:scenario.created_by.username }}{% else %}System{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-muted text-xs">Created At</div>
@@ -271,7 +271,7 @@
                 </div>
                 <div>
                     <div class="text-muted text-xs">Committed By</div>
-                    <div class="font-medium text-slate-800 mt-0.5">{{ scenario.committed_by.get_full_name|default:scenario.committed_by.username }}</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{% if scenario.committed_by %}{{ scenario.committed_by.get_full_name|default:scenario.committed_by.username }}{% else %}—{% endif %}</div>
                 </div>
                 {% endif %}
             </div>
