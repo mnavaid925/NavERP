@@ -59,7 +59,7 @@
   - **Issue**: In `detail.html`, `parameters.count` and `drill_paths.count` run separate SQL `COUNT(*)` queries before loops iterate the same objects. Furthermore, slicing `executions[:10]` and calling `executions.count` produces a subquery count capped at 10.
   - **Fix**: Evaluate `list(report.parameters...)`, `list(report.source_drill_paths...)`, and `total_executions_count = report.executions.count()` in the view and pass `parameters_count`, `drill_paths_count`, `total_executions_count` in context.
 
-- [ ] **[I6] Unused heavy JSON & Text fields loaded in list filter dropdowns**
+- [x] **[I6] Unused heavy JSON & Text fields loaded in list filter dropdowns** (Fixed: applied `.only("id", "name", "number")` to report querysets across all 3 list views)
   - **Locations**: `apps/bi/views/OperationalReporting/ReportParameters.py:42`, `ReportExecutions.py:60`, `ReportDrillPaths.py:45`
   - **Issue**: Filter dropdown querysets load full `ReportDefinition` records including large text and JSON fields (`columns_config_json`, `bands_config_json`, `raw_query`, `styling_css`).
   - **Fix**: Add `.only("id", "name", "number")` to filter dropdown querysets in all three views.
