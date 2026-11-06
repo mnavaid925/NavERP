@@ -30,6 +30,9 @@ from apps.bi.urls.Dashboards import (
 from apps.bi.urls.OperationalReporting import (
     urlpatterns as operational_reporting_urlpatterns,
 )
+from apps.bi.urls.SelfServiceAnalytics import (
+    urlpatterns as self_service_urlpatterns,
+)
 from apps.bi.urls.SemanticLayer import (
     urlpatterns as semantic_urlpatterns,
 )
@@ -69,4 +72,5 @@ urlpatterns = (
     + data_catalog_urlpatterns
     + dashboards_urlpatterns
     + operational_reporting_urlpatterns
+    + self_service_urlpatterns
 )
