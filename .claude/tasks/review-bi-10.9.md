@@ -82,7 +82,7 @@
 
 ### Minor Findings
 
-- [ ] **[M1] Missing `form.save_m2m()` call after `form.save(commit=False)` in `report_definition_create`**
+- [x] **[M1] Missing `form.save_m2m()` call after `form.save(commit=False)` in `report_definition_create`** (Fixed: added `form.save_m2m()` immediately after `report.save()`)
   - **Location**: `apps/bi/views/OperationalReporting/ReportDefinitions.py:121`
   - **Issue**: `form.save_m2m()` is omitted after `form.save(commit=False)`.
   - **Fix**: Add `form.save_m2m()` immediately after `report.save()`.
