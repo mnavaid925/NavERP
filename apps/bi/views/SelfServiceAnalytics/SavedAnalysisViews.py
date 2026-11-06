@@ -71,6 +71,10 @@ def saved_analysis_view_list(request):
     if is_template in ("1", "true", "True"):
         qs = qs.filter(is_template=True)
 
+    org_unit_param = request.GET.get("org_unit", "").strip()
+    if org_unit_param and org_unit_param.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit_param))
+
     org_units = OrgUnit.objects.filter(tenant=request.tenant)
 
     paginator = Paginator(qs, 20)
