@@ -7,6 +7,144 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.9: Standard & Operational Reporting (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.9.md` (2026-11-06)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.8.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0021_bidashboard_idx_bdsh_ten_created_and_more.py`, so **10.9 claims `0022`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.9.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/OperationalReporting/`
+> Template folder name: `templates/bi/operational_reporting/{report_definition,report_parameter,report_execution,report_drill_path}/` + `viewer.html` / `print.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Standard & Operational Reporting Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Operational Scope:
+    - `ReportDefinition`:
+      - Primary catalog of standard operational, banded pixel-perfect, and regulatory reports across ERP modules (`finance`, `sales`, `inventory`, `hr`, `procurement`, `production`, `compliance`, `custom`).
+      - Precision paper geometry: `paper_size` (`a4`, `letter`, `legal`, `tabloid`, `custom`), `orientation` (`portrait`, `landscape`), and `margins_json` (top, bottom, left, right in mm).
+      - Banded report layout: `bands_config_json` (title, page_header, group_header, detail_band, group_footer, page_footer, summary_band) and `columns_config_json`.
+      - Data feeds: Links to verified `bi.SemanticModel` (10.4) or `bi.WarehouseTable` (10.3) or direct operational query.
+      - Departmental scoping: Optional `org_unit` (`core.OrgUnit`, SET_NULL).
+      - Authorship & status: `created_by` (`settings.AUTH_USER_MODEL`, SET_NULL), `status` (`draft`, `published`, `archived`), and `is_prebuilt_template` flag.
+    - `ReportParameter`:
+      - Prompt-driven runtime filter inputs for `ReportDefinition` (CASCADE).
+      - Parameter types: `string`, `integer`, `decimal`, `date`, `daterange`, `boolean`, `choice_single`, `choice_multi`.
+      - Dynamic choice population from `SemanticModel` dimensions, `WarehouseTable` columns, or static lists.
+      - Prompt order, defaults, requirement enforcement, and regex validation.
+    - `ReportExecution`:
+      - Centralized operational execution audit, performance log, and generated artifacts.
+      - Tracks `executed_by`, `execution_mode` (`interactive_view`, `export_pdf`, `export_excel`, `export_csv`, `export_docx`, `drill_through`), `execution_status` (`pending`, `running`, `completed`, `failed`), started/completed timestamps, `duration_ms`, `row_count`.
+      - Frozen snapshot of applied runtime parameter values in `parameter_values_json`.
+      - Output format (`html`, `pdf`, `xlsx`, `csv`, `docx`, `json`), generated file size, and error trace.
+    - `ReportDrillPath`:
+      - Parameterized drill-through actions linking a source report cell/column to a target sub-report, sibling operational report, or direct ERP record URL.
+      - Dynamic mapping matrix in `parameter_mapping_json` (mapping row fields to target parameters).
+  - Sibling Hand-offs & Boundaries:
+    - 10.3 (`DataWarehouse`): Physical fact/dimension tables (`WarehouseTable`) queried by direct operational reports.
+    - 10.4 (`SemanticLayer`): Governed datasets (`SemanticModel`) and metrics (`CalculatedMeasure`) feeding standard reports.
+    - 10.7 (`DataCatalog`): Catalog assets and data lineage tracing reports to upstream source models.
+    - 10.8 (`Dashboards`): Interactive visual dashboards with widget click-through to detailed operational reports.
+    - 10.9 (`OperationalReporting` — THIS SUB-MODULE): Pre-built report templates, banded pixel-perfect documents, parameterized prompts, operational execution logs, transactional drill-paths, and multi-format exports.
+    - 10.16 (`AlertsAndSubscriptions` — DOWNSTREAM): Scheduled report bursting, email distribution, and threshold webhooks.
+    - 10.17 (`EmbeddedBi` — DOWNSTREAM): In-app ERP widget embedding and mobile PWA views.
+  - Audit logging: Administrative actions (create, edit, delete, publish, clone) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log`.
+- **Prefix Collision Sweep**: `BRPT` (ReportDefinition), `BPAR` (ReportParameter), `BRUN` (ReportExecution), `BDRP` (ReportDrillPath) verified 100% collision-free repository-wide.
+
+---
+
+## 10.9-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO heavy external C++ binary rendering engines requiring native OS libraries (Cairo/Pango/WeasyPrint)** — Precision print formatting is handled via standards-compliant CSS `@media print`, strict page-break rules, standard paper dimensions, and native tabular CSV/XLSX exports.
+- [ ] **NO visual drag-and-drop WYSIWYG band designer** — Layout is configured via structured band JSON and field configuration forms.
+- [ ] **NO multi-recipient bursting or scheduled email/SFTP dispatch daemons** — Belongs downstream in Sub-module 10.16 Alerts, Subscriptions & Distribution.
+
+---
+
+## Sub-module 10.9 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.9.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: ReportDefinition (`BRPT-`)**
+  - [ ] Model: `apps/bi/models/OperationalReporting/ReportDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRPT"`)
+  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportDefinitions.py` (`ReportDefinitionForm`, `ReportCloneForm`)
+  - [ ] Views: `apps/bi/views/OperationalReporting/ReportDefinitions.py` (list, detail, create, edit, delete, clone, preview/interactive viewer)
+  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportDefinitions.py` (`report_definition_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/operational_reporting/report_definition/list.html`
+    - [ ] `templates/bi/operational_reporting/report_definition/detail.html`
+    - [ ] `templates/bi/operational_reporting/report_definition/form.html`
+    - [ ] `templates/bi/operational_reporting/report_definition/viewer.html`
+    - [ ] `templates/bi/operational_reporting/report_definition/print.html`
+- [ ] **Entity 2: ReportParameter (`BPAR-`)**
+  - [ ] Model: `apps/bi/models/OperationalReporting/ReportParameters.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPAR"`)
+  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportParameters.py` (`ReportParameterForm`)
+  - [ ] Views: `apps/bi/views/OperationalReporting/ReportParameters.py` (list, detail, create, edit, delete)
+  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportParameters.py` (`report_parameter_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/operational_reporting/report_parameter/list.html`
+    - [ ] `templates/bi/operational_reporting/report_parameter/detail.html`
+    - [ ] `templates/bi/operational_reporting/report_parameter/form.html`
+- [ ] **Entity 3: ReportExecution (`BRUN-`)**
+  - [ ] Model: `apps/bi/models/OperationalReporting/ReportExecutions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BRUN"`)
+  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportExecutions.py` (`ReportExecutionRunForm`)
+  - [ ] Views: `apps/bi/views/OperationalReporting/ReportExecutions.py` (list, detail, create/run, delete, download export)
+  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportExecutions.py` (`report_execution_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/operational_reporting/report_execution/list.html`
+    - [ ] `templates/bi/operational_reporting/report_execution/detail.html`
+    - [ ] `templates/bi/operational_reporting/report_execution/form.html`
+- [ ] **Entity 4: ReportDrillPath (`BDRP-`)**
+  - [ ] Model: `apps/bi/models/OperationalReporting/ReportDrillPaths.py` (`TenantNumbered`, `NUMBER_PREFIX = "BDRP"`)
+  - [ ] Form: `apps/bi/forms/OperationalReporting/ReportDrillPaths.py` (`ReportDrillPathForm`)
+  - [ ] Views: `apps/bi/views/OperationalReporting/ReportDrillPaths.py` (list, detail, create, edit, delete)
+  - [ ] URLs: `apps/bi/urls/OperationalReporting/ReportDrillPaths.py` (`report_drill_path_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/operational_reporting/report_drill_path/list.html`
+    - [ ] `templates/bi/operational_reporting/report_drill_path/detail.html`
+    - [ ] `templates/bi/operational_reporting/report_drill_path/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Add re-exports in `apps/bi/models/OperationalReporting/__init__.py` and `apps/bi/models/__init__.py`
+- [ ] Add re-exports in `apps/bi/forms/OperationalReporting/__init__.py` and `apps/bi/forms/__init__.py`
+- [ ] Add re-exports in `apps/bi/views/OperationalReporting/__init__.py` and `apps/bi/views/__init__.py`
+- [ ] Assemble URL patterns in `apps/bi/urls/OperationalReporting/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Add `LIVE_LINKS["10.9"]` in `apps/core/navigation.py`
+- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data
+- [ ] Run `makemigrations bi` (claiming `0022`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+
+### Phase 3.5: Smoke Testing
+- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+
+### Phase 4: Six-Pass Serial Review
+- [ ] Pass 1: Code Reviewer
+- [ ] Pass 2: Explorer
+- [ ] Pass 3: Frontend Reviewer
+- [ ] Pass 4: Performance Reviewer
+- [ ] Pass 5: QA Smoke Tester
+- [ ] Pass 6: Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.9.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+
+### Phase 6: Automated Test Suite
+- [ ] Add shared 10.9 fixtures to `conftest.py`
+- [ ] Write `test_operationalreporting_models.py`
+- [ ] Write `test_operationalreporting_forms.py`
+- [ ] Write `test_operationalreporting_views.py`
+- [ ] Write `test_operationalreporting_security.py`
+- [ ] Run full unfiltered test suite and ensure 100% green
+
+### Phase 7: Skill & Documentation Close-out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.9 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.9 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.9.md`
+
+---
+
 # Sub-module 10.8: Dashboards & Visualization (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.8.md` (2026-11-05)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1, 10.2, 10.3, 10.4, 10.5, and 10.6.
