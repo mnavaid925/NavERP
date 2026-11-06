@@ -126,7 +126,10 @@
                         <span class="badge {{ blend.badge_status }}">{{ blend.get_status_display }}</span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'bi:data_blend_definition_preview' blend.pk %}" class="btn btn-icon" title="Preview Blend Join">
+                        <a href="{% url 'bi:data_blend_definition_preview' blend.pk %}" class="btn btn-icon text-blue-600" title="Preview Blend Join">
+                            <i data-lucide="play"></i>
+                        </a>
+                        <a href="{% url 'bi:data_blend_definition_detail' blend.pk %}" class="btn btn-icon" title="View Details">
                             <i data-lucide="eye"></i>
                         </a>
                         <a href="{% url 'bi:data_blend_definition_edit' blend.pk %}" class="btn btn-icon" title="Edit Blend">
