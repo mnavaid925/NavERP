@@ -81,10 +81,11 @@ def ad_hoc_calculated_field_create(request):
             cf.save()
 
             write_audit_log(
-                request,
+                user=request.user,
+                obj=cf,
                 action="create",
-                instance=cf,
-                description=f"Created custom calculated field {cf.display_label} ({cf.number})",
+                tenant=request.tenant,
+                changes={"description": f"Created custom calculated field {cf.display_label} ({cf.number})"},
             )
             messages.success(request, f"Calculated field '{cf.display_label}' created successfully.")
             return redirect("bi:ad_hoc_calculated_field_detail", pk=cf.pk)
@@ -112,10 +113,11 @@ def ad_hoc_calculated_field_edit(request, pk):
         if form.is_valid():
             cf = form.save()
             write_audit_log(
-                request,
+                user=request.user,
+                obj=cf,
                 action="update",
-                instance=cf,
-                description=f"Updated calculated field {cf.display_label} ({cf.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated calculated field {cf.display_label} ({cf.number})"},
             )
             messages.success(request, f"Calculated field '{cf.display_label}' updated successfully.")
             return redirect("bi:ad_hoc_calculated_field_detail", pk=cf.pk)
@@ -143,10 +145,11 @@ def ad_hoc_calculated_field_delete(request, pk):
     number = cf.number
 
     write_audit_log(
-        request,
+        user=request.user,
+        obj=cf,
         action="delete",
-        instance=cf,
-        description=f"Deleted calculated field {label} ({number})",
+        tenant=request.tenant,
+        changes={"description": f"Deleted calculated field {label} ({number})"},
     )
     cf.delete()
     messages.success(request, f"Calculated field '{label}' ({number}) deleted.")
