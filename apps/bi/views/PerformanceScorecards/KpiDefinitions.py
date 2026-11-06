@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -25,17 +25,31 @@ def kpi_definition_list(request):
         "semantic_measure", "department", "owner"
     )
 
+    on_target_filter = (
+        Q(is_active=True)
+        & ~Q(status__in=["deprecated", "archived"])
+        & Q(current_value__isnull=False, target_value__isnull=False)
+        & (
+            (Q(target_direction="maximize") & Q(current_value__gte=F("target_value")))
+            | (Q(target_direction="minimize") & Q(current_value__lte=F("target_value")))
+            | (
+                Q(target_direction="in_range")
+                & Q(current_value__gte=F("target_value") * 0.9)
+                & Q(current_value__lte=F("target_value") * 1.1)
+            )
+        )
+    )
+
     counts = qs.aggregate(
         total=Count("id"),
         active=Count("id", filter=Q(status="active")),
         under_review=Count("id", filter=Q(status="under_review")),
+        on_target=Count("id", filter=on_target_filter),
     )
     total_count = counts["total"] or 0
     active_count = counts["active"] or 0
     under_review_count = counts["under_review"] or 0
-
-    # Calculate on-target count in python or query
-    on_target_count = sum(1 for k in qs if k.calculate_rag_status() == "green")
+    on_target_count = counts["on_target"] or 0
 
     # Filters
     q = request.GET.get("q", "").strip()
