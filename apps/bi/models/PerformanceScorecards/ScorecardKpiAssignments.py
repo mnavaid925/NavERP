@@ -80,7 +80,7 @@ class ScorecardKpiAssignment(TenantNumbered):
     evaluated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["scorecard", "perspective", "sort_order", "kpi__name"]
+        ordering = ["scorecard", "perspective", "sort_order", "id"]
         constraints = [
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bsci_tenant_num_uniq"),
             models.UniqueConstraint(fields=["tenant", "scorecard", "kpi"], name="bi_bsci_ten_sc_kpi_uniq"),
@@ -90,6 +90,7 @@ class ScorecardKpiAssignment(TenantNumbered):
             models.Index(fields=["tenant", "kpi"], name="idx_bsci_ten_kpi"),
             models.Index(fields=["tenant", "rag_status"], name="idx_bsci_ten_rag"),
             models.Index(fields=["tenant", "perspective"], name="idx_bsci_ten_persp"),
+            models.Index(fields=["tenant", "trend_direction"], name="idx_bsci_ten_trend"),
         ]
 
     def __str__(self):
