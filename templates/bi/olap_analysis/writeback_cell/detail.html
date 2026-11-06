@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Writeback Cell {{ cell.number }} — OLAP Analysis — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:what_if_scenario_list' %}">What-If Scenarios</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:what_if_scenario_detail' cell.scenario.pk %}">{{ cell.scenario.name }}</a>
+            <span class="sep">/</span>
+            <span>Cell {{ cell.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Writeback Cell: {{ cell.number }}</h1>
+            {% if cell.is_committed %}
+            <span class="badge badge-green">Committed</span>
+            {% else %}
+            <span class="badge badge-amber">Simulation Live</span>
+            {% endif %}
+            <span class="badge badge-info">{{ cell.get_spread_method_display }}</span>
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>Scenario: {{ cell.scenario.name }} ({{ cell.scenario.number }})</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:what_if_scenario_simulate' cell.scenario.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Scenario Workbench</span>
+        </a>
+        <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Cell</span>
+        </a>
+        <form method="post" action="{% url 'bi:writeback_cell_delete' cell.pk %}" onsubmit="return confirm('Delete Writeback Cell {{ cell.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Variance Comparison Card -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="card p-4">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Baseline Value</div>
+                <div class="text-xl font-bold font-mono text-slate-700">${{ cell.baseline_value|floatformat:2 }}</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Adjusted Value</div>
+                <div class="text-xl font-bold font-mono text-indigo-700">${{ cell.adjusted_value|floatformat:2 }}</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Net Variance</div>
+                <div class="text-xl font-bold font-mono {% if cell.variance_amount >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    {% if cell.variance_amount > 0 %}+{% endif %}${{ cell.variance_amount|floatformat:2 }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Dimensional Coordinates -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Multidimensional Cell Coordinates</h3>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Coordinate Dimension</th>
+                                <th>Intersection Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for k, v in cell.cell_coordinates.items %}
+                            <tr>
+                                <td class="font-medium text-slate-700 text-xs">{{ k }}</td>
+                                <td class="font-mono text-xs font-bold text-indigo-700">{{ v }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center py-4 text-xs text-muted">No specific dimension tuples stored (global cell).</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Target Accounts & Commentary -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Financial Ledger Anchors & Commentary</h3>
+            </div>
+            <div class="card-body p-5 space-y-4 text-sm">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-muted text-xs">General Ledger Account</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if cell.gl_account %}
+                            <span>{{ cell.gl_account.code }} - {{ cell.gl_account.name }}</span>
+                            {% else %}
+                            <span class="text-muted italic">All Accounts (Top-Down Splash)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Organizational Unit / Cost Center</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if cell.org_unit %}
+                            <span>{{ cell.org_unit.name }}</span>
+                            {% else %}
+                            <span class="text-muted italic">All Departments</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if cell.commentary %}
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-muted text-xs mb-1">Planner Commentary & Justification</div>
+                    <p class="text-slate-700 text-xs bg-slate-50 p-3 rounded border border-slate-200">{{ cell.commentary }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Info -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Status & Allocation</h3>
+            </div>
+            <div class="card-body p-5 space-y-3 text-sm">
+                <div>
+                    <div class="text-muted text-xs">Spread / Splashing Method</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ cell.get_spread_method_display }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Commitment Status</div>
+                    <div class="font-medium text-slate-800 mt-0.5">
+                        {% if cell.is_committed %}
+                        <span class="badge badge-green">Committed to Budget</span>
+                        {% else %}
+                        <span class="badge badge-amber">Pending Commitment</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if cell.committed_budget_line %}
+                <div>
+                    <div class="text-muted text-xs">Committed Budget Line</div>
+                    <div class="font-mono text-xs text-slate-700 mt-0.5">{{ cell.committed_budget_line }}</div>
+                </div>
+                {% endif %}
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-muted text-xs">Created By</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ cell.created_by.get_full_name|default:cell.created_by.username|default:"System" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Created At</div>
+                    <div class="text-slate-600 mt-0.5">{{ cell.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
