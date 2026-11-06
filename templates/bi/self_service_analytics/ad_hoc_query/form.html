@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ query.name }}{% else %}New Ad-Hoc Query{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ query.number }}{% else %}New Query{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Query: {{ query.name }}{% else %}Create New Ad-Hoc Query{% endif %}</h1>
+        <p class="text-muted text-sm">Define exploration metadata, bind to governed semantic datasets or warehouse tables, and configure default visualization</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:ad_hoc_query_detail' query.pk %}{% else %}{% url 'bi:ad_hoc_query_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Basic Information -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">1. Query Metadata</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_name" class="form-label">Query Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_slug" class="form-label">URL Slug (Auto-generated if blank)</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_status" class="form-label">Exploration Lifecycle Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_visualization_type" class="form-label">Default Visualization</label>
+                {{ form.visualization_type }}
+                {% if form.visualization_type.errors %}<div class="form-error">{{ form.visualization_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_description" class="form-label">Description & Analytical Hypothesis</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Source Binding -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">2. Data Source Binding</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="id_source_type" class="form-label">Data Source Type <span class="text-red-500">*</span></label>
+                {{ form.source_type }}
+                {% if form.source_type.errors %}<div class="form-error">{{ form.source_type.errors }}</div>{% endif %}
+                <p class="text-xs text-muted mt-1">Select whether this query reads from a governed Semantic Model (10.4), physical Warehouse Table (10.3), or Blended Dataset Mashup (10.10).</p>
+            </div>
+            <div class="form-group">
+                <label for="id_semantic_model" class="form-label">Governed Semantic Model</label>
+                {{ form.semantic_model }}
+                {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_warehouse_table" class="form-label">Warehouse Fact/Dimension Table</label>
+                {{ form.warehouse_table }}
+                {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_data_blend" class="form-label">Blended Dataset Mashup</label>
+                {{ form.data_blend }}
+                {% if form.data_blend.errors %}<div class="form-error">{{ form.data_blend.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Execution Limits -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">3. Execution & Safety Bounds</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_row_limit" class="form-label">Row Truncation Limit</label>
+                {{ form.row_limit }}
+                {% if form.row_limit.errors %}<div class="form-error">{{ form.row_limit.errors }}</div>{% endif %}
+                <p class="text-xs text-muted mt-1">Maximum rows evaluated in preview to prevent browser memory exhaustion (e.g. 100, 500, 1000).</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Actions -->
+    <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'bi:ad_hoc_query_detail' query.pk %}{% else %}{% url 'bi:ad_hoc_query_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Save & Configure Fields{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
