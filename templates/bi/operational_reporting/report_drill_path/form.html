@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ drill_path.drill_label }}{% else %}New Drill Path{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_drill_path_list' %}">Drill Paths</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ drill_path.number }}{% else %}New Drill Path{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Drill Path: {{ drill_path.drill_label }}{% else %}Create Transactional Drill Path{% endif %}</h1>
+        <p class="text-muted text-sm">Configure parameterized navigation from operational report cells into sub-reports or ERP record detail URLs</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:report_drill_path_detail' drill_path.pk %}{% else %}{% url 'bi:report_drill_path_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="max-w-4xl space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Drill Source & Trigger Action</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="id_source_report" class="form-label">Source Operational Report <span class="text-red-500">*</span></label>
+                {{ form.source_report }}
+                {% if form.source_report.errors %}<div class="form-error">{{ form.source_report.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_source_field" class="form-label">Trigger Column / Field Name <span class="text-red-500">*</span></label>
+                {{ form.source_field }}
+                <p class="text-xs text-muted mt-1">e.g. 'customer_code', 'account_id', 'order_number'</p>
+                {% if form.source_field.errors %}<div class="form-error">{{ form.source_field.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_drill_label" class="form-label">User-Facing Drill Action Label <span class="text-red-500">*</span></label>
+                {{ form.drill_label }}
+                <p class="text-xs text-muted mt-1">e.g. 'View Customer Invoices', 'Drill to GL Details'</p>
+                {% if form.drill_label.errors %}<div class="form-error">{{ form.drill_label.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Target Destination & Parameter Mapping</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_target_type" class="form-label">Target Navigation Type</label>
+                {{ form.target_type }}
+                {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_target_report" class="form-label">Target Report (if Subreport / Sibling)</label>
+                {{ form.target_report }}
+                {% if form.target_report.errors %}<div class="form-error">{{ form.target_report.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_target_url_pattern" class="form-label">Direct ERP URL Pattern (if Target Type is ERP URL)</label>
+                {{ form.target_url_pattern }}
+                <p class="text-xs text-muted mt-1">Format: '/crm/accounts/{customer_id}/' or '/accounting/invoices/{id}/'</p>
+                {% if form.target_url_pattern.errors %}<div class="form-error">{{ form.target_url_pattern.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_parameter_mapping_json" class="form-label">Parameter Mapping JSON Matrix</label>
+                {{ form.parameter_mapping_json }}
+                <p class="text-xs text-muted mt-1">Maps source row fields to target parameters: {"source_column": "target_param"}</p>
+                {% if form.parameter_mapping_json.errors %}<div class="form-error">{{ form.parameter_mapping_json.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_sort_order" class="form-label">Priority Display Order</label>
+                {{ form.sort_order }}
+                {% if form.sort_order.errors %}<div class="form-error">{{ form.sort_order.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="flex items-center space-x-2">
+                {{ form.is_enabled }}
+                <label for="id_is_enabled" class="text-sm font-medium text-slate-700">Drill Path is Enabled and Navigable</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end space-x-3">
+        <a href="{% if is_edit %}{% url 'bi:report_drill_path_detail' drill_path.pk %}{% else %}{% url 'bi:report_drill_path_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Drill Path{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
