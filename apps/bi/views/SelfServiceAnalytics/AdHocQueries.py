@@ -130,10 +130,6 @@ def ad_hoc_query_detail(request, pk):
 
 @login_required
 def ad_hoc_query_create(request):
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True)
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant, is_active=True)
-    blends = DataBlendDefinition.objects.filter(tenant=request.tenant, status="active")
-
     if request.method == "POST":
         form = AdHocQueryForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -160,9 +156,6 @@ def ad_hoc_query_create(request):
         {
             "form": form,
             "is_edit": False,
-            "semantic_models": semantic_models,
-            "warehouse_tables": warehouse_tables,
-            "blends": blends,
         },
     )
 
@@ -170,9 +163,6 @@ def ad_hoc_query_create(request):
 @login_required
 def ad_hoc_query_edit(request, pk):
     query = bi_object(request, AdHocQuery, pk)
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True)
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant, is_active=True)
-    blends = DataBlendDefinition.objects.filter(tenant=request.tenant, status="active")
 
     if request.method == "POST":
         form = AdHocQueryForm(request.POST, instance=query, tenant=request.tenant)
@@ -197,9 +187,6 @@ def ad_hoc_query_edit(request, pk):
             "form": form,
             "query": query,
             "is_edit": True,
-            "semantic_models": semantic_models,
-            "warehouse_tables": warehouse_tables,
-            "blends": blends,
         },
     )
 
@@ -231,10 +218,6 @@ def ad_hoc_query_composer(request, pk):
         pk,
         select_related=("semantic_model", "warehouse_table", "data_blend"),
     )
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True)
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant, is_active=True)
-    blends = DataBlendDefinition.objects.filter(tenant=request.tenant, status="active")
-
     if request.method == "POST":
         form = AdHocQueryComposerForm(request.POST, instance=query, tenant=request.tenant)
         if form.is_valid():
@@ -284,9 +267,6 @@ def ad_hoc_query_composer(request, pk):
         {
             "query": query,
             "form": form,
-            "semantic_models": semantic_models,
-            "warehouse_tables": warehouse_tables,
-            "blends": blends,
             "viz_choices": AdHocQuery.VISUALIZATION_TYPE_CHOICES,
             "preview_results": preview_results,
         },
