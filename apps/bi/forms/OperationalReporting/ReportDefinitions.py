@@ -110,6 +110,15 @@ class ReportDefinitionForm(TenantUniqueMixin, TenantModelForm):
                 raise forms.ValidationError(f"Invalid JSON: {e}")
         return val or []
 
+    def clean_styling_css(self):
+        val = self.cleaned_data.get("styling_css", "") or ""
+        lower = val.lower()
+        forbidden = ["</style", "<script", "</script", "<iframe", "</iframe", "javascript:", "onload=", "onerror="]
+        for bad in forbidden:
+            if bad in lower:
+                raise forms.ValidationError(f"Invalid CSS: HTML tag closing, script injection, or javascript scheme ('{bad}') is not permitted.")
+        return val
+
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["semantic_model", "warehouse_table", "org_unit"])
