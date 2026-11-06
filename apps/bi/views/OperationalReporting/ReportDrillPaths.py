@@ -35,7 +35,7 @@ def report_drill_path_list(request):
         qs = qs.filter(target_type=target_type)
 
     report_id = request.GET.get("report", "").strip()
-    if report_id:
+    if report_id and report_id.isdigit():
         qs = qs.filter(source_report_id=report_id)
 
     paginator = Paginator(qs, 15)
@@ -76,9 +76,9 @@ def report_drill_path_detail(request, pk):
 @login_required
 @tenant_admin_required
 def report_drill_path_create(request):
-    report_id = request.GET.get("report")
+    report_id = request.GET.get("report", "").strip()
     initial = {}
-    if report_id:
+    if report_id and report_id.isdigit():
         source_report = get_object_or_404(ReportDefinition.objects.filter(tenant=request.tenant), pk=report_id)
         initial["source_report"] = source_report
 
