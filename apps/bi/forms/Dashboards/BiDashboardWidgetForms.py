@@ -70,6 +70,11 @@ class BiDashboardWidgetForm(TenantUniqueMixin, TenantModelForm):
         reject_foreign(self, cleaned_data, [
             "dashboard", "semantic_model", "calculated_measure", "warehouse_table", "drill_hierarchy"
         ])
+        pos_x = cleaned_data.get("pos_x")
+        width_cols = cleaned_data.get("width_cols")
+        if pos_x is not None and width_cols is not None:
+            if pos_x + width_cols > 12:
+                self.add_error("width_cols", "Widget position pos_x + width_cols exceeds the 12-column grid limit.")
         return cleaned_data
 
 
