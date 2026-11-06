@@ -104,6 +104,9 @@ class ReportExecution(TenantNumbered):
             models.Index(fields=["tenant", "execution_status"], name="idx_brun_ten_stat"),
             models.Index(fields=["tenant", "executed_by"], name="idx_brun_ten_exec"),
             models.Index(fields=["tenant", "started_at"], name="idx_brun_ten_start"),
+            models.Index(fields=["tenant", "report", "-started_at"], name="idx_brun_ten_rpt_start"),
+            models.Index(fields=["tenant", "output_format"], name="idx_brun_ten_format"),
+            models.Index(fields=["tenant", "execution_mode"], name="idx_brun_ten_mode"),
         ]
 
     def __str__(self):
