@@ -48,7 +48,7 @@ class StrategicObjectiveForm(TenantUniqueMixin, TenantModelForm):
                 parent_qs = parent_qs.exclude(pk=self.instance.pk)
             self.fields["parent_objective"].queryset = parent_qs
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["owner"].queryset = User.objects.filter(is_active=True).order_by("username")
+            self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
         self.fields["slug"].required = False
 
     def clean_slug(self):
@@ -60,7 +60,7 @@ class StrategicObjectiveForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["parent_objective", "org_unit"])
+        reject_foreign(self, cleaned, ["parent_objective", "org_unit", "owner"])
 
         parent = cleaned.get("parent_objective")
         if parent and self.instance and parent.pk == self.instance.pk:
