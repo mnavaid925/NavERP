@@ -2877,6 +2877,9 @@ class Command(BaseCommand):
             # ---------------------------------------------------------
             if not KpiDefinition.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
+                    from apps.core.models.OrgUnit import OrgUnit
+                    from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
+
                     tenant_admin = get_user_model().objects.filter(tenant=tenant).first()
                     first_org = OrgUnit.objects.filter(tenant=tenant).first()
                     semantic_measure = CalculatedMeasure.objects.filter(tenant=tenant).first()
