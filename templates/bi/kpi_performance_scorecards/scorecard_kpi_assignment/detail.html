@@ -34,7 +34,7 @@
             <span class="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">→ Steady Trend</span>
             {% endif %}
         </div>
-        <p class="text-muted text-sm">Target assigned to <a href="{{ assignment.scorecard.get_absolute_url }}" class="text-primary hover:underline font-medium">{{ assignment.scorecard.name }}</a> ({{ assignment.scorecard.number }})</p>
+        <p class="text-muted text-sm">Target assigned to <a href="{{ assignment.scorecard.get_absolute_url }}" class="text-brand hover:underline font-medium">{{ assignment.scorecard.name }}</a> ({{ assignment.scorecard.number }})</p>
     </div>
     <div class="page-actions">
         <a href="{{ assignment.scorecard.get_absolute_url }}" class="btn btn-outline">
@@ -126,7 +126,7 @@
             <div class="grid grid-cols-2 gap-4">
                 <div>
                     <div class="text-xs text-muted uppercase">Balanced Scorecard</div>
-                    <div class="font-medium text-primary mt-1">
+                    <div class="font-medium text-brand mt-1">
                         <a href="{{ assignment.scorecard.get_absolute_url }}">{{ assignment.scorecard.name }}</a>
                     </div>
                 </div>
@@ -144,7 +144,7 @@
                 <div class="text-xs text-muted uppercase">Linked Strategic Objective</div>
                 {% if assignment.objective %}
                 <div class="font-medium text-slate-800 mt-1">
-                    <a href="{% url 'bi:strategic_objective_detail' assignment.objective.pk %}" class="text-primary hover:underline">{{ assignment.objective.name }}</a>
+                    <a href="{% url 'bi:strategic_objective_detail' assignment.objective.pk %}" class="text-brand hover:underline">{{ assignment.objective.name }}</a>
                     <span class="font-mono text-xs text-muted">({{ assignment.objective.code }})</span>
                 </div>
                 {% else %}
@@ -155,7 +155,7 @@
             <div class="pt-3 border-t border-slate-100">
                 <div class="text-xs text-muted uppercase">Catalog KPI Definition</div>
                 <div class="font-medium text-slate-800 mt-1">
-                    <a href="{% url 'bi:kpi_definition_detail' assignment.kpi.pk %}" class="text-primary hover:underline">{{ assignment.kpi.name }}</a>
+                    <a href="{% url 'bi:kpi_definition_detail' assignment.kpi.pk %}" class="text-brand hover:underline">{{ assignment.kpi.name }}</a>
                     <span class="font-mono text-xs text-muted">({{ assignment.kpi.code }})</span>
                 </div>
                 <div class="text-xs text-muted mt-1">{{ assignment.kpi.get_calculation_type_display }} · {{ assignment.kpi.get_tracking_frequency_display }}</div>
