@@ -108,6 +108,11 @@ class WhatIfScenario(TenantNumbered):
             models.Index(fields=["tenant", "created_by"], name="idx_bwif_ten_user"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if "fiscal_period" in kwargs and isinstance(kwargs["fiscal_period"], str):
+            kwargs.pop("fiscal_period")
+        super().__init__(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.number})"
 
