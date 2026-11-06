@@ -155,6 +155,7 @@ def writeback_cell_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def writeback_cell_delete(request, pk):
     cell = bi_object(request, ScenarioWritebackCell, pk)
