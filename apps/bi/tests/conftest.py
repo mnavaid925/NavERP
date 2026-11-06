@@ -1093,9 +1093,9 @@ def bi_dashboard_a(db, tenant_a, admin_user):
         slug="executive-performance-overview",
         description="Core metrics for executive leadership",
         category="executive",
-        theme="navy_slate",
+        theme="slate_corporate",
         layout_type="grid_12",
-        refresh_cadence="manual",
+        refresh_interval_seconds=0,
         is_published=True,
         is_kiosk_enabled=True,
         created_by=admin_user,
@@ -1110,10 +1110,10 @@ def bi_dashboard_b(db, tenant_b, admin_user_b):
         title="Globex Revenue Operations",
         slug="globex-revenue-operations",
         description="Globex revenue KPIs",
-        category="financial",
-        theme="light",
+        category="finance",
+        theme="indigo_modern",
         layout_type="grid_12",
-        refresh_cadence="manual",
+        refresh_interval_seconds=0,
         is_published=True,
         is_kiosk_enabled=True,
         created_by=admin_user_b,
@@ -1128,10 +1128,10 @@ def bi_dashboard_draft_a(db, tenant_a, admin_user):
         title="Draft Strategy Dashboard",
         slug="draft-strategy-dashboard",
         description="Work in progress dashboard",
-        category="strategic",
-        theme="dark",
+        category="executive",
+        theme="dark_observability",
         layout_type="grid_12",
-        refresh_cadence="manual",
+        refresh_interval_seconds=0,
         is_published=False,
         is_kiosk_enabled=False,
         created_by=admin_user,
@@ -1139,40 +1139,34 @@ def bi_dashboard_draft_a(db, tenant_a, admin_user):
 
 
 @pytest.fixture
-def bi_widget_a(db, tenant_a, bi_dashboard_a, admin_user):
+def bi_widget_a(db, tenant_a, bi_dashboard_a):
     return BiDashboardWidget.objects.create(
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
-        number="BWID-00001",
+        number="BDWG-00001",
         title="Monthly Recurring Revenue",
         widget_type="kpi_card",
         pos_x=0,
         pos_y=0,
         width_cols=4,
         height_rows=2,
-        query_override="",
-        color_scheme="blue",
-        chart_config={"value": "125000", "trend": "+12%"},
-        created_by=admin_user,
+        chart_config_json={"value": "125000", "trend": "+12%"},
     )
 
 
 @pytest.fixture
-def bi_widget_b(db, tenant_b, bi_dashboard_b, admin_user_b):
+def bi_widget_b(db, tenant_b, bi_dashboard_b):
     return BiDashboardWidget.objects.create(
         tenant=tenant_b,
         dashboard=bi_dashboard_b,
-        number="BWID-00002",
+        number="BDWG-00002",
         title="Globex Margin Rate",
         widget_type="kpi_card",
         pos_x=0,
         pos_y=0,
         width_cols=6,
         height_rows=2,
-        query_override="",
-        color_scheme="teal",
-        chart_config={"value": "34.5%"},
-        created_by=admin_user_b,
+        chart_config_json={"value": "34.5%"},
     )
 
 
@@ -1182,10 +1176,10 @@ def bi_bookmark_a(db, tenant_a, bi_dashboard_a, admin_user):
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
         user=admin_user,
-        number="BBMK-00001",
+        number="BDBM-00001",
         name="Q3 Fiscal View",
-        filters_payload={"region": "EMEA", "currency": "USD"},
-        crossfilter_state={"active_slice": "Enterprise"},
+        filter_state_json={"region": "EMEA", "currency": "USD"},
+        crossfilter_state_json={"active_slice": "Enterprise"},
         is_default=False,
         is_shared=True,
     )
@@ -1197,10 +1191,10 @@ def bi_bookmark_b(db, tenant_b, bi_dashboard_b, admin_user_b):
         tenant=tenant_b,
         dashboard=bi_dashboard_b,
         user=admin_user_b,
-        number="BBMK-00002",
+        number="BDBM-00002",
         name="Globex Default View",
-        filters_payload={"region": "APAC"},
-        crossfilter_state={},
+        filter_state_json={"region": "APAC"},
+        crossfilter_state_json={},
         is_default=True,
         is_shared=False,
     )
@@ -1211,15 +1205,14 @@ def bi_filter_a(db, tenant_a, bi_dashboard_a):
     return BiDashboardFilter.objects.create(
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
-        number="BFIL-00001",
+        number="BDFL-00001",
         filter_label="Operating Region",
         filter_key="region",
-        filter_type="select",
+        filter_type="dropdown",
         default_value="ALL",
-        options_source="static",
-        static_options=[{"value": "ALL", "label": "All Regions"}, {"value": "EMEA", "label": "EMEA"}],
-        display_order=1,
-        is_global=True,
+        options_source="static_list",
+        static_options_json=[{"value": "ALL", "label": "All Regions"}, {"value": "EMEA", "label": "EMEA"}],
+        order=1,
     )
 
 
@@ -1228,15 +1221,14 @@ def bi_filter_b(db, tenant_b, bi_dashboard_b):
     return BiDashboardFilter.objects.create(
         tenant=tenant_b,
         dashboard=bi_dashboard_b,
-        number="BFIL-00002",
+        number="BDFL-00002",
         filter_label="Product Segment",
         filter_key="segment",
-        filter_type="select",
+        filter_type="dropdown",
         default_value="ALL",
-        options_source="static",
-        static_options=[{"value": "ALL", "label": "All Segments"}],
-        display_order=1,
-        is_global=False,
+        options_source="static_list",
+        static_options_json=[{"value": "ALL", "label": "All Segments"}],
+        order=1,
     )
 
 
