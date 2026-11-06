@@ -74,6 +74,14 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                ScorecardKpiAssignment.objects.all().delete()
+                PerformanceScorecard.objects.all().delete()
+                StrategicObjective.objects.all().delete()
+                KpiDefinition.objects.all().delete()
+                ScenarioWritebackCell.objects.all().delete()
+                WhatIfScenario.objects.all().delete()
+                PivotAnalysisView.objects.all().delete()
+                OlapCube.objects.all().delete()
                 SavedAnalysisView.objects.all().delete()
                 AdHocCalculatedField.objects.all().delete()
                 AdHocQuery.objects.all().delete()
