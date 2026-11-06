@@ -49,7 +49,7 @@
   - **Issue**: In `report_execution_export`, row cells are sanitized with `csv_safe(...)`, but column titles in the header row are written without sanitization. If a column title begins with `=`, `+`, `-`, or `@`, spreadsheet software executes it as a formula.
   - **Fix**: Apply `csv_safe(...)` to every column title written to the CSV header row.
 
-- [ ] **[I4] Unauthenticated State Mutation & Audit Flooding via HTTP GET in Report Viewer**
+- [x] **[I4] Unauthenticated State Mutation & Audit Flooding via HTTP GET in Report Viewer** (Fixed: removed database execution creation from read-only GET `report_definition_viewer`, reserving runs for POST `report_execution_run`)
   - **Location**: `apps/bi/views/OperationalReporting/ReportDefinitions.py:312-326`
   - **Issue**: Loading `report_definition_viewer` with an HTTP GET request automatically creates a persistent `ReportExecution` database record. GET requests are not CSRF-protected and can be triggered by crawlers, prefetching, or image tags, flooding execution audit logs.
   - **Fix**: Remove automatic execution creation on read-only GET requests, reserving execution creation for explicit POST execution triggers (`report_execution_run`).
