@@ -163,6 +163,12 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["cube"])
+        if cleaned.get("name") and not cleaned.get("slug"):
+            from django.utils.text import slugify
+            base_slug = slugify(cleaned["name"]) or "view"
+            slug = base_slug[:120]
+            cleaned["slug"] = slug
+            self.instance.slug = slug
         return cleaned
 
     def save(self, commit=True):
