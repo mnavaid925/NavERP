@@ -151,10 +151,18 @@
         <!-- Writeback Adjustments Table -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h3 class="font-semibold text-slate-800">Scenario Writeback Cells ({{ writeback_cells.count }})</h3>
-                {% if scenario.status != 'committed' %}
-                <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline">+ Add Adjustment</a>
-                {% endif %}
+                <div>
+                    <h3 class="font-semibold text-slate-800">Scenario Writeback Cells ({{ writeback_cells_count|default:writeback_cells.count }})</h3>
+                    {% if writeback_cells_count > 50 %}
+                    <span class="text-xs text-muted">Showing latest 50</span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="{% url 'bi:writeback_cell_list' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline">View All Adjustments &rarr;</a>
+                    {% if scenario.status != 'committed' %}
+                    <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline">+ Add Adjustment</a>
+                    {% endif %}
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-wrap">
@@ -232,6 +240,13 @@
                         </tbody>
                     </table>
                 </div>
+                {% if writeback_cells_count > 50 %}
+                <div class="p-3 bg-slate-50 border-t border-slate-200 text-center">
+                    <a href="{% url 'bi:writeback_cell_list' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline font-medium">
+                        Showing 50 of {{ writeback_cells_count }} writeback adjustments. Click here to view all &rarr;
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
