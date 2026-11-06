@@ -191,3 +191,12 @@ class ScorecardKpiAssignment(TenantNumbered):
 
         self.calculate_performance_metrics()
         super().save(*args, **kwargs)
+
+    def record_actual_value(self, actual_value, save=True):
+        """Record new actual measurement and recalculate performance metrics."""
+        self.actual_value = Decimal(str(actual_value))
+        self.calculate_performance_metrics()
+        if save:
+            self.save()
+        return self
+
