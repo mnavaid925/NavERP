@@ -16,7 +16,7 @@
             <h1 class="page-title">{{ objective.name }}</h1>
             <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ objective.number }}</span>
 
-            <span class="badge {% if objective.perspective == 'financial' %}badge-green{% elif objective.perspective == 'customer' %}badge-info{% elif objective.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+            <span class="badge {% if objective.perspective == 'financial' %}badge-green{% elif objective.perspective == 'customer' %}badge-info{% elif objective.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                 {{ objective.get_perspective_display }}
             </span>
 
@@ -136,7 +136,7 @@
                             </div>
                             <div class="text-xs text-muted">{{ objective.parent_objective.code }} · {{ objective.parent_objective.get_perspective_display }}</div>
                         </div>
-                        <span class="badge {% if objective.parent_objective.perspective == 'financial' %}badge-green{% elif objective.parent_objective.perspective == 'customer' %}badge-info{% elif objective.parent_objective.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if objective.parent_objective.perspective == 'financial' %}badge-green{% elif objective.parent_objective.perspective == 'customer' %}badge-info{% elif objective.parent_objective.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ objective.parent_objective.get_perspective_display }}
                         </span>
                     </div>
@@ -240,7 +240,7 @@
                         <div class="text-xs font-mono text-muted">{{ a.kpi.code }}</div>
                     </td>
                     <td>
-                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ a.get_perspective_display }}
                         </span>
                     </td>
