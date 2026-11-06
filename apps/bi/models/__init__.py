@@ -37,6 +37,10 @@ from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefiniti
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
 from apps.bi.models.OperationalReporting.ReportParameters import ReportParameter
+from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
+from apps.bi.models.PerformanceScorecards.PerformanceScorecards import PerformanceScorecard
+from apps.bi.models.PerformanceScorecards.ScorecardKpiAssignments import ScorecardKpiAssignment
+from apps.bi.models.PerformanceScorecards.StrategicObjectives import StrategicObjective
 from apps.bi.models.SelfServiceAnalytics.AdHocCalculatedFields import AdHocCalculatedField
 from apps.bi.models.SelfServiceAnalytics.AdHocQueries import AdHocQuery
 from apps.bi.models.SelfServiceAnalytics.DataBlendDefinitions import DataBlendDefinition
@@ -89,6 +93,10 @@ __all__ = [
     "AdHocCalculatedField",
     "DataBlendDefinition",
     "SavedAnalysisView",
+    "KpiDefinition",
+    "PerformanceScorecard",
+    "ScorecardKpiAssignment",
+    "StrategicObjective",
     "OlapCube",
     "PivotAnalysisView",
     "WhatIfScenario",
