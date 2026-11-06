@@ -1,4 +1,5 @@
 import json
+import re
 from django import forms
 from django.utils.text import slugify
 
@@ -62,6 +63,15 @@ class ReportParameterForm(TenantUniqueMixin, TenantModelForm):
             except Exception as e:
                 raise forms.ValidationError(f"Invalid JSON: {e}")
         return val or []
+
+    def clean_validation_regex(self):
+        val = self.cleaned_data.get("validation_regex", "") or ""
+        if val.strip():
+            try:
+                re.compile(val)
+            except re.error as e:
+                raise forms.ValidationError(f"Invalid regular expression pattern: {e}")
+        return val
 
     def clean(self):
         cleaned_data = super().clean()
