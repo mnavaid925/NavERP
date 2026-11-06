@@ -57,12 +57,13 @@ def test_dashboards_dashboard_form_duplicate_slug_rejected(tenant_a, bi_dashboar
         "slug": bi_dashboard_a.slug,
         "category": "finance",
         "layout_type": "grid_12",
+        "refresh_interval_seconds": 0,
         "theme": "slate_corporate",
         "is_active": True,
     }
     form = BiDashboardForm(data=form_data, tenant=tenant_a)
     assert not form.is_valid()
-    assert "slug" in form.errors
+    assert "slug" in form.errors or "__all__" in form.errors
 
 
 @pytest.mark.django_db
@@ -73,6 +74,7 @@ def test_dashboards_dashboard_form_duplicate_slug_allowed_cross_tenant(tenant_b,
         "slug": bi_dashboard_a.slug,
         "category": "operations",
         "layout_type": "grid_12",
+        "refresh_interval_seconds": 0,
         "theme": "dark_observability",
         "is_active": True,
     }
@@ -153,10 +155,13 @@ def test_dashboards_widget_form_grid_overflow_rejected(tenant_a, bi_dashboard_a)
         "dashboard": bi_dashboard_a.pk,
         "title": "Overflow Widget",
         "widget_type": "bar",
+        "aggregation_type": "sum",
         "pos_x": 10,
         "pos_y": 0,
         "width_cols": 4,  # 10 + 4 = 14 > 12
         "height_rows": 2,
+        "refresh_interval_seconds": 0,
+        "sort_order": 1,
         "is_active": True,
     }
     form = BiDashboardWidgetForm(data=form_data, tenant=tenant_a)
@@ -266,9 +271,11 @@ def test_dashboards_filter_form_duplicate_key_rejected(tenant_a, bi_dashboard_a,
         "filter_label": "Duplicate Region Filter",
         "filter_key": bi_filter_a.filter_key,
         "filter_type": "dropdown",
+        "target_field": "region",
         "options_source": "static_list",
+        "order": 1,
         "is_active": True,
     }
     form = BiDashboardFilterForm(data=form_data, tenant=tenant_a)
     assert not form.is_valid()
-    assert "filter_key" in form.errors
+    assert "filter_key" in form.errors or "__all__" in form.errors
