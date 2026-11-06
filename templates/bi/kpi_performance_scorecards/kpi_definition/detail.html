@@ -130,7 +130,7 @@
         <div class="card">
             <div class="card-header flex justify-between items-center">
                 <h3 class="font-semibold text-slate-900">KPI Specifications</h3>
-                <span class="badge {% if kpi.perspective == 'financial' %}badge-green{% elif kpi.perspective == 'customer' %}badge-info{% elif kpi.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                <span class="badge {% if kpi.perspective == 'financial' %}badge-green{% elif kpi.perspective == 'customer' %}badge-info{% elif kpi.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                     {{ kpi.get_perspective_display }}
                 </span>
             </div>
@@ -333,7 +333,7 @@
                         <div class="text-xs text-muted">{{ a.scorecard.number }} · {{ a.scorecard.get_scorecard_type_display }}</div>
                     </td>
                     <td>
-                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ a.get_perspective_display }}
                         </span>
                     </td>
