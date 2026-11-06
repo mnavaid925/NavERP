@@ -203,6 +203,7 @@ def performance_scorecard_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def performance_scorecard_recalculate(request, pk):
     scorecard = bi_object(request, PerformanceScorecard, pk)
