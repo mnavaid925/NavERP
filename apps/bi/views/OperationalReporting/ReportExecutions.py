@@ -136,7 +136,7 @@ def report_execution_run(request, report_pk):
             return redirect("bi:report_execution_detail", pk=execution.pk)
     else:
         form = ReportExecutionRunForm(
-            initial={"report": report, "execution_mode": "interactive_view", "output_format": "html"},
+            initial={"execution_mode": "interactive_view", "output_format": "html"},
             tenant=request.tenant,
         )
 
