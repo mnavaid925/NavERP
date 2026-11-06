@@ -36,11 +36,11 @@
             <i data-lucide="arrow-left"></i>
             <span>Back to Details</span>
         </a>
+        {% if scenario.status != 'committed' %}
         <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="btn btn-outline">
             <i data-lucide="plus"></i>
             <span>Add Cell Adjustment</span>
         </a>
-        {% if scenario.status != 'committed' %}
         <form method="post" action="{% url 'bi:what_if_scenario_commit' scenario.pk %}" onsubmit="return confirm('Commit these simulated adjustments to the financial budget ledger?');" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
@@ -48,6 +48,11 @@
                 <span>Commit Simulation to Budget</span>
             </button>
         </form>
+        {% else %}
+        <span class="badge badge-slate flex items-center gap-1.5 py-1.5 px-3">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Committed & Locked</span>
+        </span>
         {% endif %}
     </div>
 </div>
@@ -165,6 +170,10 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions justify-end">
+                            <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="btn btn-icon" title="View Cell">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            {% if not cell.is_committed and scenario.status != 'committed' %}
                             <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-icon" title="Edit Cell">
                                 <i data-lucide="pencil"></i>
                             </a>
@@ -174,6 +183,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -184,10 +194,12 @@
                             <i data-lucide="sliders" class="w-10 h-10 text-slate-300 mx-auto mb-2"></i>
                             <h4 class="text-sm font-semibold text-slate-800">No Cell Coordinates Adjusted</h4>
                             <p class="text-xs text-muted max-w-sm mx-auto mb-3">Add writeback cells to specify departmental adjustments or macro splashing across financial GL accounts.</p>
+                            {% if scenario.status != 'committed' %}
                             <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="btn btn-primary btn-sm">
                                 <i data-lucide="plus"></i>
                                 <span>Add First Cell</span>
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
