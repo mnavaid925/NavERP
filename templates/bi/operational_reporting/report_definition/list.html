@@ -26,10 +26,12 @@
             <i data-lucide="git-branch"></i>
             <span>Drill Paths</span>
         </a>
+        {% if request.user.is_superuser or request.is_tenant_admin %}
         <a href="{% url 'bi:report_definition_create' %}" class="btn btn-primary">
             <i data-lucide="plus"></i>
             <span>New Report</span>
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -178,6 +180,7 @@
                         <a href="{% url 'bi:report_definition_detail' rpt.pk %}" class="btn btn-icon" title="Inspect Specs & Details">
                             <i data-lucide="eye"></i>
                         </a>
+                        {% if request.user.is_superuser or request.is_tenant_admin %}
                         <a href="{% url 'bi:report_definition_clone' rpt.pk %}" class="btn btn-icon" title="Clone / Fork Report">
                             <i data-lucide="copy"></i>
                         </a>
@@ -190,6 +193,7 @@
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -199,12 +203,14 @@
                             <i data-lucide="file-question" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-900">No Operational Reports Found</h3>
                             <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Get started by creating a new standard or regulatory report definition, or adjust your filter query.</p>
+                            {% if request.user.is_superuser or request.is_tenant_admin %}
                             <div class="mt-4">
                                 <a href="{% url 'bi:report_definition_create' %}" class="btn btn-primary">
                                     <i data-lucide="plus"></i>
                                     <span>Create Report</span>
                                 </a>
                             </div>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
