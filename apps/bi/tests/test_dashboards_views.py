@@ -303,7 +303,7 @@ def test_dashboards_widget_detail_and_data_api(client_a, bi_widget_a):
     assert resp_data.status_code == 200
     telemetry = resp_data.json()
     assert "widget_id" in telemetry
-    assert "payload" in telemetry
+    assert "datasets" in telemetry
 
 
 @pytest.mark.django_db
