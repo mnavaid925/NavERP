@@ -64,7 +64,7 @@
   - **Issue**: Filter dropdown querysets load full `ReportDefinition` records including large text and JSON fields (`columns_config_json`, `bands_config_json`, `raw_query`, `styling_css`).
   - **Fix**: Add `.only("id", "name", "number")` to filter dropdown querysets in all three views.
 
-- [ ] **[I7] Missing composite indexes on high-velocity `ReportExecution` table**
+- [x] **[I7] Missing composite indexes on high-velocity `ReportExecution` table** (Fixed: added composite indexes `idx_brun_ten_rpt_start`, `idx_brun_ten_format`, and `idx_brun_ten_mode` to `ReportExecution.Meta.indexes`, generated and applied migration `0023`)
   - **Location**: `apps/bi/models/OperationalReporting/ReportExecutions.py:102-107`
   - **Issue**: `ReportExecution` records grow rapidly. History queries filtering by `(tenant, report)` ordered by `-started_at` perform filesorts without a composite index. Filtering on `output_format` and `execution_mode` also lacks tenant composite indexes.
   - **Fix**: Add composite indexes in `ReportExecution.Meta.indexes`:
