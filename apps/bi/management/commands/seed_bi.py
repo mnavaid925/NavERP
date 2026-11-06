@@ -37,6 +37,10 @@ from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefiniti
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
 from apps.bi.models.OperationalReporting.ReportParameters import ReportParameter
+from apps.bi.models.SelfServiceAnalytics.AdHocCalculatedFields import AdHocCalculatedField
+from apps.bi.models.SelfServiceAnalytics.AdHocQueries import AdHocQuery
+from apps.bi.models.SelfServiceAnalytics.DataBlendDefinitions import DataBlendDefinition
+from apps.bi.models.SelfServiceAnalytics.SavedAnalysisViews import SavedAnalysisView
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -2691,5 +2695,164 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Standard & Operational Reporting for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Standard & Operational Reporting already seeded for tenant: {tenant.name}")
+
+            # =========================================================================
+            # SUB-MODULE 10.10: Self-Service & Ad-Hoc Analytics
+            # =========================================================================
+            if not AdHocQuery.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    # Reference semantic models from 10.4 if available
+                    smdl_sales = SemanticModel.objects.filter(tenant=tenant, slug="sales-performance-cube").first() or SemanticModel.objects.filter(tenant=tenant).first()
+                    smdl_procure = SemanticModel.objects.filter(tenant=tenant, slug="procurement-spend-analytics").first() or smdl_sales
+                    wtbl_fin = WarehouseTable.objects.filter(tenant=tenant, table_type="fact").first()
+
+                    # 1. Data Blend Definition
+                    blend_mashup, _ = DataBlendDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        slug="sales-procurement-mashup",
+                        defaults={
+                            "name": "Sales Opportunities & SCM Procurement Mashup",
+                            "description": "Cross-dataset blend linking sales demand with supply chain vendor procurement commitments.",
+                            "primary_source_type": "semantic_model",
+                            "primary_semantic_model": smdl_sales,
+                            "secondary_source_type": "semantic_model",
+                            "secondary_semantic_model": smdl_procure,
+                            "join_type": "left_outer",
+                            "cardinality": "many_to_one",
+                            "join_keys_mapping_json": [
+                                {"primary_field": "partner_id", "secondary_field": "vendor_partner_id"}
+                            ],
+                            "collision_resolution": "prefix_secondary",
+                            "status": "active",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 2. Ad-Hoc Queries
+                    q_revenue, _ = AdHocQuery.objects.get_or_create(
+                        tenant=tenant,
+                        slug="quarterly-revenue-profitability",
+                        defaults={
+                            "name": "Quarterly Revenue & Profitability Exploration",
+                            "description": "Exploratory ad-hoc analysis evaluating quarterly revenue trends, gross profit, and order volumes across regions.",
+                            "source_type": "semantic_model" if smdl_sales else "warehouse_table",
+                            "semantic_model": smdl_sales,
+                            "warehouse_table": wtbl_fin if not smdl_sales else None,
+                            "fields_config_json": [
+                                {"field": "fiscal_period", "label": "Fiscal Period", "type": "string", "agg": "none"},
+                                {"field": "gross_revenue", "label": "Gross Revenue", "type": "currency", "agg": "sum"},
+                                {"field": "cogs", "label": "Cost of Goods Sold", "type": "currency", "agg": "sum"},
+                                {"field": "orders_count", "label": "Total Orders", "type": "integer", "agg": "count"},
+                            ],
+                            "filter_criteria_json": [
+                                {"field": "fiscal_period", "operator": "starts_with", "value": "2026"}
+                            ],
+                            "sort_config_json": [
+                                {"field": "fiscal_period", "direction": "asc"}
+                            ],
+                            "visualization_type": "bar_chart",
+                            "chart_config_json": {"palette": "corporate_blue", "show_legend": True},
+                            "row_limit": 500,
+                            "status": "active",
+                            "last_executed_at": timezone.now(),
+                            "execution_duration_ms": 34,
+                            "row_count": 4,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    q_blend, _ = AdHocQuery.objects.get_or_create(
+                        tenant=tenant,
+                        slug="customer-acquisition-order-volume",
+                        defaults={
+                            "name": "Customer Acquisition & Procurement Volume Mashup",
+                            "description": "Blended exploratory dataset evaluating customer acquisition pipeline alongside vendor supplier fulfillments.",
+                            "source_type": "blend",
+                            "data_blend": blend_mashup,
+                            "fields_config_json": [
+                                {"field": "sales_region", "label": "Sales Region", "type": "string", "agg": "none"},
+                                {"field": "customer_count", "label": "New Customers", "type": "integer", "agg": "count_distinct"},
+                                {"field": "order_value", "label": "Order Value", "type": "currency", "agg": "sum"},
+                            ],
+                            "filter_criteria_json": [],
+                            "sort_config_json": [
+                                {"field": "order_value", "direction": "desc"}
+                            ],
+                            "visualization_type": "line_chart",
+                            "chart_config_json": {"palette": "emerald_trend"},
+                            "row_limit": 500,
+                            "status": "active",
+                            "last_executed_at": timezone.now(),
+                            "execution_duration_ms": 48,
+                            "row_count": 5,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 3. Custom Calculated Fields
+                    AdHocCalculatedField.objects.get_or_create(
+                        tenant=tenant,
+                        query=q_revenue,
+                        field_name="profit_margin_pct",
+                        defaults={
+                            "display_label": "Profit Margin Percentage",
+                            "formula_expression": "(([gross_revenue] - [cogs]) / [gross_revenue]) * 100",
+                            "return_type": "percentage",
+                            "aggregation_mode": "post_agg",
+                            "is_valid": True,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    AdHocCalculatedField.objects.get_or_create(
+                        tenant=tenant,
+                        query=q_revenue,
+                        field_name="average_order_value",
+                        defaults={
+                            "display_label": "Average Order Value (AOV)",
+                            "formula_expression": "[gross_revenue] / [orders_count]",
+                            "return_type": "currency",
+                            "aggregation_mode": "formula",
+                            "is_valid": True,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 4. Saved Analysis Views
+                    SavedAnalysisView.objects.get_or_create(
+                        tenant=tenant,
+                        slug="exec-2026-margin-explore",
+                        defaults={
+                            "name": "Executive 2026 Margin Exploration",
+                            "description": "Standard exploratory view tracking Q1-Q4 quarterly revenue profitability and margin margins.",
+                            "query": q_revenue,
+                            "sharing_scope": "tenant_public",
+                            "is_template": True,
+                            "is_favorite": True,
+                            "view_count": 18,
+                            "last_viewed_at": timezone.now(),
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    SavedAnalysisView.objects.get_or_create(
+                        tenant=tenant,
+                        slug="territory-sales-scm-view",
+                        defaults={
+                            "name": "Territory Sales vs SCM Blend Analysis",
+                            "description": "Departmental exploration view showing cross-dataset pipeline against supplier orders.",
+                            "query": q_blend,
+                            "sharing_scope": "team",
+                            "is_template": False,
+                            "is_favorite": False,
+                            "view_count": 9,
+                            "last_viewed_at": timezone.now(),
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Self-Service & Ad-Hoc Analytics for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Self-Service & Ad-Hoc Analytics already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
