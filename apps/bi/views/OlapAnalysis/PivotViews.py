@@ -197,6 +197,7 @@ def pivot_view_matrix(request, pk):
             "cube": cube,
             "col_headers": col_headers,
             "row_headers": row_headers,
+            "matrix_rows": row_headers,
             "grand_totals": grand_totals,
             "selected_measures": selected_measures,
         },
