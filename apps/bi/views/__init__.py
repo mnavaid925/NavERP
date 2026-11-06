@@ -289,6 +289,42 @@ from apps.bi.views.OperationalReporting.ReportParameters import (
     report_parameter_edit,
     report_parameter_list,
 )
+from apps.bi.views.SelfServiceAnalytics.AdHocCalculatedFields import (
+    ad_hoc_calculated_field_create,
+    ad_hoc_calculated_field_delete,
+    ad_hoc_calculated_field_detail,
+    ad_hoc_calculated_field_edit,
+    ad_hoc_calculated_field_list,
+    ad_hoc_calculated_field_validate,
+)
+from apps.bi.views.SelfServiceAnalytics.AdHocQueries import (
+    ad_hoc_query_composer,
+    ad_hoc_query_create,
+    ad_hoc_query_delete,
+    ad_hoc_query_detail,
+    ad_hoc_query_edit,
+    ad_hoc_query_execute,
+    ad_hoc_query_export,
+    ad_hoc_query_list,
+)
+from apps.bi.views.SelfServiceAnalytics.DataBlendDefinitions import (
+    data_blend_definition_create,
+    data_blend_definition_delete,
+    data_blend_definition_detail,
+    data_blend_definition_edit,
+    data_blend_definition_list,
+    data_blend_definition_preview,
+)
+from apps.bi.views.SelfServiceAnalytics.SavedAnalysisViews import (
+    saved_analysis_view_clone,
+    saved_analysis_view_create,
+    saved_analysis_view_delete,
+    saved_analysis_view_detail,
+    saved_analysis_view_edit,
+    saved_analysis_view_explore,
+    saved_analysis_view_list,
+    saved_analysis_view_share,
+)
 from apps.bi.views.SemanticLayer.SemanticOverviewViews import semantic_overview
 
 __all__ = [
@@ -508,4 +544,32 @@ __all__ = [
     "report_drill_path_create",
     "report_drill_path_edit",
     "report_drill_path_delete",
+    "ad_hoc_query_list",
+    "ad_hoc_query_detail",
+    "ad_hoc_query_create",
+    "ad_hoc_query_edit",
+    "ad_hoc_query_delete",
+    "ad_hoc_query_composer",
+    "ad_hoc_query_execute",
+    "ad_hoc_query_export",
+    "ad_hoc_calculated_field_list",
+    "ad_hoc_calculated_field_detail",
+    "ad_hoc_calculated_field_create",
+    "ad_hoc_calculated_field_edit",
+    "ad_hoc_calculated_field_delete",
+    "ad_hoc_calculated_field_validate",
+    "data_blend_definition_list",
+    "data_blend_definition_detail",
+    "data_blend_definition_create",
+    "data_blend_definition_edit",
+    "data_blend_definition_delete",
+    "data_blend_definition_preview",
+    "saved_analysis_view_list",
+    "saved_analysis_view_detail",
+    "saved_analysis_view_create",
+    "saved_analysis_view_edit",
+    "saved_analysis_view_delete",
+    "saved_analysis_view_clone",
+    "saved_analysis_view_share",
+    "saved_analysis_view_explore",
 ]
