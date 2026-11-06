@@ -109,12 +109,16 @@
                         <span class="text-slate-400 text-xs font-mono">{{ row.row_id }}</span>
                         {% elif col.field == 'item_code' %}
                         <span class="font-mono font-semibold">{{ row.item_code }}</span>
+                        {% elif col.field == 'description' %}
+                        <span>{{ row.description }}</span>
                         {% elif col.field == 'amount' %}
                         <span class="{% if row.amount < 0 %}text-red-700{% else %}text-slate-900{% endif %}">
                             ${{ row.amount|floatformat:2 }}
                         </span>
+                        {% elif col.field == 'status' %}
+                        <span>{{ row.status }}</span>
                         {% else %}
-                        {{ row|dictsort:col.field }}
+                        <span>{{ row.description }}</span>
                         {% endif %}
                     </td>
                     {% endfor %}
