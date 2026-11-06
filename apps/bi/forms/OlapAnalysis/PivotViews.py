@@ -127,6 +127,18 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}")
 
+    def clean_drill_through_target(self):
+        val = self.cleaned_data.get("drill_through_target", "").strip()
+        if val:
+            from django.urls import reverse, NoReverseMatch
+            try:
+                reverse(val)
+            except NoReverseMatch:
+                raise forms.ValidationError(
+                    f"Invalid URL route name '{val}'. It could not be reversed by Django URL routing."
+                )
+        return val
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["cube"])
