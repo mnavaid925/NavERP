@@ -31,6 +31,10 @@
         <div class="text-xs text-muted font-mono mt-1">Token: {{ parameter.parameter_name }}</div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:report_parameter_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Parameters</span>
+        </a>
         <a href="{% url 'bi:report_definition_detail' parameter.report.pk %}" class="btn btn-outline">
             <i data-lucide="file-text"></i>
             <span>Parent Report</span>
