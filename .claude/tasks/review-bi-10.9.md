@@ -107,7 +107,7 @@
   - **Issue**: Edit/delete/clone buttons for `@tenant_admin_required` views are shown to staff members who lack admin privileges.
   - **Fix**: Wrap action buttons in `{% if request.user.is_superuser or request.is_tenant_admin %}`.
 
-- [ ] **[M6] Missing regular expression validation in `ReportParameterForm`**
+- [x] **[M6] Missing regular expression validation in `ReportParameterForm`** (Fixed: added `clean_validation_regex` in `ReportParameterForm` verifying `re.compile(pattern)` succeeds)
   - **Location**: `apps/bi/forms/OperationalReporting/ReportParameters.py:22`
   - **Issue**: Malformed regular expression strings in `validation_regex` cause unhandled `re.error` at runtime.
   - **Fix**: Add `clean_validation_regex` to verify `re.compile(pattern)` succeeds.
