@@ -650,3 +650,87 @@ Enterprise multi-tenant executive dashboards, interactive analytical visualizati
 - **Bookmark Scoping**: Cross-user bookmark IDOR prevention via `Q(user=request.user) | Q(is_shared=True)` in canvas viewer and `apply` route.
 - **Visual Builder Security**: `bi_dashboard_canvas_builder` and its AJAX coordinate updater are protected by `@tenant_admin_required` with coordinate clamping (`0 <= pos_x <= 11`, `1 <= width_cols <= 12`, `pos_x + width_cols <= 12`).
 - **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.8"]`.
+
+---
+
+## Sub-module 10.9: Standard & Operational Reporting
+
+### Overview
+Enterprise pixel-perfect, banded operational reports, dynamic runtime parameter prompt filtering, transactional drill-through navigation, and multi-format document exporting (HTML, PDF, Excel/CSV, Word, JSON).
+- App package: `apps/bi/models/OperationalReporting/`, `forms/OperationalReporting/`, `views/OperationalReporting/`, `urls/OperationalReporting/`
+- Templates: `templates/bi/operational_reporting/`
+- Navigation Key: `LIVE_LINKS["10.9"]`
+
+### Models & Key Fields
+1. **`ReportDefinition`** (`BRPT-`):
+   - Represents a governed operational report template.
+   - Key fields: `name`, `slug`, `category` (finance, sales, inventory, procurement, hr, operations), `report_type` (tabular, summary_banded, matrix_crosstab, invoice_statement, composite_document), `status` (draft, in_review, published, deprecated), `semantic_model`, `warehouse_table`, `raw_query`, `page_orientation` (portrait, landscape), `page_size` (letter, legal, A4, A3), `margins_json`, `bands_config_json`, `columns_config_json`, `styling_css`, `is_prebuilt`.
+2. **`ReportParameter`** (`BPAR-`):
+   - Runtime input prompt filtering operational report queries.
+   - Key fields: `report` (FK `ReportDefinition`), `parameter_name` (slug token), `prompt_label`, `parameter_type` (string, integer, decimal, date, daterange, boolean, choice_single, choice_multi), `choices_source` (static_list, semantic_dimension, warehouse_column), `choices_config_json`, `default_value`, `is_required`, `is_hidden`, `validation_regex`, `prompt_order`.
+3. **`ReportExecution`** (`BRUN-`):
+   - Telemetry log and audit trail of interactive viewer runs and batch export jobs.
+   - Key fields: `report` (FK `ReportDefinition`), `executed_by` (FK `User`), `execution_mode` (interactive_view, export_pdf, export_excel, export_csv, export_docx, drill_through), `execution_status` (pending, running, completed, failed), `started_at`, `completed_at`, `duration_ms`, `parameter_values_json`, `row_count`, `output_format` (html, pdf, xlsx, csv, docx, json), `output_file_name`, `file_size_bytes`, `error_message`, `is_cached`.
+   - Composite indexes: `idx_brun_ten_rpt_start` (`tenant, report, -started_at`), `idx_brun_ten_format` (`tenant, output_format`), `idx_brun_ten_mode` (`tenant, execution_mode`).
+4. **`ReportDrillPath`** (`BDRP-`):
+   - Hyperlink action navigation from summary operational report cells to sub-reports or ERP record detail pages.
+   - Key fields: `source_report` (FK `ReportDefinition`), `source_field`, `drill_label`, `target_type` (subreport, operational_report, erp_record_url), `target_report` (FK `ReportDefinition`), `target_url_pattern`, `parameter_mapping_json`, `is_enabled`, `sort_order`.
+
+### URLs & Routes
+- Report Definitions:
+  - `bi:report_definition_list` (`/bi/reports/`)
+  - `bi:report_definition_create` (`/bi/reports/create/` - `@tenant_admin_required`)
+  - `bi:report_definition_detail` (`/bi/reports/<int:pk>/`)
+  - `bi:report_definition_edit` (`/bi/reports/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:report_definition_delete` (`/bi/reports/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+  - `bi:report_definition_clone` (`/bi/reports/<int:pk>/clone/` - copy dialog with parameter/drill path duplication, `@tenant_admin_required`)
+  - `bi:report_definition_viewer` (`/bi/reports/<int:pk>/view/` - interactive grid viewer with prompt bar)
+  - `bi:report_definition_print` (`/bi/reports/<int:pk>/print/` - print-ready preview with CSS page styles)
+- Report Parameters:
+  - `bi:report_parameter_list` (`/bi/report-parameters/`)
+  - `bi:report_parameter_create` (`/bi/report-parameters/create/` - `@tenant_admin_required`)
+  - `bi:report_parameter_detail` (`/bi/report-parameters/<int:pk>/`)
+  - `bi:report_parameter_edit` (`/bi/report-parameters/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:report_parameter_delete` (`/bi/report-parameters/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+- Report Executions:
+  - `bi:report_execution_list` (`/bi/report-executions/`)
+  - `bi:report_execution_run` (`/bi/report-executions/run/<int:report_pk>/` - trigger on-demand run)
+  - `bi:report_execution_detail` (`/bi/report-executions/<int:pk>/`)
+  - `bi:report_execution_delete` (`/bi/report-executions/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+  - `bi:report_execution_export` (`/bi/report-executions/<int:pk>/export/<str:export_format>/` - download CSV/JSON/XLSX)
+- Report Drill Paths:
+  - `bi:report_drill_path_list` (`/bi/report-drill-paths/`)
+  - `bi:report_drill_path_create` (`/bi/report-drill-paths/create/` - `@tenant_admin_required`)
+  - `bi:report_drill_path_detail` (`/bi/report-drill-paths/<int:pk>/`)
+  - `bi:report_drill_path_edit` (`/bi/report-drill-paths/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:report_drill_path_delete` (`/bi/report-drill-paths/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/operational_reporting/`:
+  - `report_definition/` (`list.html` with category filters, KPI stat cards, and prebuilt badges; `detail.html` with tabbed parameters/executions/drill paths and action buttons; `form.html`; `clone.html`; `viewer.html` with interactive filter prompt bar and column rendering; `print.html` with print-specific `@page` CSS layout).
+  - `report_parameter/` (`list.html` with type badges; `detail.html` with choices preview; `form.html`).
+  - `report_execution/` (`list.html` with mode and status badges; `detail.html` with runtime metrics and export download buttons; `form.html`).
+  - `report_drill_path/` (`list.html` with target type badges; `detail.html`; `form.html`).
+- Design System: Colour-named badges (`.badge-green`, `.badge-info`, `.badge-amber`, `.badge-slate`, `.badge-muted`), `.stat-card`, `.table-wrap`, and `.btn`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Standard & Operational Reporting records:
+  - 4 Pre-built Reports:
+    - Acme Inc Monthly Profit & Loss Statement (Finance, Tabular)
+    - Sales Performance & Commission Audit (Sales, Summary Banded)
+    - Warehouse Stock Balance & Valuation Report (Inventory, Tabular)
+    - Department Headcount & Payroll Allocation (HR, Summary Banded)
+  - Pre-configured prompt parameters (Fiscal Year, Department, Status).
+  - Transactional drill paths (Item drill-through, Customer 360 link).
+  - Simulated execution history telemetry across interactive and export runs.
+- 100% idempotent with `--flush` support.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Stored XSS Protection**: Custom report CSS is validated by `clean_styling_css` in `ReportDefinitionForm` to block `</style>`, `<script>`, `<iframe>`, and dangerous protocols, with closing tags stripped prior to rendering.
+- **CSV Formula Injection Mitigation**: All column headers and cell values in `report_execution_export` are escaped via `csv_safe(...)` to prevent DDE formula execution (`=`, `+`, `-`, `@`).
+- **Read-Only Viewer Idempotency**: `report_definition_viewer` is read-only on GET requests and does not flood execution audit logs; execution runs require deliberate POST submissions.
+- **Safe Filtering**: Integer FK GET parameters (`report_id`) are guarded with `.isdigit()` before querying the database, preventing `ValueError` 500s.
+- **Unique Slugs on Clone**: `ReportCloneForm` enforces uniqueness of `new_slug` within the tenant to prevent unhandled database constraint crashes.
+- **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.9"]`.
+
