@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}{{ report.name }} — Report Details — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <span class="font-mono">{{ report.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ report.name }}</h1>
+            <span class="badge {{ report.badge_status }}">{{ report.get_status_display }}</span>
+            <span class="badge {{ report.badge_category }}">{{ report.get_category_display }}</span>
+            {% if report.is_prebuilt_template %}
+            <span class="badge badge-info">Pre-Built Template</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted font-mono mt-1">{{ report.slug }}</div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_definition_viewer' report.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Run / Open Viewer</span>
+        </a>
+        <a href="{% url 'bi:report_definition_print' report.pk %}" target="_blank" class="btn btn-outline">
+            <i data-lucide="printer"></i>
+            <span>Print View</span>
+        </a>
+        <a href="{% url 'bi:report_definition_clone' report.pk %}" class="btn btn-outline">
+            <i data-lucide="copy"></i>
+            <span>Clone</span>
+        </a>
+        {% if can_edit %}
+        <a href="{% url 'bi:report_definition_edit' report.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:report_definition_delete' report.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete report {{ report.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Specifications & Metadata -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title">Report Specifications & Setup</h2>
+        </div>
+        <div class="card-body">
+            {% if report.description %}
+            <p class="text-sm text-slate-700 mb-6 bg-slate-50 p-4 rounded-lg border border-slate-200">{{ report.description }}</p>
+            {% endif %}
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Report Number</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ report.number }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Domain Category</span>
+                    <span class="font-medium text-slate-800">{{ report.get_category_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Report Type</span>
+                    <span class="font-medium text-slate-800">{{ report.get_report_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Paper Size & Orientation</span>
+                    <span class="font-medium text-slate-800">{{ report.get_paper_size_display }} ({{ report.get_orientation_display }})</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Governed Semantic Model</span>
+                    {% if report.semantic_model %}
+                    <span class="font-medium text-blue-600">{{ report.semantic_model.name }}</span>
+                    {% else %}
+                    <span class="text-muted italic">None (Direct / Custom Table)</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Warehouse Table Feed</span>
+                    {% if report.warehouse_table %}
+                    <span class="font-medium font-mono text-purple-600">{{ report.warehouse_table.table_name }}</span>
+                    {% else %}
+                    <span class="text-muted italic">None</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Department / Org Unit</span>
+                    {% if report.org_unit %}
+                    <span class="font-medium text-slate-800">{{ report.org_unit.name }}</span>
+                    {% else %}
+                    <span class="text-muted italic">All Workspaces / Org Units</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Watermark Security</span>
+                    {% if report.watermark_text %}
+                    <span class="badge badge-amber font-mono">{{ report.watermark_text }}</span>
+                    {% else %}
+                    <span class="text-muted italic">None</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Created By</span>
+                    <span class="text-slate-800">{% if report.created_by %}{{ report.created_by.get_full_name|default:report.created_by.username }}{% else %}System Seeder{% endif %}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs uppercase font-medium">Created Timestamp</span>
+                    <span class="text-slate-600 text-xs">{{ report.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+
+            {% if report.raw_query %}
+            <div class="mt-6 pt-4 border-t border-slate-200">
+                <span class="text-muted block text-xs uppercase font-medium mb-1">Analytical Raw Query / ORM Spec</span>
+                <pre class="bg-slate-900 text-emerald-400 p-3 rounded font-mono text-xs overflow-x-auto">{{ report.raw_query }}</pre>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Stats & Actions -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm">Components Summary</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100">
+                    <span class="text-muted">Prompt Parameters</span>
+                    <span class="font-bold text-slate-800">{{ parameters.count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100">
+                    <span class="text-muted">Drill-Through Paths</span>
+                    <span class="font-bold text-slate-800">{{ drill_paths.count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm py-1 border-b border-slate-100">
+                    <span class="text-muted">Total Recorded Executions</span>
+                    <span class="font-bold text-slate-800">{{ executions.count }}</span>
+                </div>
+                <div class="flex justify-between items-center text-sm py-1">
+                    <span class="text-muted">Page Margins</span>
+                    <span class="font-mono text-xs text-slate-600">{{ report.margins_json }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title text-sm">Quick Navigation</h3>
+            </div>
+            <div class="card-body space-y-2">
+                <a href="{% url 'bi:report_parameter_create' %}?report={{ report.pk }}" class="btn btn-outline w-full justify-start text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Add Prompt Parameter</span>
+                </a>
+                <a href="{% url 'bi:report_drill_path_create' %}?report={{ report.pk }}" class="btn btn-outline w-full justify-start text-xs">
+                    <i data-lucide="plus"></i>
+                    <span>Configure Drill-Through Path</span>
+                </a>
+                <a href="{% url 'bi:report_execution_run' report.pk %}" class="btn btn-outline w-full justify-start text-xs">
+                    <i data-lucide="terminal"></i>
+                    <span>Run On-Demand Batch</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Parameters Section -->
+<div class="card mb-8">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="card-title">Prompt-Driven Filtering Parameters</h2>
+            <p class="text-xs text-muted">Configured runtime prompts presented to users before report rendering</p>
+        </div>
+        <a href="{% url 'bi:report_parameter_create' %}?report={{ report.pk }}" class="btn btn-outline text-xs">
+            <i data-lucide="plus"></i>
+            <span>Add Parameter</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>Prompt Label</th>
+                    <th>Parameter Name</th>
+                    <th>Data Type</th>
+                    <th>Choices Source</th>
+                    <th>Default Value</th>
+                    <th>Required</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for param in parameters %}
+                <tr>
+                    <td class="font-mono text-xs">{{ param.prompt_order }}</td>
+                    <td class="font-medium text-slate-800">
+                        <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="hover:underline">{{ param.prompt_label }}</a>
+                    </td>
+                    <td class="font-mono text-xs text-slate-600">{{ param.parameter_name }}</td>
+                    <td>
+                        <span class="badge badge-info">{{ param.get_parameter_type_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-600">{{ param.get_choices_source_display }}</td>
+                    <td class="font-mono text-xs text-slate-700">{{ param.default_value|default:"—" }}</td>
+                    <td>
+                        {% if param.is_required %}
+                        <span class="badge badge-amber">Required</span>
+                        {% else %}
+                        <span class="badge badge-slate">Optional</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_parameter_edit' param.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-sm text-slate-500">
+                        No filtering parameters defined for this report. Report runs unfiltered by default.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Drill Paths Section -->
+<div class="card mb-8">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="card-title">Sub-Reports & Transactional Drill Paths</h2>
+            <p class="text-xs text-muted">Configured interactive drill links navigating from cells to child reports or ERP records</p>
+        </div>
+        <a href="{% url 'bi:report_drill_path_create' %}?report={{ report.pk }}" class="btn btn-outline text-xs">
+            <i data-lucide="plus"></i>
+            <span>Add Drill Path</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Trigger Column / Field</th>
+                    <th>Drill Action Label</th>
+                    <th>Target Type</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for drill in drill_paths %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-purple-700">{{ drill.source_field }}</td>
+                    <td class="font-medium text-slate-800">
+                        <a href="{% url 'bi:report_drill_path_detail' drill.pk %}" class="hover:underline">{{ drill.drill_label }}</a>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ drill.get_target_type_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {% if drill.target_report %}
+                        <a href="{% url 'bi:report_definition_detail' drill.target_report.pk %}" class="text-blue-600 hover:underline">
+                            {{ drill.target_report.name }}
+                        </a>
+                        {% elif drill.target_url_pattern %}
+                        <code class="text-xs font-mono bg-slate-100 px-1 py-0.5 rounded">{{ drill.target_url_pattern }}</code>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if drill.is_enabled %}
+                        <span class="badge badge-green">Enabled</span>
+                        {% else %}
+                        <span class="badge badge-muted">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_drill_path_detail' drill.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_drill_path_edit' drill.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-sm text-slate-500">
+                        No drill paths configured. Report data rows are standard non-interactive tabular records.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Execution History Section -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <div>
+            <h2 class="card-title">Recent Run History & Export Audit</h2>
+            <p class="text-xs text-muted">Audit log of recent user executions, run times, and generated artifacts</p>
+        </div>
+        <a href="{% url 'bi:report_execution_list' %}?report={{ report.pk }}" class="btn btn-outline text-xs">
+            <i data-lucide="list"></i>
+            <span>All Runs</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Execution Number</th>
+                    <th>Executed By</th>
+                    <th>Mode</th>
+                    <th>Format</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Rows</th>
+                    <th>Started At</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exec in executions %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold">
+                        <a href="{% url 'bi:report_execution_detail' exec.pk %}" class="text-blue-600 hover:underline">{{ exec.number }}</a>
+                    </td>
+                    <td class="text-xs text-slate-700">
+                        {% if exec.executed_by %}{{ exec.executed_by.username }}{% else %}System{% endif %}
+                    </td>
+                    <td><span class="badge badge-slate text-xs">{{ exec.get_execution_mode_display }}</span></td>
+                    <td><span class="badge badge-info text-xs uppercase">{{ exec.output_format }}</span></td>
+                    <td><span class="badge {{ exec.badge_status }} text-xs">{{ exec.get_execution_status_display }}</span></td>
+                    <td class="text-xs font-mono">{{ exec.duration_ms }} ms</td>
+                    <td class="text-xs font-mono font-medium">{{ exec.row_count }}</td>
+                    <td class="text-xs text-slate-500">{{ exec.started_at|date:"Y-m-d H:i" }}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_execution_detail' exec.pk %}" class="btn btn-icon" title="View Run Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_execution_export' exec.pk 'csv' %}" class="btn btn-icon" title="Download CSV">
+                            <i data-lucide="download"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-6 text-sm text-slate-500">
+                        No previous executions recorded for this report. Run the report to populate performance telemetry.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
