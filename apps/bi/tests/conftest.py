@@ -37,15 +37,19 @@ from apps.bi.models import (
     MdmHierarchyNode,
     MdmReferenceCode,
     MdmSurvivorshipRule,
+    OlapCube,
+    PivotAnalysisView,
     ReportDefinition,
     ReportDrillPath,
     ReportExecution,
     ReportParameter,
     SavedAnalysisView,
+    ScenarioWritebackCell,
     SemanticModel,
     TransformationStep,
     WarehouseStoragePolicy,
     WarehouseTable,
+    WhatIfScenario,
 )
 
 
@@ -1495,6 +1499,142 @@ def saved_analysis_view_b(db, tenant_b, adhoc_query_b, admin_user_b):
         is_favorite=True,
         created_by=admin_user_b,
     )
+
+
+@pytest.fixture
+def olap_cube_a(db, tenant_a, admin_user):
+    return OlapCube.objects.create(
+        tenant=tenant_a,
+        name="Acme Financial Performance Cube",
+        slug="acme-financial-performance-cube",
+        description="Core multidimensional financial performance cube",
+        storage_mode="molap",
+        dimensions_config=[
+            {"name": "Department", "field": "dept", "type": "string"},
+            {"name": "FiscalPeriod", "field": "period", "type": "string"},
+        ],
+        measures_config=[
+            {"name": "Actual Amount", "field": "amount", "agg": "sum"},
+            {"name": "Budget Amount", "field": "budget", "agg": "sum"},
+        ],
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def olap_cube_b(db, tenant_b, admin_user_b):
+    return OlapCube.objects.create(
+        tenant=tenant_b,
+        name="Globex Financial Performance Cube",
+        slug="globex-financial-performance-cube",
+        description="Core multidimensional financial performance cube for Globex",
+        storage_mode="molap",
+        dimensions_config=[
+            {"name": "Department", "field": "dept", "type": "string"},
+            {"name": "FiscalPeriod", "field": "period", "type": "string"},
+        ],
+        measures_config=[
+            {"name": "Actual Amount", "field": "amount", "agg": "sum"},
+        ],
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def pivot_view_a(db, tenant_a, olap_cube_a, admin_user):
+    return PivotAnalysisView.objects.create(
+        tenant=tenant_a,
+        cube=olap_cube_a,
+        name="Acme Department Expense Matrix",
+        slug="acme-department-expense-matrix",
+        description="Expense matrix by department and period",
+        row_dimensions=["Department"],
+        column_dimensions=["FiscalPeriod"],
+        measures_selection=["Actual Amount"],
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def pivot_view_b(db, tenant_b, olap_cube_b, admin_user_b):
+    return PivotAnalysisView.objects.create(
+        tenant=tenant_b,
+        cube=olap_cube_b,
+        name="Globex Department Expense Matrix",
+        slug="globex-department-expense-matrix",
+        description="Expense matrix by department and period for Globex",
+        row_dimensions=["Department"],
+        column_dimensions=["FiscalPeriod"],
+        measures_selection=["Actual Amount"],
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def what_if_scenario_a(db, tenant_a, olap_cube_a, admin_user):
+    return WhatIfScenario.objects.create(
+        tenant=tenant_a,
+        cube=olap_cube_a,
+        name="Acme FY2026 Optimistic Budget",
+        slug="acme-fy2026-optimistic-budget",
+        description="Optimistic budget scenario with 10% growth",
+        fiscal_period="2026-FY",
+        status="draft",
+        total_baseline_amount=Decimal("100000.00"),
+        total_adjusted_amount=Decimal("110000.00"),
+        total_variance_amount=Decimal("10000.00"),
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def what_if_scenario_b(db, tenant_b, olap_cube_b, admin_user_b):
+    return WhatIfScenario.objects.create(
+        tenant=tenant_b,
+        cube=olap_cube_b,
+        name="Globex FY2026 Optimistic Budget",
+        slug="globex-fy2026-optimistic-budget",
+        description="Optimistic budget scenario for Globex",
+        fiscal_period="2026-FY",
+        status="draft",
+        total_baseline_amount=Decimal("50000.00"),
+        total_adjusted_amount=Decimal("55000.00"),
+        total_variance_amount=Decimal("5000.00"),
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def writeback_cell_a(db, tenant_a, what_if_scenario_a, admin_user):
+    return ScenarioWritebackCell.objects.create(
+        tenant=tenant_a,
+        scenario=what_if_scenario_a,
+        coordinate_keys_json={"dept": "Sales", "period": "2026-Q1"},
+        baseline_amount=Decimal("10000.00"),
+        adjustment_delta=Decimal("2000.00"),
+        simulated_amount=Decimal("12000.00"),
+        adjustment_method="absolute",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def writeback_cell_b(db, tenant_b, what_if_scenario_b, admin_user_b):
+    return ScenarioWritebackCell.objects.create(
+        tenant=tenant_b,
+        scenario=what_if_scenario_b,
+        coordinate_keys_json={"dept": "Operations", "period": "2026-Q1"},
+        baseline_amount=Decimal("5000.00"),
+        adjustment_delta=Decimal("1000.00"),
+        simulated_amount=Decimal("6000.00"),
+        adjustment_method="absolute",
+        created_by=admin_user_b,
+    )
+
 
 
 
