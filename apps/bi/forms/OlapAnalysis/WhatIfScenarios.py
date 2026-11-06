@@ -85,6 +85,12 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["cube", "baseline_budget", "fiscal_period"])
+        if cleaned.get("name") and not cleaned.get("slug"):
+            from django.utils.text import slugify
+            base_slug = slugify(cleaned["name"]) or "scenario"
+            slug = base_slug[:120]
+            cleaned["slug"] = slug
+            self.instance.slug = slug
         return cleaned
 
     def save(self, commit=True):
