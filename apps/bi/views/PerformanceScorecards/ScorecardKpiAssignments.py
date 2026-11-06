@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -111,18 +112,19 @@ def scorecard_kpi_assignment_create(request):
     if request.method == "POST":
         form = ScorecardKpiAssignmentForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            assignment = form.save(commit=False)
-            assignment.tenant = request.tenant
-            assignment.save()
-            assignment.scorecard.recalculate_performance()
+            with transaction.atomic():
+                assignment = form.save(commit=False)
+                assignment.tenant = request.tenant
+                assignment.save()
+                assignment.scorecard.recalculate_performance()
 
-            write_audit_log(
-                request.user,
-                assignment,
-                "create",
-                changes={"summary": f"Assigned KPI {assignment.kpi.name} to Scorecard {assignment.scorecard.name}"},
-                tenant=request.tenant,
-            )
+                write_audit_log(
+                    request.user,
+                    assignment,
+                    "create",
+                    changes={"summary": f"Assigned KPI {assignment.kpi.name} to Scorecard {assignment.scorecard.name}"},
+                    tenant=request.tenant,
+                )
             messages.success(request, f"KPI '{assignment.kpi.name}' assigned to scorecard.")
             return redirect(assignment.scorecard.get_absolute_url())
     else:
@@ -143,16 +145,17 @@ def scorecard_kpi_assignment_edit(request, pk):
     if request.method == "POST":
         form = ScorecardKpiAssignmentForm(request.POST, instance=assignment, tenant=request.tenant)
         if form.is_valid():
-            assignment = form.save()
-            assignment.scorecard.recalculate_performance()
+            with transaction.atomic():
+                assignment = form.save()
+                assignment.scorecard.recalculate_performance()
 
-            write_audit_log(
-                request.user,
-                assignment,
-                "update",
-                changes={"summary": f"Updated KPI Assignment {assignment.number} ({assignment.kpi.name})"},
-                tenant=request.tenant,
-            )
+                write_audit_log(
+                    request.user,
+                    assignment,
+                    "update",
+                    changes={"summary": f"Updated KPI Assignment {assignment.number} ({assignment.kpi.name})"},
+                    tenant=request.tenant,
+                )
             messages.success(request, f"KPI assignment updated.")
             return redirect(assignment.scorecard.get_absolute_url())
     else:
@@ -173,15 +176,16 @@ def scorecard_kpi_assignment_delete(request, pk):
     assignment = bi_object(request, ScorecardKpiAssignment, pk, select_related=("scorecard", "kpi"))
     sc = assignment.scorecard
     kpi_name = assignment.kpi.name
-    write_audit_log(
-        request.user,
-        assignment,
-        "delete",
-        changes={"summary": f"Removed KPI {kpi_name} from Scorecard {sc.name}"},
-        tenant=request.tenant,
-    )
-    assignment.delete()
-    sc.recalculate_performance()
+    with transaction.atomic():
+        write_audit_log(
+            request.user,
+            assignment,
+            "delete",
+            changes={"summary": f"Removed KPI {kpi_name} from Scorecard {sc.name}"},
+            tenant=request.tenant,
+        )
+        assignment.delete()
+        sc.recalculate_performance()
     messages.success(request, f"KPI '{kpi_name}' removed from scorecard.")
     return redirect(sc.get_absolute_url())
 
@@ -193,16 +197,17 @@ def scorecard_kpi_assignment_record_actual(request, pk):
     if request.method == "POST":
         form = ScorecardKpiRecordActualForm(request.POST, instance=assignment)
         if form.is_valid():
-            assignment = form.save()
-            assignment.scorecard.recalculate_performance()
+            with transaction.atomic():
+                assignment = form.save()
+                assignment.scorecard.recalculate_performance()
 
-            write_audit_log(
-                request.user,
-                assignment,
-                "update",
-                changes={"summary": f"Recorded actual value {assignment.actual_value} for {assignment.kpi.name} on {assignment.scorecard.name}"},
-                tenant=request.tenant,
-            )
+                write_audit_log(
+                    request.user,
+                    assignment,
+                    "update",
+                    changes={"summary": f"Recorded actual value {assignment.actual_value} for {assignment.kpi.name} on {assignment.scorecard.name}"},
+                    tenant=request.tenant,
+                )
             messages.success(request, f"Recorded actual measurement ({assignment.actual_value}) for '{assignment.kpi.name}'.")
             return redirect(assignment.scorecard.get_absolute_url())
     else:
