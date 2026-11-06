@@ -13,6 +13,7 @@ class OlapCube(TenantNumbered):
         ("rolap", "Relational OLAP (Dynamic Query)"),
         ("summary_rollup", "Pre-Aggregated Summary Rollup"),
         ("hybrid", "Hybrid (Fast Cache + Passthrough)"),
+        ("molap", "Multidimensional OLAP"),
     ]
 
     STATUS_CHOICES = [
