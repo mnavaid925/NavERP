@@ -76,6 +76,10 @@ class OlapCubeForm(TenantUniqueMixin, TenantModelForm):
             args = (data,) + args[1:]
 
         super().__init__(*args, **kwargs)
+        if "slug" in self.fields:
+            self.fields["slug"].required = False
+        if "cache_ttl_minutes" in self.fields:
+            self.fields["cache_ttl_minutes"].required = False
         if self.tenant is not None:
             self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant)
             self.fields["warehouse_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant)
@@ -149,6 +153,9 @@ class OlapCubeForm(TenantUniqueMixin, TenantModelForm):
             slug = base_slug[:120]
             cleaned["slug"] = slug
             self.instance.slug = slug
+        if cleaned.get("cache_ttl_minutes") in (None, ""):
+            cleaned["cache_ttl_minutes"] = 60
+            self.instance.cache_ttl_minutes = 60
         return cleaned
 
     def save(self, commit=True):
