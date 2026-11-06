@@ -109,7 +109,7 @@ class ReportParameter(TenantNumbered):
             "date": "badge-green",
             "daterange": "badge-green",
             "boolean": "badge-amber",
-            "choice_single": "badge-purple",
-            "choice_multi": "badge-purple",
+            "choice_single": "badge-info",
+            "choice_multi": "badge-info",
         }
         return mapping.get(self.parameter_type, "badge-slate")
