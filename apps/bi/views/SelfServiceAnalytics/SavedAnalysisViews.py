@@ -105,10 +105,11 @@ def saved_analysis_view_create(request):
             view_obj.save()
 
             write_audit_log(
-                request,
+                user=request.user,
+                obj=view_obj,
                 action="create",
-                instance=view_obj,
-                description=f"Created saved analysis view {view_obj.name} ({view_obj.number})",
+                tenant=request.tenant,
+                changes={"description": f"Created saved analysis view {view_obj.name} ({view_obj.number})"},
             )
             messages.success(request, f"Saved view '{view_obj.name}' created.")
             return redirect("bi:saved_analysis_view_detail", pk=view_obj.pk)
@@ -138,10 +139,11 @@ def saved_analysis_view_edit(request, pk):
         if form.is_valid():
             view_obj = form.save()
             write_audit_log(
-                request,
+                user=request.user,
+                obj=view_obj,
                 action="update",
-                instance=view_obj,
-                description=f"Updated saved analysis view {view_obj.name} ({view_obj.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated saved analysis view {view_obj.name} ({view_obj.number})"},
             )
             messages.success(request, f"Saved view '{view_obj.name}' updated successfully.")
             return redirect("bi:saved_analysis_view_detail", pk=view_obj.pk)
@@ -169,10 +171,11 @@ def saved_analysis_view_delete(request, pk):
     number = view_obj.number
 
     write_audit_log(
-        request,
+        user=request.user,
+        obj=view_obj,
         action="delete",
-        instance=view_obj,
-        description=f"Deleted saved analysis view {name} ({number})",
+        tenant=request.tenant,
+        changes={"description": f"Deleted saved analysis view {name} ({number})"},
     )
     view_obj.delete()
     messages.success(request, f"Saved view '{name}' ({number}) deleted.")
@@ -197,10 +200,11 @@ def saved_analysis_view_clone(request, pk):
     )
 
     write_audit_log(
-        request,
+        user=request.user,
+        obj=cloned,
         action="create",
-        instance=cloned,
-        description=f"Forked analysis view from {original.number} as {cloned.number}",
+        tenant=request.tenant,
+        changes={"description": f"Forked analysis view from {original.number} as {cloned.number}"},
     )
     messages.success(request, f"Cloned view into personal workspace as '{cloned.name}'.")
     return redirect("bi:saved_analysis_view_detail", pk=cloned.pk)
@@ -215,10 +219,11 @@ def saved_analysis_view_share(request, pk):
         if form.is_valid():
             view_obj = form.save()
             write_audit_log(
-                request,
+                user=request.user,
+                obj=view_obj,
                 action="update",
-                instance=view_obj,
-                description=f"Updated sharing permissions for {view_obj.name} ({view_obj.number})",
+                tenant=request.tenant,
+                changes={"description": f"Updated sharing permissions for {view_obj.name} ({view_obj.number})"},
             )
             messages.success(request, f"Sharing scope updated to '{view_obj.get_sharing_scope_display()}'.")
             return redirect("bi:saved_analysis_view_detail", pk=view_obj.pk)
