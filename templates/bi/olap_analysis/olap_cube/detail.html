@@ -273,7 +273,7 @@
         <!-- Related Pivot Views -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h3 class="font-semibold text-slate-800">Pivot Views ({{ pivot_views.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Pivot Views ({{ pivot_views_count|default:pivot_views.count }})</h3>
                 <a href="{% url 'bi:pivot_view_create' %}?cube={{ cube.pk }}" class="text-xs text-blue-600 hover:underline">+ New</a>
             </div>
             <div class="card-body p-4 space-y-3">
@@ -301,7 +301,7 @@
         <!-- Related What-If Scenarios -->
         <div class="card">
             <div class="card-header flex items-center justify-between">
-                <h3 class="font-semibold text-slate-800">What-If Scenarios ({{ scenarios.count }})</h3>
+                <h3 class="font-semibold text-slate-800">What-If Scenarios ({{ scenarios_count|default:scenarios.count }})</h3>
                 <a href="{% url 'bi:what_if_scenario_create' %}?cube={{ cube.pk }}" class="text-xs text-blue-600 hover:underline">+ New</a>
             </div>
             <div class="card-body p-4 space-y-3">
