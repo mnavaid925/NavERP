@@ -26,7 +26,8 @@ class BiDashboardBookmarkForm(TenantUniqueMixin, TenantModelForm):
             "is_active": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant, is_active=True)
@@ -34,4 +35,17 @@ class BiDashboardBookmarkForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["dashboard"])
+        dashboard = cleaned_data.get("dashboard")
+        name = cleaned_data.get("name")
+        user = getattr(self, "user", None)
+        if not user and self.instance and self.instance.pk:
+            user = self.instance.user
+        if self.tenant and dashboard and name and user:
+            qs = BiDashboardBookmark.objects.filter(
+                tenant=self.tenant, dashboard=dashboard, user=user, name=name
+            )
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error("name", f"A bookmark named '{name}' already exists for this dashboard.")
         return cleaned_data
