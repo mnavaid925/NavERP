@@ -5,7 +5,9 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -18,7 +20,11 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_dashboard_bookmark_list(request):
-    qs = bi_scope(BiDashboardBookmark.objects.all(), request).select_related("dashboard", "user")
+    qs = (
+        bi_scope(BiDashboardBookmark.objects.all(), request)
+        .select_related("dashboard", "user")
+        .defer("filter_state_json", "crossfilter_state_json")
+    )
     # Users can view their own bookmarks, or bookmarks marked shared
     qs = qs.filter(Q(user=request.user) | Q(is_shared=True))
     total_bookmarks = qs.count()
@@ -33,7 +39,7 @@ def bi_dashboard_bookmark_list(request):
         )
 
     dashboard_id = request.GET.get("dashboard", "").strip()
-    if dashboard_id:
+    if dashboard_id and dashboard_id.isdigit():
         qs = qs.filter(dashboard_id=dashboard_id)
 
     is_shared = request.GET.get("is_shared", "").strip()
@@ -46,7 +52,7 @@ def bi_dashboard_bookmark_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).order_by("title")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).only("id", "title").order_by("title")
 
     context = {
         "page_obj": page_obj,
@@ -89,7 +95,7 @@ def bi_dashboard_bookmark_create(request):
         initial_data["dashboard"] = dashboard_id
 
     if request.method == "POST":
-        form = BiDashboardBookmarkForm(request.POST, tenant=request.tenant)
+        form = BiDashboardBookmarkForm(request.POST, tenant=request.tenant, user=request.user)
         if form.is_valid():
             with transaction.atomic():
                 bookmark = form.save(commit=False)
@@ -115,17 +121,16 @@ def bi_dashboard_bookmark_create(request):
 
                 bookmark.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="create",
-                    target_model="BiDashboardBookmark",
-                    target_id=str(bookmark.pk),
+                    request.user,
+                    bookmark,
+                    "create",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Bookmark '{bookmark.name}' saved successfully.")
             return redirect("bi:bi_dashboard_detail", pk=bookmark.dashboard_id)
     else:
-        form = BiDashboardBookmarkForm(initial=initial_data, tenant=request.tenant)
+        form = BiDashboardBookmarkForm(initial=initial_data, tenant=request.tenant, user=request.user)
 
     context = {
         "form": form,
@@ -144,7 +149,7 @@ def bi_dashboard_bookmark_edit(request, pk):
         return redirect("bi:bi_dashboard_bookmark_detail", pk=bookmark.pk)
 
     if request.method == "POST":
-        form = BiDashboardBookmarkForm(request.POST, instance=bookmark, tenant=request.tenant)
+        form = BiDashboardBookmarkForm(request.POST, instance=bookmark, tenant=request.tenant, user=request.user)
         if form.is_valid():
             with transaction.atomic():
                 if form.cleaned_data.get("is_default"):
@@ -157,17 +162,16 @@ def bi_dashboard_bookmark_edit(request, pk):
 
                 bookmark = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="update",
-                    target_model="BiDashboardBookmark",
-                    target_id=str(bookmark.pk),
+                    request.user,
+                    bookmark,
+                    "update",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Bookmark '{bookmark.name}' updated successfully.")
             return redirect("bi:bi_dashboard_bookmark_detail", pk=bookmark.pk)
     else:
-        form = BiDashboardBookmarkForm(instance=bookmark, tenant=request.tenant)
+        form = BiDashboardBookmarkForm(instance=bookmark, tenant=request.tenant, user=request.user)
 
     context = {
         "form": form,
@@ -189,12 +193,11 @@ def bi_dashboard_bookmark_delete(request, pk):
     name = bookmark.name
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
-            actor=request.user,
-            action="delete",
-            target_model="BiDashboardBookmark",
-            target_id=str(bookmark.pk),
+            request.user,
+            bookmark,
+            "delete",
             changes={"name": name, "number": bookmark.number},
+            tenant=request.tenant,
         )
         bookmark.delete()
     messages.success(request, f"Bookmark '{name}' deleted.")
@@ -204,8 +207,11 @@ def bi_dashboard_bookmark_delete(request, pk):
 @login_required
 def bi_dashboard_bookmark_apply(request, pk):
     bookmark = bi_object(request, BiDashboardBookmark, pk)
+    if bookmark.user != request.user and not bookmark.is_shared and not getattr(request, "is_tenant_admin", False):
+        return HttpResponseForbidden("You do not have permission to access this private bookmark.")
     BiDashboardBookmark.objects.filter(pk=bookmark.pk).update(
         view_count=bookmark.view_count + 1,
         last_viewed_at=timezone.now(),
     )
-    return redirect(f"/bi/dashboards/{bookmark.dashboard_id}/view/?bookmark={bookmark.pk}")
+    url = reverse("bi:bi_dashboard_canvas_view", kwargs={"pk": bookmark.dashboard_id}) + f"?bookmark={bookmark.pk}"
+    return redirect(url)
