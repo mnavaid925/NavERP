@@ -6,6 +6,10 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.bi.models import (
+    BiDashboard,
+    BiDashboardBookmark,
+    BiDashboardFilter,
+    BiDashboardWidget,
     BusinessGlossaryTerm,
     CalculatedMeasure,
     CatalogAsset,
@@ -1078,5 +1082,162 @@ def catalog_trust_endorsement_b(db, tenant_b, catalog_asset_b, admin_user_b):
         attested_by=admin_user_b,
         is_active=True,
     )
+
+
+@pytest.fixture
+def bi_dashboard_a(db, tenant_a, admin_user):
+    return BiDashboard.objects.create(
+        tenant=tenant_a,
+        number="BDSH-00001",
+        title="Executive Performance Overview",
+        slug="executive-performance-overview",
+        description="Core metrics for executive leadership",
+        category="executive",
+        theme="navy_slate",
+        layout_type="grid_12",
+        refresh_cadence="manual",
+        is_published=True,
+        is_kiosk_enabled=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_dashboard_b(db, tenant_b, admin_user_b):
+    return BiDashboard.objects.create(
+        tenant=tenant_b,
+        number="BDSH-00002",
+        title="Globex Revenue Operations",
+        slug="globex-revenue-operations",
+        description="Globex revenue KPIs",
+        category="financial",
+        theme="light",
+        layout_type="grid_12",
+        refresh_cadence="manual",
+        is_published=True,
+        is_kiosk_enabled=True,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_dashboard_draft_a(db, tenant_a, admin_user):
+    return BiDashboard.objects.create(
+        tenant=tenant_a,
+        number="BDSH-00003",
+        title="Draft Strategy Dashboard",
+        slug="draft-strategy-dashboard",
+        description="Work in progress dashboard",
+        category="strategic",
+        theme="dark",
+        layout_type="grid_12",
+        refresh_cadence="manual",
+        is_published=False,
+        is_kiosk_enabled=False,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_widget_a(db, tenant_a, bi_dashboard_a, admin_user):
+    return BiDashboardWidget.objects.create(
+        tenant=tenant_a,
+        dashboard=bi_dashboard_a,
+        number="BWID-00001",
+        title="Monthly Recurring Revenue",
+        widget_type="kpi_card",
+        pos_x=0,
+        pos_y=0,
+        width_cols=4,
+        height_rows=2,
+        query_override="",
+        color_scheme="blue",
+        chart_config={"value": "125000", "trend": "+12%"},
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_widget_b(db, tenant_b, bi_dashboard_b, admin_user_b):
+    return BiDashboardWidget.objects.create(
+        tenant=tenant_b,
+        dashboard=bi_dashboard_b,
+        number="BWID-00002",
+        title="Globex Margin Rate",
+        widget_type="kpi_card",
+        pos_x=0,
+        pos_y=0,
+        width_cols=6,
+        height_rows=2,
+        query_override="",
+        color_scheme="teal",
+        chart_config={"value": "34.5%"},
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_bookmark_a(db, tenant_a, bi_dashboard_a, admin_user):
+    return BiDashboardBookmark.objects.create(
+        tenant=tenant_a,
+        dashboard=bi_dashboard_a,
+        user=admin_user,
+        number="BBMK-00001",
+        name="Q3 Fiscal View",
+        filters_payload={"region": "EMEA", "currency": "USD"},
+        crossfilter_state={"active_slice": "Enterprise"},
+        is_default=False,
+        is_shared=True,
+    )
+
+
+@pytest.fixture
+def bi_bookmark_b(db, tenant_b, bi_dashboard_b, admin_user_b):
+    return BiDashboardBookmark.objects.create(
+        tenant=tenant_b,
+        dashboard=bi_dashboard_b,
+        user=admin_user_b,
+        number="BBMK-00002",
+        name="Globex Default View",
+        filters_payload={"region": "APAC"},
+        crossfilter_state={},
+        is_default=True,
+        is_shared=False,
+    )
+
+
+@pytest.fixture
+def bi_filter_a(db, tenant_a, bi_dashboard_a):
+    return BiDashboardFilter.objects.create(
+        tenant=tenant_a,
+        dashboard=bi_dashboard_a,
+        number="BFIL-00001",
+        filter_label="Operating Region",
+        filter_key="region",
+        filter_type="select",
+        default_value="ALL",
+        options_source="static",
+        static_options=[{"value": "ALL", "label": "All Regions"}, {"value": "EMEA", "label": "EMEA"}],
+        display_order=1,
+        is_global=True,
+    )
+
+
+@pytest.fixture
+def bi_filter_b(db, tenant_b, bi_dashboard_b):
+    return BiDashboardFilter.objects.create(
+        tenant=tenant_b,
+        dashboard=bi_dashboard_b,
+        number="BFIL-00002",
+        filter_label="Product Segment",
+        filter_key="segment",
+        filter_type="select",
+        default_value="ALL",
+        options_source="static",
+        static_options=[{"value": "ALL", "label": "All Segments"}],
+        display_order=1,
+        is_global=False,
+    )
+
 
 
