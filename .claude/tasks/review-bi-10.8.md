@@ -192,50 +192,50 @@ None. Multi-tenant isolation is strictly enforced across all querysets (`tenant=
 ## Deduplicated & Prioritized Findings Checklist (All 6 Passes)
 
 ### Critical
-- [ ] **C1**: `apps/bi/views/Dashboards/*.py` — All `write_audit_log` calls use wrong signature (`actor=...`, `target_model=...`, `target_id=...`) instead of positional `(user, obj, action, changes=None, tenant=None)`, causing `TypeError` 500 on every mutating action (create/edit/delete/publish/duplicate across all 4 entities). Fix: Rewrite all 15+ callsites to `write_audit_log(request.user, <instance>, "<action>", changes=..., tenant=request.tenant)`.
-- [ ] **C2**: `templates/bi/dashboards/dashboard/detail.html:109` — Nullable FK in filter argument raises `VariableDoesNotExist` 500 when `created_by` is None (L10). Fix: Guard with `{% if dashboard.created_by %}...{% else %}System Seed{% endif %}`.
+- [x] **C1**: `apps/bi/views/Dashboards/*.py` — All `write_audit_log` calls use wrong signature (`actor=...`, `target_model=...`, `target_id=...`) instead of positional `(user, obj, action, changes=None, tenant=None)`, causing `TypeError` 500 on every mutating action (create/edit/delete/publish/duplicate across all 4 entities). Fix: Rewrite all 15+ callsites to `write_audit_log(request.user, <instance>, "<action>", changes=..., tenant=request.tenant)`.
+- [x] **C2**: `templates/bi/dashboards/dashboard/detail.html:109` — Nullable FK in filter argument raises `VariableDoesNotExist` 500 when `created_by` is None (L10). Fix: Guard with `{% if dashboard.created_by %}...{% else %}System Seed{% endif %}`.
 
 ### Important
-- [ ] **I1**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:38`, `BiDashboardBookmarks.py:36`, `BiDashboardFilters.py:33` — Unguarded `dashboard_id` filter raises `ValueError` 500 on non-numeric `?dashboard=abc` (L11). Fix: Guard with `if dashboard_id and dashboard_id.isdigit():` in all 3 views.
-- [ ] **I2**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:59` — Unguarded `bookmark_id` raises `ValueError` 500 on non-numeric `?bookmark=abc` (L11). Fix: `if bookmark_id and bookmark_id.isdigit():`.
-- [ ] **I3**: `templates/bi/dashboards/canvas/viewer.html:111,127` — Invalid `dictsort` filter on `request.GET` breaks active filter selection. Fix: Attach `f.current_value = filter_values.get(f.filter_key, f.default_value)` in view and compare in template.
-- [ ] **I4**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:119-120` — Missing authorization on canvas builder (AJAX position mutation). Fix: Add `@tenant_admin_required` or creator/admin check.
-- [ ] **I5**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:60` & `BiDashboardBookmarks.py:206` — Cross-user bookmark IDOR: private bookmarks loadable by any tenant member. Fix: Scope with `Q(user=request.user) | Q(is_shared=True)` and add ownership check on `apply`.
-- [ ] **I6**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:21-40, 97-116` — Unpublished draft dashboards accessible to regular users. Fix: Return 403 if `not dashboard.is_published and not is_admin_or_author`.
-- [ ] **I7**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:33-36` — Broken role resolution check (`user_roles.filter(code=...)` but User has single `role` FK with `name`). Fix: Check `request.user.role.name.lower() == dashboard.role_required.lower()`.
-- [ ] **I8**: `apps/bi/forms/Dashboards/BiDashboardForms.py:47` — `slug` field `required=True` blocks auto-slugification in `clean()`. Fix: `self.fields["slug"].required = False`.
-- [ ] **I9**: `apps/bi/forms/Dashboards/BiDashboardFilterForms.py:39` — `filter_key` field `required=True` blocks auto-slugification in `clean()`. Fix: `self.fields["filter_key"].required = False`.
-- [ ] **I10**: `apps/bi/management/commands/seed_bi.py:58` — Flush block omits 10.8 dashboard models. Fix: Add all 4 model deletes to flush.
-- [ ] **I11**: `templates/bi/dashboards/widget/list.html:132`, `bookmark/list.html:125`, `filter/list.html:118` — Actions columns omit POST-delete forms with CSRF+confirm. Fix: Add inline POST delete forms.
-- [ ] **I12**: `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py:9-37` — Excluded `user` field bypasses uniqueness validation, causing unhandled `IntegrityError` 500 on duplicate names. Fix: Accept user in `__init__` and validate uniqueness in `clean()`.
-- [ ] **I13**: `templates/bi/dashboards/dashboard/detail.html:48-73` vs `apps/bi/views/Dashboards/BiDashboards.py:118,150,180,200` — Creator action buttons display for authors but views enforce `@tenant_admin_required` → 403. Fix: Align permissions.
-- [ ] **I14**: `apps/bi/views/Dashboards/BiDashboards.py:90` — Missing `select_related("calculated_measure", "semantic_model", "warehouse_table")` on detail widgets queryset → N+1. Fix: Add select_related.
-- [ ] **I15**: `apps/bi/views/Dashboards/BiDashboards.py:92-94` — Missing `.select_related("user")` on detail bookmarks queryset → N+1. Fix: Add select_related.
-- [ ] **I16**: `apps/bi/views/Dashboards/BiDashboards.py:21-23` — 3 separate `.count()` queries instead of single `.aggregate()`. Fix: Consolidate.
-- [ ] **I17**: `apps/bi/views/Dashboards/BiDashboards.py:81`, `BiDashboardCanvasViews.py:27,102,125` — Redundant `prefetch_related` discarded by subsequent `.filter()` calls. Fix: Remove wasted prefetches.
-- [ ] **I18**: `apps/bi/forms/Dashboards/BiDashboardForms.py:14` — `is_published` in `Meta.fields` allows mass-assignment bypass of dedicated publish endpoint. Fix: Remove from fields.
-- [ ] **I19**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:145-146` — Exception `str(e)` leaked in JSON response. Fix: Return generic error message.
-- [ ] **I20**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:128-146` — Unvalidated coordinate values from raw JSON. Fix: Type-check + bounds-clamp.
+- [x] **I1**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:38`, `BiDashboardBookmarks.py:36`, `BiDashboardFilters.py:33` — Unguarded `dashboard_id` filter raises `ValueError` 500 on non-numeric `?dashboard=abc` (L11). Fix: Guard with `if dashboard_id and dashboard_id.isdigit():` in all 3 views.
+- [x] **I2**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:59` — Unguarded `bookmark_id` raises `ValueError` 500 on non-numeric `?bookmark=abc` (L11). Fix: `if bookmark_id and bookmark_id.isdigit():`.
+- [x] **I3**: `templates/bi/dashboards/canvas/viewer.html:111,127` — Invalid `dictsort` filter on `request.GET` breaks active filter selection. Fix: Attach `f.current_value = filter_values.get(f.filter_key, f.default_value)` in view and compare in template.
+- [x] **I4**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:119-120` — Missing authorization on canvas builder (AJAX position mutation). Fix: Add `@tenant_admin_required` or creator/admin check.
+- [x] **I5**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:60` & `BiDashboardBookmarks.py:206` — Cross-user bookmark IDOR: private bookmarks loadable by any tenant member. Fix: Scope with `Q(user=request.user) | Q(is_shared=True)` and add ownership check on `apply`.
+- [x] **I6**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:21-40, 97-116` — Unpublished draft dashboards accessible to regular users. Fix: Return 403 if `not dashboard.is_published and not is_admin_or_author`.
+- [x] **I7**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:33-36` — Broken role resolution check (`user_roles.filter(code=...)` but User has single `role` FK with `name`). Fix: Check `request.user.role.name.lower() == dashboard.role_required.lower()`.
+- [x] **I8**: `apps/bi/forms/Dashboards/BiDashboardForms.py:47` — `slug` field `required=True` blocks auto-slugification in `clean()`. Fix: `self.fields["slug"].required = False`.
+- [x] **I9**: `apps/bi/forms/Dashboards/BiDashboardFilterForms.py:39` — `filter_key` field `required=True` blocks auto-slugification in `clean()`. Fix: `self.fields["filter_key"].required = False`.
+- [x] **I10**: `apps/bi/management/commands/seed_bi.py:58` — Flush block omits 10.8 dashboard models. Fix: Add all 4 model deletes to flush.
+- [x] **I11**: `templates/bi/dashboards/widget/list.html:132`, `bookmark/list.html:125`, `filter/list.html:118` — Actions columns omit POST-delete forms with CSRF+confirm. Fix: Add inline POST delete forms.
+- [x] **I12**: `apps/bi/forms/Dashboards/BiDashboardBookmarkForms.py:9-37` — Excluded `user` field bypasses uniqueness validation, causing unhandled `IntegrityError` 500 on duplicate names. Fix: Accept user in `__init__` and validate uniqueness in `clean()`.
+- [x] **I13**: `templates/bi/dashboards/dashboard/detail.html:48-73` vs `apps/bi/views/Dashboards/BiDashboards.py:118,150,180,200` — Creator action buttons display for authors but views enforce `@tenant_admin_required` → 403. Fix: Align permissions.
+- [x] **I14**: `apps/bi/views/Dashboards/BiDashboards.py:90` — Missing `select_related("calculated_measure", "semantic_model", "warehouse_table")` on detail widgets queryset → N+1. Fix: Add select_related.
+- [x] **I15**: `apps/bi/views/Dashboards/BiDashboards.py:92-94` — Missing `.select_related("user")` on detail bookmarks queryset → N+1. Fix: Add select_related.
+- [x] **I16**: `apps/bi/views/Dashboards/BiDashboards.py:21-23` — 3 separate `.count()` queries instead of single `.aggregate()`. Fix: Consolidate.
+- [x] **I17**: `apps/bi/views/Dashboards/BiDashboards.py:81`, `BiDashboardCanvasViews.py:27,102,125` — Redundant `prefetch_related` discarded by subsequent `.filter()` calls. Fix: Remove wasted prefetches.
+- [x] **I18**: `apps/bi/forms/Dashboards/BiDashboardForms.py:14` — `is_published` in `Meta.fields` allows mass-assignment bypass of dedicated publish endpoint. Fix: Remove from fields.
+- [x] **I19**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:145-146` — Exception `str(e)` leaked in JSON response. Fix: Return generic error message.
+- [x] **I20**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:128-146` — Unvalidated coordinate values from raw JSON. Fix: Type-check + bounds-clamp.
 
 ### Minor
-- [ ] **M1**: `apps/bi/views/Dashboards/BiDashboardBookmarks.py:211` — Hardcoded URL in bookmark apply. Fix: Use `reverse(...)`.
-- [ ] **M2**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:97` — Kiosk view ignores `is_kiosk_enabled`. Fix: Return 403 when disabled.
-- [ ] **M3**: `apps/bi/views/Dashboards/BiDashboards.py:227` — Duplicate slug collision unhandled. Fix: Check existence and append suffix.
-- [ ] **M4**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134` — Builder AJAX missing `AuditLog` entry. Fix: Add `write_audit_log`.
-- [ ] **M5**: `templates/bi/dashboards/canvas/viewer.html:83,137,161` & `builder.html:32,61` — Missing `aria-label` on icon-only buttons. Fix: Add descriptive labels.
-- [ ] **M6**: `templates/bi/dashboards/canvas/viewer.html:33-38` — Missing outside-click dismiss on bookmark menu. Fix: Add document click listener.
-- [ ] **M7**: `templates/bi/dashboards/widget/detail.html` — Unrendered `data_preview` context var. Fix: Add preview card.
-- [ ] **M8**: `templates/bi/dashboards/bookmark/detail.html` — Unrendered `crossfilter_state_pretty` context var. Fix: Add JSON block.
-- [ ] **M9**: `templates/bi/dashboards/dashboard/list.html:151` — N+1 via `{{ d.widgets.count }}` in loop. Fix: Annotate `widget_count` in view.
-- [ ] **M10**: `apps/bi/models/Dashboards/BiDashboardBookmarks.py:61-62` — FK hop in `__str__` → N+1 risk (L18). Fix: Simplify to `f"{self.name} ({self.number})"`.
-- [ ] **M11**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:50` — Unused `semantic_models` queryset. Fix: Remove.
-- [ ] **M12**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:49`, `BiDashboardBookmarks.py:49`, `BiDashboardFilters.py:44` — Heavy field loading on dropdown querysets. Fix: `.only("id", "title")`.
-- [ ] **M13**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:23`, `BiDashboardBookmarks.py:21`, `BiDashboardFilters.py:19` — Missing `.defer()` on unrendered JSON fields. Fix: Defer heavy JSON columns.
-- [ ] **M14**: `apps/bi/models/Dashboards/BiDashboards.py:95-108` & `BiDashboardWidgets.py:117-130` — Missing composite tenant indexes. Fix: Add `(tenant, -created_at)` and `(tenant, warehouse_table)`.
-- [ ] **M15**: `apps/bi/management/commands/seed_bi.py:2115` — Dead `drill_ref` query. Fix: Remove.
-- [ ] **M16**: `templates/bi/dashboards/canvas/viewer.html:226` — Duplicate Chart.js script inclusion. Fix: Remove redundant CDN tag.
-- [ ] **M17**: `templates/bi/dashboards/dashboard/list.html:70-112` — Theme filter omitted from UI. Fix: Add theme dropdown.
-- [ ] **M18**: `templates/bi/dashboards/canvas/viewer.html:35,41` & `builder.html:48,52` — `.count` + iteration dual query. Fix: Use `|length`.
-- [ ] **M19**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:151-153` — Unbounded queryset fetch in builder. Fix: Slice and `.only()`.
-- [ ] **M20**: `templates/bi/dashboards/dashboard/list.html:168-180` — Missing direct edit/delete on card grid. Fix: Add edit/delete to card footer.
+- [x] **M1**: `apps/bi/views/Dashboards/BiDashboardBookmarks.py:211` — Hardcoded URL in bookmark apply. Fix: Use `reverse(...)`.
+- [x] **M2**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:97` — Kiosk view ignores `is_kiosk_enabled`. Fix: Return 403 when disabled.
+- [x] **M3**: `apps/bi/views/Dashboards/BiDashboards.py:227` — Duplicate slug collision unhandled. Fix: Check existence and append suffix.
+- [x] **M4**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:134` — Builder AJAX missing `AuditLog` entry. Fix: Add `write_audit_log`.
+- [x] **M5**: `templates/bi/dashboards/canvas/viewer.html:83,137,161` & `builder.html:32,61` — Missing `aria-label` on icon-only buttons. Fix: Add descriptive labels.
+- [x] **M6**: `templates/bi/dashboards/canvas/viewer.html:33-38` — Missing outside-click dismiss on bookmark menu. Fix: Add document click listener.
+- [x] **M7**: `templates/bi/dashboards/widget/detail.html` — Unrendered `data_preview` context var. Fix: Add preview card.
+- [x] **M8**: `templates/bi/dashboards/bookmark/detail.html` — Unrendered `crossfilter_state_pretty` context var. Fix: Add JSON block.
+- [x] **M9**: `templates/bi/dashboards/dashboard/list.html:151` — N+1 via `{{ d.widgets.count }}` in loop. Fix: Annotate `widget_count` in view.
+- [x] **M10**: `apps/bi/models/Dashboards/BiDashboardBookmarks.py:61-62` — FK hop in `__str__` → N+1 risk (L18). Fix: Simplify to `f"{self.name} ({self.number})"`.
+- [x] **M11**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:50` — Unused `semantic_models` queryset. Fix: Remove.
+- [x] **M12**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:49`, `BiDashboardBookmarks.py:49`, `BiDashboardFilters.py:44` — Heavy field loading on dropdown querysets. Fix: `.only("id", "title")`.
+- [x] **M13**: `apps/bi/views/Dashboards/BiDashboardWidgets.py:23`, `BiDashboardBookmarks.py:21`, `BiDashboardFilters.py:19` — Missing `.defer()` on unrendered JSON fields. Fix: Defer heavy JSON columns.
+- [x] **M14**: `apps/bi/models/Dashboards/BiDashboards.py:95-108` & `BiDashboardWidgets.py:117-130` — Missing composite tenant indexes. Fix: Add `(tenant, -created_at)` and `(tenant, warehouse_table)`.
+- [x] **M15**: `apps/bi/management/commands/seed_bi.py:2115` — Dead `drill_ref` query. Fix: Remove.
+- [x] **M16**: `templates/bi/dashboards/canvas/viewer.html:226` — Duplicate Chart.js script inclusion. Fix: Remove redundant CDN tag.
+- [x] **M17**: `templates/bi/dashboards/dashboard/list.html:70-112` — Theme filter omitted from UI. Fix: Add theme dropdown.
+- [x] **M18**: `templates/bi/dashboards/canvas/viewer.html:35,41` & `builder.html:48,52` — `.count` + iteration dual query. Fix: Use `|length`.
+- [x] **M19**: `apps/bi/views/Dashboards/BiDashboardCanvasViews.py:151-153` — Unbounded queryset fetch in builder. Fix: Slice and `.only()`.
+- [x] **M20**: `templates/bi/dashboards/dashboard/list.html:168-180` — Missing direct edit/delete on card grid. Fix: Add edit/delete to card footer.
 
