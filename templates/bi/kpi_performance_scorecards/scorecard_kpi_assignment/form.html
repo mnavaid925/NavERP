@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Target Assignment{% else %}Assign KPI to Scorecard{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:scorecard_kpi_assignment_list' %}">Goal Tracking</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Assignment{% else %}New Assignment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Target: {{ assignment.kpi.name }}{% else %}Assign KPI to Scorecard{% endif %}</h1>
+        <p class="text-muted text-sm">Align KPI metrics into scorecard perspectives with target thresholds and weighting</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{{ assignment.scorecard.get_absolute_url }}{% else %}{% url 'bi:scorecard_kpi_assignment_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Scorecard & Metric Alignment -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Scorecard & Objective Association</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.scorecard.id_for_label }}">Performance Scorecard <span class="text-rose-500">*</span></label>
+                {{ form.scorecard }}
+                {% if form.scorecard.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.scorecard.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.kpi.id_for_label }}">KPI Definition <span class="text-rose-500">*</span></label>
+                {{ form.kpi }}
+                {% if form.kpi.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.kpi.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.perspective.id_for_label }}">Scorecard Perspective <span class="text-rose-500">*</span></label>
+                {{ form.perspective }}
+                {% if form.perspective.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.perspective.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.objective.id_for_label }}">Linked Strategic Objective (Optional)</label>
+                {{ form.objective }}
+                <div class="text-[11px] text-muted mt-1">Associate with strategy map cause-and-effect objective</div>
+                {% if form.objective.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.objective.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Target & Weight -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Target Value & Perspective Weighting</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.weight.id_for_label }}">Perspective Weight (%) <span class="text-rose-500">*</span></label>
+                {{ form.weight }}
+                {% if form.weight.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.weight.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_value.id_for_label }}">Target Value <span class="text-rose-500">*</span></label>
+                {{ form.target_value }}
+                {% if form.target_value.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.target_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.actual_value.id_for_label }}">Actual Value (Current)</label>
+                {{ form.actual_value }}
+                {% if form.actual_value.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.actual_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.benchmark_overlay_value.id_for_label }}">Benchmark Overlay</label>
+                {{ form.benchmark_overlay_value }}
+                {% if form.benchmark_overlay_value.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.benchmark_overlay_value.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Manager Notes & Display -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Manager Notes & Ordering</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group sm:col-span-2">
+                <label class="form-label" for="{{ form.manager_notes.id_for_label }}">Qualitative Performance Commentary</label>
+                {{ form.manager_notes }}
+                {% if form.manager_notes.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.manager_notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sort_order.id_for_label }}">Display Sort Order</label>
+                {{ form.sort_order }}
+                {% if form.sort_order.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.sort_order.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-4">
+        <a href="{% if is_edit %}{{ assignment.scorecard.get_absolute_url }}{% else %}{% url 'bi:scorecard_kpi_assignment_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Assignment{% else %}Assign KPI{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
