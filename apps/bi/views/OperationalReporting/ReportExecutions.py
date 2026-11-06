@@ -176,7 +176,7 @@ def report_execution_export(request, pk, export_format):
 
         writer = csv.writer(response)
         # Header row
-        writer.writerow([col.get("title", col.get("field")) for col in columns])
+        writer.writerow([csv_safe(col.get("title", col.get("field", ""))) for col in columns])
         # Data rows
         for row in rows:
             writer.writerow([csv_safe(row.get(col.get("field"), "")) for col in columns])
