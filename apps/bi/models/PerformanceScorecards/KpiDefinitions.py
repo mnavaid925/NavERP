@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 
 from apps.bi.models._base import TenantNumbered
@@ -177,3 +178,13 @@ class KpiDefinition(TenantNumbered):
             if lower <= cur <= upper:
                 return "green"
             return "amber"
+
+    def record_measurement(self, new_value, save=True):
+        """Update current value, shifting current to previous value."""
+        self.previous_value = self.current_value
+        self.current_value = Decimal(str(new_value))
+        self.last_calculated_at = timezone.now()
+        if save:
+            self.save(update_fields=["previous_value", "current_value", "last_calculated_at", "updated_at"])
+        return self
+
