@@ -37,7 +37,7 @@
 | **M5** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Undefined utility class `text-primary` used instead of `text-brand` (L13) | [x] fixed — replaced text-primary with text-brand across all 10.11 templates |
 | **M6** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Filter form labels and quick refresh labels missing `for` / `id` association | [x] fixed — added matching for and id attributes to filter form controls and quick refresh form |
 | **M7** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Inline JavaScript confirm handlers interpolating unescaped dynamic model names with single-quote breakages | [x] fixed — used static confirmation messages without dynamic interpolation |
-| **M8** | Minor | `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` | `scorecard_id` in `scorecard_kpi_assignment_create` needs `.isdigit()` validation | [ ] open |
+| **M8** | Minor | `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` | `scorecard_id` in `scorecard_kpi_assignment_create` needs `.isdigit()` validation | [x] fixed — added isdigit validation on scorecard_id in initial kwargs |
 
 ---
 
