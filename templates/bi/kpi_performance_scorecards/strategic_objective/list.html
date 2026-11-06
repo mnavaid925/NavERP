@@ -78,12 +78,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Code, name, intent..." class="form-input">
+                <label for="obj-filter-q" class="form-label text-xs">Search</label>
+                <input type="text" id="obj-filter-q" name="q" value="{{ request.GET.q }}" placeholder="Code, name, intent..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Perspective</label>
-                <select name="perspective" class="form-select">
+                <label for="obj-filter-perspective" class="form-label text-xs">Perspective</label>
+                <select id="obj-filter-perspective" name="perspective" class="form-select">
                     <option value="">All Perspectives</option>
                     {% for val, label in perspective_choices %}
                     <option value="{{ val }}" {% if request.GET.perspective == val %}selected{% endif %}>{{ label }}</option>
@@ -91,8 +91,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select">
+                <label for="obj-filter-status" class="form-label text-xs">Status</label>
+                <select id="obj-filter-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -100,8 +100,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">RAG Health</label>
-                <select name="rag_status" class="form-select">
+                <label for="obj-filter-rag" class="form-label text-xs">RAG Health</label>
+                <select id="obj-filter-rag" name="rag_status" class="form-select">
                     <option value="">All Health Statuses</option>
                     {% for val, label in rag_choices %}
                     <option value="{{ val }}" {% if request.GET.rag_status == val %}selected{% endif %}>{{ label }}</option>
@@ -109,8 +109,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Department</label>
-                <select name="org_unit" class="form-select">
+                <label for="obj-filter-org-unit" class="form-label text-xs">Department</label>
+                <select id="obj-filter-org-unit" name="org_unit" class="form-select">
                     <option value="">All Departments</option>
                     {% for org in org_units %}
                     <option value="{{ org.pk }}" {% if request.GET.org_unit == org.pk|stringformat:"d" %}selected{% endif %}>{{ org.name }}</option>
