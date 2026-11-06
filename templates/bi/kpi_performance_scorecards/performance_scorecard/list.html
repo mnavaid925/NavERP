@@ -236,7 +236,7 @@
                         <a href="{% url 'bi:performance_scorecard_edit' sc.pk %}" class="btn btn-icon btn-outline" title="Edit Scorecard">
                             <i data-lucide="pencil"></i>
                         </a>
-                        <form method="post" action="{% url 'bi:performance_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ sc.name }}?');">
+                        <form method="post" action="{% url 'bi:performance_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this scorecard?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon btn-danger" title="Delete Scorecard">
                                 <i data-lucide="trash-2"></i>
