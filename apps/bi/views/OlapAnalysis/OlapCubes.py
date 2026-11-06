@@ -138,6 +138,7 @@ def olap_cube_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def olap_cube_delete(request, pk):
     cube = bi_object(request, OlapCube, pk)
