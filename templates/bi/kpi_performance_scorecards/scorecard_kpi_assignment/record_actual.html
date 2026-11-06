@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Record Actual Measurement — {{ assignment.kpi.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:scorecard_kpi_assignment_list' %}">Goal Tracking</a>
+            <span class="sep">/</span>
+            <a href="{{ assignment.scorecard.get_absolute_url }}">{{ assignment.scorecard.name }}</a>
+            <span class="sep">/</span>
+            <span>Record Measurement</span>
+        </div>
+        <h1 class="page-title">Record Actual Measurement: {{ assignment.kpi.name }}</h1>
+        <p class="text-muted text-sm">Update current performance metrics and capture qualitative root-cause commentary for scorecard reviews</p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ assignment.scorecard.get_absolute_url }}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Scorecard</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-2xl">
+    <!-- Current Target Overview Card -->
+    <div class="card mb-6">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Current Target Baseline</h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="p-3 bg-slate-50 rounded-lg">
+                    <div class="text-xs text-muted uppercase font-medium">Target Value</div>
+                    <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ assignment.target_value|floatformat:2 }}</div>
+                    <div class="text-xs text-muted">{{ assignment.kpi.get_unit_of_measure_display }}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded-lg">
+                    <div class="text-xs text-muted uppercase font-medium">Last Recorded</div>
+                    <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ assignment.actual_value|floatformat:2 }}</div>
+                    <div class="text-xs text-muted">{% if assignment.evaluated_at %}{{ assignment.evaluated_at|date:"M d, Y" }}{% else %}Not recorded{% endif %}</div>
+                </div>
+                <div class="p-3 bg-slate-50 rounded-lg">
+                    <div class="text-xs text-muted uppercase font-medium">Direction</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-2">{{ assignment.kpi.get_target_direction_display }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Measurement Entry Form -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">New Performance Measurement</h3>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.actual_value.id_for_label }}">New Actual Value <span class="text-rose-500">*</span></label>
+                    {{ form.actual_value }}
+                    {% if form.actual_value.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.actual_value.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.manager_notes.id_for_label }}">Performance Notes & Qualitative Rationale</label>
+                    {{ form.manager_notes }}
+                    <div class="text-[11px] text-muted mt-1">Document factors contributing to positive progress or plans to mitigate negative variances.</div>
+                    {% if form.manager_notes.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.manager_notes.errors }}</div>{% endif %}
+                </div>
+
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                    <a href="{{ assignment.scorecard.get_absolute_url }}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>Save Measurement</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
