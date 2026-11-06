@@ -111,6 +111,11 @@ class OlapCube(TenantNumbered):
     def measure_count(self):
         return len(self.measures_config) if isinstance(self.measures_config, list) else 0
 
+    def refresh_cube(self):
+        from django.utils import timezone
+        self.last_refreshed_at = timezone.now()
+        self.save(update_fields=["last_refreshed_at", "updated_at"])
+
     def save(self, *args, **kwargs):
         if not self.slug:
             base_slug = slugify(self.name) or "cube"
