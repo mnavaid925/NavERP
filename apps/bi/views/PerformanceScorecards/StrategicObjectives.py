@@ -84,10 +84,9 @@ def strategic_objective_detail(request, pk):
         StrategicObjective,
         pk,
         select_related=("parent_objective", "org_unit", "owner"),
-        prefetch_related=("child_objectives", "scorecard_kpis__kpi", "scorecard_kpis__scorecard"),
     )
-    child_objectives = objective.child_objectives.all().order_by("sort_order", "name")
-    assigned_kpis = objective.scorecard_kpis.select_related("kpi", "scorecard").order_by("scorecard__name", "kpi__name")
+    child_objectives = list(objective.child_objectives.all().order_by("sort_order", "name"))
+    assigned_kpis = list(objective.scorecard_kpis.select_related("kpi", "scorecard").order_by("scorecard__name", "kpi__name"))
 
     context = {
         "objective": objective,
