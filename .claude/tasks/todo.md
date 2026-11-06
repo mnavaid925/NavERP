@@ -7,11 +7,178 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.11: KPI & Performance Scorecards (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.11.md` (2026-11-06)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.10.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0025_datablenddefinition_idx_bbld_ten_user_and_more.py`, so **10.11 claims `0026`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.11.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/PerformanceScorecards/`
+> Template folder name: `templates/bi/kpi_performance_scorecards/{kpi_definition,performance_scorecard,scorecard_kpi_assignment,strategic_objective}/` + `strategy_map.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **KPI & Performance Scorecards Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical & Performance Scope:
+    - `KpiDefinition`:
+      - Master catalog of Key Performance Indicators. Captures metric code, name, category, default perspective, ownership, measurement units, calculation source (manual, 10.4 semantic measure, formula expression), target optimization direction, warning/critical threshold boundaries, current/previous values, and industry benchmark baselines.
+      - Optimization direction: `target_direction` (`maximize`, `minimize`, `in_range`).
+      - Unit of measure: `unit_of_measure` (`currency`, `percentage`, `count`, `days`, `hours`, `ratio`, `score`).
+      - Review cadence: `tracking_frequency` (`daily`, `weekly`, `monthly`, `quarterly`, `annual`).
+      - Calculation sources: `calculation_type` (`manual`, `semantic_measure`, `formula_expression`, `aggregation`), linking to `bi.CalculatedMeasure` (10.4) or custom formulas.
+      - Threshold bands: `target_value`, `warning_threshold`, `critical_threshold`.
+      - Benchmarking: `industry_benchmark_value`, `benchmark_source`, `benchmark_percentile`, `previous_value`, `current_value`.
+      - Ownership & Accountability: `owner` (`settings.AUTH_USER_MODEL`, SET_NULL), `department` (`core.OrgUnit`, SET_NULL).
+      - Lifecycle status: `status` (`draft`, `active`, `under_review`, `deprecated`, `archived`), `is_active` boolean.
+    - `PerformanceScorecard`:
+      - The organizational scorecard container. Governs Balanced Scorecard perspectives, scorecard archetypes, review cadence, fiscal year, perspective weighting, overall calculated performance score, and aggregate traffic-light health status.
+      - Scorecard archetypes: `scorecard_type` (`balanced_scorecard`, `executive`, `departmental`, `operational`, `strategic_initiative`).
+      - 4 Kaplan & Norton perspectives weighting: `financial_weight` (25.00), `customer_weight` (25.00), `internal_process_weight` (25.00), `learning_growth_weight` (25.00).
+      - Review cadence & temporal scope: `review_period` (`monthly`, `quarterly`, `semi_annual`, `annual`, `rolling_12_months`), `fiscal_year` (default 2026).
+      - Aggregate score & status: `overall_score` (0.00–100.00%), `overall_rag_status` (`green`, `amber`, `red`, `gray`).
+      - Ownership & publication: `owner` (`settings.AUTH_USER_MODEL`, SET_NULL), `org_unit` (`core.OrgUnit`, SET_NULL), `is_default`, `is_published`, `status` (`draft`, `active`, `in_review`, `closed`, `archived`).
+    - `ScorecardKpiAssignment`:
+      - Operational junction linking a `KpiDefinition` into a `PerformanceScorecard` and optional `StrategicObjective`.
+      - Manages perspective classification (`financial`, `customer`, `internal_process`, `learning_growth`), assigned `weight` percentage, `target_value`, `actual_value`.
+      - Automated plan-vs-actual variance: `variance` (`actual_value - target_value`), `variance_percentage`.
+      - Traffic-light RAG status indicator: `rag_status` (`green`, `amber`, `red`, `gray`).
+      - Directional trend vector: `trend_direction` (`improving`, `steady`, `deteriorating`).
+      - Normalized scoring: `normalized_score` (0.00–100.00%).
+      - Benchmark overlay & gap: `benchmark_overlay_value`, `benchmark_gap` (`actual_value - benchmark_overlay_value`).
+      - Manager commentary: `manager_notes` for qualitative root-cause analysis during performance reviews.
+      - Display order: `sort_order`.
+    - `StrategicObjective`:
+      - Defines high-level strategic objectives organized across the 4 Balanced Scorecard perspectives.
+      - Cause-and-effect relationship mapping via self-referential `parent_objective` FK (`StrategicObjective`, SET_NULL).
+      - Scope & intent: `name`, `code`, `statement_of_intent` (narrative strategic rationale), `target_date`.
+      - Health roll-up: `rag_status` (`green`, `amber`, `red`, `gray`), `alignment_score` (0.00–100.00% derived from child assigned KPIs).
+      - Ownership: `owner` (`settings.AUTH_USER_MODEL`, SET_NULL), `org_unit` (`core.OrgUnit`, SET_NULL), `status` (`proposed`, `active`, `achieved`, `postponed`, `canceled`), `sort_order`.
+  - Sibling Hand-offs & Boundaries:
+    - 10.4 (`SemanticLayer`): `CalculatedMeasure` and `SemanticModel` providing automated values to KPI definitions.
+    - 10.8 (`Dashboards`): Executive dashboards where scorecard summary widgets and KPI cards are embedded.
+    - 10.9 (`OperationalReporting`): Standard operational reports where scorecard data can be rendered into executive briefing packs.
+    - 10.10 (`SelfServiceAnalytics`): Ad-hoc query definitions supplying exploratory measure baselines to KPI libraries.
+    - 10.11 (`PerformanceScorecards` — THIS SUB-MODULE): Centralized KPI catalogs, Balanced Scorecards, plan-vs-actual variance, RAG traffic lights, directional trend arrows, industry benchmarking, and strategy maps.
+    - 10.16 (`AlertsAndSubscriptions` — DOWNSTREAM): Automated threshold breach notifications and metric subscriptions.
+  - Audit logging: Administrative actions (create, edit, delete, recalculate, record actual) write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log`.
+- **Prefix Collision Sweep**: `BKPI` (KpiDefinition), `BSCR` (PerformanceScorecard), `BSCI` (ScorecardKpiAssignment), `BOBJ` (StrategicObjective) verified 100% collision-free repository-wide.
+
+---
+
+## 10.11-0 — Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO external automated scraping or unauthenticated webhook listeners for metric ingestion** — Automated external feeds and SaaS metric syndication belong in Sub-module 10.19 Integration & API Hub.
+- [ ] **NO heavy WebSockets multi-cursor collaborative co-authoring engine** — Asynchronous manager notes, audit trails, and review workflow states provide enterprise governance without WebSockets complexity.
+- [ ] **NO machine-learning forecast regressors or predictive models on KPIs** — Belongs downstream in Sub-module 10.13 Predictive & Advanced Analytics.
+- [ ] **NO direct automated writeback modifying General Ledger accounts** — Financial ledger posting belongs strictly to Module 2 Accounting (`accounting`).
+
+---
+
+## Sub-module 10.11 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.11.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: KpiDefinition (`BKPI-`)**
+  - [ ] Model: `apps/bi/models/PerformanceScorecards/KpiDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BKPI"`)
+  - [ ] Form: `apps/bi/forms/PerformanceScorecards/KpiDefinitions.py` (`KpiDefinitionForm`, `KpiDefinitionRefreshForm`)
+  - [ ] Views: `apps/bi/views/PerformanceScorecards/KpiDefinitions.py` (list, detail, create, edit, delete, refresh_value)
+  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/KpiDefinitions.py` (`kpi_definition_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/list.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/detail.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/form.html`
+- [ ] **Entity 2: PerformanceScorecard (`BSCR-`)**
+  - [ ] Model: `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCR"`)
+  - [ ] Form: `apps/bi/forms/PerformanceScorecards/PerformanceScorecards.py` (`PerformanceScorecardForm`, `PerformanceScorecardRecalculateForm`)
+  - [ ] Views: `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py` (list, detail, create, edit, delete, strategy_map, recalculate)
+  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/PerformanceScorecards.py` (`performance_scorecard_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/list.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/detail.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/form.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/strategy_map.html`
+- [ ] **Entity 3: ScorecardKpiAssignment (`BSCI-`)**
+  - [ ] Model: `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCI"`)
+  - [ ] Form: `apps/bi/forms/PerformanceScorecards/ScorecardKpiAssignments.py` (`ScorecardKpiAssignmentForm`, `ScorecardKpiRecordActualForm`)
+  - [ ] Views: `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` (list, detail, create, edit, delete, record_actual)
+  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/ScorecardKpiAssignments.py` (`scorecard_kpi_assignment_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/list.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/detail.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/form.html`
+- [ ] **Entity 4: StrategicObjective (`BOBJ-`)**
+  - [ ] Model: `apps/bi/models/PerformanceScorecards/StrategicObjectives.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOBJ"`)
+  - [ ] Form: `apps/bi/forms/PerformanceScorecards/StrategicObjectives.py` (`StrategicObjectiveForm`)
+  - [ ] Views: `apps/bi/views/PerformanceScorecards/StrategicObjectives.py` (list, detail, create, edit, delete)
+  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/StrategicObjectives.py` (`strategic_objective_*`)
+  - [ ] Templates:
+    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/list.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/detail.html`
+    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Add re-exports in `apps/bi/models/PerformanceScorecards/__init__.py` and `apps/bi/models/__init__.py`
+- [ ] Add re-exports in `apps/bi/forms/PerformanceScorecards/__init__.py` and `apps/bi/forms/__init__.py`
+- [ ] Add re-exports in `apps/bi/views/PerformanceScorecards/__init__.py` and `apps/bi/views/__init__.py`
+- [ ] Assemble URL patterns in `apps/bi/urls/PerformanceScorecards/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Add `LIVE_LINKS["10.11"]` in `apps/core/navigation.py`:
+  - `"KPI Library & Definitions": "bi:kpi_definition_list"`
+  - `"Scorecards & Balanced Scorecard": "bi:performance_scorecard_list"`
+  - `"Goal & Target Tracking": "bi:scorecard_kpi_assignment_list"`
+  - `"Benchmarking": "bi:kpi_definition_list"`
+  - `"Strategy Maps & Alignment": "bi:strategic_objective_list"`
+- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data (KPI definitions across 4 BSC perspectives, scorecard containers, assignments with variances and RAG indicators, and strategic objectives with cause-and-effect links)
+- [ ] Run `makemigrations bi` (claiming `0026`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+
+### Phase 3.5: Smoke Testing
+- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+
+### Phase 4: Six-Pass Serial Review
+- [ ] Pass 1: Code Reviewer
+- [ ] Pass 2: Explorer
+- [ ] Pass 3: Frontend Reviewer
+- [ ] Pass 4: Performance Reviewer
+- [ ] Pass 5: QA Smoke Tester
+- [ ] Pass 6: Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.11.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+
+### Phase 6: Automated Test Suite
+- [ ] Add shared 10.11 fixtures to `conftest.py`
+- [ ] Write `test_performancescorecards_models.py`
+- [ ] Write `test_performancescorecards_forms.py`
+- [ ] Write `test_performancescorecards_views.py`
+- [ ] Write `test_performancescorecards_security.py`
+- [ ] Run full unfiltered test suite and ensure 100% green
+
+### Phase 7: Skill & Documentation Close-out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.11 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.11 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.11.md`
+
+---
+
+## Later Passes / Deferred
+- **Automated External SaaS Metric Ingestion**: Direct API connectors scraping third-party SaaS tools (HubSpot, Salesforce, Stripe) for automated actuals ingestion -> Deferred to Sub-module 10.19 Integration & API Hub.
+- **Predictive Anomaly Detection & Forecast Trend Regressions on KPIs**: Machine learning models and trend forecasts on historical KPI series -> Belongs downstream in Sub-module 10.13 Predictive & Advanced Analytics.
+- **Bi-Directional Financial Budget Writeback to General Ledger**: Synchronizing scorecard target budgets with GL chart of accounts -> Belongs to integration with Module 2 Accounting (`accounting.Budget`).
+
+---
+
+## Review Notes
+(Filled in at the end of implementation)
+
+---
+
 # Sub-module 10.12: OLAP & Multidimensional Analysis (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.12.md` (2026-11-06)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.10.
 > **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
-> Migration is **incremental**: previous leaf is `0025_datablenddefinition_idx_bbld_ten_user_and_more.py`, so **10.12 claims `0026`** (see L43).
+> Migration is **incremental**: previous leaf is `0025_datablenddefinition_idx_bbld_ten_user_and_more.py` (claimed by 10.11 as `0026`), so **10.12 claims `0027`** (see L43).
 > Plan written from `.claude/tasks/research-bi-10.12.md` (Phase 1).
 > Package folder name: `apps/bi/{models,forms,views,urls}/OlapAnalysis/`
 > Template folder name: `templates/bi/olap_analysis/{olap_cube,pivot_view,what_if_scenario,writeback_cell}/` + `matrix.html` / `simulate.html`
