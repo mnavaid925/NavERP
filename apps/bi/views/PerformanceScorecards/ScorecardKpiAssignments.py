@@ -46,8 +46,8 @@ def scorecard_kpi_assignment_list(request):
         )
 
     scorecard_id = request.GET.get("scorecard", "").strip()
-    if scorecard_id:
-        qs = qs.filter(scorecard_id=scorecard_id)
+    if scorecard_id and scorecard_id.isdigit():
+        qs = qs.filter(scorecard_id=int(scorecard_id))
 
     perspective = request.GET.get("perspective", "").strip()
     if perspective:
