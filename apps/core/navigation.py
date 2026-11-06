@@ -2996,6 +2996,20 @@ LIVE_LINKS = {
         "Dashboard Filters": "bi:bi_dashboard_filter_list",
     },
 
+    # 10.9 Standard & Operational Reporting
+    "10.9": {
+        "Pre-Built Report Templates": "bi:report_definition_list",
+        "Pixel-Perfect & Regulatory Reports": "bi:report_definition_list",
+        "Parameterized & Drill Reports": "bi:report_parameter_list",
+        "Operational & Real-Time Reports": "bi:report_execution_list",
+        "Multi-Format Export": "bi:report_execution_list",
+        # Extra live leaves
+        "Report Definitions": "bi:report_definition_list",
+        "Report Parameters": "bi:report_parameter_list",
+        "Execution History": "bi:report_execution_list",
+        "Drill-Through Paths": "bi:report_drill_path_list",
+    },
+
 
 
 
