@@ -32,12 +32,14 @@ from apps.bi.models import (
     EtlPipelineVersion,
     IngestionPipeline,
     IngestionRun,
+    KpiDefinition,
     LakehouseZone,
     MdmGoldenRecord,
     MdmHierarchyNode,
     MdmReferenceCode,
     MdmSurvivorshipRule,
     OlapCube,
+    PerformanceScorecard,
     PivotAnalysisView,
     ReportDefinition,
     ReportDrillPath,
@@ -45,7 +47,9 @@ from apps.bi.models import (
     ReportParameter,
     SavedAnalysisView,
     ScenarioWritebackCell,
+    ScorecardKpiAssignment,
     SemanticModel,
+    StrategicObjective,
     TransformationStep,
     WarehouseStoragePolicy,
     WarehouseTable,
@@ -1634,6 +1638,157 @@ def writeback_cell_b(db, tenant_b, what_if_scenario_b, admin_user_b):
         adjustment_method="absolute",
         created_by=admin_user_b,
     )
+
+
+@pytest.fixture
+def kpi_definition_a(db, tenant_a, admin_user):
+    return KpiDefinition.objects.create(
+        tenant=tenant_a,
+        number="BKPI-00001",
+        code="REV_GROWTH_A",
+        name="Acme Quarterly Revenue Growth",
+        slug="acme-quarterly-revenue-growth",
+        category="finance",
+        perspective="financial",
+        target_direction="maximize",
+        unit_of_measure="percentage",
+        tracking_frequency="quarterly",
+        calculation_type="manual",
+        target_value=Decimal("15.0000"),
+        warning_threshold=Decimal("10.0000"),
+        critical_threshold=Decimal("5.0000"),
+        current_value=Decimal("14.5000"),
+        status="active",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def kpi_definition_b(db, tenant_b, admin_user_b):
+    return KpiDefinition.objects.create(
+        tenant=tenant_b,
+        number="BKPI-00002",
+        code="REV_GROWTH_B",
+        name="Globex Quarterly Revenue Growth",
+        slug="globex-quarterly-revenue-growth",
+        category="finance",
+        perspective="financial",
+        target_direction="maximize",
+        unit_of_measure="percentage",
+        tracking_frequency="quarterly",
+        calculation_type="manual",
+        target_value=Decimal("12.0000"),
+        warning_threshold=Decimal("8.0000"),
+        critical_threshold=Decimal("4.0000"),
+        current_value=Decimal("11.5000"),
+        status="active",
+        owner=admin_user_b,
+    )
+
+
+@pytest.fixture
+def performance_scorecard_a(db, tenant_a, admin_user):
+    return PerformanceScorecard.objects.create(
+        tenant=tenant_a,
+        number="BSCR-00001",
+        name="Acme Corporate Balanced Scorecard 2026",
+        slug="acme-corporate-balanced-scorecard-2026",
+        scorecard_type="balanced_scorecard",
+        review_period="quarterly",
+        fiscal_year=2026,
+        status="active",
+        is_published=True,
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def performance_scorecard_b(db, tenant_b, admin_user_b):
+    return PerformanceScorecard.objects.create(
+        tenant=tenant_b,
+        number="BSCR-00002",
+        name="Globex Corporate Balanced Scorecard 2026",
+        slug="globex-corporate-balanced-scorecard-2026",
+        scorecard_type="balanced_scorecard",
+        review_period="quarterly",
+        fiscal_year=2026,
+        status="active",
+        is_published=True,
+        owner=admin_user_b,
+    )
+
+
+@pytest.fixture
+def strategic_objective_a(db, tenant_a, admin_user):
+    return StrategicObjective.objects.create(
+        tenant=tenant_a,
+        number="BOBJ-00001",
+        code="GROW_REV_A",
+        name="Acme Accelerate Sustainable Revenue Growth",
+        slug="acme-accelerate-sustainable-revenue-growth",
+        perspective="financial",
+        statement_of_intent="Expand enterprise software market share by 25%.",
+        rag_status="green",
+        status="active",
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def strategic_objective_b(db, tenant_b, admin_user_b):
+    return StrategicObjective.objects.create(
+        tenant=tenant_b,
+        number="BOBJ-00002",
+        code="GROW_REV_B",
+        name="Globex Accelerate Sustainable Revenue Growth",
+        slug="globex-accelerate-sustainable-revenue-growth",
+        perspective="financial",
+        statement_of_intent="Expand manufacturing export share by 20%.",
+        rag_status="green",
+        status="active",
+        owner=admin_user_b,
+    )
+
+
+@pytest.fixture
+def scorecard_kpi_assignment_a(
+    db, tenant_a, performance_scorecard_a, kpi_definition_a, strategic_objective_a
+):
+    return ScorecardKpiAssignment.objects.create(
+        tenant=tenant_a,
+        number="BSCI-00001",
+        scorecard=performance_scorecard_a,
+        kpi=kpi_definition_a,
+        objective=strategic_objective_a,
+        perspective="financial",
+        weight=Decimal("25.00"),
+        target_value=Decimal("15.0000"),
+        actual_value=Decimal("14.5000"),
+        rag_status="green",
+        trend_direction="improving",
+        sort_order=10,
+    )
+
+
+@pytest.fixture
+def scorecard_kpi_assignment_b(
+    db, tenant_b, performance_scorecard_b, kpi_definition_b, strategic_objective_b
+):
+    return ScorecardKpiAssignment.objects.create(
+        tenant=tenant_b,
+        number="BSCI-00002",
+        scorecard=performance_scorecard_b,
+        kpi=kpi_definition_b,
+        objective=strategic_objective_b,
+        perspective="financial",
+        weight=Decimal("25.00"),
+        target_value=Decimal("12.0000"),
+        actual_value=Decimal("11.5000"),
+        rag_status="green",
+        trend_direction="improving",
+        sort_order=10,
+    )
+
 
 
 
