@@ -117,13 +117,11 @@ def scorecard_kpi_assignment_create(request):
             assignment.scorecard.recalculate_performance()
 
             write_audit_log(
+                request.user,
+                assignment,
+                "create",
+                changes={"summary": f"Assigned KPI {assignment.kpi.name} to Scorecard {assignment.scorecard.name}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="ScorecardKpiAssignment",
-                object_id=str(assignment.pk),
-                object_repr=str(assignment),
-                change_summary=f"Assigned KPI {assignment.kpi.name} to Scorecard {assignment.scorecard.name}",
             )
             messages.success(request, f"KPI '{assignment.kpi.name}' assigned to scorecard.")
             return redirect(assignment.scorecard.get_absolute_url())
@@ -149,13 +147,11 @@ def scorecard_kpi_assignment_edit(request, pk):
             assignment.scorecard.recalculate_performance()
 
             write_audit_log(
+                request.user,
+                assignment,
+                "update",
+                changes={"summary": f"Updated KPI Assignment {assignment.number} ({assignment.kpi.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ScorecardKpiAssignment",
-                object_id=str(assignment.pk),
-                object_repr=str(assignment),
-                change_summary=f"Updated KPI Assignment {assignment.number} ({assignment.kpi.name})",
             )
             messages.success(request, f"KPI assignment updated.")
             return redirect(assignment.scorecard.get_absolute_url())
@@ -177,18 +173,15 @@ def scorecard_kpi_assignment_delete(request, pk):
     assignment = bi_object(request, ScorecardKpiAssignment, pk, select_related=("scorecard", "kpi"))
     sc = assignment.scorecard
     kpi_name = assignment.kpi.name
+    write_audit_log(
+        request.user,
+        assignment,
+        "delete",
+        changes={"summary": f"Removed KPI {kpi_name} from Scorecard {sc.name}"},
+        tenant=request.tenant,
+    )
     assignment.delete()
     sc.recalculate_performance()
-
-    write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="ScorecardKpiAssignment",
-        object_id=str(pk),
-        object_repr=f"Assignment - {kpi_name}",
-        change_summary=f"Removed KPI {kpi_name} from Scorecard {sc.name}",
-    )
     messages.success(request, f"KPI '{kpi_name}' removed from scorecard.")
     return redirect(sc.get_absolute_url())
 
@@ -203,13 +196,11 @@ def scorecard_kpi_assignment_record_actual(request, pk):
             assignment.scorecard.recalculate_performance()
 
             write_audit_log(
+                request.user,
+                assignment,
+                "update",
+                changes={"summary": f"Recorded actual value {assignment.actual_value} for {assignment.kpi.name} on {assignment.scorecard.name}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="ScorecardKpiAssignment",
-                object_id=str(assignment.pk),
-                object_repr=str(assignment),
-                change_summary=f"Recorded actual value {assignment.actual_value} for {assignment.kpi.name} on {assignment.scorecard.name}",
             )
             messages.success(request, f"Recorded actual measurement ({assignment.actual_value}) for '{assignment.kpi.name}'.")
             return redirect(assignment.scorecard.get_absolute_url())
