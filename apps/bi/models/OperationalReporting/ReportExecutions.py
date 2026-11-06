@@ -130,6 +130,6 @@ class ReportExecution(TenantNumbered):
             "export_excel": "badge-green",
             "export_csv": "badge-slate",
             "export_docx": "badge-info",
-            "drill_through": "badge-purple",
+            "drill_through": "badge-info",
         }
         return mapping.get(self.execution_mode, "badge-slate")
