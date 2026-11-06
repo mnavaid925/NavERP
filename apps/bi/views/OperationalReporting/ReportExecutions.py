@@ -151,7 +151,7 @@ def report_execution_run(request, report_pk):
 @tenant_admin_required
 @require_POST
 def report_execution_delete(request, pk):
-    execution = bi_object(request, ReportExecution, pk)
+    execution = bi_object(request, ReportExecution, pk, select_related=("report",))
     num = execution.number
     with transaction.atomic():
         write_audit_log(
