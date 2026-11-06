@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
@@ -19,11 +20,35 @@ from apps.core.models import OrgUnit
 from apps.core.utils import write_audit_log
 
 
+def _can_view_saved_view(request, view_obj):
+    if view_obj.sharing_scope != "personal":
+        return True
+    if view_obj.created_by_id == request.user.pk:
+        return True
+    if request.user.is_superuser or getattr(request, "is_tenant_admin", False) or getattr(request.user, "is_tenant_admin", False):
+        return True
+    token = request.GET.get("token", "").strip()
+    if token and view_obj.share_token and token == view_obj.share_token:
+        return True
+    return False
+
+
+def _can_modify_saved_view(request, view_obj):
+    if view_obj.created_by_id == request.user.pk:
+        return True
+    if request.user.is_superuser or getattr(request, "is_tenant_admin", False) or getattr(request.user, "is_tenant_admin", False):
+        return True
+    return False
+
+
 @login_required
 def saved_analysis_view_list(request):
     qs = bi_scope(SavedAnalysisView.objects.all(), request, owner_field="created_by").select_related(
         "query", "org_unit", "created_by"
     )
+
+    if not (request.user.is_superuser or getattr(request, "is_tenant_admin", False) or getattr(request.user, "is_tenant_admin", False)):
+        qs = qs.filter(Q(sharing_scope__in=["team", "tenant_public"]) | Q(created_by=request.user))
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -72,6 +97,9 @@ def saved_analysis_view_detail(request, pk):
         pk,
         select_related=("query", "org_unit", "parent_view", "created_by"),
     )
+
+    if not _can_view_saved_view(request, view_obj):
+        raise PermissionDenied("You do not have permission to view this personal analysis view.")
 
     # Increment view counter
     view_obj.view_count += 1
@@ -133,6 +161,8 @@ def saved_analysis_view_create(request):
 @login_required
 def saved_analysis_view_edit(request, pk):
     view_obj = bi_object(request, SavedAnalysisView, pk)
+    if not _can_modify_saved_view(request, view_obj):
+        raise PermissionDenied("You do not have permission to modify this analysis view.")
     queries = AdHocQuery.objects.filter(tenant=request.tenant)
     org_units = OrgUnit.objects.filter(tenant=request.tenant)
 
@@ -169,6 +199,8 @@ def saved_analysis_view_edit(request, pk):
 @require_POST
 def saved_analysis_view_delete(request, pk):
     view_obj = bi_object(request, SavedAnalysisView, pk)
+    if not _can_modify_saved_view(request, view_obj):
+        raise PermissionDenied("You do not have permission to delete this analysis view.")
     name = view_obj.name
     number = view_obj.number
 
@@ -189,6 +221,8 @@ def saved_analysis_view_delete(request, pk):
 @transaction.atomic
 def saved_analysis_view_clone(request, pk):
     original = bi_object(request, SavedAnalysisView, pk)
+    if not _can_view_saved_view(request, original):
+        raise PermissionDenied("You do not have permission to clone this personal analysis view.")
 
     base_slug = slugify(f"Copy of {original.name}")[:90] or "view-copy"
     slug = base_slug
@@ -225,6 +259,8 @@ def saved_analysis_view_clone(request, pk):
 @login_required
 def saved_analysis_view_share(request, pk):
     view_obj = bi_object(request, SavedAnalysisView, pk)
+    if not _can_modify_saved_view(request, view_obj):
+        raise PermissionDenied("You do not have permission to change sharing settings for this analysis view.")
 
     if request.method == "POST":
         form = SavedAnalysisViewShareForm(request.POST, instance=view_obj, tenant=request.tenant)
@@ -260,6 +296,8 @@ def saved_analysis_view_explore(request, pk):
         pk,
         select_related=("query", "org_unit", "created_by"),
     )
+    if not _can_view_saved_view(request, view_obj):
+        raise PermissionDenied("You do not have permission to view this personal analysis view.")
     query = view_obj.query
 
     # Increment view counter
