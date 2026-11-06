@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from apps.bi.forms.SelfServiceAnalytics.SavedAnalysisViews import (
@@ -186,9 +187,17 @@ def saved_analysis_view_delete(request, pk):
 def saved_analysis_view_clone(request, pk):
     original = bi_object(request, SavedAnalysisView, pk)
 
+    base_slug = slugify(f"Copy of {original.name}")[:90] or "view-copy"
+    slug = base_slug
+    counter = 1
+    while SavedAnalysisView.objects.filter(tenant=request.tenant, slug=slug).exists():
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
     cloned = SavedAnalysisView.objects.create(
         tenant=request.tenant,
         name=f"Copy of {original.name}",
+        slug=slug,
         description=original.description,
         query=original.query,
         sharing_scope="personal",
