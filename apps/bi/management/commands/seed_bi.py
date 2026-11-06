@@ -2873,6 +2873,9 @@ class Command(BaseCommand):
             # ---------------------------------------------------------
             if not OlapCube.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
+                    from apps.accounting.models import Budget, FiscalPeriod, GLAccount
+                    from apps.core.models import OrgUnit
+
                     # Reference spine masters
                     gl_rev = GLAccount.objects.filter(tenant=tenant, code__startswith="4").first() or GLAccount.objects.filter(tenant=tenant).first()
                     gl_exp = GLAccount.objects.filter(tenant=tenant, code__startswith="5").first() or GLAccount.objects.filter(tenant=tenant).last()
