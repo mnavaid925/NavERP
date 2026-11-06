@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}OLAP Cubes & Aggregations — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>OLAP & Multidimensional Analysis</span>
+        </div>
+        <h1 class="page-title">OLAP Cubes & Aggregations</h1>
+        <p class="text-muted text-sm">Multidimensional data cubes, pre-aggregated cuboids, hierarchies, and fast slice-and-dice engines</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:pivot_view_list' %}" class="btn btn-outline">
+            <i data-lucide="table"></i>
+            <span>Pivot Views</span>
+        </a>
+        <a href="{% url 'bi:what_if_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="sliders"></i>
+            <span>What-If Scenarios</span>
+        </a>
+        <a href="{% url 'bi:olap_cube_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New OLAP Cube</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="box"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Cubes</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Cubes</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">ROLAP Cubes</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ rolap_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="database"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pre-Aggregated Rollups</div>
+            <div class="text-2xl font-bold text-amber-600">{{ rollup_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by name, slug, number..." class="form-input pl-9 w-full">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                </div>
+            </div>
+            <div class="w-48">
+                <select name="storage_mode" class="form-select w-full">
+                    <option value="">All Storage Modes</option>
+                    {% for val, label in storage_mode_choices %}
+                    <option value="{{ val }}" {% if request.GET.storage_mode == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-40">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.storage_mode or request.GET.status %}
+            <a href="{% url 'bi:olap_cube_list' %}" class="btn btn-outline">
+                <i data-lucide="x"></i>
+                <span>Clear</span>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Cube</th>
+                    <th>Storage Mode</th>
+                    <th>Fact Source</th>
+                    <th>Dimensions / Measures</th>
+                    <th>Time Intelligence</th>
+                    <th>Status</th>
+                    <th>Last Refreshed</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cube in cubes %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:olap_cube_detail' cube.pk %}" class="hover:text-blue-600 transition-colors">
+                                {{ cube.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-0.5">
+                            <span>{{ cube.number }}</span>
+                            <span class="text-slate-300">•</span>
+                            <span>{{ cube.slug }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if cube.storage_mode == 'rolap' %}
+                        <span class="badge badge-info">ROLAP</span>
+                        {% elif cube.storage_mode == 'summary_rollup' %}
+                        <span class="badge badge-green">Summary Rollup</span>
+                        {% else %}
+                        <span class="badge badge-purple">Hybrid</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cube.semantic_model %}
+                        <div class="text-xs font-medium text-slate-800">{{ cube.semantic_model.name }}</div>
+                        <div class="text-xs text-muted">Semantic Model</div>
+                        {% elif cube.warehouse_table %}
+                        <div class="text-xs font-medium text-slate-800 font-mono">{{ cube.warehouse_table.table_name }}</div>
+                        <div class="text-xs text-muted">Warehouse Table</div>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Unlinked</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs flex items-center gap-2">
+                            <span class="font-medium text-slate-700">{{ cube.dimension_count }} dims</span>
+                            <span class="text-slate-300">/</span>
+                            <span class="font-medium text-slate-700">{{ cube.measure_count }} measures</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if cube.time_intelligence_enabled %}
+                        <span class="badge badge-green">Enabled</span>
+                        {% else %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cube.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif cube.status == 'draft' %}
+                        <span class="badge badge-amber">Draft</span>
+                        {% else %}
+                        <span class="badge badge-muted">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cube.last_refreshed_at %}
+                        <span class="text-xs text-slate-600">{{ cube.last_refreshed_at|date:"Y-m-d H:i" }}</span>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Never</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:olap_cube_detail' cube.pk %}" class="btn btn-icon" title="View Cube Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:olap_cube_edit' cube.pk %}" class="btn btn-icon" title="Edit Cube">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:olap_cube_delete' cube.pk %}" onsubmit="return confirm('Are you sure you want to delete OLAP Cube {{ cube.name|escapejs }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Cube">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="box" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No OLAP Cubes Defined</h3>
+                            <p class="text-sm text-muted max-w-sm mx-auto mb-4">Create your first multidimensional data cube to power high-speed slicing, dicing, and pivot analysis.</p>
+                            <a href="{% url 'bi:olap_cube_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create OLAP Cube</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} cubes
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.storage_mode %}&storage_mode={{ request.GET.storage_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.storage_mode %}&storage_mode={{ request.GET.storage_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
