@@ -84,6 +84,7 @@ class StrategicObjective(TenantNumbered):
             models.Index(fields=["tenant", "perspective"], name="idx_bobj_ten_persp"),
             models.Index(fields=["tenant", "status"], name="idx_bobj_ten_stat"),
             models.Index(fields=["tenant", "parent_objective"], name="idx_bobj_ten_parent"),
+            models.Index(fields=["tenant", "rag_status"], name="idx_bobj_ten_rag"),
         ]
 
     def __str__(self):
