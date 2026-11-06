@@ -55,7 +55,7 @@ def writeback_cell_list(request):
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page", 1))
 
-    scenarios = WhatIfScenario.objects.filter(tenant=request.tenant).order_by("-created_at")
+    scenarios = WhatIfScenario.objects.filter(tenant=request.tenant).only("id", "name").order_by("-created_at")
 
     return render(
         request,
