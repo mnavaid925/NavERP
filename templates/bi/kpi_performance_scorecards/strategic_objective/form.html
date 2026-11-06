@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ objective.name }}{% else %}New Strategic Objective{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:strategic_objective_list' %}">Strategic Objectives</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Objective{% else %}New Objective{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Objective: {{ objective.name }}{% else %}Create Strategic Objective{% endif %}</h1>
+        <p class="text-muted text-sm">Define strategic objectives within Balanced Scorecard perspectives and configure cause-and-effect alignment hierarchies</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{{ objective.get_absolute_url }}{% else %}{% url 'bi:strategic_objective_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Objective Identification & Perspective -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Objective Identification & BSC Perspective</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.code.id_for_label }}">Objective Code <span class="text-rose-500">*</span></label>
+                {{ form.code }}
+                {% if form.code.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.code.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group sm:col-span-2">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Strategic Objective Name <span class="text-rose-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.perspective.id_for_label }}">Scorecard Perspective <span class="text-rose-500">*</span></label>
+                {{ form.perspective }}
+                {% if form.perspective.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.perspective.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Strategic Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_date.id_for_label }}">Target Completion Date</label>
+                {{ form.target_date }}
+                {% if form.target_date.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.target_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.sort_order.id_for_label }}">Strategy Map Sort Order</label>
+                {{ form.sort_order }}
+                {% if form.sort_order.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.sort_order.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cause-and-Effect Alignment -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Strategy Map Cause-and-Effect Linkage</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.parent_objective.id_for_label }}">Upstream Parent Objective (Driven Goal)</label>
+                {{ form.parent_objective }}
+                <div class="text-[11px] text-muted mt-1">Select the higher-level strategic objective that this initiative directly drives (e.g. Process objective drives Customer objective)</div>
+                {% if form.parent_objective.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.parent_objective.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.statement_of_intent.id_for_label }}">Statement of Strategic Intent & Rationale</label>
+                {{ form.statement_of_intent }}
+                <div class="text-[11px] text-muted mt-1">Provide clear operational context and hypotheses regarding why this objective is critical to business strategy</div>
+                {% if form.statement_of_intent.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.statement_of_intent.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Accountability -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Accountability & Governance</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Strategic Sponsor / Owner</label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.org_unit.id_for_label }}">Responsible Business Unit / Department</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.org_unit.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-4">
+        <a href="{% if is_edit %}{{ objective.get_absolute_url }}{% else %}{% url 'bi:strategic_objective_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Strategic Objective{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
