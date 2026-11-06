@@ -34,7 +34,7 @@
 | **M2** | Minor | `apps/bi/views/PerformanceScorecards/*.py` | Non-atomic multi-row mutations in scorecards, targets, and objectives should use `transaction.atomic()` | [x] fixed — wrapped mutations and recalculations in transaction.atomic |
 | **M3** | Minor | `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` | Chained FK traversal in `ScorecardKpiAssignment.__str__` | [x] fixed — made str resilient using fields_cache and id fallbacks |
 | **M4** | Minor | `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` | Redundant `select_related("kpi")` in scorecard recalculation and summary methods | [x] fixed — removed redundant select_related kpi from recalculate_performance and get_perspective_summary |
-| **M5** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Undefined utility class `text-primary` used instead of `text-brand` (L13) | [ ] open |
+| **M5** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Undefined utility class `text-primary` used instead of `text-brand` (L13) | [x] fixed — replaced text-primary with text-brand across all 10.11 templates |
 | **M6** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Filter form labels and quick refresh labels missing `for` / `id` association | [ ] open |
 | **M7** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Inline JavaScript confirm handlers interpolating unescaped dynamic model names with single-quote breakages | [ ] open |
 | **M8** | Minor | `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` | `scorecard_id` in `scorecard_kpi_assignment_create` needs `.isdigit()` validation | [ ] open |
