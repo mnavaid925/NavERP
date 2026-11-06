@@ -111,13 +111,11 @@ def strategic_objective_create(request):
             obj.recalculate_alignment()
 
             write_audit_log(
+                request.user,
+                obj,
+                "create",
+                changes={"summary": f"Created Strategic Objective {obj.number} ({obj.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="StrategicObjective",
-                object_id=str(obj.pk),
-                object_repr=str(obj),
-                change_summary=f"Created Strategic Objective {obj.number} ({obj.name})",
             )
             messages.success(request, f"Strategic Objective '{obj.name}' created.")
             return redirect(obj.get_absolute_url())
@@ -143,13 +141,11 @@ def strategic_objective_edit(request, pk):
             obj.recalculate_alignment()
 
             write_audit_log(
+                request.user,
+                obj,
+                "update",
+                changes={"summary": f"Updated Strategic Objective {obj.number} ({obj.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="StrategicObjective",
-                object_id=str(obj.pk),
-                object_repr=str(obj),
-                change_summary=f"Updated Strategic Objective {obj.number} ({obj.name})",
             )
             messages.success(request, f"Strategic Objective '{obj.name}' updated.")
             return redirect(obj.get_absolute_url())
@@ -171,16 +167,13 @@ def strategic_objective_delete(request, pk):
     obj = bi_object(request, StrategicObjective, pk)
     obj_name = obj.name
     obj_num = obj.number
-    obj.delete()
-
     write_audit_log(
+        request.user,
+        obj,
+        "delete",
+        changes={"summary": f"Deleted Strategic Objective {obj_num} ({obj_name})"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="StrategicObjective",
-        object_id=str(pk),
-        object_repr=f"{obj_num} - {obj_name}",
-        change_summary=f"Deleted Strategic Objective {obj_num} ({obj_name})",
     )
+    obj.delete()
     messages.success(request, f"Strategic Objective '{obj_name}' deleted.")
     return redirect("bi:strategic_objective_list")
