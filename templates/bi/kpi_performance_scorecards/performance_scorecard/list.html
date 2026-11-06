@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+
+{% block title %}Scorecards & Balanced Scorecard — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Scorecards & Balanced Scorecards</span>
+        </div>
+        <h1 class="page-title">Performance Scorecards</h1>
+        <p class="text-muted text-sm">Strategic and operational scorecards aligning Financial, Customer, Internal Process, and Learning & Growth perspectives</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:kpi_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="activity"></i>
+            <span>KPI Library</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_list' %}" class="btn btn-outline">
+            <i data-lucide="target"></i>
+            <span>Goal Tracking</span>
+        </a>
+        <a href="{% url 'bi:strategic_objective_list' %}" class="btn btn-outline">
+            <i data-lucide="compass"></i>
+            <span>Strategy Objectives</span>
+        </a>
+        <a href="{% url 'bi:performance_scorecard_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Scorecard</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layout-grid"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Scorecards</div>
+            <div class="text-2xl font-bold">{{ stats.total }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Scorecards</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ stats.active }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">On Track (Green)</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ stats.on_track }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Needs Attention</div>
+            <div class="text-2xl font-bold text-amber-600">{{ stats.needs_attention }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate">
+            <i data-lucide="alert-octagon"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Critical Off Track</div>
+            <div class="text-2xl font-bold text-rose-600">{{ stats.critical }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Search & Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Scorecard name, number..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Archetype</label>
+                <select name="scorecard_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.scorecard_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Cadence</label>
+                <select name="review_period" class="form-select">
+                    <option value="">All Periods</option>
+                    {% for val, label in period_choices %}
+                    <option value="{{ val }}" {% if request.GET.review_period == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Health RAG</label>
+                <select name="rag_status" class="form-select">
+                    <option value="">All RAG Statuses</option>
+                    {% for val, label in rag_choices %}
+                    <option value="{{ val }}" {% if request.GET.rag_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Department</label>
+                <select name="org_unit" class="form-select">
+                    <option value="">All Departments</option>
+                    {% for org in org_units %}
+                    <option value="{{ org.pk }}" {% if request.GET.org_unit == org.pk|stringformat:"d" %}selected{% endif %}>{{ org.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                {% if request.GET.q or request.GET.scorecard_type or request.GET.review_period or request.GET.rag_status or request.GET.org_unit or request.GET.status %}
+                <a href="{% url 'bi:performance_scorecard_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Scorecards Table -->
+<div class="card">
+    {% if scorecards %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scorecard Number</th>
+                    <th>Name & Department</th>
+                    <th>Archetype</th>
+                    <th>Review Period</th>
+                    <th>Fiscal Year</th>
+                    <th class="text-right">Performance Score</th>
+                    <th>Health Index</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sc in scorecards %}
+                <tr>
+                    <td>
+                        <div class="font-mono text-xs font-semibold text-primary">
+                            <a href="{{ sc.get_absolute_url }}">{{ sc.number }}</a>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{{ sc.get_absolute_url }}" class="hover:underline">{{ sc.name }}</a>
+                            {% if sc.is_default %}
+                            <span class="badge badge-info ml-1 text-[10px]">Default</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-muted">
+                            {% if sc.org_unit %}{{ sc.org_unit.name }}{% else %}Company-wide{% endif %}
+                            {% if sc.owner %}· Owner: {{ sc.owner.get_full_name|default:sc.owner.username }}{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium">{{ sc.get_scorecard_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-600">{{ sc.get_review_period_display }}</span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs">{{ sc.fiscal_year }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="font-mono text-sm font-bold {% if sc.overall_score >= 85 %}text-emerald-600{% elif sc.overall_score >= 70 %}text-amber-600{% elif sc.overall_score > 0 %}text-rose-600{% else %}text-slate-500{% endif %}">
+                            {{ sc.overall_score|floatformat:1 }}%
+                        </div>
+                    </td>
+                    <td>
+                        {% if sc.overall_rag_status == 'green' %}
+                        <span class="badge badge-green">On Track</span>
+                        {% elif sc.overall_rag_status == 'amber' %}
+                        <span class="badge badge-amber">Needs Attention</span>
+                        {% elif sc.overall_rag_status == 'red' %}
+                        <span class="badge badge-red">Critical / Off Track</span>
+                        {% else %}
+                        <span class="badge badge-muted">Not Evaluated</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sc.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif sc.status == 'draft' %}
+                        <span class="badge badge-slate">Draft</span>
+                        {% elif sc.status == 'in_review' %}
+                        <span class="badge badge-amber">In Review</span>
+                        {% elif sc.status == 'closed' %}
+                        <span class="badge badge-muted">Closed</span>
+                        {% else %}
+                        <span class="badge badge-red">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{{ sc.get_absolute_url }}" class="btn btn-icon btn-outline" title="View Scorecard">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:performance_scorecard_strategy_map' sc.pk %}" class="btn btn-icon btn-outline" title="Strategy Map">
+                            <i data-lucide="map"></i>
+                        </a>
+                        <a href="{% url 'bi:performance_scorecard_edit' sc.pk %}" class="btn btn-icon btn-outline" title="Edit Scorecard">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:performance_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ sc.name }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Scorecard">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if scorecards.paginator.num_pages > 1 %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if scorecards.has_previous %}
+            <a href="?page={{ scorecards.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </span>
+            {% endif %}
+
+            <span class="text-xs text-muted">
+                Page {{ scorecards.number }} of {{ scorecards.paginator.num_pages }} ({{ scorecards.paginator.count }} items)
+            </span>
+
+            {% if scorecards.has_next %}
+            <a href="?page={{ scorecards.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">
+            <i data-lucide="layout-grid"></i>
+        </div>
+        <h3>No Performance Scorecards Found</h3>
+        <p class="text-muted text-sm">Create Balanced Scorecards aligning strategic priorities across Financial, Customer, Internal Process, and Learning & Growth perspectives.</p>
+        <a href="{% url 'bi:performance_scorecard_create' %}" class="btn btn-primary mt-4">
+            <i data-lucide="plus"></i>
+            <span>Create First Scorecard</span>
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
