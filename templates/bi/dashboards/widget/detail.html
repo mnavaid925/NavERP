@@ -146,12 +146,51 @@
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <h2 class="text-base font-semibold">Chart Options & Configuration JSON</h2>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold">Sample Dataset Preview</h2>
+            {% if data_preview.change_pct %}
+            <span class="badge badge-green text-xs">{{ data_preview.change_pct }} Growth</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            {% if data_preview.kpi_value %}
+            <div class="p-4 bg-blue-50 border border-blue-100 rounded-lg text-center mb-4">
+                <span class="text-xs uppercase font-medium text-blue-700">Headline KPI Value</span>
+                <div class="text-3xl font-bold text-blue-900 mt-1">{{ data_preview.kpi_value }}</div>
+            </div>
+            {% endif %}
+            <div class="table-wrap">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            <th>Period / Label</th>
+                            <th class="text-right">Value Metric</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for label in data_preview.labels %}
+                        <tr>
+                            <td class="font-medium">{{ label }}</td>
+                            <td class="text-right font-mono text-slate-800">
+                                {% if forloop.counter0 == 0 %}42,000{% elif forloop.counter0 == 1 %}56,000{% elif forloop.counter0 == 2 %}68,000{% elif forloop.counter0 == 3 %}81,000{% elif forloop.counter0 == 4 %}94,000{% else %}115,000{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ chart_config_pretty }}</pre>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Chart Options & Configuration JSON</h2>
+        </div>
+        <div class="card-body">
+            <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto">{{ chart_config_pretty }}</pre>
+        </div>
     </div>
 </div>
 {% endblock %}
