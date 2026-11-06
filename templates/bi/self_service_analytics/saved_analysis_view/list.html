@@ -30,7 +30,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
             <div>
                 <label for="id_q" class="form-label">Search Views</label>
                 <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Name, number, description..." class="form-input">
@@ -45,10 +45,19 @@
                 </select>
             </div>
             <div>
-                <label for="id_favorite" class="form-label">Favorites & Templates</label>
-                <select id="id_favorite" name="favorite" class="form-select">
+                <label for="id_org_unit" class="form-label">Org Unit</label>
+                <select id="id_org_unit" name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_template" class="form-label">Templates</label>
+                <select id="id_template" name="template" class="form-select">
                     <option value="">All Saved Views</option>
-                    <option value="1" {% if request.GET.favorite == "1" %}selected{% endif %}>Favorites Only</option>
+                    <option value="1" {% if request.GET.template == "1" %}selected{% endif %}>Templates Only</option>
                 </select>
             </div>
             <div class="flex space-x-2">
@@ -169,10 +178,10 @@
         </div>
         <div class="flex space-x-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}{% if request.GET.template %}&template={{ request.GET.template }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
             {% endif %}
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}{% if request.GET.template %}&template={{ request.GET.template }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
             {% endif %}
         </div>
     </div>
