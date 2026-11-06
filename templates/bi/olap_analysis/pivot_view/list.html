@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Pivot & Cross-Tab Views — OLAP Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:olap_cube_list' %}">OLAP & Multidimensional</a>
+            <span class="sep">/</span>
+            <span>Pivot Views</span>
+        </div>
+        <h1 class="page-title">Pivot & Cross-Tab Views</h1>
+        <p class="text-muted text-sm">Interactive multidimensional cross-tabs with row/column dimension nesting, subtotals, and transactional drill-through</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:olap_cube_list' %}" class="btn btn-outline">
+            <i data-lucide="box"></i>
+            <span>OLAP Cubes</span>
+        </a>
+        <a href="{% url 'bi:what_if_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="sliders"></i>
+            <span>What-If Scenarios</span>
+        </a>
+        <a href="{% url 'bi:pivot_view_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Pivot View</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="table"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Views</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Cross-Tabs</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="star"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Bookmarked Favorites</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ favorite_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="external-link"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Drill-Through Enabled</div>
+            <div class="text-2xl font-bold text-amber-600">{{ drill_through_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search pivot views..." class="form-input pl-9 w-full">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                </div>
+            </div>
+            <div class="w-48">
+                <select name="cube" class="form-select w-full">
+                    <option value="">All Parent Cubes</option>
+                    {% for c in cubes %}
+                    <option value="{{ c.pk }}" {% if request.GET.cube == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-40">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.cube or request.GET.status %}
+            <a href="{% url 'bi:pivot_view_list' %}" class="btn btn-outline">
+                <i data-lucide="x"></i>
+                <span>Clear</span>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Pivot View</th>
+                    <th>Parent Cube</th>
+                    <th>Row × Col Dimensions</th>
+                    <th>Subtotals & Totals</th>
+                    <th>Drill-Through Target</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for view in views %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900 flex items-center gap-1.5">
+                            {% if view.is_favorite %}
+                            <i data-lucide="star" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
+                            {% endif %}
+                            <a href="{% url 'bi:pivot_view_detail' view.pk %}" class="hover:text-blue-600 transition-colors">
+                                {{ view.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-0.5">
+                            <span>{{ view.number }}</span>
+                            <span class="text-slate-300">•</span>
+                            <span>{{ view.slug }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium text-slate-800">
+                            <a href="{% url 'bi:olap_cube_detail' view.cube.pk %}" class="hover:underline text-blue-600">
+                                {{ view.cube.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ view.cube.number }}</div>
+                    </td>
+                    <td>
+                        <div class="text-xs">
+                            <span class="text-slate-700 font-medium">Rows:</span>
+                            <span class="text-slate-500">{{ view.row_dimensions|join:", "|default:"Default" }}</span>
+                        </div>
+                        <div class="text-xs mt-0.5">
+                            <span class="text-slate-700 font-medium">Cols:</span>
+                            <span class="text-slate-500">{{ view.column_dimensions|join:", "|default:"None" }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1 flex-wrap">
+                            {% if view.show_row_subtotals %}
+                            <span class="badge badge-info text-[10px]">Row Subtotals</span>
+                            {% endif %}
+                            {% if view.show_col_subtotals %}
+                            <span class="badge badge-purple text-[10px]">Col Subtotals</span>
+                            {% endif %}
+                            {% if view.show_grand_totals %}
+                            <span class="badge badge-green text-[10px]">Grand Totals</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if view.drill_through_enabled %}
+                        <div class="text-xs font-mono text-slate-700">{{ view.drill_through_target }}</div>
+                        <span class="badge badge-green text-[10px]">Enabled</span>
+                        {% else %}
+                        <span class="badge badge-slate text-[10px]">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if view.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif view.status == 'draft' %}
+                        <span class="badge badge-amber">Draft</span>
+                        {% else %}
+                        <span class="badge badge-muted">Archived</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:pivot_view_matrix' view.pk %}" class="btn btn-outline btn-sm text-blue-600 hover:bg-blue-50" title="Open Pivot Matrix">
+                                <i data-lucide="layout-grid"></i>
+                                <span>Matrix</span>
+                            </a>
+                            <a href="{% url 'bi:pivot_view_detail' view.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:pivot_view_edit' view.pk %}" class="btn btn-icon" title="Edit View">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:pivot_view_delete' view.pk %}" onsubmit="return confirm('Are you sure you want to delete Pivot View {{ view.name|escapejs }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete View">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="table" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Pivot Views Configured</h3>
+                            <p class="text-sm text-muted max-w-sm mx-auto mb-4">Build interactive cross-tab matrices to nest dimensions, calculate dynamic subtotals, and drill into transactions.</p>
+                            <a href="{% url 'bi:pivot_view_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Pivot View</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} views
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.cube %}&cube={{ request.GET.cube }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.cube %}&cube={{ request.GET.cube }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
