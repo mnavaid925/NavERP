@@ -87,7 +87,7 @@
   - **Issue**: `form.save_m2m()` is omitted after `form.save(commit=False)`.
   - **Fix**: Add `form.save_m2m()` immediately after `report.save()`.
 
-- [ ] **[M2] Pagination links drop `is_prebuilt` filter parameter**
+- [x] **[M2] Pagination links drop `is_prebuilt` filter parameter** (Fixed: appended `is_prebuilt` filter parameter to pagination links in `report_definition/list.html`)
   - **Location**: `templates/bi/operational_reporting/report_definition/list.html:223, 226`
   - **Issue**: Pagination links in report definition list preserve `q`, `category`, `report_type`, and `status`, but omit `is_prebuilt`.
   - **Fix**: Append `{% if is_prebuilt %}&is_prebuilt={{ is_prebuilt }}{% endif %}` to previous/next page link URLs.
