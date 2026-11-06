@@ -80,7 +80,7 @@ class ReportDrillPath(TenantNumbered):
     def badge_target_type(self):
         mapping = {
             "subreport": "badge-info",
-            "operational_report": "badge-purple",
+            "operational_report": "badge-slate",
             "erp_record_url": "badge-green",
         }
         return mapping.get(self.target_type, "badge-slate")
