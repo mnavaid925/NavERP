@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block title %}Visual Query Composer: {{ query.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_detail' query.pk %}">{{ query.number }}</a>
+            <span class="sep">/</span>
+            <span>Composer</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">Visual Query Composer: {{ query.name }}</h1>
+            <span class="badge {{ query.badge_source }}">{{ query.get_source_type_display }}</span>
+            <span class="badge {{ query.badge_status }}">{{ query.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ query.number }} · {{ query.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_detail' query.pk %}" class="btn btn-outline">
+            <i data-lucide="eye"></i>
+            <span>View Specs</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_query_export' query.pk %}" class="btn btn-outline">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+        </a>
+        <button type="button" id="btn-run-live" class="btn btn-outline text-emerald-600 border-emerald-300 hover:bg-emerald-50">
+            <i data-lucide="play"></i>
+            <span>Execute Live</span>
+        </button>
+        <button type="submit" form="composer-form" class="btn btn-primary">
+            <i data-lucide="save"></i>
+            <span>Save Configuration</span>
+        </button>
+    </div>
+</div>
+
+<form id="composer-form" method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Left Sidebar: Field Palette & Controls -->
+        <div class="lg:col-span-1 space-y-6">
+            <!-- Source Selector & Visual Type -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title text-sm font-semibold">1. Visualization & Limits</h3>
+                </div>
+                <div class="card-body space-y-4">
+                    <div class="form-group">
+                        <label for="id_visualization_type" class="form-label text-xs">Visual Format</label>
+                        {{ form.visualization_type }}
+                    </div>
+                    <div class="form-group">
+                        <label for="id_row_limit" class="form-label text-xs">Row Limit</label>
+                        {{ form.row_limit }}
+                    </div>
+                    <div class="form-group">
+                        <label for="id_status" class="form-label text-xs">Status</label>
+                        {{ form.status }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fields Palette -->
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <h3 class="card-title text-sm font-semibold">Available Attributes</h3>
+                    <span class="badge badge-info text-[10px]">Source Schema</span>
+                </div>
+                <div class="card-body p-3">
+                    <div class="text-xs text-muted mb-2 font-medium">Click to add to query fields:</div>
+                    <div class="space-y-1.5">
+                        <button type="button" onclick="addField('period', 'Fiscal Period', 'string', 'none')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-slate-700">Fiscal Period</span>
+                            <span class="badge badge-slate text-[9px]">Dimension</span>
+                        </button>
+                        <button type="button" onclick="addField('region', 'Sales Region', 'string', 'none')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-slate-700">Sales Region</span>
+                            <span class="badge badge-slate text-[9px]">Dimension</span>
+                        </button>
+                        <button type="button" onclick="addField('category', 'Product Category', 'string', 'none')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-blue-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-slate-700">Product Category</span>
+                            <span class="badge badge-slate text-[9px]">Dimension</span>
+                        </button>
+                        <button type="button" onclick="addField('revenue', 'Gross Revenue', 'currency', 'sum')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-emerald-800">Gross Revenue</span>
+                            <span class="badge badge-green text-[9px]">Measure (SUM)</span>
+                        </button>
+                        <button type="button" onclick="addField('orders', 'Orders Count', 'integer', 'count')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-emerald-800">Orders Count</span>
+                            <span class="badge badge-green text-[9px]">Measure (COUNT)</span>
+                        </button>
+                        <button type="button" onclick="addField('margin_pct', 'Profit Margin %', 'percentage', 'avg')" class="w-full text-left px-2 py-1.5 rounded bg-slate-50 hover:bg-purple-50 border border-slate-200 text-xs flex justify-between items-center transition">
+                            <span class="font-medium text-purple-800">Profit Margin %</span>
+                            <span class="badge badge-purple text-[9px]">Formula (AVG)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Main Workspace: Visual Canvas & Query Shelves -->
+        <div class="lg:col-span-3 space-y-6">
+            <!-- Active Query Shelves -->
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <h3 class="card-title text-sm font-semibold">Active Query Shelves</h3>
+                    <div class="text-xs text-muted">
+                        Duration: <span id="stat-duration" class="font-mono text-slate-800 font-bold">{{ query.execution_duration_ms }} ms</span>
+                        · Records: <span id="stat-rows" class="font-mono text-slate-800 font-bold">{{ query.row_count }}</span>
+                    </div>
+                </div>
+                <div class="card-body space-y-4">
+                    <!-- Name & Source Inputs (Hidden/Inline) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="id_name" class="form-label text-xs">Query Name</label>
+                            {{ form.name }}
+                        </div>
+                        <div class="form-group">
+                            <label for="id_source_type" class="form-label text-xs">Data Source</label>
+                            {{ form.source_type }}
+                        </div>
+                    </div>
+
+                    <!-- Selected Fields Configuration JSON -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="id_fields_config_json" class="form-label text-xs mb-0">Fields Configuration (JSON Array)</label>
+                            <span class="text-[11px] text-muted">Dimensions & Measures</span>
+                        </div>
+                        {{ form.fields_config_json }}
+                        <p class="text-[11px] text-muted mt-1">Format: <code>[{"field": "name", "label": "Title", "type": "currency", "agg": "sum"}]</code></p>
+                    </div>
+
+                    <!-- Filter Criteria JSON -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label for="id_filter_criteria_json" class="form-label text-xs mb-0">Filters (JSON Array)</label>
+                                <span class="text-[11px] text-muted">Rule Logic Tree</span>
+                            </div>
+                            {{ form.filter_criteria_json }}
+                            <p class="text-[11px] text-muted mt-1">Format: <code>[{"field": "region", "operator": "equals", "value": "North"}]</code></p>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center mb-1">
+                                <label for="id_sort_config_json" class="form-label text-xs mb-0">Sorting (JSON Array)</label>
+                                <span class="text-[11px] text-muted">Ordering Criteria</span>
+                            </div>
+                            {{ form.sort_config_json }}
+                            <p class="text-[11px] text-muted mt-1">Format: <code>[{"field": "revenue", "direction": "desc"}]</code></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visual Preview Canvas -->
+            <div class="card">
+                <div class="card-header flex justify-between items-center">
+                    <h3 class="card-title text-sm font-semibold flex items-center space-x-2">
+                        <i data-lucide="bar-chart-3" class="w-4 h-4 text-blue-600"></i>
+                        <span>Exploration Preview</span>
+                    </h3>
+                    <div class="flex space-x-2">
+                        <span class="badge badge-green text-xs">Live Connected</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Chart View Container -->
+                    <div id="chart-container" class="relative h-72 w-full mb-6">
+                        <canvas id="explorationChart"></canvas>
+                    </div>
+
+                    <!-- Data Grid View -->
+                    <div class="table-wrap border border-slate-200 rounded">
+                        <table class="table text-xs">
+                            <thead>
+                                <tr id="preview-thead">
+                                    {% for col in preview_results.columns %}
+                                    <th>{{ col }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody id="preview-tbody">
+                                {% for row in preview_results.rows %}
+                                <tr>
+                                    <td>{{ row.period }}</td>
+                                    <td class="font-mono text-emerald-600">{{ row.revenue }}</td>
+                                    <td class="font-mono">{{ row.orders }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Chart.js Script Integration -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('explorationChart').getContext('2d');
+    var chartType = 'bar';
+    var vizVal = document.getElementById('id_visualization_type').value;
+
+    if (vizVal === 'line_chart') chartType = 'line';
+    else if (vizVal === 'pie_chart') chartType = 'doughnut';
+    else if (vizVal === 'area_chart') {
+        chartType = 'line';
+    }
+
+    var chartData = {
+        labels: ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4'],
+        datasets: [{
+            label: 'Gross Revenue ($)',
+            data: [145200, 189450, 210100, 255800],
+            backgroundColor: chartType === 'doughnut' 
+                ? ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6']
+                : 'rgba(59, 130, 246, 0.7)',
+            borderColor: '#2563eb',
+            borderWidth: 1.5,
+            fill: (vizVal === 'area_chart')
+        }]
+    };
+
+    var explorationChart = new Chart(ctx, {
+        type: chartType,
+        data: chartData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { enabled: true }
+            },
+            scales: (chartType === 'doughnut') ? {} : {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    // Execute Live AJAX Handler
+    document.getElementById('btn-run-live').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Executing...';
+
+        fetch("{% url 'bi:ad_hoc_query_execute' query.pk %}")
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play"></i> <span>Execute Live</span>';
+                if (window.lucide) lucide.createIcons();
+
+                document.getElementById('stat-duration').innerText = data.duration_ms + ' ms';
+                document.getElementById('stat-rows').innerText = data.row_count;
+
+                // Update Table Header & Body
+                var thead = document.getElementById('preview-thead');
+                thead.innerHTML = '';
+                data.columns.forEach(function(col) {
+                    var th = document.createElement('th');
+                    th.innerText = col;
+                    thead.appendChild(th);
+                });
+
+                var tbody = document.getElementById('preview-tbody');
+                tbody.innerHTML = '';
+                data.rows.forEach(function(r) {
+                    var tr = document.createElement('tr');
+                    data.columns.forEach(function(c) {
+                        var td = document.createElement('td');
+                        td.innerText = r[c] !== undefined ? r[c] : '—';
+                        tr.appendChild(td);
+                    });
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(function(err) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="play"></i> <span>Execute Live</span>';
+                if (window.lucide) lucide.createIcons();
+                alert('Live execution failed: ' + err);
+            });
+    });
+});
+
+function addField(fieldKey, labelText, typeStr, aggStr) {
+    var textarea = document.getElementById('id_fields_config_json');
+    var existing = [];
+    try {
+        existing = JSON.parse(textarea.value || "[]");
+    } catch(e) {
+        existing = [];
+    }
+    // Check if exists
+    var found = existing.some(function(item) { return item.field === fieldKey; });
+    if (!found) {
+        existing.push({ field: fieldKey, label: labelText, type: typeStr, agg: aggStr });
+        textarea.value = JSON.stringify(existing, null, 2);
+    }
+}
+</script>
+{% endblock %}
