@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Writeback Cell — {{ cell.number }}{% else %}New Writeback Cell{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:what_if_scenario_list' %}">What-If Scenarios</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Cell {{ cell.number }}{% else %}New Writeback Cell{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Writeback Cell: {{ cell.number }}{% else %}Record Writeback Cell Adjustment{% endif %}</h1>
+        <p class="text-muted text-sm">Configure multidimensional coordinate values, baseline benchmarks, and top-down splashing methods</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Scenario & Financial Anchors -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Parent Scenario & Financial Anchors</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.scenario.id_for_label }}">What-If Scenario *</label>
+                            {{ form.scenario }}
+                            {% if form.scenario.errors %}<div class="form-error">{{ form.scenario.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.gl_account.id_for_label }}">GL Account</label>
+                            {{ form.gl_account }}
+                            {% if form.gl_account.errors %}<div class="form-error">{{ form.gl_account.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit / Department</label>
+                            {{ form.org_unit }}
+                            {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multidimensional Coordinates -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-2">Multidimensional Coordinates</h3>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cell_coordinates_raw.id_for_label }}">Cell Coordinates (JSON)</label>
+                        {{ form.cell_coordinates_raw }}
+                        <span class="text-xs text-muted">{{ form.cell_coordinates_raw.help_text }}</span>
+                        {% if form.cell_coordinates_raw.errors %}<div class="form-error">{{ form.cell_coordinates_raw.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Values & Splashing Method -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Cell Values & Splashing</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.baseline_value.id_for_label }}">Baseline Value ($) *</label>
+                            {{ form.baseline_value }}
+                            {% if form.baseline_value.errors %}<div class="form-error">{{ form.baseline_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.adjusted_value.id_for_label }}">Adjusted Value ($) *</label>
+                            {{ form.adjusted_value }}
+                            {% if form.adjusted_value.errors %}<div class="form-error">{{ form.adjusted_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.spread_method.id_for_label }}">Spread / Splash Method *</label>
+                            {{ form.spread_method }}
+                            {% if form.spread_method.errors %}<div class="form-error">{{ form.spread_method.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group mt-4">
+                        <label class="form-label" for="{{ form.commentary.id_for_label }}">Commentary & Business Justification</label>
+                        {{ form.commentary }}
+                        {% if form.commentary.errors %}<div class="form-error">{{ form.commentary.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <a href="{% if is_edit %}{% url 'bi:writeback_cell_detail' cell.pk %}{% else %}{% url 'bi:writeback_cell_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Save Writeback Cell{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
