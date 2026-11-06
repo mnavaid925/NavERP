@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ objective.name }} ({{ objective.code }}) — Strategic Objective — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:strategic_objective_list' %}">Strategic Objectives</a>
+            <span class="sep">/</span>
+            <span>{{ objective.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ objective.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ objective.number }}</span>
+
+            <span class="badge {% if objective.perspective == 'financial' %}badge-green{% elif objective.perspective == 'customer' %}badge-info{% elif objective.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                {{ objective.get_perspective_display }}
+            </span>
+
+            {% if objective.rag_status == 'green' %}
+            <span class="badge badge-green flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> On Track</span>
+            {% elif objective.rag_status == 'amber' %}
+            <span class="badge badge-amber flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> In Progress</span>
+            {% elif objective.rag_status == 'red' %}
+            <span class="badge badge-red flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Off Track</span>
+            {% else %}
+            <span class="badge badge-muted flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Proposed</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ objective.code }} · {% if objective.target_date %}Target Date: {{ objective.target_date|date:"F j, Y" }}{% else %}No target date set{% endif %}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:strategic_objective_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Objectives</span>
+        </a>
+        <a href="{% url 'bi:strategic_objective_edit' objective.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Objective</span>
+        </a>
+        <form method="post" action="{% url 'bi:strategic_objective_delete' objective.pk %}" class="inline" onsubmit="return confirm('Delete this strategic objective?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Key Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if objective.alignment_score >= 85 %}green{% elif objective.alignment_score >= 70 %}orange{% elif objective.alignment_score > 0 %}slate{% else %}blue{% endif %}">
+            <i data-lucide="compass"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Health Roll-Up</div>
+            <div class="text-2xl font-bold font-mono text-slate-900">
+                {{ objective.alignment_score|floatformat:0 }}%
+            </div>
+            <div class="text-[11px] text-muted">From {{ assigned_kpis.count }} linked KPI{{ assigned_kpis.count|pluralize }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="flag"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Strategic Status</div>
+            <div class="text-xl font-bold text-indigo-700 capitalize">
+                {{ objective.get_status_display }}
+            </div>
+            <div class="text-[11px] text-muted">{{ objective.get_perspective_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="corner-right-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Child Objectives</div>
+            <div class="text-2xl font-bold text-slate-800">
+                {{ child_objectives.count }}
+            </div>
+            <div class="text-[11px] text-muted">Upstream drivers</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Linked KPIs</div>
+            <div class="text-2xl font-bold text-emerald-600">
+                {{ assigned_kpis.count }}
+            </div>
+            <div class="text-[11px] text-muted">Active goal assignments</div>
+        </div>
+    </div>
+</div>
+
+<!-- Strategic Narrative & Hierarchy Breakdown -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Statement of Strategic Intent -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Statement of Strategic Intent</h3>
+            </div>
+            <div class="card-body">
+                {% if objective.statement_of_intent %}
+                <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{{ objective.statement_of_intent }}</p>
+                {% else %}
+                <p class="text-sm text-muted italic">No narrative statement of strategic rationale recorded for this objective.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Cause-and-Effect Alignment -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Cause-and-Effect Alignment Hierarchy</h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Direct Parent Objective (Drives)</div>
+                    {% if objective.parent_objective %}
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between mt-1">
+                        <div>
+                            <div class="font-semibold text-primary">
+                                <a href="{% url 'bi:strategic_objective_detail' objective.parent_objective.pk %}">{{ objective.parent_objective.name }}</a>
+                            </div>
+                            <div class="text-xs text-muted">{{ objective.parent_objective.code }} · {{ objective.parent_objective.get_perspective_display }}</div>
+                        </div>
+                        <span class="badge {% if objective.parent_objective.perspective == 'financial' %}badge-green{% elif objective.parent_objective.perspective == 'customer' %}badge-info{% elif objective.parent_objective.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                            {{ objective.parent_objective.get_perspective_display }}
+                        </span>
+                    </div>
+                    {% else %}
+                    <div class="text-slate-500 italic mt-1">Top-level objective in strategic hierarchy.</div>
+                    {% endif %}
+                </div>
+
+                <div class="pt-3 border-t border-slate-100">
+                    <div class="text-xs text-muted uppercase font-semibold mb-2">Downstream Child Objectives (Enabling Drivers)</div>
+                    {% if child_objectives %}
+                    <div class="space-y-2">
+                        {% for child in child_objectives %}
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                            <div>
+                                <div class="font-semibold text-primary">
+                                    <a href="{% url 'bi:strategic_objective_detail' child.pk %}">{{ child.name }}</a>
+                                </div>
+                                <div class="text-xs text-muted">{{ child.code }} · {{ child.get_perspective_display }}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="badge {% if child.rag_status == 'green' %}badge-green{% elif child.rag_status == 'amber' %}badge-amber{% elif child.rag_status == 'red' %}badge-red{% else %}badge-muted{% endif %}">
+                                    {{ child.alignment_score|floatformat:0 }}%
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-slate-500 italic">No downstream enabling objectives currently map to this goal.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Ownership & Details -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Governance & Ownership</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Strategic Sponsor / Owner</div>
+                    <div class="font-medium text-slate-800 mt-0.5">
+                        {% if objective.owner %}{{ objective.owner.get_full_name|default:objective.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Department / Business Unit</div>
+                    <div class="font-medium text-slate-800 mt-0.5">
+                        {% if objective.org_unit %}{{ objective.org_unit.name }}{% else %}<span class="text-muted">Enterprise-wide</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Target Completion Date</div>
+                    <div class="font-medium text-slate-800 mt-0.5">
+                        {% if objective.target_date %}{{ objective.target_date|date:"F j, Y" }}{% else %}<span class="text-muted">Ongoing</span>{% endif %}
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-100 text-xs text-muted space-y-1">
+                    <div>Created: {{ objective.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ objective.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Linked KPIs Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-900">Associated KPIs & Goal Targets</h3>
+        <span class="text-xs text-muted">{{ assigned_kpis.count }} Metric{{ assigned_kpis.count|pluralize }}</span>
+    </div>
+    {% if assigned_kpis %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scorecard</th>
+                    <th>KPI Metric Name</th>
+                    <th>Perspective</th>
+                    <th class="text-right">Weight</th>
+                    <th class="text-right">Target</th>
+                    <th class="text-right">Actual</th>
+                    <th class="text-right">Variance</th>
+                    <th>RAG Health</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in assigned_kpis %}
+                <tr>
+                    <td>
+                        <a href="{{ a.scorecard.get_absolute_url }}" class="font-medium text-primary hover:underline">{{ a.scorecard.name }}</a>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:kpi_definition_detail' a.kpi.pk %}" class="font-medium text-slate-900 hover:underline">{{ a.kpi.name }}</a>
+                        <div class="text-xs font-mono text-muted">{{ a.kpi.code }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                            {{ a.get_perspective_display }}
+                        </span>
+                    </td>
+                    <td class="text-right font-mono text-xs">{{ a.weight|floatformat:1 }}%</td>
+                    <td class="text-right font-mono text-sm">{{ a.target_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-sm font-semibold">{{ a.actual_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-sm {% if a.variance >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+                        {% if a.variance > 0 %}+{% endif %}{{ a.variance|floatformat:2 }}
+                    </td>
+                    <td>
+                        {% if a.rag_status == 'green' %}
+                        <span class="badge badge-green">On Track</span>
+                        {% elif a.rag_status == 'amber' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% elif a.rag_status == 'red' %}
+                        <span class="badge badge-red">Critical</span>
+                        {% else %}
+                        <span class="badge badge-muted">Not Evaluated</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{{ a.get_absolute_url }}" class="btn btn-icon btn-outline" title="View Target Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-6 text-center text-muted text-sm">
+        No KPI targets are currently linked to this strategic objective.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
