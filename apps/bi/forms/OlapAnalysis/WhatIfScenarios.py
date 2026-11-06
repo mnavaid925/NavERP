@@ -40,6 +40,17 @@ class WhatIfScenarioForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        if "data" in kwargs and kwargs["data"]:
+            data = kwargs["data"].copy()
+            if "driver_parameters" in data and "driver_parameters_raw" not in data:
+                data["driver_parameters_raw"] = json.dumps(data["driver_parameters"]) if isinstance(data["driver_parameters"], dict) else str(data["driver_parameters"])
+            kwargs["data"] = data
+        elif len(args) > 0 and args[0]:
+            data = args[0].copy()
+            if "driver_parameters" in data and "driver_parameters_raw" not in data:
+                data["driver_parameters_raw"] = json.dumps(data["driver_parameters"]) if isinstance(data["driver_parameters"], dict) else str(data["driver_parameters"])
+            args = (data,) + args[1:]
+
         super().__init__(*args, **kwargs)
         if "status" in self.fields:
             self.fields["status"].choices = [
