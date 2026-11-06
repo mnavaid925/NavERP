@@ -54,7 +54,7 @@ def pivot_view_list(request):
     paginator = Paginator(qs, 15)
     page_obj = paginator.get_page(request.GET.get("page", 1))
 
-    cubes = OlapCube.objects.filter(tenant=request.tenant).order_by("name")
+    cubes = OlapCube.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     return render(
         request,
