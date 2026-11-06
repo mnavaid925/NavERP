@@ -41,6 +41,10 @@ from apps.bi.models import (
     AdHocCalculatedField,
     DataBlendDefinition,
     SavedAnalysisView,
+    KpiDefinition,
+    PerformanceScorecard,
+    ScorecardKpiAssignment,
+    StrategicObjective,
     OlapCube,
     PivotAnalysisView,
     WhatIfScenario,
@@ -435,6 +439,43 @@ class ScenarioWritebackCellAdmin(admin.ModelAdmin):
     list_filter = ("spread_method", "is_committed", "tenant")
     search_fields = ("number", "scenario__name", "gl_account__name", "gl_account__code", "commentary")
     readonly_fields = ("number", "tenant", "variance_amount", "created_at", "updated_at")
+
+
+@admin.register(KpiDefinition)
+class KpiDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "perspective", "target_direction", "tracking_frequency", "current_value", "target_value", "status", "tenant")
+    list_select_related = ("tenant", "semantic_measure", "department", "owner")
+    list_filter = ("perspective", "target_direction", "tracking_frequency", "calculation_type", "status", "is_active", "tenant")
+    search_fields = ("number", "code", "name", "slug", "description", "category")
+    readonly_fields = ("number", "tenant", "last_calculated_at", "created_at", "updated_at")
+
+
+@admin.register(PerformanceScorecard)
+class PerformanceScorecardAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "scorecard_type", "review_period", "fiscal_year", "overall_score", "overall_rag_status", "status", "tenant")
+    list_select_related = ("tenant", "owner", "org_unit")
+    list_filter = ("scorecard_type", "review_period", "fiscal_year", "overall_rag_status", "status", "is_default", "is_published", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "overall_score", "overall_rag_status", "last_recalculated_at", "created_at", "updated_at")
+
+
+@admin.register(ScorecardKpiAssignment)
+class ScorecardKpiAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "scorecard", "kpi", "perspective", "weight", "target_value", "actual_value", "variance", "rag_status", "trend_direction", "tenant")
+    list_select_related = ("tenant", "scorecard", "kpi", "objective")
+    list_filter = ("perspective", "rag_status", "trend_direction", "tenant")
+    search_fields = ("number", "scorecard__name", "kpi__name", "kpi__code", "manager_notes")
+    readonly_fields = ("number", "tenant", "variance", "variance_percentage", "rag_status", "trend_direction", "normalized_score", "benchmark_gap", "evaluated_at", "created_at", "updated_at")
+
+
+@admin.register(StrategicObjective)
+class StrategicObjectiveAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "perspective", "parent_objective", "alignment_score", "rag_status", "status", "tenant")
+    list_select_related = ("tenant", "parent_objective", "owner", "org_unit")
+    list_filter = ("perspective", "rag_status", "status", "tenant")
+    search_fields = ("number", "code", "name", "slug", "statement_of_intent")
+    readonly_fields = ("number", "tenant", "alignment_score", "rag_status", "created_at", "updated_at")
+
 
 
 
