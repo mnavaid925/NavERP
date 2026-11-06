@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scenario.name }} — What-If Scenario — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:what_if_scenario_list' %}">What-If Scenarios</a>
+            <span class="sep">/</span>
+            <span>{{ scenario.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scenario.name }}</h1>
+            {% if scenario.status == 'committed' %}
+            <span class="badge badge-green">Committed</span>
+            {% elif scenario.status == 'approved' %}
+            <span class="badge badge-info">Approved</span>
+            {% elif scenario.status == 'simulated' %}
+            <span class="badge badge-purple">Simulated</span>
+            {% elif scenario.status == 'draft' %}
+            <span class="badge badge-amber">Draft</span>
+            {% else %}
+            <span class="badge badge-muted">Archived</span>
+            {% endif %}
+            <span class="badge badge-slate">{{ scenario.get_default_disaggregation_display }}</span>
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ scenario.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>slug: {{ scenario.slug }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:what_if_scenario_simulate' scenario.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Simulate Workbench</span>
+        </a>
+        {% if scenario.status != 'committed' %}
+        <form method="post" action="{% url 'bi:what_if_scenario_commit' scenario.pk %}" onsubmit="return confirm('Commit scenario adjustments to the budget writeback ledger? This will lock the simulation.');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-600 hover:bg-emerald-50">
+                <i data-lucide="check-circle-2"></i>
+                <span>Commit to Budget</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Add Writeback Cell</span>
+        </a>
+        <a href="{% url 'bi:what_if_scenario_edit' scenario.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:what_if_scenario_delete' scenario.pk %}" onsubmit="return confirm('Delete What-If Scenario {{ scenario.name|escapejs }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Key Variance Metrics -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="card p-5">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Baseline Budget</div>
+        <div class="text-2xl font-bold font-mono text-slate-700">${{ scenario.total_baseline_amount|floatformat:2 }}</div>
+        <div class="text-xs text-muted mt-1">Original unadjusted benchmark</div>
+    </div>
+    <div class="card p-5">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Simulated Adjusted Total</div>
+        <div class="text-2xl font-bold font-mono text-indigo-700">${{ scenario.total_adjusted_amount|floatformat:2 }}</div>
+        <div class="text-xs text-muted mt-1">Post-disaggregation scenario total</div>
+    </div>
+    <div class="card p-5">
+        <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Net Variance / Delta</div>
+        <div class="text-2xl font-bold font-mono {% if scenario.total_variance_amount >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+            {% if scenario.total_variance_amount > 0 %}+{% endif %}${{ scenario.total_variance_amount|floatformat:2 }}
+        </div>
+        <div class="text-xs text-muted mt-1">Scenario difference impact</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Scenario Identity & Financial Scope</h3>
+            </div>
+            <div class="card-body p-5 space-y-4">
+                {% if scenario.description %}
+                <p class="text-sm text-slate-600">{{ scenario.description }}</p>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm border-t border-slate-100 pt-3">
+                    <div>
+                        <div class="text-muted text-xs">Target Fiscal Period</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if scenario.fiscal_period %}
+                            <span>{{ scenario.fiscal_period.name }}</span>
+                            {% else %}
+                            <span class="text-muted italic">Unspecified</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Baseline Financial Budget</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if scenario.baseline_budget %}
+                            <a href="{% url 'accounting:budget_detail' scenario.baseline_budget.pk %}" class="text-blue-600 hover:underline">
+                                {{ scenario.baseline_budget.name }} ({{ scenario.baseline_budget.number }})
+                            </a>
+                            {% else %}
+                            <span class="text-muted italic">No linked budget</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">OLAP Cube Model</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if scenario.cube %}
+                            <a href="{% url 'bi:olap_cube_detail' scenario.cube.pk %}" class="text-blue-600 hover:underline">
+                                {{ scenario.cube.name }} ({{ scenario.cube.number }})
+                            </a>
+                            {% else %}
+                            <span class="text-muted italic">Direct Multi-Cell Simulation</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Disaggregation / Splashing</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            <span class="badge badge-info">{{ scenario.get_default_disaggregation_display }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Writeback Adjustments Table -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="font-semibold text-slate-800">Scenario Writeback Cells ({{ writeback_cells.count }})</h3>
+                <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline">+ Add Adjustment</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Cell / Target</th>
+                                <th>Coordinates</th>
+                                <th class="text-right">Baseline</th>
+                                <th class="text-right">Adjusted</th>
+                                <th class="text-right">Variance</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th class="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cell in writeback_cells %}
+                            <tr>
+                                <td>
+                                    <div class="font-medium text-xs text-slate-900">
+                                        <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="hover:text-blue-600">
+                                            {{ cell.number }}
+                                        </a>
+                                    </div>
+                                    <div class="text-[11px] text-muted">
+                                        {% if cell.gl_account %}{{ cell.gl_account.code }} - {{ cell.gl_account.name }}{% endif %}
+                                        {% if cell.org_unit %}<span class="text-slate-300">•</span> {{ cell.org_unit.name }}{% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="text-[11px] font-mono text-slate-600">
+                                        {% for k, v in cell.cell_coordinates.items %}
+                                        <span class="px-1.5 py-0.5 bg-slate-100 rounded">{{ k }}={{ v }}</span>
+                                        {% empty %}
+                                        <span class="text-muted italic">Default Leaf</span>
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td class="text-right font-mono text-xs text-slate-600">${{ cell.baseline_value|floatformat:2 }}</td>
+                                <td class="text-right font-mono text-xs font-semibold text-slate-900">${{ cell.adjusted_value|floatformat:2 }}</td>
+                                <td class="text-right font-mono text-xs font-bold {% if cell.variance_amount >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                                    {% if cell.variance_amount > 0 %}+{% endif %}${{ cell.variance_amount|floatformat:2 }}
+                                </td>
+                                <td>
+                                    <span class="badge badge-slate text-[10px]">{{ cell.get_spread_method_display }}</span>
+                                </td>
+                                <td>
+                                    {% if cell.is_committed %}
+                                    <span class="badge badge-green text-[10px]">Committed</span>
+                                    {% else %}
+                                    <span class="badge badge-amber text-[10px]">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <div class="table-actions justify-end">
+                                        <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="btn btn-icon" title="View Cell">
+                                            <i data-lucide="eye"></i>
+                                        </a>
+                                        <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-icon" title="Edit Cell">
+                                            <i data-lucide="pencil"></i>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center py-6 text-sm text-muted">
+                                    No writeback adjustments added to this scenario yet. Use the Simulation Workbench or Add Adjustment button.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Drivers & Lifecycle -->
+    <div class="space-y-6">
+        <!-- Driver Parameters -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Macro Driver Multipliers</h3>
+            </div>
+            <div class="card-body p-5">
+                {% if scenario.driver_parameters %}
+                <div class="space-y-3">
+                    {% for k, v in scenario.driver_parameters.items %}
+                    <div class="flex items-center justify-between text-xs p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span class="font-medium text-slate-700">{{ k }}</span>
+                        <span class="font-mono font-bold text-indigo-700">{{ v }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-xs text-muted italic">No macro driver multipliers defined.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Audit & Commitment Info -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Commitment & Audit</h3>
+            </div>
+            <div class="card-body p-5 space-y-3 text-sm">
+                <div>
+                    <div class="text-muted text-xs">Author</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ scenario.created_by.get_full_name|default:scenario.created_by.username|default:"System" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Created At</div>
+                    <div class="text-slate-600 mt-0.5">{{ scenario.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% if scenario.committed_at %}
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-muted text-xs">Committed At</div>
+                    <div class="text-emerald-700 font-semibold mt-0.5">{{ scenario.committed_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Committed By</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ scenario.committed_by.get_full_name|default:scenario.committed_by.username }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
