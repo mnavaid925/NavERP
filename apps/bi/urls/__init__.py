@@ -30,6 +30,9 @@ from apps.bi.urls.Dashboards import (
 from apps.bi.urls.OlapAnalysis import (
     urlpatterns as olap_analysis_urlpatterns,
 )
+from apps.bi.urls.PerformanceScorecards import (
+    urlpatterns as performance_scorecards_urlpatterns,
+)
 from apps.bi.urls.OperationalReporting import (
     urlpatterns as operational_reporting_urlpatterns,
 )
@@ -76,5 +79,6 @@ urlpatterns = (
     + dashboards_urlpatterns
     + operational_reporting_urlpatterns
     + self_service_urlpatterns
+    + performance_scorecards_urlpatterns
     + olap_analysis_urlpatterns
 )
