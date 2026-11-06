@@ -121,9 +121,12 @@
                         <a href="{% url 'bi:saved_analysis_view_explore' v.pk %}" class="btn btn-icon text-blue-600" title="Open Interactive Exploration">
                             <i data-lucide="compass"></i>
                         </a>
-                        <a href="{% url 'bi:saved_analysis_view_clone' v.pk %}" class="btn btn-icon" title="Fork / Clone View">
-                            <i data-lucide="copy"></i>
-                        </a>
+                        <form method="post" action="{% url 'bi:saved_analysis_view_clone' v.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon" title="Fork / Clone View">
+                                <i data-lucide="copy"></i>
+                            </button>
+                        </form>
                         <a href="{% url 'bi:saved_analysis_view_detail' v.pk %}" class="btn btn-icon" title="View Details">
                             <i data-lucide="eye"></i>
                         </a>
