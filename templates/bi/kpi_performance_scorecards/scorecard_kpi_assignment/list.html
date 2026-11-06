@@ -74,12 +74,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="KPI, scorecard, objective..." class="form-input">
+                <label for="asn-filter-q" class="form-label text-xs">Search</label>
+                <input type="text" id="asn-filter-q" name="q" value="{{ request.GET.q }}" placeholder="KPI, scorecard, objective..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Scorecard</label>
-                <select name="scorecard" class="form-select">
+                <label for="asn-filter-scorecard" class="form-label text-xs">Scorecard</label>
+                <select id="asn-filter-scorecard" name="scorecard" class="form-select">
                     <option value="">All Scorecards</option>
                     {% for sc in scorecards %}
                     <option value="{{ sc.pk }}" {% if request.GET.scorecard == sc.pk|stringformat:"d" %}selected{% endif %}>{{ sc.name }}</option>
@@ -87,8 +87,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Perspective</label>
-                <select name="perspective" class="form-select">
+                <label for="asn-filter-perspective" class="form-label text-xs">Perspective</label>
+                <select id="asn-filter-perspective" name="perspective" class="form-select">
                     <option value="">All Perspectives</option>
                     {% for val, label in perspective_choices %}
                     <option value="{{ val }}" {% if request.GET.perspective == val %}selected{% endif %}>{{ label }}</option>
@@ -96,8 +96,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">RAG Status</label>
-                <select name="rag_status" class="form-select">
+                <label for="asn-filter-rag" class="form-label text-xs">RAG Status</label>
+                <select id="asn-filter-rag" name="rag_status" class="form-select">
                     <option value="">All RAG Statuses</option>
                     {% for val, label in rag_choices %}
                     <option value="{{ val }}" {% if request.GET.rag_status == val %}selected{% endif %}>{{ label }}</option>
@@ -105,8 +105,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Trend</label>
-                <select name="trend_direction" class="form-select">
+                <label for="asn-filter-trend" class="form-label text-xs">Trend</label>
+                <select id="asn-filter-trend" name="trend_direction" class="form-select">
                     <option value="">All Trends</option>
                     {% for val, label in trend_choices %}
                     <option value="{{ val }}" {% if request.GET.trend_direction == val %}selected{% endif %}>{{ label }}</option>
