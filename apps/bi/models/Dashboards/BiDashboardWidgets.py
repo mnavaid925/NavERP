@@ -125,6 +125,7 @@ class BiDashboardWidget(TenantNumbered):
             models.Index(fields=["tenant", "widget_type"], name="idx_bdwg_ten_wtype"),
             models.Index(fields=["tenant", "semantic_model"], name="idx_bdwg_ten_smdl"),
             models.Index(fields=["tenant", "calculated_measure"], name="idx_bdwg_ten_cmsr"),
+            models.Index(fields=["tenant", "warehouse_table"], name="idx_bdwg_ten_wht"),
             models.Index(fields=["tenant", "sort_order"], name="idx_bdwg_ten_sort"),
             models.Index(fields=["tenant", "is_active"], name="idx_bdwg_ten_act"),
         ]
