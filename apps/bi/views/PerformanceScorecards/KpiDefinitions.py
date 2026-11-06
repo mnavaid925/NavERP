@@ -123,13 +123,11 @@ def kpi_definition_create(request):
                 kpi.owner = request.user
             kpi.save()
             write_audit_log(
+                request.user,
+                kpi,
+                "create",
+                changes={"summary": f"Created KPI Definition {kpi.number} ({kpi.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="KpiDefinition",
-                object_id=str(kpi.pk),
-                object_repr=str(kpi),
-                change_summary=f"Created KPI Definition {kpi.number} ({kpi.name})",
             )
             messages.success(request, f"KPI '{kpi.name}' created successfully.")
             return redirect(kpi.get_absolute_url())
@@ -153,13 +151,11 @@ def kpi_definition_edit(request, pk):
         if form.is_valid():
             kpi = form.save()
             write_audit_log(
+                request.user,
+                kpi,
+                "update",
+                changes={"summary": f"Updated KPI Definition {kpi.number} ({kpi.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="KpiDefinition",
-                object_id=str(kpi.pk),
-                object_repr=str(kpi),
-                change_summary=f"Updated KPI Definition {kpi.number} ({kpi.name})",
             )
             messages.success(request, f"KPI '{kpi.name}' updated successfully.")
             return redirect(kpi.get_absolute_url())
@@ -181,16 +177,14 @@ def kpi_definition_delete(request, pk):
     kpi = bi_object(request, KpiDefinition, pk)
     kpi_name = kpi.name
     kpi_num = kpi.number
-    kpi.delete()
     write_audit_log(
+        request.user,
+        kpi,
+        "delete",
+        changes={"summary": f"Deleted KPI Definition {kpi_num} ({kpi_name})"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="KpiDefinition",
-        object_id=str(pk),
-        object_repr=f"{kpi_num} - {kpi_name}",
-        change_summary=f"Deleted KPI Definition {kpi_num} ({kpi_name})",
     )
+    kpi.delete()
     messages.success(request, f"KPI '{kpi_name}' deleted.")
     return redirect("bi:kpi_definition_list")
 
@@ -209,13 +203,11 @@ def kpi_definition_refresh(request, pk):
         kpi.save(update_fields=["previous_value", "current_value", "last_calculated_at", "updated_at"])
 
         write_audit_log(
+            request.user,
+            kpi,
+            "update",
+            changes={"summary": f"Refreshed KPI {kpi.number} to {new_val} (was {kpi.previous_value}). Notes: {notes}"},
             tenant=request.tenant,
-            user=request.user,
-            action="update",
-            model_name="KpiDefinition",
-            object_id=str(kpi.pk),
-            object_repr=str(kpi),
-            change_summary=f"Refreshed KPI {kpi.number} to {new_val} (was {kpi.previous_value}). Notes: {notes}",
         )
         messages.success(request, f"KPI '{kpi.name}' value updated to {new_val}.")
     else:
