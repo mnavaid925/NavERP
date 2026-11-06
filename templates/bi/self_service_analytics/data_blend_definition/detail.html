@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}{{ blend.name }} ({{ blend.number }}) — Data Blend — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Analytics</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_blend_definition_list' %}">Data Blends</a>
+            <span class="sep">/</span>
+            <span>{{ blend.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ blend.name }}</h1>
+            <span class="badge {{ blend.badge_status }}">{{ blend.get_status_display }}</span>
+            <span class="badge {{ blend.badge_join }}">{{ blend.get_join_type_display }}</span>
+            <span class="badge badge-slate">{{ blend.get_cardinality_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ blend.number }} · {{ blend.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_create' %}?data_blend={{ blend.pk }}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Create Query from Blend</span>
+        </a>
+        <a href="{% url 'bi:data_blend_definition_edit' blend.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:data_blend_definition_delete' blend.pk %}" class="inline" onsubmit="return confirm('Delete data blend {{ blend.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title text-base">Mashup Architecture & Joins</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Primary Source</dt>
+                    <dd class="mt-1 font-semibold text-slate-800">
+                        <span class="badge badge-info text-xs">{{ blend.get_primary_source_type_display }}</span>
+                        <div class="mt-1">
+                            {% if blend.primary_semantic_model %}
+                                <a href="{% url 'bi:semantic_model_detail' blend.primary_semantic_model.pk %}" class="text-blue-600 hover:underline">
+                                    {{ blend.primary_semantic_model.name }}
+                                </a>
+                            {% elif blend.primary_warehouse_table %}
+                                <a href="{% url 'bi:warehouse_table_detail' blend.primary_warehouse_table.pk %}" class="text-blue-600 hover:underline">
+                                    {{ blend.primary_warehouse_table.name }}
+                                </a>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Secondary Source</dt>
+                    <dd class="mt-1 font-semibold text-slate-800">
+                        <span class="badge badge-info text-xs">{{ blend.get_secondary_source_type_display }}</span>
+                        <div class="mt-1">
+                            {% if blend.secondary_semantic_model %}
+                                <a href="{% url 'bi:semantic_model_detail' blend.secondary_semantic_model.pk %}" class="text-blue-600 hover:underline">
+                                    {{ blend.secondary_semantic_model.name }}
+                                </a>
+                            {% elif blend.secondary_warehouse_table %}
+                                <a href="{% url 'bi:warehouse_table_detail' blend.secondary_warehouse_table.pk %}" class="text-blue-600 hover:underline">
+                                    {{ blend.secondary_warehouse_table.name }}
+                                </a>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Join Semantics</dt>
+                    <dd class="mt-1 text-slate-800">{{ blend.get_join_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Collision Resolution</dt>
+                    <dd class="mt-1 font-mono text-slate-800">{{ blend.collision_resolution }}</dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-xs text-muted uppercase font-medium">Description</dt>
+                    <dd class="mt-1 text-slate-700">
+                        {{ blend.description|default:"No description recorded for this dataset blend." }}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base">Metadata</h2>
+        </div>
+        <div class="card-body text-sm space-y-3">
+            <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                <span class="text-muted">Author:</span>
+                <span class="font-medium text-slate-800">
+                    {% if blend.created_by %}
+                        {{ blend.created_by.get_full_name|default:blend.created_by.username }}
+                    {% else %}
+                        System
+                    {% endif %}
+                </span>
+            </div>
+            <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                <span class="text-muted">Created:</span>
+                <span class="text-slate-800">{{ blend.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+            <div class="flex justify-between items-center py-1">
+                <span class="text-muted">Last Updated:</span>
+                <span class="text-slate-800">{{ blend.updated_at|date:"Y-m-d H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Join Key Mappings -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="card-title text-sm font-semibold">Join Key Pairs (Mapping Matrix)</h3>
+    </div>
+    <div class="card-body p-4">
+        {% if blend.join_keys_mapping_json %}
+        <div class="space-y-2">
+            {% for pair in blend.join_keys_mapping_json %}
+            <div class="flex items-center space-x-3 text-xs bg-slate-50 p-2.5 rounded border border-slate-200">
+                <span class="font-mono bg-white px-2 py-1 rounded border border-slate-300 font-semibold text-blue-700">{{ pair.primary_field }}</span>
+                <i data-lucide="arrow-left-right" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span class="font-mono bg-white px-2 py-1 rounded border border-slate-300 font-semibold text-emerald-700">{{ pair.secondary_field }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-xs text-muted text-center py-3">No explicit join key mappings configured</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Preview Rows if Available -->
+{% if preview_rows %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="card-title text-sm font-semibold">Blend Join Preview (Live Simulation)</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table text-xs">
+            <thead>
+                <tr>
+                    {% for col in preview_cols %}
+                    <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in preview_rows %}
+                <tr>
+                    {% for cell in r %}
+                    <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Linked Queries -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="card-title text-sm font-semibold">Ad-Hoc Queries Consuming this Blend</h3>
+        <span class="badge badge-info text-xs">{{ queries|length }}</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Query Number & Name</th>
+                    <th>Visual Type</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for qry in queries %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:ad_hoc_query_detail' qry.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ qry.name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ qry.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.badge_viz }}">{{ qry.get_visualization_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.badge_status }}">{{ qry.get_status_display }}</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="3" class="text-center py-4 text-xs text-muted">No queries currently consuming this data blend</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
