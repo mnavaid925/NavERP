@@ -19,7 +19,6 @@ class BiDashboardForm(TenantUniqueMixin, TenantModelForm):
             "theme",
             "role_required",
             "org_unit",
-            "is_published",
             "is_template",
             "is_default",
             "is_kiosk_enabled",
@@ -36,7 +35,6 @@ class BiDashboardForm(TenantUniqueMixin, TenantModelForm):
             "role_required": forms.TextInput(attrs={"class": "form-input", "placeholder": "all, executive, finance_manager"}),
             "org_unit": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "High-level overview and purpose of this dashboard..."}),
-            "is_published": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "is_template": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "is_default": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
             "is_kiosk_enabled": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
@@ -45,6 +43,8 @@ class BiDashboardForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "slug" in self.fields:
+            self.fields["slug"].required = False
         if self.tenant is not None:
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["org_unit"].empty_label = "— All Departments / Org Units —"
