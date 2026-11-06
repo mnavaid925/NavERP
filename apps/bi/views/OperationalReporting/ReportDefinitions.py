@@ -192,7 +192,7 @@ def report_definition_delete(request, pk):
 def report_definition_clone(request, pk):
     source_report = bi_object(request, ReportDefinition, pk)
     if request.method == "POST":
-        form = ReportCloneForm(request.POST)
+        form = ReportCloneForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             new_name = form.cleaned_data["new_name"]
             new_slug = form.cleaned_data["new_slug"]
