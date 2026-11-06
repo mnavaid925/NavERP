@@ -26,6 +26,10 @@
         <div class="text-xs text-muted mt-1">Trigger Column: <code class="font-mono text-purple-700 bg-purple-50 px-1 py-0.5 rounded">{{ drill_path.source_field }}</code></div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:report_drill_path_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Drill Paths</span>
+        </a>
         <a href="{% url 'bi:report_definition_detail' drill_path.source_report.pk %}" class="btn btn-outline">
             <i data-lucide="file-text"></i>
             <span>Source Report</span>
