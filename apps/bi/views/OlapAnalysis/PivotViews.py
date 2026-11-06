@@ -42,7 +42,10 @@ def pivot_view_list(request):
 
     cube_id = request.GET.get("cube", "").strip()
     if cube_id:
-        qs = qs.filter(cube_id=cube_id)
+        if cube_id.isdigit():
+            qs = qs.filter(cube_id=int(cube_id))
+        else:
+            qs = qs.none()
 
     status = request.GET.get("status", "").strip()
     if status:
@@ -90,7 +93,7 @@ def pivot_view_detail(request, pk):
 def pivot_view_create(request):
     cube_id = request.GET.get("cube")
     initial = {}
-    if cube_id:
+    if cube_id and str(cube_id).isdigit():
         cube = get_object_or_404(OlapCube, pk=cube_id, tenant=request.tenant)
         initial["cube"] = cube
 
