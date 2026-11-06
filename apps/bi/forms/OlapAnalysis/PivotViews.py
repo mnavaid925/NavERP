@@ -66,6 +66,33 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        if "data" in kwargs and kwargs["data"]:
+            data = kwargs["data"].copy()
+            if "row_dimensions" in data and "row_dimensions_raw" not in data:
+                data["row_dimensions_raw"] = json.dumps(data["row_dimensions"]) if isinstance(data["row_dimensions"], list) else str(data["row_dimensions"])
+            if "column_dimensions" in data and "column_dimensions_raw" not in data:
+                data["column_dimensions_raw"] = json.dumps(data["column_dimensions"]) if isinstance(data["column_dimensions"], list) else str(data["column_dimensions"])
+            if "measures_selection" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = json.dumps(data["measures_selection"]) if isinstance(data["measures_selection"], list) else str(data["measures_selection"])
+            if "selected_measures" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = json.dumps(data["selected_measures"]) if isinstance(data["selected_measures"], list) else str(data["selected_measures"])
+            if "measures_selection_raw" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = data["measures_selection_raw"]
+            kwargs["data"] = data
+        elif len(args) > 0 and args[0]:
+            data = args[0].copy()
+            if "row_dimensions" in data and "row_dimensions_raw" not in data:
+                data["row_dimensions_raw"] = json.dumps(data["row_dimensions"]) if isinstance(data["row_dimensions"], list) else str(data["row_dimensions"])
+            if "column_dimensions" in data and "column_dimensions_raw" not in data:
+                data["column_dimensions_raw"] = json.dumps(data["column_dimensions"]) if isinstance(data["column_dimensions"], list) else str(data["column_dimensions"])
+            if "measures_selection" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = json.dumps(data["measures_selection"]) if isinstance(data["measures_selection"], list) else str(data["measures_selection"])
+            if "selected_measures" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = json.dumps(data["selected_measures"]) if isinstance(data["selected_measures"], list) else str(data["selected_measures"])
+            if "measures_selection_raw" in data and "selected_measures_raw" not in data:
+                data["selected_measures_raw"] = data["measures_selection_raw"]
+            args = (data,) + args[1:]
+
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["cube"].queryset = OlapCube.objects.filter(tenant=self.tenant)
