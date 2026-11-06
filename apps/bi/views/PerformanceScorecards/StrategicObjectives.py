@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -102,20 +103,21 @@ def strategic_objective_create(request):
     if request.method == "POST":
         form = StrategicObjectiveForm(request.POST, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.tenant = request.tenant
-            if not obj.owner:
-                obj.owner = request.user
-            obj.save()
-            obj.recalculate_alignment()
+            with transaction.atomic():
+                obj = form.save(commit=False)
+                obj.tenant = request.tenant
+                if not obj.owner:
+                    obj.owner = request.user
+                obj.save()
+                obj.recalculate_alignment()
 
-            write_audit_log(
-                request.user,
-                obj,
-                "create",
-                changes={"summary": f"Created Strategic Objective {obj.number} ({obj.name})"},
-                tenant=request.tenant,
-            )
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "create",
+                    changes={"summary": f"Created Strategic Objective {obj.number} ({obj.name})"},
+                    tenant=request.tenant,
+                )
             messages.success(request, f"Strategic Objective '{obj.name}' created.")
             return redirect(obj.get_absolute_url())
     else:
@@ -136,16 +138,17 @@ def strategic_objective_edit(request, pk):
     if request.method == "POST":
         form = StrategicObjectiveForm(request.POST, instance=obj, tenant=request.tenant)
         if form.is_valid():
-            obj = form.save()
-            obj.recalculate_alignment()
+            with transaction.atomic():
+                obj = form.save()
+                obj.recalculate_alignment()
 
-            write_audit_log(
-                request.user,
-                obj,
-                "update",
-                changes={"summary": f"Updated Strategic Objective {obj.number} ({obj.name})"},
-                tenant=request.tenant,
-            )
+                write_audit_log(
+                    request.user,
+                    obj,
+                    "update",
+                    changes={"summary": f"Updated Strategic Objective {obj.number} ({obj.name})"},
+                    tenant=request.tenant,
+                )
             messages.success(request, f"Strategic Objective '{obj.name}' updated.")
             return redirect(obj.get_absolute_url())
     else:
