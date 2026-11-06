@@ -56,6 +56,15 @@ from apps.bi.forms.OperationalReporting.ReportDefinitions import (
 from apps.bi.forms.OperationalReporting.ReportDrillPaths import ReportDrillPathForm
 from apps.bi.forms.OperationalReporting.ReportExecutions import ReportExecutionRunForm
 from apps.bi.forms.OperationalReporting.ReportParameters import ReportParameterForm
+from apps.bi.forms.PerformanceScorecards import (
+    KpiDefinitionForm,
+    KpiDefinitionRefreshForm,
+    PerformanceScorecardForm,
+    PerformanceScorecardRecalculateForm,
+    ScorecardKpiAssignmentForm,
+    ScorecardKpiRecordActualForm,
+    StrategicObjectiveForm,
+)
 from apps.bi.forms.SelfServiceAnalytics.AdHocCalculatedFields import (
     AdHocCalculatedFieldForm,
 )
@@ -135,6 +144,13 @@ __all__ = [
     "DataBlendDefinitionForm",
     "SavedAnalysisViewForm",
     "SavedAnalysisViewShareForm",
+    "KpiDefinitionForm",
+    "KpiDefinitionRefreshForm",
+    "PerformanceScorecardForm",
+    "PerformanceScorecardRecalculateForm",
+    "ScorecardKpiAssignmentForm",
+    "ScorecardKpiRecordActualForm",
+    "StrategicObjectiveForm",
     "OlapCubeForm",
     "PivotAnalysisViewForm",
     "WhatIfScenarioForm",
