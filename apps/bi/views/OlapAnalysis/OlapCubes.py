@@ -97,7 +97,7 @@ def olap_cube_create(request):
             cube.tenant = request.tenant
             cube.created_by = request.user
             cube.save()
-            write_audit_log(request.user, "create", cube, {"name": cube.name, "number": cube.number})
+            write_audit_log(request.user, cube, "create", changes={"name": cube.name, "number": cube.number}, tenant=request.tenant)
             messages.success(request, f"OLAP Cube '{cube.name}' ({cube.number}) created successfully.")
             return redirect("bi:olap_cube_detail", pk=cube.pk)
     else:
@@ -120,7 +120,7 @@ def olap_cube_edit(request, pk):
         form = OlapCubeForm(request.POST, instance=cube, tenant=request.tenant)
         if form.is_valid():
             cube = form.save()
-            write_audit_log(request.user, "update", cube, {"name": cube.name, "number": cube.number})
+            write_audit_log(request.user, cube, "update", changes={"name": cube.name, "number": cube.number}, tenant=request.tenant)
             messages.success(request, f"OLAP Cube '{cube.name}' updated successfully.")
             return redirect("bi:olap_cube_detail", pk=cube.pk)
     else:
@@ -144,7 +144,7 @@ def olap_cube_delete(request, pk):
     name = cube.name
     number = cube.number
     cube.delete()
-    write_audit_log(request.user, "delete", cube, {"name": name, "number": number})
+    write_audit_log(request.user, cube, "delete", changes={"name": name, "number": number}, tenant=request.tenant)
     messages.success(request, f"OLAP Cube '{name}' ({number}) deleted successfully.")
     return redirect("bi:olap_cube_list")
 
@@ -155,6 +155,6 @@ def olap_cube_refresh(request, pk):
     cube = bi_object(request, OlapCube, pk)
     cube.last_refreshed_at = timezone.now()
     cube.save(update_fields=["last_refreshed_at", "updated_at"])
-    write_audit_log(request.user, "refresh", cube, {"last_refreshed_at": str(cube.last_refreshed_at)})
+    write_audit_log(request.user, cube, "refresh", changes={"last_refreshed_at": str(cube.last_refreshed_at)}, tenant=request.tenant)
     messages.success(request, f"OLAP Cube '{cube.name}' aggregations refreshed successfully.")
     return redirect("bi:olap_cube_detail", pk=cube.pk)
