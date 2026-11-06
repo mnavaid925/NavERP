@@ -295,7 +295,7 @@ def report_definition_viewer(request, pk):
         select_related=("created_by", "org_unit", "semantic_model", "warehouse_table"),
     )
 
-    parameters = report.parameters.filter(is_active=True).order_by("prompt_order")
+    parameters = list(report.parameters.filter(is_active=True).order_by("prompt_order"))
     drill_paths = report.source_drill_paths.filter(is_enabled=True).select_related("target_report").order_by("sort_order")
 
     # Read applied parameters from GET
@@ -303,6 +303,7 @@ def report_definition_viewer(request, pk):
     for param in parameters:
         val = request.GET.get(param.parameter_name, param.default_value)
         applied_params[param.parameter_name] = val
+        param.runtime_value = val
 
     start_time = time.time()
     columns, rows = _evaluate_report_data(report, applied_params)
@@ -347,8 +348,12 @@ def report_definition_print(request, pk):
         select_related=("created_by", "org_unit"),
     )
 
-    parameters = report.parameters.filter(is_active=True).order_by("prompt_order")
-    applied_params = {param.parameter_name: request.GET.get(param.parameter_name, param.default_value) for param in parameters}
+    parameters = list(report.parameters.filter(is_active=True).order_by("prompt_order"))
+    applied_params = {}
+    for param in parameters:
+        val = request.GET.get(param.parameter_name, param.default_value)
+        applied_params[param.parameter_name] = val
+        param.runtime_value = val
 
     columns, rows = _evaluate_report_data(report, applied_params)
 
