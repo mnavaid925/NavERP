@@ -65,85 +65,96 @@
 ## Sub-module 10.10 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.10.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.10.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AdHocQuery (`BAHQ-`)**
-  - [ ] Model: `apps/bi/models/SelfServiceAnalytics/AdHocQueries.py` (`TenantNumbered`, `NUMBER_PREFIX = "BAHQ"`)
-  - [ ] Form: `apps/bi/forms/SelfServiceAnalytics/AdHocQueries.py` (`AdHocQueryForm`, `AdHocQueryComposerForm`)
-  - [ ] Views: `apps/bi/views/SelfServiceAnalytics/AdHocQueries.py` (list, detail, create, edit, delete, composer, execute, export)
-  - [ ] URLs: `apps/bi/urls/SelfServiceAnalytics/AdHocQueries.py` (`ad_hoc_query_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_query/list.html`
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_query/detail.html`
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_query/form.html`
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_query/composer.html`
-- [ ] **Entity 2: AdHocCalculatedField (`BACF-`)**
-  - [ ] Model: `apps/bi/models/SelfServiceAnalytics/AdHocCalculatedFields.py` (`TenantNumbered`, `NUMBER_PREFIX = "BACF"`)
-  - [ ] Form: `apps/bi/forms/SelfServiceAnalytics/AdHocCalculatedFields.py` (`AdHocCalculatedFieldForm`)
-  - [ ] Views: `apps/bi/views/SelfServiceAnalytics/AdHocCalculatedFields.py` (list, detail, create, edit, delete, validate)
-  - [ ] URLs: `apps/bi/urls/SelfServiceAnalytics/AdHocCalculatedFields.py` (`ad_hoc_calculated_field_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_calculated_field/list.html`
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_calculated_field/detail.html`
-    - [ ] `templates/bi/self_service_analytics/ad_hoc_calculated_field/form.html`
-- [ ] **Entity 3: DataBlendDefinition (`BBLD-`)**
-  - [ ] Model: `apps/bi/models/SelfServiceAnalytics/DataBlendDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BBLD"`)
-  - [ ] Form: `apps/bi/forms/SelfServiceAnalytics/DataBlendDefinitions.py` (`DataBlendDefinitionForm`)
-  - [ ] Views: `apps/bi/views/SelfServiceAnalytics/DataBlendDefinitions.py` (list, detail, create, edit, delete, preview)
-  - [ ] URLs: `apps/bi/urls/SelfServiceAnalytics/DataBlendDefinitions.py` (`data_blend_definition_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/self_service_analytics/data_blend_definition/list.html`
-    - [ ] `templates/bi/self_service_analytics/data_blend_definition/detail.html`
-    - [ ] `templates/bi/self_service_analytics/data_blend_definition/form.html`
-- [ ] **Entity 4: SavedAnalysisView (`BSAV-`)**
-  - [ ] Model: `apps/bi/models/SelfServiceAnalytics/SavedAnalysisViews.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSAV"`)
-  - [ ] Form: `apps/bi/forms/SelfServiceAnalytics/SavedAnalysisViews.py` (`SavedAnalysisViewForm`, `SavedAnalysisViewShareForm`)
-  - [ ] Views: `apps/bi/views/SelfServiceAnalytics/SavedAnalysisViews.py` (list, detail, create, edit, delete, clone, share, explore)
-  - [ ] URLs: `apps/bi/urls/SelfServiceAnalytics/SavedAnalysisViews.py` (`saved_analysis_view_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/self_service_analytics/saved_analysis_view/list.html`
-    - [ ] `templates/bi/self_service_analytics/saved_analysis_view/detail.html`
-    - [ ] `templates/bi/self_service_analytics/saved_analysis_view/form.html`
-    - [ ] `templates/bi/self_service_analytics/saved_analysis_view/explore.html`
+- [x] **Entity 1: AdHocQuery (`BAHQ-`)**
+  - [x] Model: `apps/bi/models/SelfServiceAnalytics/AdHocQueries.py` (`TenantNumbered`, `NUMBER_PREFIX = "BAHQ"`)
+  - [x] Form: `apps/bi/forms/SelfServiceAnalytics/AdHocQueries.py` (`AdHocQueryForm`, `AdHocQueryComposerForm`)
+  - [x] Views: `apps/bi/views/SelfServiceAnalytics/AdHocQueries.py` (list, detail, create, edit, delete, composer, execute, export)
+  - [x] URLs: `apps/bi/urls/SelfServiceAnalytics/AdHocQueries.py` (`ad_hoc_query_*`)
+  - [x] Templates:
+    - [x] `templates/bi/self_service_analytics/ad_hoc_query/list.html`
+    - [x] `templates/bi/self_service_analytics/ad_hoc_query/detail.html`
+    - [x] `templates/bi/self_service_analytics/ad_hoc_query/form.html`
+    - [x] `templates/bi/self_service_analytics/ad_hoc_query/composer.html`
+- [x] **Entity 2: AdHocCalculatedField (`BACF-`)**
+  - [x] Model: `apps/bi/models/SelfServiceAnalytics/AdHocCalculatedFields.py` (`TenantNumbered`, `NUMBER_PREFIX = "BACF"`)
+  - [x] Form: `apps/bi/forms/SelfServiceAnalytics/AdHocCalculatedFields.py` (`AdHocCalculatedFieldForm`)
+  - [x] Views: `apps/bi/views/SelfServiceAnalytics/AdHocCalculatedFields.py` (list, detail, create, edit, delete, validate)
+  - [x] URLs: `apps/bi/urls/SelfServiceAnalytics/AdHocCalculatedFields.py` (`ad_hoc_calculated_field_*`)
+  - [x] Templates:
+    - [x] `templates/bi/self_service_analytics/ad_hoc_calculated_field/list.html`
+    - [x] `templates/bi/self_service_analytics/ad_hoc_calculated_field/detail.html`
+    - [x] `templates/bi/self_service_analytics/ad_hoc_calculated_field/form.html`
+- [x] **Entity 3: DataBlendDefinition (`BBLD-`)**
+  - [x] Model: `apps/bi/models/SelfServiceAnalytics/DataBlendDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BBLD"`)
+  - [x] Form: `apps/bi/forms/SelfServiceAnalytics/DataBlendDefinitions.py` (`DataBlendDefinitionForm`)
+  - [x] Views: `apps/bi/views/SelfServiceAnalytics/DataBlendDefinitions.py` (list, detail, create, edit, delete, preview)
+  - [x] URLs: `apps/bi/urls/SelfServiceAnalytics/DataBlendDefinitions.py` (`data_blend_definition_*`)
+  - [x] Templates:
+    - [x] `templates/bi/self_service_analytics/data_blend_definition/list.html`
+    - [x] `templates/bi/self_service_analytics/data_blend_definition/detail.html`
+    - [x] `templates/bi/self_service_analytics/data_blend_definition/form.html`
+- [x] **Entity 4: SavedAnalysisView (`BSAV-`)**
+  - [x] Model: `apps/bi/models/SelfServiceAnalytics/SavedAnalysisViews.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSAV"`)
+  - [x] Form: `apps/bi/forms/SelfServiceAnalytics/SavedAnalysisViews.py` (`SavedAnalysisViewForm`, `SavedAnalysisViewShareForm`)
+  - [x] Views: `apps/bi/views/SelfServiceAnalytics/SavedAnalysisViews.py` (list, detail, create, edit, delete, clone, share, explore)
+  - [x] URLs: `apps/bi/urls/SelfServiceAnalytics/SavedAnalysisViews.py` (`saved_analysis_view_*`)
+  - [x] Templates:
+    - [x] `templates/bi/self_service_analytics/saved_analysis_view/list.html`
+    - [x] `templates/bi/self_service_analytics/saved_analysis_view/detail.html`
+    - [x] `templates/bi/self_service_analytics/saved_analysis_view/form.html`
+    - [x] `templates/bi/self_service_analytics/saved_analysis_view/explore.html`
+    - [x] `templates/bi/self_service_analytics/saved_analysis_view/share.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Add re-exports in `apps/bi/models/SelfServiceAnalytics/__init__.py` and `apps/bi/models/__init__.py`
-- [ ] Add re-exports in `apps/bi/forms/SelfServiceAnalytics/__init__.py` and `apps/bi/forms/__init__.py`
-- [ ] Add re-exports in `apps/bi/views/SelfServiceAnalytics/__init__.py` and `apps/bi/views/__init__.py`
-- [ ] Assemble URL patterns in `apps/bi/urls/SelfServiceAnalytics/__init__.py` and wire into `apps/bi/urls/__init__.py`
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Add `LIVE_LINKS["10.10"]` in `apps/core/navigation.py`
-- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data
-- [ ] Run `makemigrations bi` (claiming `0024`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+- [x] Add re-exports in `apps/bi/models/SelfServiceAnalytics/__init__.py` and `apps/bi/models/__init__.py`
+- [x] Add re-exports in `apps/bi/forms/SelfServiceAnalytics/__init__.py` and `apps/bi/forms/__init__.py`
+- [x] Add re-exports in `apps/bi/views/SelfServiceAnalytics/__init__.py` and `apps/bi/views/__init__.py`
+- [x] Assemble URL patterns in `apps/bi/urls/SelfServiceAnalytics/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Add `LIVE_LINKS["10.10"]` in `apps/core/navigation.py`
+- [x] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data
+- [x] Run `makemigrations bi` (claiming `0024`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
 
 ### Phase 3.5: Smoke Testing
-- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+- [x] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
 
 ### Phase 4: Six-Pass Serial Review
-- [ ] Pass 1: Code Reviewer
-- [ ] Pass 2: Explorer
-- [ ] Pass 3: Frontend Reviewer
-- [ ] Pass 4: Performance Reviewer
-- [ ] Pass 5: QA Smoke Tester
-- [ ] Pass 6: Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.10.md`
+- [x] Pass 1: Code Reviewer
+- [x] Pass 2: Explorer
+- [x] Pass 3: Frontend Reviewer
+- [x] Pass 4: Performance Reviewer
+- [x] Pass 5: QA Smoke Tester
+- [x] Pass 6: Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.10.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+- [x] Fix all 19 review findings in order (Critical -> Important -> Minor) and commit per-file
 
 ### Phase 6: Automated Test Suite
-- [ ] Add shared 10.10 fixtures to `conftest.py`
-- [ ] Write `test_selfserviceanalytics_models.py`
-- [ ] Write `test_selfserviceanalytics_forms.py`
-- [ ] Write `test_selfserviceanalytics_views.py`
-- [ ] Write `test_selfserviceanalytics_security.py`
-- [ ] Run full unfiltered test suite and ensure 100% green
+- [x] Add shared 10.10 fixtures to `conftest.py`
+- [x] Write `test_selfserviceanalytics_models.py`
+- [x] Write `test_selfserviceanalytics_forms.py`
+- [x] Write `test_selfserviceanalytics_views.py`
+- [x] Write `test_selfserviceanalytics_security.py`
+- [x] Run full unfiltered test suite and ensure 100% green (1,315 passing tests across `apps/bi`)
 
 ### Phase 7: Skill & Documentation Close-out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.10 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.10 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.10.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.10 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.10 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.10.md`
+
+---
+
+### Sub-module 10.10 Review & Close-out Summary
+- **Module & Sub-module**: Module 10: Business Intelligence (`apps/bi`), Sub-module 10.10: Self-Service & Ad-Hoc Analytics.
+- **Models Delivered**: `AdHocQuery` (`BAHQ-`), `AdHocCalculatedField` (`BACF-`), `DataBlendDefinition` (`BBLD-`), `SavedAnalysisView` (`BSAV-`).
+- **Migrations**: `0024_datablenddefinition_adhocquery_savedanalysisview_and_more.py` and `0025_savedanalysisview_idx_bsav_ten_qry_and_more.py`.
+- **Review Findings**: All 19 findings (`C1`–`C2`, `I1`–`I10`, `M1`–`M7`) in `.claude/tasks/review-bi-10.10.md` resolved and verified (`[x] fixed`).
+- **Test Suite**: 56 dedicated passing tests across models, forms, views, and security. Full unfiltered `apps/bi/tests/` suite passes 100% green with 1,315 passing tests.
+- **Gaps Register**: Documented in [.agents/tasks/gaps-bi-10.10.md](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-bi-10.10.md) (`GAP-10.10-01` In-Browser DuckDB WASM Engine, `GAP-10.10-02` Real-time WebSockets Multi-User Collaboration). **Open Defects**: None.
 
 ---
 
