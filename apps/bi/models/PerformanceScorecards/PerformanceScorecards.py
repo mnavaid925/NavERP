@@ -171,9 +171,10 @@ class PerformanceScorecard(TenantNumbered):
         self.last_recalculated_at = timezone.now()
         self.save(update_fields=["overall_score", "overall_rag_status", "last_recalculated_at", "updated_at"])
 
-    def get_perspective_summary(self):
+    def get_perspective_summary(self, assignments=None):
         """Return counts and average scores per BSC perspective."""
-        assignments = list(self.kpi_assignments.select_related("kpi").all())
+        if assignments is None:
+            assignments = list(self.kpi_assignments.all())
         summary = {
             "financial": {"name": "Financial", "count": 0, "on_track": 0, "avg_score": Decimal("0.00")},
             "customer": {"name": "Customer", "count": 0, "on_track": 0, "avg_score": Decimal("0.00")},
