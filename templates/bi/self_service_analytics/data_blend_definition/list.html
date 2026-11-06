@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Cross-Dataset Blends & Mashups — Self-Service Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Analytics</a>
+            <span class="sep">/</span>
+            <span>Data Blends</span>
+        </div>
+        <h1 class="page-title">Cross-Dataset Blends & Mashups</h1>
+        <p class="text-muted text-sm">On-the-fly cross-dataset joins between governed semantic models and warehouse tables without database schema modifications</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Queries</span>
+        </a>
+        <a href="{% url 'bi:data_blend_definition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Data Blend</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Blends</label>
+                <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Blend name, number..." class="form-input">
+            </div>
+            <div>
+                <label for="id_join_type" class="form-label">Join Type</label>
+                <select id="id_join_type" name="join_type" class="form-select">
+                    <option value="">All Join Types</option>
+                    {% for code, label in join_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.join_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label">Status</label>
+                <select id="id_status" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:data_blend_definition_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number & Name</th>
+                    <th>Primary Source</th>
+                    <th>Join Type</th>
+                    <th>Secondary Source</th>
+                    <th>Cardinality</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for blend in blends %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:data_blend_definition_detail' blend.pk %}" class="font-medium text-slate-900 hover:text-blue-600">
+                            {{ blend.name }}
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ blend.number }} · {{ blend.slug }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ blend.get_primary_source_type_display }}</span>
+                        <div class="text-xs text-slate-700 font-medium mt-0.5">
+                            {% if blend.primary_semantic_model %}
+                                {{ blend.primary_semantic_model.name }}
+                            {% elif blend.primary_warehouse_table %}
+                                {{ blend.primary_warehouse_table.name }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ blend.badge_join }}">
+                            {{ blend.get_join_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ blend.get_secondary_source_type_display }}</span>
+                        <div class="text-xs text-slate-700 font-medium mt-0.5">
+                            {% if blend.secondary_semantic_model %}
+                                {{ blend.secondary_semantic_model.name }}
+                            {% elif blend.secondary_warehouse_table %}
+                                {{ blend.secondary_warehouse_table.name }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ blend.get_cardinality_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ blend.badge_status }}">{{ blend.get_status_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:data_blend_definition_preview' blend.pk %}" class="btn btn-icon" title="Preview Blend Join">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:data_blend_definition_edit' blend.pk %}" class="btn btn-icon" title="Edit Blend">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:data_blend_definition_delete' blend.pk %}" class="inline" onsubmit="return confirm('Delete data blend definition {{ blend.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Blend">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="shuffle" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Data Blends Configured</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Create cross-dataset mashups to join distinct governed datasets (e.g. Sales Orders and Supply Chain Inventory).</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:data_blend_definition_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Data Blend</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.join_type %}&join_type={{ request.GET.join_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.join_type %}&join_type={{ request.GET.join_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
