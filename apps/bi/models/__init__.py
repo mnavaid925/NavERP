@@ -27,6 +27,12 @@ from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
 from apps.bi.models.Dashboards.BiDashboardBookmarks import BiDashboardBookmark
 from apps.bi.models.Dashboards.BiDashboardFilters import BiDashboardFilter
+from apps.bi.models.OlapAnalysis import (
+    OlapCube,
+    PivotAnalysisView,
+    ScenarioWritebackCell,
+    WhatIfScenario,
+)
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -83,4 +89,8 @@ __all__ = [
     "AdHocCalculatedField",
     "DataBlendDefinition",
     "SavedAnalysisView",
+    "OlapCube",
+    "PivotAnalysisView",
+    "WhatIfScenario",
+    "ScenarioWritebackCell",
 ]
