@@ -100,6 +100,7 @@ class BiDashboard(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bdsh_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bdsh_ten_created"),
             models.Index(fields=["tenant", "category"], name="idx_bdsh_ten_cat"),
             models.Index(fields=["tenant", "is_published"], name="idx_bdsh_ten_pub"),
             models.Index(fields=["tenant", "is_default"], name="idx_bdsh_ten_def"),
