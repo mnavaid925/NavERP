@@ -15,7 +15,7 @@
 
 ### Critical Findings
 
-- [ ] **[C1] Unhandled HTTP 500 on duplicate slug during report cloning**
+- [x] **[C1] Unhandled HTTP 500 on duplicate slug during report cloning** (Fixed: added `tenant` parameter and `clean_new_slug` / `clean` uniqueness checks in `ReportCloneForm`, passed `tenant=request.tenant` in `report_definition_clone` view)
   - **Locations**: `apps/bi/forms/OperationalReporting/ReportDefinitions.py:123-140`, `apps/bi/views/OperationalReporting/ReportDefinitions.py:192-264`
   - **Issue**: `ReportCloneForm` does not validate tenant uniqueness of `new_slug`. When `ReportDefinition.objects.create(tenant=request.tenant, slug=new_slug, ...)` runs with a duplicate slug, an `IntegrityError` is thrown on `bi_brpt_tenant_slug_uniq`. `TenantNumbered.save()` catches this in a 5-attempt retry loop assuming a number sequence collision, then raises `IntegrityError: Could not allocate a unique BRPT number...`, crashing with HTTP 500.
   - **Fix**: Accept `tenant` in `ReportCloneForm`, add `clean_new_slug` to validate `ReportDefinition.objects.filter(tenant=self.tenant, slug=slug).exists()`, and return clean form validation error.
