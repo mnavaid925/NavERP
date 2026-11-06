@@ -89,11 +89,24 @@ class PivotAnalysisView(TenantNumbered):
             models.Index(fields=["tenant", "created_by"], name="idx_bpiv_ten_user"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if "measures_selection" in kwargs and "selected_measures" not in kwargs:
+            kwargs["selected_measures"] = kwargs.pop("measures_selection")
+        super().__init__(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.number})"
 
     def get_absolute_url(self):
         return reverse("bi:pivot_view_detail", kwargs={"pk": self.pk})
+
+    @property
+    def measures_selection(self):
+        return self.selected_measures
+
+    @measures_selection.setter
+    def measures_selection(self, value):
+        self.selected_measures = value
 
     def save(self, *args, **kwargs):
         if not self.slug:
