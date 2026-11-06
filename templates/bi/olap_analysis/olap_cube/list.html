@@ -180,7 +180,7 @@
                         {% elif cube.status == 'draft' %}
                         <span class="badge badge-amber">Draft</span>
                         {% else %}
-                        <span class="badge badge-muted">Archived</span>
+                        <span class="badge badge-muted">{{ cube.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td>
