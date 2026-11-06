@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}{{ kpi.name }} ({{ kpi.code }}) — KPI Definition — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:kpi_definition_list' %}">KPI Library</a>
+            <span class="sep">/</span>
+            <span>{{ kpi.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ kpi.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ kpi.number }}</span>
+            {% if kpi.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif kpi.status == 'draft' %}
+            <span class="badge badge-slate">Draft</span>
+            {% elif kpi.status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif kpi.status == 'deprecated' %}
+            <span class="badge badge-muted">Deprecated</span>
+            {% else %}
+            <span class="badge badge-red">Archived</span>
+            {% endif %}
+
+            {% if rag_status == 'green' %}
+            <span class="badge badge-green flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> On Track</span>
+            {% elif rag_status == 'amber' %}
+            <span class="badge badge-amber flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Needs Attention</span>
+            {% elif rag_status == 'red' %}
+            <span class="badge badge-red flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Critical / Off Track</span>
+            {% else %}
+            <span class="badge badge-muted flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Not Evaluated</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">{{ kpi.code }} · {{ kpi.get_perspective_display }} · {{ kpi.category|capfirst }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:kpi_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Library</span>
+        </a>
+        <a href="{% url 'bi:kpi_definition_edit' kpi.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit KPI</span>
+        </a>
+        <form method="post" action="{% url 'bi:kpi_definition_delete' kpi.pk %}" class="inline" onsubmit="return confirm('Delete this KPI definition?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Primary Metric Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if rag_status == 'green' %}green{% elif rag_status == 'amber' %}orange{% elif rag_status == 'red' %}slate{% else %}blue{% endif %}">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Current Value</div>
+            <div class="text-2xl font-bold font-mono">
+                {{ kpi.current_value|floatformat:2 }}
+                <span class="text-sm font-normal text-muted">{{ kpi.get_unit_of_measure_display }}</span>
+            </div>
+            {% if kpi.previous_value %}
+            <div class="text-xs text-muted mt-1">Prev: {{ kpi.previous_value|floatformat:2 }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Target Value</div>
+            <div class="text-2xl font-bold font-mono text-slate-800">
+                {{ kpi.target_value|floatformat:2 }}
+            </div>
+            <div class="text-xs text-muted mt-1">{{ kpi.get_target_direction_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if kpi.variance >= 0 %}green{% else %}orange{% endif %}">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Variance vs Target</div>
+            <div class="text-2xl font-bold font-mono {% if kpi.variance >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+                {% if kpi.variance > 0 %}+{% endif %}{{ kpi.variance|floatformat:2 }}
+            </div>
+            <div class="text-xs text-muted mt-1">
+                {% if kpi.variance_percentage > 0 %}+{% endif %}{{ kpi.variance_percentage|floatformat:1 }}%
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Industry Benchmark</div>
+            <div class="text-2xl font-bold font-mono text-indigo-700">
+                {% if kpi.industry_benchmark_value %}
+                {{ kpi.industry_benchmark_value|floatformat:2 }}
+                {% else %}
+                <span class="text-slate-400 text-lg">None</span>
+                {% endif %}
+            </div>
+            {% if kpi.benchmark_gap is not None %}
+            <div class="text-xs {% if kpi.benchmark_gap >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %} mt-1">
+                Gap: {% if kpi.benchmark_gap > 0 %}+{% endif %}{{ kpi.benchmark_gap|floatformat:2 }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Details & Configuration -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Specs and Calculation -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">KPI Specifications</h3>
+                <span class="badge {% if kpi.perspective == 'financial' %}badge-green{% elif kpi.perspective == 'customer' %}badge-info{% elif kpi.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                    {{ kpi.get_perspective_display }}
+                </span>
+            </div>
+            <div class="card-body space-y-4">
+                {% if kpi.description %}
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold tracking-wider">Description</div>
+                    <p class="text-sm text-slate-700 mt-1">{{ kpi.description }}</p>
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Direction of Improvement</div>
+                        <div class="text-sm font-medium mt-1">{{ kpi.get_target_direction_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Tracking Frequency</div>
+                        <div class="text-sm font-medium mt-1">{{ kpi.get_tracking_frequency_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Calculation Mode</div>
+                        <div class="text-sm font-medium mt-1">{{ kpi.get_calculation_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Unit of Measure</div>
+                        <div class="text-sm font-medium mt-1">{{ kpi.get_unit_of_measure_display }}</div>
+                    </div>
+                </div>
+
+                <!-- Calculation Source Connection -->
+                <div class="pt-4 border-t border-slate-100">
+                    <div class="text-xs text-muted uppercase font-semibold mb-2">Calculation Logic</div>
+                    {% if kpi.calculation_type == 'semantic_measure' and kpi.semantic_measure %}
+                    <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900 flex items-center justify-between">
+                        <div>
+                            <div class="font-semibold">Linked Semantic Measure (10.4)</div>
+                            <div class="text-xs font-mono text-blue-700">{{ kpi.semantic_measure.number }} - {{ kpi.semantic_measure.name }} ({{ kpi.semantic_measure.measure_code }})</div>
+                        </div>
+                        <a href="{% url 'bi:calculated_measure_detail' kpi.semantic_measure.pk %}" class="btn btn-outline btn-sm">
+                            <i data-lucide="external-link"></i>
+                            <span>View Measure</span>
+                        </a>
+                    </div>
+                    {% elif kpi.formula_expression %}
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div class="text-xs text-muted mb-1">Formula Expression:</div>
+                        <code class="text-sm font-mono text-slate-900 font-semibold">{{ kpi.formula_expression }}</code>
+                    </div>
+                    {% else %}
+                    <div class="text-sm text-slate-600 italic">Manual quantitative or qualitative measurement recording.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Threshold Bands -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">RAG Threshold Bands</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+                        <div class="text-xs font-semibold text-emerald-800 uppercase">Target (Green)</div>
+                        <div class="text-xl font-bold font-mono text-emerald-900 mt-1">{{ kpi.target_value|floatformat:2 }}</div>
+                        <div class="text-xs text-emerald-700 mt-1">Desired operational benchmark</div>
+                    </div>
+                    <div class="p-3 rounded-lg border border-amber-200 bg-amber-50/50">
+                        <div class="text-xs font-semibold text-amber-800 uppercase">Warning (Amber)</div>
+                        <div class="text-xl font-bold font-mono text-amber-900 mt-1">
+                            {% if kpi.warning_threshold %}{{ kpi.warning_threshold|floatformat:2 }}{% else %}—{% endif %}
+                        </div>
+                        <div class="text-xs text-amber-700 mt-1">Pre-breach warning alert</div>
+                    </div>
+                    <div class="p-3 rounded-lg border border-rose-200 bg-rose-50/50">
+                        <div class="text-xs font-semibold text-rose-800 uppercase">Critical (Red)</div>
+                        <div class="text-xl font-bold font-mono text-rose-900 mt-1">
+                            {% if kpi.critical_threshold %}{{ kpi.critical_threshold|floatformat:2 }}{% else %}—{% endif %}
+                        </div>
+                        <div class="text-xs text-rose-700 mt-1">Severe underperformance</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Quick Refresh, Benchmarking & Metadata -->
+    <div class="space-y-6">
+        <!-- Quick Refresh Form -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Record Measurement</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:kpi_definition_refresh' kpi.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label class="form-label text-xs">New Actual Value</label>
+                        {{ refresh_form.new_value }}
+                    </div>
+                    <div>
+                        <label class="form-label text-xs">Measurement Notes</label>
+                        {{ refresh_form.notes }}
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="refresh-cw"></i>
+                        <span>Update KPI Value</span>
+                    </button>
+                    {% if kpi.last_calculated_at %}
+                    <div class="text-[11px] text-muted text-center">Last updated: {{ kpi.last_calculated_at|date:"M d, Y H:i" }}</div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        <!-- Industry Benchmarking -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Industry Benchmarking</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase">Benchmark Value</div>
+                    <div class="font-mono font-semibold text-slate-800">
+                        {% if kpi.industry_benchmark_value %}{{ kpi.industry_benchmark_value|floatformat:2 }}{% else %}<span class="text-muted">Not specified</span>{% endif %}
+                    </div>
+                </div>
+                {% if kpi.benchmark_source %}
+                <div>
+                    <div class="text-xs text-muted uppercase">Benchmark Source</div>
+                    <div class="text-slate-700">{{ kpi.benchmark_source }}</div>
+                </div>
+                {% endif %}
+                {% if kpi.benchmark_percentile %}
+                <div>
+                    <div class="text-xs text-muted uppercase">Market Percentile</div>
+                    <div class="font-semibold text-indigo-700">{{ kpi.benchmark_percentile }}th Percentile</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Accountability & Governance -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Accountability & Governance</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase">KPI Owner</div>
+                    <div class="font-medium text-slate-800">
+                        {% if kpi.owner %}{{ kpi.owner.get_full_name|default:kpi.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase">Department / Org Unit</div>
+                    <div class="font-medium text-slate-800">
+                        {% if kpi.department %}{{ kpi.department.name }}{% else %}<span class="text-muted">Company-wide</span>{% endif %}
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-slate-100 text-xs text-muted space-y-1">
+                    <div>Created: {{ kpi.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ kpi.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scorecards Utilizing this KPI -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-900">Scorecard Inclusions & Usage</h3>
+        <span class="text-xs text-muted">{{ assignments.count }} Scorecard{{ assignments.count|pluralize }}</span>
+    </div>
+    {% if assignments %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scorecard</th>
+                    <th>Perspective</th>
+                    <th>Strategic Objective</th>
+                    <th class="text-right">Weight</th>
+                    <th class="text-right">Target</th>
+                    <th class="text-right">Actual</th>
+                    <th class="text-right">Variance</th>
+                    <th>Health</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in assignments %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-primary">
+                            <a href="{{ a.scorecard.get_absolute_url }}">{{ a.scorecard.name }}</a>
+                        </div>
+                        <div class="text-xs text-muted">{{ a.scorecard.number }} · {{ a.scorecard.get_scorecard_type_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {% if a.perspective == 'financial' %}badge-green{% elif a.perspective == 'customer' %}badge-info{% elif a.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                            {{ a.get_perspective_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if a.objective %}
+                        <a href="{{ a.objective.get_absolute_url }}" class="text-xs text-primary hover:underline font-medium">{{ a.objective.name }}</a>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right font-mono text-sm">{{ a.weight|floatformat:1 }}%</td>
+                    <td class="text-right font-mono text-sm">{{ a.target_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-sm font-semibold">{{ a.actual_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-sm {% if a.variance >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+                        {% if a.variance > 0 %}+{% endif %}{{ a.variance|floatformat:2 }}
+                    </td>
+                    <td>
+                        {% if a.rag_status == 'green' %}
+                        <span class="badge badge-green">On Track</span>
+                        {% elif a.rag_status == 'amber' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% elif a.rag_status == 'red' %}
+                        <span class="badge badge-red">Critical</span>
+                        {% else %}
+                        <span class="badge badge-muted">Not Evaluated</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{{ a.get_absolute_url }}" class="btn btn-icon btn-outline" title="View Assignment">
+                            <i data-lucide="eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="p-6 text-center text-muted text-sm">
+        This KPI is not currently assigned to any performance scorecards.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
