@@ -123,6 +123,10 @@
                     </td>
                     {% endfor %}
                 </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-6 text-slate-500 italic">No records found matching prompt criteria.</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>
