@@ -111,7 +111,7 @@
                     </td>
                     {% for val in row.values %}
                     <td class="text-right border-r border-slate-200 font-mono text-xs">
-                        {% if view.drill_through_enabled %}
+                        {% if view.drill_through_enabled and view.drill_through_target %}
                         <a href="{% url view.drill_through_target %}" class="text-slate-800 hover:text-blue-600 hover:underline" title="Click to drill-through to transactional journal entries">
                             ${{ val|floatformat:2 }}
                         </a>
