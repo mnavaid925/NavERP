@@ -122,9 +122,6 @@ def saved_analysis_view_detail(request, pk):
 
 @login_required
 def saved_analysis_view_create(request):
-    queries = AdHocQuery.objects.filter(tenant=request.tenant)
-    org_units = OrgUnit.objects.filter(tenant=request.tenant)
-
     initial = {}
     query_param = request.GET.get("query")
     if query_param and query_param.isdigit():
@@ -156,8 +153,6 @@ def saved_analysis_view_create(request):
         {
             "form": form,
             "is_edit": False,
-            "queries": queries,
-            "org_units": org_units,
         },
     )
 
@@ -167,8 +162,6 @@ def saved_analysis_view_edit(request, pk):
     view_obj = bi_object(request, SavedAnalysisView, pk)
     if not _can_modify_saved_view(request, view_obj):
         raise PermissionDenied("You do not have permission to modify this analysis view.")
-    queries = AdHocQuery.objects.filter(tenant=request.tenant)
-    org_units = OrgUnit.objects.filter(tenant=request.tenant)
 
     if request.method == "POST":
         form = SavedAnalysisViewForm(request.POST, instance=view_obj, tenant=request.tenant)
@@ -193,8 +186,6 @@ def saved_analysis_view_edit(request, pk):
             "form": form,
             "view_obj": view_obj,
             "is_edit": True,
-            "queries": queries,
-            "org_units": org_units,
         },
     )
 
