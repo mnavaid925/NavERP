@@ -2876,6 +2876,8 @@ class Command(BaseCommand):
                     from apps.accounting.models import Budget, FiscalPeriod, GLAccount
                     from apps.core.models import OrgUnit
 
+                    tenant_admin = get_user_model().objects.filter(tenant=tenant).first()
+
                     # Reference spine masters
                     gl_rev = GLAccount.objects.filter(tenant=tenant, code__startswith="4").first() or GLAccount.objects.filter(tenant=tenant).first()
                     gl_exp = GLAccount.objects.filter(tenant=tenant, code__startswith="5").first() or GLAccount.objects.filter(tenant=tenant).last()
