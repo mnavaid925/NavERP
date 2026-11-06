@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from django import forms
+from django.db.models import Q
 
 from apps.accounting.models import GLAccount
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
@@ -42,7 +43,12 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["scenario"].queryset = WhatIfScenario.objects.filter(tenant=self.tenant)
+            scenario_qs = WhatIfScenario.objects.filter(tenant=self.tenant).exclude(status="committed")
+            if self.instance and self.instance.pk and self.instance.scenario_id:
+                scenario_qs = WhatIfScenario.objects.filter(tenant=self.tenant).filter(
+                    Q(status__in=["draft", "simulated", "approved"]) | Q(pk=self.instance.scenario_id)
+                )
+            self.fields["scenario"].queryset = scenario_qs
             self.fields["gl_account"].queryset = GLAccount.objects.filter(tenant=self.tenant)
             self.fields["org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
 
@@ -54,6 +60,12 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
                 "period": "2026-Q1",
                 "channel": "Enterprise Direct",
             }, indent=2)
+
+    def clean_scenario(self):
+        scenario = self.cleaned_data.get("scenario")
+        if scenario and scenario.status == "committed":
+            raise forms.ValidationError("Adjustments cannot be attached to a committed scenario.")
+        return scenario
 
     def clean_cell_coordinates_raw(self):
         val = self.cleaned_data.get("cell_coordinates_raw", "").strip()
