@@ -55,3 +55,28 @@
    - Export logic outputs delimited text regardless of whether CSV or XLSX was chosen.
 
 ---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+1. `templates/bi/operational_reporting/report_definition/viewer.html:56, 61, 65, 161` & `print.html:117` — **[C1] Misuse of `dictsort` filter for dictionary key lookup in `viewer.html` and `print.html`.**
+   - In `viewer.html:161` & `print.html:117`, `{{ row|dictsort:col.field }}` in the `{% else %}` branch evaluates to `""`, rendering standard mock columns like `"description"` and custom columns completely blank.
+   - In `viewer.html:56, 65`, `value="{{ applied_params|dictsort:param.parameter_name|default:param.default_value }}"` evaluates `dictsort` to `""`, losing user-submitted prompt inputs.
+   - In `viewer.html:61`, `{% if applied_params|dictsort:param.parameter_name == choice.value %}selected{% endif %}` compares `"" == choice.value`, failing to re-select submitted choices.
+
+### Important
+1. `apps/bi/models/OperationalReporting/ReportDrillPaths.py:80`, `ReportExecutions.py:126`, `ReportParameters.py:104` — **[I1] Non-existent theme class `badge-purple` returned by model properties (L33).**
+   - `theme.css` has no `.badge-purple`.
+   - `ReportDrillPath.badge_target_type` maps `"operational_report": "badge-purple"`.
+   - `ReportExecution.badge_mode` maps `"drill_through": "badge-purple"`.
+   - `ReportParameter.badge_type` maps `"choice_single"` and `"choice_multi"` to `"badge-purple"`.
+   - Fix: Map to valid color-named classes (`badge-info`, `badge-slate`, or `badge-green`).
+2. `templates/bi/operational_reporting/*/*/detail.html` — **[I2] Missing "Back to Reports" / "Back to List" action button in detail header page-actions.**
+   - Detail page-actions omit standard "Back to List" action button alongside Edit/Delete.
+
+### Minor
+1. `templates/bi/operational_reporting/report_definition/print.html:104-123` — **[M1] Missing `{% empty %}` fallback row in print view.**
+   - If report returns 0 rows matching prompt criteria, print table renders an empty tbody without an explanatory empty row.
+2. `templates/bi/operational_reporting/*/*.html` — **[M2] Raw Tailwind color utilities lack paired `dark:` variants in certain headings/subheadings.**
+
+---
