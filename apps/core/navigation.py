@@ -3010,6 +3010,20 @@ LIVE_LINKS = {
         "Drill-Through Paths": "bi:report_drill_path_list",
     },
 
+    # 10.10 Self-Service & Ad-Hoc Analytics
+    "10.10": {
+        "Ad-Hoc Query Builder": "bi:ad_hoc_query_list",
+        "Data Discovery & Exploration": "bi:ad_hoc_query_list",
+        "Calculated Fields & Custom Metrics": "bi:ad_hoc_calculated_field_list",
+        "Data Blending & Mashups": "bi:data_blend_definition_list",
+        "Saved Views & Sharing": "bi:saved_analysis_view_list",
+        # Extra live leaves
+        "Ad-Hoc Queries": "bi:ad_hoc_query_list",
+        "Calculated Fields": "bi:ad_hoc_calculated_field_list",
+        "Data Blends": "bi:data_blend_definition_list",
+        "Saved Views": "bi:saved_analysis_view_list",
+    },
+
 
 
 
