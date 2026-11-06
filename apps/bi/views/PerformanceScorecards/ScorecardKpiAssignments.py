@@ -187,6 +187,7 @@ def scorecard_kpi_assignment_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 def scorecard_kpi_assignment_record_actual(request, pk):
     assignment = bi_object(request, ScorecardKpiAssignment, pk, select_related=("scorecard", "kpi"))
     if request.method == "POST":
