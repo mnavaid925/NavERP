@@ -39,7 +39,7 @@
   - **Issue**: `report_id = request.GET.get("report", "").strip()` is queried directly against `report_id=report_id` or `get_object_or_404(..., pk=report_id)` without checking `.isdigit()`. Submitting `?report=abc` crashes with `ValueError: Field 'id' expected a number`.
   - **Fix**: Guard with `if report_id and report_id.isdigit():` before applying the filter or `get_object_or_404`.
 
-- [ ] **[I2] Non-existent theme class `badge-purple` returned by model properties (L33)**
+- [x] **[I2] Non-existent theme class `badge-purple` returned by model properties (L33)** (Fixed: remapped all `badge-purple` properties to valid theme classes `badge-slate` and `badge-info` across `ReportDrillPath`, `ReportExecution`, and `ReportParameter`)
   - **Locations**: `apps/bi/models/OperationalReporting/ReportDrillPaths.py:80`, `ReportExecutions.py:126`, `ReportParameters.py:104`
   - **Issue**: `theme.css` only provides `.badge-green`, `.badge-red`, `.badge-amber`, `.badge-info`, `.badge-muted`, `.badge-slate`. `choice_single`, `choice_multi`, `drill_through`, and `operational_report` map to `badge-purple`, rendering without CSS styles.
   - **Fix**: Map them to valid color-named classes (`badge-info`, `badge-slate`, or `badge-green`).
