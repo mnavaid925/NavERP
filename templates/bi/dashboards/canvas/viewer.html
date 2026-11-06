@@ -32,7 +32,7 @@
         <div class="relative inline-block text-left" id="bookmark-dropdown-wrap">
             <button type="button" class="btn btn-outline flex items-center gap-1.5" id="bookmark-btn" onclick="document.getElementById('bookmark-menu').classList.toggle('hidden');">
                 <i data-lucide="bookmark"></i>
-                <span>Bookmarks ({{ bookmarks.count }})</span>
+                <span>Bookmarks ({{ bookmarks|length }})</span>
                 <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
             </button>
             <div id="bookmark-menu" class="hidden absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-20 divide-y divide-slate-100">
@@ -80,7 +80,7 @@
             <span>Builder</span>
         </a>
 
-        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline" title="Dashboard Specs">
+        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline" title="Dashboard Specs" aria-label="Dashboard Specs">
             <i data-lucide="settings"></i>
         </a>
     </div>
@@ -108,23 +108,23 @@
                     <option value="">All</option>
                     {% if f.static_options_json %}
                         {% for opt in f.static_options_json %}
-                        <option value="{{ opt.value }}" {% if request.GET|dictsort:f.filter_key == opt.value or f.default_value == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+                        <option value="{{ opt.value }}" {% if f.current_value == opt.value %}selected{% endif %}>{{ opt.label }}</option>
                         {% endfor %}
                     {% else %}
-                        <option value="current" selected>Current Active</option>
-                        <option value="previous">Previous Period</option>
+                        <option value="current" {% if f.current_value == "current" or not f.current_value %}selected{% endif %}>Current Active</option>
+                        <option value="previous" {% if f.current_value == "previous" %}selected{% endif %}>Previous Period</option>
                     {% endif %}
                 </select>
                 {% elif f.filter_type == "date_preset" %}
                 <select id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" class="form-select py-1 text-xs">
-                    <option value="today">Today</option>
-                    <option value="mtd" selected>Month to Date</option>
-                    <option value="qtd">Quarter to Date</option>
-                    <option value="ytd">Year to Date (YTD)</option>
-                    <option value="all">All Time</option>
+                    <option value="today" {% if f.current_value == "today" %}selected{% endif %}>Today</option>
+                    <option value="mtd" {% if f.current_value == "mtd" or not f.current_value %}selected{% endif %}>Month to Date</option>
+                    <option value="qtd" {% if f.current_value == "qtd" %}selected{% endif %}>Quarter to Date</option>
+                    <option value="ytd" {% if f.current_value == "ytd" %}selected{% endif %}>Year to Date (YTD)</option>
+                    <option value="all" {% if f.current_value == "all" %}selected{% endif %}>All Time</option>
                 </select>
                 {% else %}
-                <input type="text" id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" value="{{ request.GET|dictsort:f.filter_key|default:f.default_value }}" class="form-input py-1 text-xs w-32" placeholder="Value...">
+                <input type="text" id="fl-{{ f.filter_key }}" name="{{ f.filter_key }}" value="{{ f.current_value }}" class="form-input py-1 text-xs w-32" placeholder="Value...">
                 {% endif %}
             </div>
             {% endfor %}
@@ -134,7 +134,7 @@
                     <i data-lucide="filter" class="w-3.5 h-3.5"></i>
                     <span>Apply</span>
                 </button>
-                <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-sm btn-outline" title="Reset">
+                <a href="{% url 'bi:bi_dashboard_canvas_view' dashboard.pk %}" class="btn btn-sm btn-outline" title="Reset Filters" aria-label="Reset Filters">
                     <i data-lucide="x" class="w-3.5 h-3.5"></i>
                 </a>
             </div>
@@ -158,7 +158,7 @@
             <div class="flex items-center gap-1">
                 <span class="badge {{ w.badge_widget_type }} text-[10px]">{{ w.get_widget_type_display }}</span>
                 {% if w.drilldown_target_url %}
-                <a href="{{ w.drilldown_target_url }}" class="text-slate-400 hover:text-blue-600 p-1" title="Drill Down">
+                <a href="{{ w.drilldown_target_url }}" class="text-slate-400 hover:text-blue-600 p-1" title="Drill Down" aria-label="Drill Down">
                     <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                 </a>
                 {% endif %}
@@ -223,9 +223,17 @@
 {% endif %}
 
 <!-- Chart.js Client Rendering & Auto-Refresh Script -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+    // Outside click dismiss for bookmark menu
+    document.addEventListener("click", function(e) {
+        const wrap = document.getElementById("bookmark-dropdown-wrap");
+        const menu = document.getElementById("bookmark-menu");
+        if (wrap && menu && !wrap.contains(e.target)) {
+            menu.classList.add("hidden");
+        }
+    });
+
     {% if refresh_interval %}
     let secondsLeft = {{ refresh_interval }};
     const timerEl = document.getElementById("refresh-timer");
