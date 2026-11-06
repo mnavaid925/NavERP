@@ -305,7 +305,7 @@
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
         <h3 class="font-semibold text-slate-900">Scorecard Inclusions & Usage</h3>
-        <span class="text-xs text-muted">{{ assignments.count }} Scorecard{{ assignments.count|pluralize }}</span>
+        <span class="text-xs text-muted">{{ assignments|length }} Scorecard{{ assignments|length|pluralize }}</span>
     </div>
     {% if assignments %}
     <div class="table-wrap">
