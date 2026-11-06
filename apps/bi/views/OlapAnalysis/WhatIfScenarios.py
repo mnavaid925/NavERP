@@ -112,7 +112,7 @@ def what_if_scenario_create(request):
             scenario.tenant = request.tenant
             scenario.created_by = request.user
             scenario.save()
-            write_audit_log(request.user, "create", scenario, {"name": scenario.name, "number": scenario.number})
+            write_audit_log(request.user, scenario, "create", changes={"name": scenario.name, "number": scenario.number}, tenant=request.tenant)
             messages.success(request, f"What-If Scenario '{scenario.name}' ({scenario.number}) created successfully.")
             return redirect("bi:what_if_scenario_simulate", pk=scenario.pk)
     else:
@@ -135,7 +135,7 @@ def what_if_scenario_edit(request, pk):
         form = WhatIfScenarioForm(request.POST, instance=scenario, tenant=request.tenant)
         if form.is_valid():
             scenario = form.save()
-            write_audit_log(request.user, "update", scenario, {"name": scenario.name, "number": scenario.number})
+            write_audit_log(request.user, scenario, "update", changes={"name": scenario.name, "number": scenario.number}, tenant=request.tenant)
             messages.success(request, f"What-If Scenario '{scenario.name}' updated successfully.")
             return redirect("bi:what_if_scenario_detail", pk=scenario.pk)
     else:
@@ -159,7 +159,7 @@ def what_if_scenario_delete(request, pk):
     name = scenario.name
     number = scenario.number
     scenario.delete()
-    write_audit_log(request.user, "delete", scenario, {"name": name, "number": number})
+    write_audit_log(request.user, scenario, "delete", changes={"name": name, "number": number}, tenant=request.tenant)
     messages.success(request, f"What-If Scenario '{name}' ({number}) deleted successfully.")
     return redirect("bi:what_if_scenario_list")
 
@@ -246,13 +246,14 @@ def what_if_scenario_commit(request, pk):
 
         write_audit_log(
             request.user,
-            "commit",
             scenario,
-            {
+            "commit",
+            changes={
                 "committed_at": str(scenario.committed_at),
                 "total_adjusted_amount": str(scenario.total_adjusted_amount),
                 "total_variance_amount": str(scenario.total_variance_amount),
             },
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Scenario '{scenario.name}' successfully committed to budget writeback ledger!")
