@@ -100,16 +100,15 @@ def performance_scorecard_detail(request, pk):
         PerformanceScorecard,
         pk,
         select_related=("org_unit", "owner"),
-        prefetch_related=("kpi_assignments__kpi", "kpi_assignments__objective"),
     )
 
-    all_kpis = scorecard.kpi_assignments.select_related("kpi", "objective").order_by("sort_order", "kpi__name")
+    all_kpis = list(scorecard.kpi_assignments.select_related("kpi", "objective").order_by("sort_order", "kpi__name"))
     financial_kpis = [k for k in all_kpis if k.perspective == "financial"]
     customer_kpis = [k for k in all_kpis if k.perspective == "customer"]
     process_kpis = [k for k in all_kpis if k.perspective == "internal_process"]
     learning_kpis = [k for k in all_kpis if k.perspective == "learning_growth"]
 
-    perspective_summary = scorecard.get_perspective_summary()
+    perspective_summary = scorecard.get_perspective_summary(assignments=all_kpis)
 
     context = {
         "scorecard": scorecard,
