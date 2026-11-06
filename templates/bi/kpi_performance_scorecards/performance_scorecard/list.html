@@ -85,10 +85,19 @@
 <!-- Search & Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-end">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Scorecard name, number..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label class="form-label text-xs">Archetype</label>
@@ -245,7 +254,7 @@
     <div class="p-4 border-t border-slate-200">
         <div class="pagination">
             {% if scorecards.has_previous %}
-            <a href="?page={{ scorecards.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ scorecards.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
                 <i data-lucide="chevron-left"></i>
                 <span>Previous</span>
             </a>
@@ -261,7 +270,7 @@
             </span>
 
             {% if scorecards.has_next %}
-            <a href="?page={{ scorecards.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ scorecards.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scorecard_type %}&scorecard_type={{ request.GET.scorecard_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.review_period %}&review_period={{ request.GET.review_period }}{% endif %}{% if request.GET.rag_status %}&rag_status={{ request.GET.rag_status }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit }}{% endif %}" class="btn btn-outline btn-sm">
                 <span>Next</span>
                 <i data-lucide="chevron-right"></i>
             </a>
