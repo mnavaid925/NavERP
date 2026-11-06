@@ -62,7 +62,7 @@
             <div class="text-2xl font-bold font-mono text-slate-900">
                 {{ objective.alignment_score|floatformat:0 }}%
             </div>
-            <div class="text-[11px] text-muted">From {{ assigned_kpis.count }} linked KPI{{ assigned_kpis.count|pluralize }}</div>
+            <div class="text-[11px] text-muted">From {{ assigned_kpis|length }} linked KPI{{ assigned_kpis|length|pluralize }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -84,7 +84,7 @@
         <div>
             <div class="text-muted text-xs font-medium uppercase tracking-wider">Child Objectives</div>
             <div class="text-2xl font-bold text-slate-800">
-                {{ child_objectives.count }}
+                {{ child_objectives|length }}
             </div>
             <div class="text-[11px] text-muted">Upstream drivers</div>
         </div>
@@ -96,7 +96,7 @@
         <div>
             <div class="text-muted text-xs font-medium uppercase tracking-wider">Linked KPIs</div>
             <div class="text-2xl font-bold text-emerald-600">
-                {{ assigned_kpis.count }}
+                {{ assigned_kpis|length }}
             </div>
             <div class="text-[11px] text-muted">Active goal assignments</div>
         </div>
@@ -211,7 +211,7 @@
 <div class="card mb-6">
     <div class="card-header flex justify-between items-center">
         <h3 class="font-semibold text-slate-900">Associated KPIs & Goal Targets</h3>
-        <span class="text-xs text-muted">{{ assigned_kpis.count }} Metric{{ assigned_kpis.count|pluralize }}</span>
+        <span class="text-xs text-muted">{{ assigned_kpis|length }} Metric{{ assigned_kpis|length|pluralize }}</span>
     </div>
     {% if assigned_kpis %}
     <div class="table-wrap">
