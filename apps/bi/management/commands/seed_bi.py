@@ -41,6 +41,12 @@ from apps.bi.models.SelfServiceAnalytics.AdHocCalculatedFields import AdHocCalcu
 from apps.bi.models.SelfServiceAnalytics.AdHocQueries import AdHocQuery
 from apps.bi.models.SelfServiceAnalytics.DataBlendDefinitions import DataBlendDefinition
 from apps.bi.models.SelfServiceAnalytics.SavedAnalysisViews import SavedAnalysisView
+from apps.bi.models.OlapAnalysis.OlapCubes import OlapCube
+from apps.bi.models.OlapAnalysis.PivotViews import PivotAnalysisView
+from apps.bi.models.OlapAnalysis.WhatIfScenarios import WhatIfScenario
+from apps.bi.models.OlapAnalysis.WritebackCells import ScenarioWritebackCell
+from apps.accounting.models import Budget, FiscalPeriod, GLAccount
+from apps.core.models import OrgUnit
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -2861,5 +2867,219 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Self-Service & Ad-Hoc Analytics for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Self-Service & Ad-Hoc Analytics already seeded for tenant: {tenant.name}")
+
+            # ---------------------------------------------------------
+            # 10.12 OLAP & Multidimensional Analysis
+            # ---------------------------------------------------------
+            if not OlapCube.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    # Reference spine masters
+                    gl_rev = GLAccount.objects.filter(tenant=tenant, code__startswith="4").first() or GLAccount.objects.filter(tenant=tenant).first()
+                    gl_exp = GLAccount.objects.filter(tenant=tenant, code__startswith="5").first() or GLAccount.objects.filter(tenant=tenant).last()
+                    first_org = OrgUnit.objects.filter(tenant=tenant).first()
+                    first_period = FiscalPeriod.objects.filter(tenant=tenant).first()
+                    first_budget = Budget.objects.filter(tenant=tenant).first()
+                    first_sem_model = SemanticModel.objects.filter(tenant=tenant).first()
+                    first_wh_table = WarehouseTable.objects.filter(tenant=tenant).first()
+                    first_hierarchy = DrillHierarchy.objects.filter(tenant=tenant).first()
+
+                    # 1. OLAP Cubes
+                    cube_fin, _ = OlapCube.objects.get_or_create(
+                        tenant=tenant,
+                        slug="exec-financial-cube",
+                        defaults={
+                            "name": "Executive Financial Performance Cube",
+                            "description": "Pre-aggregated multidimensional cuboid space combining P&L accounts, org units, and fiscal periods.",
+                            "storage_mode": "summary_rollup",
+                            "semantic_model": first_sem_model,
+                            "warehouse_table": first_wh_table,
+                            "default_hierarchy": first_hierarchy,
+                            "dimensions_config": [
+                                {"name": "FiscalPeriod", "type": "time", "levels": ["Year", "Quarter", "Month"]},
+                                {"name": "OrgUnit", "type": "organization", "levels": ["Company", "Division", "Department"]},
+                                {"name": "GLAccount", "type": "financial", "levels": ["Class", "Group", "Account"]},
+                            ],
+                            "measures_config": [
+                                {"name": "NetRevenue", "aggregation": "sum", "format": "$#,##0.00"},
+                                {"name": "TotalExpenses", "aggregation": "sum", "format": "$#,##0.00"},
+                                {"name": "OperatingMargin", "formula": "[NetRevenue] - [TotalExpenses]", "format": "$#,##0.00"},
+                            ],
+                            "aggregations_config": [
+                                ["FiscalPeriod", "OrgUnit"],
+                                ["FiscalPeriod", "GLAccount"],
+                                ["OrgUnit", "GLAccount"],
+                            ],
+                            "time_intelligence_enabled": True,
+                            "cache_ttl_minutes": 60,
+                            "last_refreshed_at": timezone.now(),
+                            "status": "active",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    cube_sales, _ = OlapCube.objects.get_or_create(
+                        tenant=tenant,
+                        slug="sales-margin-cube",
+                        defaults={
+                            "name": "Multidimensional Sales & Margin Cube",
+                            "description": "Dynamic ROLAP cube for sales channel, territory, and product category slice-and-dice.",
+                            "storage_mode": "rolap",
+                            "semantic_model": first_sem_model,
+                            "warehouse_table": first_wh_table,
+                            "default_hierarchy": first_hierarchy,
+                            "dimensions_config": [
+                                {"name": "Territory", "type": "geography", "levels": ["Region", "Country", "Territory"]},
+                                {"name": "Channel", "type": "distribution", "levels": ["Segment", "Channel"]},
+                                {"name": "ProductCategory", "type": "catalog", "levels": ["Family", "Category"]},
+                            ],
+                            "measures_config": [
+                                {"name": "SalesVolume", "aggregation": "sum", "format": "#,##0 units"},
+                                {"name": "GrossRevenue", "aggregation": "sum", "format": "$#,##0.00"},
+                                {"name": "GrossMarginPct", "formula": "([GrossRevenue] - [COGS]) / [GrossRevenue] * 100", "format": "0.0%"},
+                            ],
+                            "aggregations_config": [
+                                ["Territory", "Channel"],
+                            ],
+                            "time_intelligence_enabled": True,
+                            "cache_ttl_minutes": 120,
+                            "last_refreshed_at": timezone.now(),
+                            "status": "active",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 2. Pivot Analysis Views
+                    pivot_pnl, _ = PivotAnalysisView.objects.get_or_create(
+                        tenant=tenant,
+                        slug="regional-pnl-cross-tab",
+                        defaults={
+                            "cube": cube_fin,
+                            "name": "Regional P&L Cross-Tab Analysis",
+                            "description": "Hierarchical row nesting of Org Units and General Ledger accounts across fiscal quarters.",
+                            "row_dimensions": ["OrgUnit", "GLAccount"],
+                            "column_dimensions": ["FiscalPeriod"],
+                            "selected_measures": ["NetRevenue", "TotalExpenses", "OperatingMargin"],
+                            "filters_json": [
+                                {"field": "FiscalPeriod.Year", "operator": "eq", "value": "2026"}
+                            ],
+                            "show_row_subtotals": True,
+                            "show_col_subtotals": True,
+                            "show_grand_totals": True,
+                            "total_position": "bottom_right",
+                            "drill_through_enabled": True,
+                            "drill_through_target": "accounting:journal_entry_list",
+                            "status": "active",
+                            "is_favorite": True,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    PivotAnalysisView.objects.get_or_create(
+                        tenant=tenant,
+                        slug="quarterly-territory-matrix",
+                        defaults={
+                            "cube": cube_sales,
+                            "name": "Quarterly Territory Revenue Matrix",
+                            "description": "Cross-tab view of regional distribution channels and margin attainment.",
+                            "row_dimensions": ["Territory", "Channel"],
+                            "column_dimensions": ["FiscalPeriod"],
+                            "selected_measures": ["GrossRevenue", "GrossMarginPct"],
+                            "filters_json": [],
+                            "show_row_subtotals": True,
+                            "show_col_subtotals": False,
+                            "show_grand_totals": True,
+                            "total_position": "bottom_right",
+                            "drill_through_enabled": True,
+                            "drill_through_target": "accounting:journal_entry_list",
+                            "status": "active",
+                            "is_favorite": False,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 3. What-If Scenarios
+                    scenario_growth, _ = WhatIfScenario.objects.get_or_create(
+                        tenant=tenant,
+                        slug="fy2026-expansion-sim",
+                        defaults={
+                            "name": "FY2026 Expansion & Growth Simulation",
+                            "description": "Scenario simulation factoring +12% revenue acceleration and 4.5% cost inflation.",
+                            "cube": cube_fin,
+                            "baseline_budget": first_budget,
+                            "fiscal_period": first_period,
+                            "driver_parameters": {
+                                "revenue_growth_pct": 12.0,
+                                "cost_inflation_pct": 4.5,
+                                "headcount_expansion_rate": 1.08,
+                            },
+                            "default_disaggregation": "pro_rata",
+                            "status": "simulated",
+                            "total_baseline_amount": Decimal("1500000.00"),
+                            "total_adjusted_amount": Decimal("1680000.00"),
+                            "total_variance_amount": Decimal("180000.00"),
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    WhatIfScenario.objects.get_or_create(
+                        tenant=tenant,
+                        slug="conservative-contingency-plan",
+                        defaults={
+                            "name": "Conservative Headwinds Contingency Plan",
+                            "description": "Defensive contingency planning factoring supply tightening and non-essential spend freeze.",
+                            "cube": cube_fin,
+                            "baseline_budget": first_budget,
+                            "fiscal_period": first_period,
+                            "driver_parameters": {
+                                "revenue_growth_pct": -2.5,
+                                "discretionary_spend_cut_pct": 25.0,
+                            },
+                            "default_disaggregation": "delta",
+                            "status": "draft",
+                            "total_baseline_amount": Decimal("1500000.00"),
+                            "total_adjusted_amount": Decimal("1470000.00"),
+                            "total_variance_amount": Decimal("-30000.00"),
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 4. Scenario Writeback Cells
+                    ScenarioWritebackCell.objects.get_or_create(
+                        tenant=tenant,
+                        scenario=scenario_growth,
+                        cell_coordinates={"period": "2026-Q1", "region": "North America"},
+                        defaults={
+                            "gl_account": gl_rev,
+                            "org_unit": first_org,
+                            "baseline_value": Decimal("450000.00"),
+                            "adjusted_value": Decimal("504000.00"),
+                            "variance_amount": Decimal("54000.00"),
+                            "spread_method": "pro_rata",
+                            "is_committed": False,
+                            "commentary": "Top-down expansion driver applied to regional revenue target.",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    ScenarioWritebackCell.objects.get_or_create(
+                        tenant=tenant,
+                        scenario=scenario_growth,
+                        cell_coordinates={"period": "2026-Q1", "cost_center": "R&D"},
+                        defaults={
+                            "gl_account": gl_exp,
+                            "org_unit": first_org,
+                            "baseline_value": Decimal("200000.00"),
+                            "adjusted_value": Decimal("209000.00"),
+                            "variance_amount": Decimal("9000.00"),
+                            "spread_method": "delta",
+                            "is_committed": False,
+                            "commentary": "Calculated software infrastructure and engineering adjustments.",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded OLAP & Multidimensional Analysis for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  OLAP & Multidimensional Analysis already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
