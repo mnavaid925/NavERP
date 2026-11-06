@@ -41,6 +41,10 @@ from apps.bi.models import (
     AdHocCalculatedField,
     DataBlendDefinition,
     SavedAnalysisView,
+    OlapCube,
+    PivotAnalysisView,
+    WhatIfScenario,
+    ScenarioWritebackCell,
 )
 
 
@@ -395,6 +399,43 @@ class SavedAnalysisViewAdmin(admin.ModelAdmin):
     list_filter = ("sharing_scope", "is_template", "is_favorite", "tenant")
     search_fields = ("number", "name", "slug", "description", "share_token")
     readonly_fields = ("number", "tenant", "share_token", "view_count", "last_viewed_at", "created_at", "updated_at")
+
+
+@admin.register(OlapCube)
+class OlapCubeAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "storage_mode", "status", "time_intelligence_enabled", "last_refreshed_at", "tenant")
+    list_select_related = ("tenant", "semantic_model", "warehouse_table", "default_hierarchy", "created_by")
+    list_filter = ("storage_mode", "status", "time_intelligence_enabled", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "last_refreshed_at", "created_at", "updated_at")
+
+
+@admin.register(PivotAnalysisView)
+class PivotAnalysisViewAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "cube", "total_position", "drill_through_enabled", "status", "is_favorite", "tenant")
+    list_select_related = ("tenant", "cube", "created_by")
+    list_filter = ("status", "is_favorite", "drill_through_enabled", "total_position", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(WhatIfScenario)
+class WhatIfScenarioAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "cube", "fiscal_period", "default_disaggregation", "status", "total_variance_amount", "tenant")
+    list_select_related = ("tenant", "cube", "baseline_budget", "fiscal_period", "created_by", "committed_by")
+    list_filter = ("status", "default_disaggregation", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "total_baseline_amount", "total_adjusted_amount", "total_variance_amount", "committed_at", "committed_by", "created_at", "updated_at")
+
+
+@admin.register(ScenarioWritebackCell)
+class ScenarioWritebackCellAdmin(admin.ModelAdmin):
+    list_display = ("number", "scenario", "gl_account", "org_unit", "baseline_value", "adjusted_value", "variance_amount", "is_committed", "tenant")
+    list_select_related = ("tenant", "scenario", "gl_account", "org_unit", "committed_budget_line", "created_by")
+    list_filter = ("spread_method", "is_committed", "tenant")
+    search_fields = ("number", "scenario__name", "gl_account__name", "gl_account__code", "commentary")
+    readonly_fields = ("number", "tenant", "variance_amount", "created_at", "updated_at")
+
 
 
 
