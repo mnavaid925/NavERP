@@ -162,7 +162,7 @@ def bi_dashboard_canvas_builder(request, pk):
             updated_count = 0
             with transaction.atomic():
                 for item in widget_positions:
-                    w_id = item.get("id")
+                    w_id = item.get("id") or item.get("widget_id")
                     if not w_id:
                         continue
                     pos_x = max(0, min(11, int(item.get("pos_x", 0))))
