@@ -25,7 +25,7 @@
   - **Issue**: Django's built-in `dictsort` filter sorts lists of dicts by key; when applied to a single dictionary (`row` or `applied_params`), it returns `""`. In `viewer.html` and `print.html`, `{{ row|dictsort:col.field }}` in fallback column branches evaluates to `""`, causing `"description"` and custom columns to render completely empty `<td></td>` cells. In `viewer.html:56, 61, 65`, `applied_params|dictsort:param.parameter_name` evaluates to `""`, losing user-entered prompt inputs and failing dropdown pre-selection.
   - **Fix**: In `report_definition_viewer` and `print`, populate parameter objects with `.runtime_value`, render `param.runtime_value` in inputs/selects, and in `viewer.html`/`print.html` add explicit handling for `description` and row cell dictionary lookups without `dictsort`.
 
-- [ ] **[C3] Stored Cross-Site Scripting (XSS) via `styling_css|safe` in Print View**
+- [x] **[C3] Stored Cross-Site Scripting (XSS) via `styling_css|safe` in Print View** (Fixed: added `clean_styling_css` in `ReportDefinitionForm` to block `</style>`, `<script>`, `<iframe`, and `javascript:` schemes, and sanitized closing style tags in `print.html`)
   - **Locations**: `templates/bi/operational_reporting/report_definition/print.html:31`, `apps/bi/forms/OperationalReporting/ReportDefinitions.py:31, 51`
   - **Issue**: `{{ report.styling_css|safe }}` is rendered inside `<style>` blocks in `print.html` without sanitizing closing HTML tags. An attacker or rogue tenant user can configure a report with CSS containing `</style><script>...` to break out of the style tag and execute arbitrary JavaScript.
   - **Fix**: Add `clean_styling_css` in `ReportDefinitionForm` to block `</style>`, `<script>`, `<iframe`, and `javascript:` URLs, and escape closing tags.
