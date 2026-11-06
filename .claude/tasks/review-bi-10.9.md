@@ -54,7 +54,7 @@
   - **Issue**: Loading `report_definition_viewer` with an HTTP GET request automatically creates a persistent `ReportExecution` database record. GET requests are not CSRF-protected and can be triggered by crawlers, prefetching, or image tags, flooding execution audit logs.
   - **Fix**: Remove automatic execution creation on read-only GET requests, reserving execution creation for explicit POST execution triggers (`report_execution_run`).
 
-- [ ] **[I5] Redundant COUNT queries and sliced QuerySet count drift in `report_definition_detail`**
+- [x] **[I5] Redundant COUNT queries and sliced QuerySet count drift in `report_definition_detail`** (Fixed: pre-evaluated `parameters_count`, `drill_paths_count`, and `total_executions_count` in view, rendering them in `detail.html`)
   - **Locations**: `apps/bi/views/OperationalReporting/ReportDefinitions.py:95-97`, `templates/bi/operational_reporting/report_definition/detail.html:142, 146, 150`
   - **Issue**: In `detail.html`, `parameters.count` and `drill_paths.count` run separate SQL `COUNT(*)` queries before loops iterate the same objects. Furthermore, slicing `executions[:10]` and calling `executions.count` produces a subquery count capped at 10.
   - **Fix**: Evaluate `list(report.parameters...)`, `list(report.source_drill_paths...)`, and `total_executions_count = report.executions.count()` in the view and pass `parameters_count`, `drill_paths_count`, `total_executions_count` in context.
