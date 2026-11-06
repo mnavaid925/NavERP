@@ -106,7 +106,13 @@
                 </div>
                 <div>
                     <dt class="text-xs font-medium text-muted uppercase">Created By</dt>
-                    <dd class="text-sm text-slate-900 mt-0.5">{{ dashboard.created_by.get_full_name|default:dashboard.created_by.username|default:"System Seed" }}</dd>
+                    <dd class="text-sm text-slate-900 mt-0.5">
+                        {% if dashboard.created_by %}
+                        {{ dashboard.created_by.get_full_name|default:dashboard.created_by.username }}
+                        {% else %}
+                        System Seed
+                        {% endif %}
+                    </dd>
                 </div>
                 <div>
                     <dt class="text-xs font-medium text-muted uppercase">Telemetry Views</dt>
