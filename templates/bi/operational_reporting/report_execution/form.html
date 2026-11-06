@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Run Report: {{ report.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_detail' report.pk %}">{{ report.number }}</a>
+            <span class="sep">/</span>
+            <span>Execute</span>
+        </div>
+        <h1 class="page-title">Run Report: {{ report.name }}</h1>
+        <p class="text-muted text-sm">Execute this operational report on-demand and produce an export artifact or recorded run trace</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_definition_detail' report.pk %}" class="btn btn-outline">Cancel</a>
+    </div>
+</div>
+
+<div class="max-w-2xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Execution Parameters & Output Format</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-4">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label for="id_report" class="form-label">Report Definition</label>
+                    {{ form.report }}
+                    {% if form.report.errors %}<div class="form-error">{{ form.report.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="id_execution_mode" class="form-label">Execution Mode</label>
+                    {{ form.execution_mode }}
+                    {% if form.execution_mode.errors %}<div class="form-error">{{ form.execution_mode.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="id_output_format" class="form-label">Desired Output Format</label>
+                    {{ form.output_format }}
+                    {% if form.output_format.errors %}<div class="form-error">{{ form.output_format.errors }}</div>{% endif %}
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <a href="{% url 'bi:report_definition_detail' report.pk %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="play"></i>
+                        <span>Start Execution</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
