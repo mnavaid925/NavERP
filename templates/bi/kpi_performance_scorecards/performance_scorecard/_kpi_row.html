@@ -7,7 +7,7 @@
     </td>
     <td>
         {% if a.objective %}
-        <a href="{% url 'bi:strategic_objective_detail' a.objective.pk %}" class="text-xs text-primary font-medium hover:underline">{{ a.objective.name }}</a>
+        <a href="{% url 'bi:strategic_objective_detail' a.objective.pk %}" class="text-xs text-brand font-medium hover:underline">{{ a.objective.name }}</a>
         {% else %}
         <span class="text-xs text-muted">—</span>
         {% endif %}
