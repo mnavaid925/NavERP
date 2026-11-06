@@ -74,6 +74,8 @@ def olap_cube_detail(request, pk):
         pk,
         select_related=["semantic_model", "warehouse_table", "default_hierarchy", "created_by"],
     )
+    pivot_views_count = cube.pivot_views.filter(tenant=request.tenant).count()
+    scenarios_count = cube.scenarios.filter(tenant=request.tenant).count()
     pivot_views = cube.pivot_views.filter(tenant=request.tenant).order_by("-created_at")[:10]
     scenarios = cube.scenarios.filter(tenant=request.tenant).order_by("-created_at")[:10]
 
@@ -84,6 +86,8 @@ def olap_cube_detail(request, pk):
             "cube": cube,
             "pivot_views": pivot_views,
             "scenarios": scenarios,
+            "pivot_views_count": pivot_views_count,
+            "scenarios_count": scenarios_count,
         },
     )
 
