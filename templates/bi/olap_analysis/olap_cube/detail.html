@@ -261,7 +261,7 @@
                 </div>
                 <div>
                     <div class="text-muted text-xs">Created By</div>
-                    <div class="font-medium text-slate-800 mt-0.5">{{ cube.created_by.get_full_name|default:cube.created_by.username|default:"System" }}</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{% if cube.created_by %}{{ cube.created_by.get_full_name|default:cube.created_by.username }}{% else %}System{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-muted text-xs">Creation Date</div>
