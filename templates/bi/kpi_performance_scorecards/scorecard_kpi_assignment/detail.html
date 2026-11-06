@@ -133,7 +133,7 @@
                 <div>
                     <div class="text-xs text-muted uppercase">BSC Perspective</div>
                     <div class="mt-1">
-                        <span class="badge {% if assignment.perspective == 'financial' %}badge-green{% elif assignment.perspective == 'customer' %}badge-info{% elif assignment.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if assignment.perspective == 'financial' %}badge-green{% elif assignment.perspective == 'customer' %}badge-info{% elif assignment.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ assignment.get_perspective_display }}
                         </span>
                     </div>
