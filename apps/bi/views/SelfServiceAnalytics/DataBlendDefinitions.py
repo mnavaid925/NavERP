@@ -86,9 +86,6 @@ def data_blend_definition_detail(request, pk):
 
 @login_required
 def data_blend_definition_create(request):
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True)
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant, is_active=True)
-
     if request.method == "POST":
         form = DataBlendDefinitionForm(request.POST, tenant=request.tenant)
         if form.is_valid():
@@ -115,8 +112,6 @@ def data_blend_definition_create(request):
         {
             "form": form,
             "is_edit": False,
-            "semantic_models": semantic_models,
-            "warehouse_tables": warehouse_tables,
         },
     )
 
@@ -124,8 +119,6 @@ def data_blend_definition_create(request):
 @login_required
 def data_blend_definition_edit(request, pk):
     blend = bi_object(request, DataBlendDefinition, pk)
-    semantic_models = SemanticModel.objects.filter(tenant=request.tenant, is_active=True)
-    warehouse_tables = WarehouseTable.objects.filter(tenant=request.tenant, is_active=True)
 
     if request.method == "POST":
         form = DataBlendDefinitionForm(request.POST, instance=blend, tenant=request.tenant)
@@ -150,8 +143,6 @@ def data_blend_definition_edit(request, pk):
             "form": form,
             "blend": blend,
             "is_edit": True,
-            "semantic_models": semantic_models,
-            "warehouse_tables": warehouse_tables,
         },
     )
 
