@@ -96,6 +96,7 @@ class PerformanceScorecard(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_bscr_ten_stat"),
             models.Index(fields=["tenant", "owner"], name="idx_bscr_ten_owner"),
             models.Index(fields=["tenant", "fiscal_year"], name="idx_bscr_ten_fyr"),
+            models.Index(fields=["tenant", "overall_rag_status"], name="idx_bscr_ten_rag"),
         ]
 
     def __str__(self):
