@@ -41,6 +41,10 @@ from apps.bi.models.SelfServiceAnalytics.AdHocCalculatedFields import AdHocCalcu
 from apps.bi.models.SelfServiceAnalytics.AdHocQueries import AdHocQuery
 from apps.bi.models.SelfServiceAnalytics.DataBlendDefinitions import DataBlendDefinition
 from apps.bi.models.SelfServiceAnalytics.SavedAnalysisViews import SavedAnalysisView
+from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
+from apps.bi.models.PerformanceScorecards.PerformanceScorecards import PerformanceScorecard
+from apps.bi.models.PerformanceScorecards.ScorecardKpiAssignments import ScorecardKpiAssignment
+from apps.bi.models.PerformanceScorecards.StrategicObjectives import StrategicObjective
 from apps.bi.models.OlapAnalysis.OlapCubes import OlapCube
 from apps.bi.models.OlapAnalysis.PivotViews import PivotAnalysisView
 from apps.bi.models.OlapAnalysis.WhatIfScenarios import WhatIfScenario
@@ -2867,6 +2871,298 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Self-Service & Ad-Hoc Analytics for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Self-Service & Ad-Hoc Analytics already seeded for tenant: {tenant.name}")
+
+            # ---------------------------------------------------------
+            # 10.11 KPI & Performance Scorecards
+            # ---------------------------------------------------------
+            if not KpiDefinition.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    tenant_admin = get_user_model().objects.filter(tenant=tenant).first()
+                    first_org = OrgUnit.objects.filter(tenant=tenant).first()
+                    semantic_measure = CalculatedMeasure.objects.filter(tenant=tenant).first()
+
+                    # 1. Seed Strategic Objectives (across 4 BSC perspectives)
+                    obj_fin, _ = StrategicObjective.objects.get_or_create(
+                        tenant=tenant,
+                        code="STRAT-FIN-01",
+                        defaults={
+                            "name": "Accelerate High-Margin Recurring Revenue",
+                            "slug": "accelerate-high-margin-recurring-revenue",
+                            "perspective": "financial",
+                            "statement_of_intent": "Drive sustainable operating profitability and maximize recurring EBITDA margins through enterprise expansion.",
+                            "status": "active",
+                            "rag_status": "green",
+                            "alignment_score": Decimal("92.00"),
+                            "owner": tenant_admin,
+                            "org_unit": first_org,
+                            "sort_order": 10,
+                        },
+                    )
+
+                    obj_cust, _ = StrategicObjective.objects.get_or_create(
+                        tenant=tenant,
+                        code="STRAT-CUST-01",
+                        defaults={
+                            "name": "Maximize Customer Lifetime Value & Retention",
+                            "slug": "maximize-customer-lifetime-value",
+                            "perspective": "customer",
+                            "statement_of_intent": "Deliver superior digital experiences to exceed industry benchmark NPS and reduce annualized client churn below 3%.",
+                            "parent_objective": obj_fin,
+                            "status": "active",
+                            "rag_status": "green",
+                            "alignment_score": Decimal("88.00"),
+                            "owner": tenant_admin,
+                            "org_unit": first_org,
+                            "sort_order": 20,
+                        },
+                    )
+
+                    obj_proc, _ = StrategicObjective.objects.get_or_create(
+                        tenant=tenant,
+                        code="STRAT-PROC-01",
+                        defaults={
+                            "name": "Streamline Order Fulfillment & Operational Efficiency",
+                            "slug": "streamline-order-fulfillment",
+                            "perspective": "internal_process",
+                            "statement_of_intent": "Shorten manufacturing and procurement cycle times through automated ERP workflows and rigorous quality control.",
+                            "parent_objective": obj_cust,
+                            "status": "active",
+                            "rag_status": "green",
+                            "alignment_score": Decimal("85.00"),
+                            "owner": tenant_admin,
+                            "org_unit": first_org,
+                            "sort_order": 30,
+                        },
+                    )
+
+                    obj_lrn, _ = StrategicObjective.objects.get_or_create(
+                        tenant=tenant,
+                        code="STRAT-LRN-01",
+                        defaults={
+                            "name": "Cultivate Data-Driven Analytics Culture",
+                            "slug": "cultivate-data-driven-analytics-culture",
+                            "perspective": "learning_growth",
+                            "statement_of_intent": "Certify 80% of management workforce on self-service BI analytics and strategy alignment tools.",
+                            "parent_objective": obj_proc,
+                            "status": "active",
+                            "rag_status": "green",
+                            "alignment_score": Decimal("90.00"),
+                            "owner": tenant_admin,
+                            "org_unit": first_org,
+                            "sort_order": 40,
+                        },
+                    )
+
+                    # 2. Seed Master KPI Definitions
+                    kpi_om, _ = KpiDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        code="KPI-FIN-01",
+                        defaults={
+                            "name": "Operating Profit Margin",
+                            "slug": "operating-profit-margin",
+                            "description": "Operating income divided by total gross net revenue.",
+                            "category": "profitability",
+                            "perspective": "financial",
+                            "target_direction": "maximize",
+                            "unit_of_measure": "percentage",
+                            "tracking_frequency": "monthly",
+                            "calculation_type": "semantic_measure" if semantic_measure else "formula_expression",
+                            "semantic_measure": semantic_measure,
+                            "formula_expression": "[operating_income] / [gross_revenue] * 100",
+                            "target_value": Decimal("24.0000"),
+                            "warning_threshold": Decimal("20.0000"),
+                            "critical_threshold": Decimal("16.0000"),
+                            "current_value": Decimal("25.4000"),
+                            "previous_value": Decimal("23.8000"),
+                            "industry_benchmark_value": Decimal("22.0000"),
+                            "benchmark_source": "Gartner Peer Insights 2026",
+                            "benchmark_percentile": 80,
+                            "status": "active",
+                            "is_active": True,
+                            "owner": tenant_admin,
+                            "department": first_org,
+                        },
+                    )
+
+                    kpi_nps, _ = KpiDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        code="KPI-CUST-01",
+                        defaults={
+                            "name": "Net Promoter Score (NPS)",
+                            "slug": "net-promoter-score",
+                            "description": "Customer advocacy index calculated from quarterly customer surveys.",
+                            "category": "customer_experience",
+                            "perspective": "customer",
+                            "target_direction": "maximize",
+                            "unit_of_measure": "score",
+                            "tracking_frequency": "quarterly",
+                            "calculation_type": "manual",
+                            "target_value": Decimal("65.0000"),
+                            "warning_threshold": Decimal("50.0000"),
+                            "critical_threshold": Decimal("35.0000"),
+                            "current_value": Decimal("68.0000"),
+                            "previous_value": Decimal("62.0000"),
+                            "industry_benchmark_value": Decimal("58.0000"),
+                            "benchmark_source": "Satmetrix B2B SaaS Benchmark",
+                            "benchmark_percentile": 75,
+                            "status": "active",
+                            "is_active": True,
+                            "owner": tenant_admin,
+                            "department": first_org,
+                        },
+                    )
+
+                    kpi_cycle, _ = KpiDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        code="KPI-PROC-01",
+                        defaults={
+                            "name": "Order Fulfillment Cycle Time",
+                            "slug": "order-fulfillment-cycle-time",
+                            "description": "Mean days elapsed between purchase order placement and customer delivery receipt.",
+                            "category": "operations",
+                            "perspective": "internal_process",
+                            "target_direction": "minimize",
+                            "unit_of_measure": "days",
+                            "tracking_frequency": "weekly",
+                            "calculation_type": "formula_expression",
+                            "formula_expression": "[days_to_ship] + [days_in_transit]",
+                            "target_value": Decimal("3.5000"),
+                            "warning_threshold": Decimal("5.0000"),
+                            "critical_threshold": Decimal("7.0000"),
+                            "current_value": Decimal("3.2000"),
+                            "previous_value": Decimal("3.8000"),
+                            "industry_benchmark_value": Decimal("4.0000"),
+                            "benchmark_source": "APQC Supply Chain Benchmark",
+                            "benchmark_percentile": 85,
+                            "status": "active",
+                            "is_active": True,
+                            "owner": tenant_admin,
+                            "department": first_org,
+                        },
+                    )
+
+                    kpi_cert, _ = KpiDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        code="KPI-LRN-01",
+                        defaults={
+                            "name": "Employee BI Certification Rate",
+                            "slug": "employee-bi-certification-rate",
+                            "description": "Percentage of staff completing annual data literacy and analytics curriculum.",
+                            "category": "human_capital",
+                            "perspective": "learning_growth",
+                            "target_direction": "maximize",
+                            "unit_of_measure": "percentage",
+                            "tracking_frequency": "quarterly",
+                            "calculation_type": "manual",
+                            "target_value": Decimal("80.0000"),
+                            "warning_threshold": Decimal("65.0000"),
+                            "critical_threshold": Decimal("50.0000"),
+                            "current_value": Decimal("84.0000"),
+                            "previous_value": Decimal("76.0000"),
+                            "industry_benchmark_value": Decimal("70.0000"),
+                            "benchmark_source": "HR Open Standards 2026",
+                            "benchmark_percentile": 78,
+                            "status": "active",
+                            "is_active": True,
+                            "owner": tenant_admin,
+                            "department": first_org,
+                        },
+                    )
+
+                    # 3. Seed Performance Scorecard
+                    scorecard, _ = PerformanceScorecard.objects.get_or_create(
+                        tenant=tenant,
+                        slug="2026-corporate-balanced-scorecard",
+                        defaults={
+                            "name": "2026 Corporate Balanced Scorecard",
+                            "description": "Enterprise-level executive scorecard tracking corporate strategy across Kaplan & Norton's four core perspectives.",
+                            "scorecard_type": "balanced_scorecard",
+                            "review_period": "quarterly",
+                            "fiscal_year": 2026,
+                            "financial_weight": Decimal("25.00"),
+                            "customer_weight": Decimal("25.00"),
+                            "internal_process_weight": Decimal("25.00"),
+                            "learning_growth_weight": Decimal("25.00"),
+                            "overall_score": Decimal("91.50"),
+                            "overall_rag_status": "green",
+                            "status": "active",
+                            "is_default": True,
+                            "is_published": True,
+                            "owner": tenant_admin,
+                            "org_unit": first_org,
+                        },
+                    )
+
+                    # 4. Seed Scorecard KPI Assignments
+                    ScorecardKpiAssignment.objects.get_or_create(
+                        tenant=tenant,
+                        scorecard=scorecard,
+                        kpi=kpi_om,
+                        defaults={
+                            "objective": obj_fin,
+                            "perspective": "financial",
+                            "weight": Decimal("100.00"),
+                            "target_value": Decimal("24.0000"),
+                            "actual_value": Decimal("25.4000"),
+                            "benchmark_overlay_value": Decimal("22.0000"),
+                            "manager_notes": "Operating margins exceeded plan by 1.4% due to ERP procurement cost reductions and cloud optimization.",
+                            "sort_order": 10,
+                        },
+                    )
+
+                    ScorecardKpiAssignment.objects.get_or_create(
+                        tenant=tenant,
+                        scorecard=scorecard,
+                        kpi=kpi_nps,
+                        defaults={
+                            "objective": obj_cust,
+                            "perspective": "customer",
+                            "weight": Decimal("100.00"),
+                            "target_value": Decimal("65.0000"),
+                            "actual_value": Decimal("68.0000"),
+                            "benchmark_overlay_value": Decimal("58.0000"),
+                            "manager_notes": "Customer NPS at all-time high of +68 following introduction of real-time shipment visibility portal.",
+                            "sort_order": 20,
+                        },
+                    )
+
+                    ScorecardKpiAssignment.objects.get_or_create(
+                        tenant=tenant,
+                        scorecard=scorecard,
+                        kpi=kpi_cycle,
+                        defaults={
+                            "objective": obj_proc,
+                            "perspective": "internal_process",
+                            "weight": Decimal("100.00"),
+                            "target_value": Decimal("3.5000"),
+                            "actual_value": Decimal("3.2000"),
+                            "benchmark_overlay_value": Decimal("4.0000"),
+                            "manager_notes": "Average fulfillment cycle shortened to 3.2 days, well ahead of industry baseline of 4.0 days.",
+                            "sort_order": 30,
+                        },
+                    )
+
+                    ScorecardKpiAssignment.objects.get_or_create(
+                        tenant=tenant,
+                        scorecard=scorecard,
+                        kpi=kpi_cert,
+                        defaults={
+                            "objective": obj_lrn,
+                            "perspective": "learning_growth",
+                            "weight": Decimal("100.00"),
+                            "target_value": Decimal("80.0000"),
+                            "actual_value": Decimal("84.0000"),
+                            "benchmark_overlay_value": Decimal("70.0000"),
+                            "manager_notes": "84% staff analytics certification reached following rollout of Module 10 self-service learning paths.",
+                            "sort_order": 40,
+                        },
+                    )
+
+                    scorecard.recalculate_performance()
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded KPI & Performance Scorecards for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  KPI & Performance Scorecards already seeded for tenant: {tenant.name}")
 
             # ---------------------------------------------------------
             # 10.12 OLAP & Multidimensional Analysis
