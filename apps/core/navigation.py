@@ -3023,6 +3023,20 @@ LIVE_LINKS = {
         "Data Blends": "bi:data_blend_definition_list",
         "Saved Views": "bi:saved_analysis_view_list",
     },
+
+    # 10.11 KPI & Performance Scorecards
+    "10.11": {
+        "KPI Library & Definitions": "bi:kpi_definition_list",
+        "Scorecards & Balanced Scorecard": "bi:performance_scorecard_list",
+        "Goal & Target Tracking": "bi:scorecard_kpi_assignment_list",
+        "Benchmarking": "bi:kpi_definition_list",
+        "Strategy Maps & Alignment": "bi:strategic_objective_list",
+        # Extra live leaves
+        "KPI Library": "bi:kpi_definition_list",
+        "Scorecards": "bi:performance_scorecard_list",
+        "Target Tracking": "bi:scorecard_kpi_assignment_list",
+        "Strategy Objectives": "bi:strategic_objective_list",
+    },
     "10.12": {
         "OLAP Cubes & Aggregations": "bi:olap_cube_list",
         "Pivot & Cross-Tab Analysis": "bi:pivot_view_list",
