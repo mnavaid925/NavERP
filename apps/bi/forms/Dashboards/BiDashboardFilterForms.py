@@ -37,6 +37,8 @@ class BiDashboardFilterForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "filter_key" in self.fields:
+            self.fields["filter_key"].required = False
         if self.tenant is not None:
             self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant, is_active=True)
 
