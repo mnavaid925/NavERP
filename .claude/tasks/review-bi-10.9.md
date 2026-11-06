@@ -92,7 +92,7 @@
   - **Issue**: Pagination links in report definition list preserve `q`, `category`, `report_type`, and `status`, but omit `is_prebuilt`.
   - **Fix**: Append `{% if is_prebuilt %}&is_prebuilt={{ is_prebuilt }}{% endif %}` to previous/next page link URLs.
 
-- [ ] **[M3] Missing `{% empty %}` fallback row in print view**
+- [x] **[M3] Missing `{% empty %}` fallback row in print view** (Fixed: added `{% empty %}` row fallback in `report_definition/print.html`)
   - **Location**: `templates/bi/operational_reporting/report_definition/print.html:104-123`
   - **Issue**: When a printed report returns 0 rows, the table body is empty without an explanatory note.
   - **Fix**: Add `{% empty %}` row: `<td colspan="10" class="text-center py-6 text-slate-500 italic">No records found matching prompt criteria.</td>`.
