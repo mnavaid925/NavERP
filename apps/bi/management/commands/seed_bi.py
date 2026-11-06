@@ -33,6 +33,10 @@ from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
 from apps.bi.models.Dashboards.BiDashboardBookmarks import BiDashboardBookmark
 from apps.bi.models.Dashboards.BiDashboardFilters import BiDashboardFilter
+from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
+from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
+from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
+from apps.bi.models.OperationalReporting.ReportParameters import ReportParameter
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -56,6 +60,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                ReportDrillPath.objects.all().delete()
+                ReportExecution.objects.all().delete()
+                ReportParameter.objects.all().delete()
+                ReportDefinition.objects.all().delete()
                 BiDashboardBookmark.objects.all().delete()
                 BiDashboardFilter.objects.all().delete()
                 BiDashboardWidget.objects.all().delete()
@@ -2446,5 +2454,242 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded BI Dashboards & Visualization for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  BI Dashboards & Visualization already seeded for tenant: {tenant.name}")
+
+            # --- 10.9 Standard & Operational Reporting Seeding ---
+            if not ReportDefinition.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    tenant_admin = User.objects.filter(tenant=tenant, username__startswith=f"admin_{tenant.slug}").first()
+                    if not tenant_admin:
+                        tenant_admin = User.objects.filter(tenant=tenant).first()
+
+                    sem_finance = SemanticModel.objects.filter(tenant=tenant, name__icontains="finance").first()
+                    sem_sales = SemanticModel.objects.filter(tenant=tenant, name__icontains="sales").first()
+                    wh_table = WarehouseTable.objects.filter(tenant=tenant).first()
+
+                    # 1. Pre-Built Reports
+                    rpt_pnl, _ = ReportDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        slug="monthly-profit-loss-statement",
+                        defaults={
+                            "name": f"{tenant.name} Monthly Profit & Loss Statement",
+                            "category": "finance",
+                            "report_type": "pixel_perfect_document",
+                            "paper_size": "a4",
+                            "orientation": "portrait",
+                            "margins_json": {"top": 15, "bottom": 15, "left": 15, "right": 15},
+                            "bands_config_json": {
+                                "title_band": {"height_mm": 25, "include_logo": True},
+                                "page_header": {"height_mm": 12, "repeat": True},
+                                "group_header": {"field": "account_type", "height_mm": 10},
+                                "detail_band": {"height_mm": 8},
+                                "group_footer": {"height_mm": 10, "show_subtotal": True},
+                                "summary_band": {"height_mm": 15, "show_grand_total": True},
+                                "page_footer": {"height_mm": 10, "show_page_number": True},
+                            },
+                            "columns_config_json": [
+                                {"field": "row_id", "title": "#", "width": "8%", "align": "center"},
+                                {"field": "item_code", "title": "GL Account Code", "width": "22%", "align": "left"},
+                                {"field": "description", "title": "Account Title & Category", "width": "45%", "align": "left"},
+                                {"field": "amount", "title": "Net Amount (USD)", "width": "25%", "align": "right", "format": "currency"},
+                            ],
+                            "watermark_text": "CONFIDENTIAL",
+                            "semantic_model": sem_finance,
+                            "warehouse_table": wh_table,
+                            "created_by": tenant_admin,
+                            "status": "published",
+                            "is_prebuilt_template": True,
+                            "description": "Standard audited income statement displaying gross margin, operating expenses, and net profit variance.",
+                        },
+                    )
+
+                    rpt_sales, _ = ReportDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        slug="sales-pipeline-customer-revenue",
+                        defaults={
+                            "name": f"{tenant.name} Sales Pipeline & Customer Revenue",
+                            "category": "sales",
+                            "report_type": "standard_tabular",
+                            "paper_size": "letter",
+                            "orientation": "landscape",
+                            "margins_json": {"top": 12, "bottom": 12, "left": 15, "right": 15},
+                            "columns_config_json": [
+                                {"field": "row_id", "title": "#", "width": "5%", "align": "center"},
+                                {"field": "item_code", "title": "Customer Ref", "width": "20%", "align": "left"},
+                                {"field": "description", "title": "Account Name / Segment", "width": "45%", "align": "left"},
+                                {"field": "amount", "title": "YTD Bookings ($)", "width": "30%", "align": "right", "format": "currency"},
+                            ],
+                            "semantic_model": sem_sales,
+                            "created_by": tenant_admin,
+                            "status": "published",
+                            "is_prebuilt_template": True,
+                            "description": "Comprehensive operational sales performance breakdown by client account and rep territory.",
+                        },
+                    )
+
+                    rpt_inv, _ = ReportDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        slug="inventory-valuation-aging-schedule",
+                        defaults={
+                            "name": f"{tenant.name} Inventory Valuation & Aging Schedule",
+                            "category": "inventory",
+                            "report_type": "standard_tabular",
+                            "paper_size": "a4",
+                            "orientation": "portrait",
+                            "columns_config_json": [
+                                {"field": "row_id", "title": "#", "width": "8%", "align": "center"},
+                                {"field": "item_code", "title": "SKU / Part Number", "width": "22%", "align": "left"},
+                                {"field": "description", "title": "Product Title / Category", "width": "45%", "align": "left"},
+                                {"field": "amount", "title": "Inventory Value ($)", "width": "25%", "align": "right", "format": "currency"},
+                            ],
+                            "warehouse_table": wh_table,
+                            "created_by": tenant_admin,
+                            "status": "published",
+                            "is_prebuilt_template": True,
+                            "description": "Audited stock valuation schedule categorized by turnover velocity and warehouse storage bins.",
+                        },
+                    )
+
+                    rpt_hr, _ = ReportDefinition.objects.get_or_create(
+                        tenant=tenant,
+                        slug="department-headcount-payroll-summary",
+                        defaults={
+                            "name": f"{tenant.name} Department Headcount & Payroll Register",
+                            "category": "hr",
+                            "report_type": "matrix_summary",
+                            "paper_size": "letter",
+                            "orientation": "landscape",
+                            "columns_config_json": [
+                                {"field": "row_id", "title": "#", "width": "8%", "align": "center"},
+                                {"field": "item_code", "title": "Cost Center", "width": "22%", "align": "left"},
+                                {"field": "description", "title": "Department & Role Level", "width": "45%", "align": "left"},
+                                {"field": "amount", "title": "Monthly Base Payroll ($)", "width": "25%", "align": "right", "format": "currency"},
+                            ],
+                            "created_by": tenant_admin,
+                            "status": "published",
+                            "is_prebuilt_template": True,
+                            "description": "Cross-tabulation of departmental staffing levels, overtime expenses, and benefit provisions.",
+                        },
+                    )
+
+                    # 2. Prompt Parameters
+                    ReportParameter.objects.get_or_create(
+                        tenant=tenant,
+                        report=rpt_pnl,
+                        parameter_name="fiscal_year",
+                        defaults={
+                            "prompt_label": "Fiscal Year",
+                            "parameter_type": "choice_single",
+                            "default_value": "2026",
+                            "choices_source": "static_list",
+                            "choices_config_json": [
+                                {"value": "2026", "label": "FY 2026 (Current)"},
+                                {"value": "2025", "label": "FY 2025"},
+                                {"value": "2024", "label": "FY 2024"},
+                            ],
+                            "prompt_order": 10,
+                            "is_required": True,
+                            "is_active": True,
+                        },
+                    )
+
+                    ReportParameter.objects.get_or_create(
+                        tenant=tenant,
+                        report=rpt_pnl,
+                        parameter_name="as_of_date",
+                        defaults={
+                            "prompt_label": "Period End Date",
+                            "parameter_type": "date",
+                            "default_value": "2026-10-31",
+                            "choices_source": "static_list",
+                            "prompt_order": 20,
+                            "is_required": False,
+                            "is_active": True,
+                        },
+                    )
+
+                    ReportParameter.objects.get_or_create(
+                        tenant=tenant,
+                        report=rpt_sales,
+                        parameter_name="sales_territory",
+                        defaults={
+                            "prompt_label": "Sales Territory",
+                            "parameter_type": "choice_single",
+                            "default_value": "all",
+                            "choices_source": "static_list",
+                            "choices_config_json": [
+                                {"value": "all", "label": "All Territories"},
+                                {"value": "na", "label": "North America"},
+                                {"value": "emea", "label": "Europe & Middle East"},
+                                {"value": "apac", "label": "Asia-Pacific"},
+                            ],
+                            "prompt_order": 10,
+                            "is_required": False,
+                            "is_active": True,
+                        },
+                    )
+
+                    # 3. Drill-Through Paths
+                    ReportDrillPath.objects.get_or_create(
+                        tenant=tenant,
+                        source_report=rpt_sales,
+                        source_field="item_code",
+                        defaults={
+                            "drill_label": "Inspect Customer 360 Account",
+                            "target_type": "erp_record_url",
+                            "target_url_pattern": "/crm/accounts/{customer_code}/",
+                            "parameter_mapping_json": {"item_code": "customer_code"},
+                            "sort_order": 10,
+                            "is_enabled": True,
+                        },
+                    )
+
+                    ReportDrillPath.objects.get_or_create(
+                        tenant=tenant,
+                        source_report=rpt_pnl,
+                        source_field="item_code",
+                        defaults={
+                            "drill_label": "Drill to Detailed Line Items",
+                            "target_type": "operational_report",
+                            "target_report": rpt_sales,
+                            "parameter_mapping_json": {"item_code": "gl_account"},
+                            "sort_order": 20,
+                            "is_enabled": True,
+                        },
+                    )
+
+                    # 4. Execution Logs
+                    ReportExecution.objects.get_or_create(
+                        tenant=tenant,
+                        report=rpt_pnl,
+                        output_format="pdf",
+                        defaults={
+                            "executed_by": tenant_admin,
+                            "execution_mode": "export_pdf",
+                            "execution_status": "completed",
+                            "duration_ms": 240,
+                            "row_count": 6,
+                            "output_file_name": "monthly-profit-loss-statement_20261101.pdf",
+                            "file_size_bytes": 148200,
+                            "parameter_values_json": {"fiscal_year": "2026", "as_of_date": "2026-10-31"},
+                        },
+                    )
+
+                    ReportExecution.objects.get_or_create(
+                        tenant=tenant,
+                        report=rpt_sales,
+                        output_format="html",
+                        defaults={
+                            "executed_by": tenant_admin,
+                            "execution_mode": "interactive_view",
+                            "execution_status": "completed",
+                            "duration_ms": 115,
+                            "row_count": 6,
+                            "parameter_values_json": {"sales_territory": "all"},
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Standard & Operational Reporting for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Standard & Operational Reporting already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
