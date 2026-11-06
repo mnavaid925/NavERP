@@ -190,6 +190,7 @@ def kpi_definition_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def kpi_definition_refresh(request, pk):
     kpi = bi_object(request, KpiDefinition, pk)
