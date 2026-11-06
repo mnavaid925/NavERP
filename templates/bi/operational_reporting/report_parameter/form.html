@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ parameter.prompt_label }}{% else %}New Report Parameter{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_parameter_list' %}">Prompt Parameters</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ parameter.number }}{% else %}New Parameter{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Parameter: {{ parameter.prompt_label }}{% else %}Create Prompt Parameter{% endif %}</h1>
+        <p class="text-muted text-sm">Configure runtime prompts, choice data sources, default selections, and input validations</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:report_parameter_detail' parameter.pk %}{% else %}{% url 'bi:report_parameter_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="max-w-4xl space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Parameter Setup & Linking</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="id_report" class="form-label">Parent Operational Report <span class="text-red-500">*</span></label>
+                {{ form.report }}
+                {% if form.report.errors %}<div class="form-error">{{ form.report.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_prompt_label" class="form-label">Prompt Label <span class="text-red-500">*</span></label>
+                {{ form.prompt_label }}
+                {% if form.prompt_label.errors %}<div class="form-error">{{ form.prompt_label.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_parameter_name" class="form-label">Variable Token Name (Auto-slugged if blank)</label>
+                {{ form.parameter_name }}
+                {% if form.parameter_name.errors %}<div class="form-error">{{ form.parameter_name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_parameter_type" class="form-label">Data Type</label>
+                {{ form.parameter_type }}
+                {% if form.parameter_type.errors %}<div class="form-error">{{ form.parameter_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_choices_source" class="form-label">Choices Source</label>
+                {{ form.choices_source }}
+                {% if form.choices_source.errors %}<div class="form-error">{{ form.choices_source.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_default_value" class="form-label">Default Selection / Value</label>
+                {{ form.default_value }}
+                {% if form.default_value.errors %}<div class="form-error">{{ form.default_value.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_prompt_order" class="form-label">Prompt Display Order</label>
+                {{ form.prompt_order }}
+                {% if form.prompt_order.errors %}<div class="form-error">{{ form.prompt_order.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_help_text" class="form-label">Help Text & Guidance</label>
+                {{ form.help_text }}
+                {% if form.help_text.errors %}<div class="form-error">{{ form.help_text.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_validation_regex" class="form-label">Validation Regular Expression (Optional)</label>
+                {{ form.validation_regex }}
+                {% if form.validation_regex.errors %}<div class="form-error">{{ form.validation_regex.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_choices_config_json" class="form-label">Static Choices JSON Options</label>
+                {{ form.choices_config_json }}
+                <p class="text-xs text-muted mt-1">Format: [{"value": "val1", "label": "Label 1"}, ...]</p>
+                {% if form.choices_config_json.errors %}<div class="form-error">{{ form.choices_config_json.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body flex space-x-8">
+            <div class="flex items-center space-x-2">
+                {{ form.is_required }}
+                <label for="id_is_required" class="text-sm font-medium text-slate-700">Prompt is Mandatory</label>
+            </div>
+            <div class="flex items-center space-x-2">
+                {{ form.is_hidden }}
+                <label for="id_is_hidden" class="text-sm font-medium text-slate-700">Hidden from Prompt Bar</label>
+            </div>
+            <div class="flex items-center space-x-2">
+                {{ form.is_active }}
+                <label for="id_is_active" class="text-sm font-medium text-slate-700">Is Active</label>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end space-x-3">
+        <a href="{% if is_edit %}{% url 'bi:report_parameter_detail' parameter.pk %}{% else %}{% url 'bi:report_parameter_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Parameter{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
