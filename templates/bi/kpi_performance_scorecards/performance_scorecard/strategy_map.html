@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}Strategy Map — {{ scorecard.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:performance_scorecard_list' %}">Scorecards</a>
+            <span class="sep">/</span>
+            <a href="{{ scorecard.get_absolute_url }}">{{ scorecard.name }}</a>
+            <span class="sep">/</span>
+            <span>Strategy Map</span>
+        </div>
+        <h1 class="page-title">Strategy Map & Alignment</h1>
+        <p class="text-muted text-sm">Visual cause-and-effect relationship mapping linking Learning & Growth upwards to Process, Customer, and Financial outcomes</p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ scorecard.get_absolute_url }}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Scorecard</span>
+        </a>
+        <a href="{% url 'bi:strategic_objective_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Strategic Objective</span>
+        </a>
+    </div>
+</div>
+
+<!-- Strategy Stats -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="compass"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Strategic Objectives</div>
+            <div class="text-2xl font-bold">{{ strategy_stats.total_objectives }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Objectives On Track</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ strategy_stats.on_track }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Achieved Objectives</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ strategy_stats.achieved }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- 4-Tier Balanced Scorecard Strategy Map Canvas -->
+<div class="space-y-6">
+
+    <!-- Tier 1: Financial Perspective (Top) -->
+    <div class="card border-2 border-emerald-200">
+        <div class="card-header bg-emerald-50 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="dollar-sign" class="text-emerald-700"></i>
+                <h3 class="font-bold text-emerald-900">1. Financial Perspective (What financial performance do shareholders expect?)</h3>
+            </div>
+            <span class="badge badge-green">{{ financial_objectives|length }} Objectives</span>
+        </div>
+        <div class="card-body">
+            {% if financial_objectives %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for obj in financial_objectives %}
+                {% include "bi/kpi_performance_scorecards/performance_scorecard/_objective_card.html" with obj=obj %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted text-sm">No financial strategic objectives defined.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Directional Flow Arrow -->
+    <div class="flex justify-center -my-3">
+        <div class="bg-white border border-slate-300 rounded-full p-1.5 shadow-sm text-slate-500">
+            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+        </div>
+    </div>
+
+    <!-- Tier 2: Customer Perspective -->
+    <div class="card border-2 border-blue-200">
+        <div class="card-header bg-blue-50 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="users" class="text-blue-700"></i>
+                <h3 class="font-bold text-blue-900">2. Customer Perspective (To achieve financial goals, how must we appear to customers?)</h3>
+            </div>
+            <span class="badge badge-info">{{ customer_objectives|length }} Objectives</span>
+        </div>
+        <div class="card-body">
+            {% if customer_objectives %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for obj in customer_objectives %}
+                {% include "bi/kpi_performance_scorecards/performance_scorecard/_objective_card.html" with obj=obj %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted text-sm">No customer strategic objectives defined.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Directional Flow Arrow -->
+    <div class="flex justify-center -my-3">
+        <div class="bg-white border border-slate-300 rounded-full p-1.5 shadow-sm text-slate-500">
+            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+        </div>
+    </div>
+
+    <!-- Tier 3: Internal Business Process Perspective -->
+    <div class="card border-2 border-amber-200">
+        <div class="card-header bg-amber-50 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="cog" class="text-amber-700"></i>
+                <h3 class="font-bold text-amber-900">3. Internal Process Perspective (To satisfy customers & shareholders, in which business processes must we excel?)</h3>
+            </div>
+            <span class="badge badge-amber">{{ process_objectives|length }} Objectives</span>
+        </div>
+        <div class="card-body">
+            {% if process_objectives %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for obj in process_objectives %}
+                {% include "bi/kpi_performance_scorecards/performance_scorecard/_objective_card.html" with obj=obj %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted text-sm">No internal process strategic objectives defined.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Directional Flow Arrow -->
+    <div class="flex justify-center -my-3">
+        <div class="bg-white border border-slate-300 rounded-full p-1.5 shadow-sm text-slate-500">
+            <i data-lucide="arrow-up" class="w-5 h-5"></i>
+        </div>
+    </div>
+
+    <!-- Tier 4: Learning & Growth Perspective (Foundation) -->
+    <div class="card border-2 border-indigo-200 mb-6">
+        <div class="card-header bg-indigo-50 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i data-lucide="book-open" class="text-indigo-700"></i>
+                <h3 class="font-bold text-indigo-900">4. Learning & Growth (How will we sustain our ability to change, learn, and improve?)</h3>
+            </div>
+            <span class="badge badge-purple">{{ learning_objectives|length }} Objectives</span>
+        </div>
+        <div class="card-body">
+            {% if learning_objectives %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for obj in learning_objectives %}
+                {% include "bi/kpi_performance_scorecards/performance_scorecard/_objective_card.html" with obj=obj %}
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-4 text-center text-muted text-sm">No learning & growth strategic objectives defined.</div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}
