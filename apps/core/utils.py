@@ -48,6 +48,16 @@ def write_audit_log(user, obj, action, changes=None, tenant=None):
         object_id = getattr(obj, "pk", None)
         target = str(obj)[:255]
 
+    sanitized_changes = {}
+    if isinstance(changes, dict):
+        for k, v in changes.items():
+            if hasattr(v, "pk"):
+                sanitized_changes[k] = str(v)
+            else:
+                sanitized_changes[k] = v
+    else:
+        sanitized_changes = changes or {}
+
     resolved_tenant = tenant or getattr(obj, "tenant", None) or getattr(user, "tenant", None)
     return AuditLog.objects.create(
         tenant=resolved_tenant,
@@ -56,7 +66,7 @@ def write_audit_log(user, obj, action, changes=None, tenant=None):
         object_id=object_id,
         target=target,
         action=action,
-        changes=changes or {},
+        changes=sanitized_changes,
     )
 
 
