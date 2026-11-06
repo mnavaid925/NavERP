@@ -46,7 +46,6 @@
                 <span>Commit to Budget</span>
             </button>
         </form>
-        {% endif %}
         <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="btn btn-outline">
             <i data-lucide="plus"></i>
             <span>Add Writeback Cell</span>
@@ -62,6 +61,12 @@
                 <span>Delete</span>
             </button>
         </form>
+        {% else %}
+        <span class="badge badge-slate flex items-center gap-1.5 py-1.5 px-3">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Committed & Locked</span>
+        </span>
+        {% endif %}
     </div>
 </div>
 
@@ -147,7 +152,9 @@
         <div class="card">
             <div class="card-header flex items-center justify-between">
                 <h3 class="font-semibold text-slate-800">Scenario Writeback Cells ({{ writeback_cells.count }})</h3>
+                {% if scenario.status != 'committed' %}
                 <a href="{% url 'bi:writeback_cell_create' %}?scenario={{ scenario.pk }}" class="text-xs text-blue-600 hover:underline">+ Add Adjustment</a>
+                {% endif %}
             </div>
             <div class="card-body p-0">
                 <div class="table-wrap">
@@ -207,9 +214,11 @@
                                         <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="btn btn-icon" title="View Cell">
                                             <i data-lucide="eye"></i>
                                         </a>
+                                        {% if not cell.is_committed and scenario.status != 'committed' %}
                                         <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-icon" title="Edit Cell">
                                             <i data-lucide="pencil"></i>
                                         </a>
+                                        {% endif %}
                                     </div>
                                 </td>
                             </tr>
