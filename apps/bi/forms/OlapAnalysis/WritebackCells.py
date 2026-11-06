@@ -18,6 +18,12 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
         required=False,
         help_text="Key-value coordinates of the intersection cell, e.g. {\"period\": \"2026-Q1\", \"region\": \"North America\"}",
     )
+    coordinate_keys_raw = forms.CharField(
+        label="Dimensional Coordinates (JSON)",
+        widget=forms.Textarea(attrs={"rows": 2, "class": "form-textarea font-mono text-xs"}),
+        required=False,
+        help_text="Key-value coordinates of the intersection cell (alias for cell_coordinates_raw)",
+    )
 
     class Meta:
         model = ScenarioWritebackCell
@@ -41,6 +47,33 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        if "data" in kwargs and kwargs["data"]:
+            data = kwargs["data"].copy()
+            if "baseline_amount" in data and "baseline_value" not in data:
+                data["baseline_value"] = data["baseline_amount"]
+            if "simulated_amount" in data and "adjusted_value" not in data:
+                data["adjusted_value"] = data["simulated_amount"]
+            if "adjustment_method" in data and "spread_method" not in data:
+                data["spread_method"] = data["adjustment_method"]
+            if "coordinate_keys_raw" in data and "cell_coordinates_raw" not in data:
+                data["cell_coordinates_raw"] = data["coordinate_keys_raw"]
+            elif "cell_coordinates_raw" in data and "coordinate_keys_raw" not in data:
+                data["coordinate_keys_raw"] = data["cell_coordinates_raw"]
+            kwargs["data"] = data
+        elif len(args) > 0 and args[0]:
+            data = args[0].copy()
+            if "baseline_amount" in data and "baseline_value" not in data:
+                data["baseline_value"] = data["baseline_amount"]
+            if "simulated_amount" in data and "adjusted_value" not in data:
+                data["adjusted_value"] = data["simulated_amount"]
+            if "adjustment_method" in data and "spread_method" not in data:
+                data["spread_method"] = data["adjustment_method"]
+            if "coordinate_keys_raw" in data and "cell_coordinates_raw" not in data:
+                data["cell_coordinates_raw"] = data["coordinate_keys_raw"]
+            elif "cell_coordinates_raw" in data and "coordinate_keys_raw" not in data:
+                data["coordinate_keys_raw"] = data["cell_coordinates_raw"]
+            args = (data,) + args[1:]
+
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             scenario_qs = WhatIfScenario.objects.filter(tenant=self.tenant).exclude(status="committed")
@@ -54,12 +87,16 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
 
         if self.instance and self.instance.pk:
             if self.instance.cell_coordinates:
-                self.fields["cell_coordinates_raw"].initial = json.dumps(self.instance.cell_coordinates, indent=2)
+                encoded = json.dumps(self.instance.cell_coordinates, indent=2)
+                self.fields["cell_coordinates_raw"].initial = encoded
+                self.fields["coordinate_keys_raw"].initial = encoded
         else:
-            self.fields["cell_coordinates_raw"].initial = json.dumps({
+            default_init = json.dumps({
                 "period": "2026-Q1",
                 "channel": "Enterprise Direct",
             }, indent=2)
+            self.fields["cell_coordinates_raw"].initial = default_init
+            self.fields["coordinate_keys_raw"].initial = default_init
 
     def clean_scenario(self):
         scenario = self.cleaned_data.get("scenario")
@@ -79,6 +116,18 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}")
 
+    def clean_coordinate_keys_raw(self):
+        val = self.cleaned_data.get("coordinate_keys_raw", "").strip()
+        if not val:
+            return {}
+        try:
+            parsed = json.loads(val)
+            if not isinstance(parsed, dict):
+                raise forms.ValidationError("Coordinates must be a JSON object of key-value pairs.")
+            return parsed
+        except json.JSONDecodeError as exc:
+            raise forms.ValidationError(f"Invalid JSON: {exc}")
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["scenario", "gl_account", "org_unit"])
@@ -86,8 +135,9 @@ class ScenarioWritebackCellForm(TenantUniqueMixin, TenantModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        if "cell_coordinates_raw" in self.cleaned_data:
-            instance.cell_coordinates = self.cleaned_data["cell_coordinates_raw"]
+        coords = self.cleaned_data.get("coordinate_keys_raw") or self.cleaned_data.get("cell_coordinates_raw")
+        if coords is not None:
+            instance.cell_coordinates = coords
         if commit:
             instance.save()
         return instance
