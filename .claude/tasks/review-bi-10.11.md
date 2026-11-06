@@ -16,7 +16,7 @@
 | ID | Severity | File(s) | Description | Status |
 |---|---|---|---|:---:|
 | **C1** | Critical | `apps/bi/views/PerformanceScorecards/*.py` | `write_audit_log` signature mismatch raising `TypeError: unexpected keyword argument 'model_name'` on all POST mutations | [x] fixed — aligned write_audit_log signature across all 4 views |
-| **C2** | Critical | `apps/bi/forms/PerformanceScorecards/*.py` | `owner` field not scoped to `tenant=self.tenant` and missing from `reject_foreign` across 3 forms | [ ] open |
+| **C2** | Critical | `apps/bi/forms/PerformanceScorecards/*.py` | `owner` field not scoped to `tenant=self.tenant` and missing from `reject_foreign` across 3 forms | [x] fixed — scoped owner queryset to tenant and added to reject_foreign |
 | **C3** | Critical | `apps/bi/views/PerformanceScorecards/*.py` | Missing `@tenant_admin_required` gate on metric updates and recalculation endpoints | [ ] open |
 | **C4** | Critical | `apps/bi/views/PerformanceScorecards/KpiDefinitions.py`, `templates/bi/kpi_performance_scorecards/kpi_definition/detail.html` | Broken prefetch in `kpi_definition_detail` triggers $2N+3$ query storm | [ ] open |
 | **C5** | Critical | `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py`, `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` | Redundant duplicate queries (5 queries vs 2) in scorecard detail | [ ] open |
