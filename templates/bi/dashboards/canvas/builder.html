@@ -29,7 +29,7 @@
             <i data-lucide="eye"></i>
             <span>View Live Canvas</span>
         </a>
-        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline">
+        <a href="{% url 'bi:bi_dashboard_detail' dashboard.pk %}" class="btn btn-outline" title="Settings" aria-label="Settings">
             <i data-lucide="settings"></i>
             <span>Settings</span>
         </a>
@@ -45,7 +45,7 @@
                     <h2 class="text-base font-semibold">12-Column Responsive Grid Canvas</h2>
                     <p class="text-xs text-muted">Widgets arranged in order of coordinates (pos_y, pos_x)</p>
                 </div>
-                <span class="badge badge-info text-xs">{{ widgets.count }} Placed Widgets</span>
+                <span class="badge badge-info text-xs">{{ widgets|length }} Placed Widgets</span>
             </div>
             <div class="card-body">
                 <div class="grid grid-cols-12 gap-4 p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl" id="grid-canvas">
@@ -58,7 +58,7 @@
                                 {% if w.subtitle %}<p class="text-xs text-muted">{{ w.subtitle }}</p>{% endif %}
                             </div>
                             <div class="flex items-center gap-1">
-                                <a href="{% url 'bi:bi_dashboard_widget_edit' w.pk %}" class="btn btn-icon p-1 text-slate-500 hover:text-blue-600" title="Edit">
+                                <a href="{% url 'bi:bi_dashboard_widget_edit' w.pk %}" class="btn btn-icon p-1 text-slate-500 hover:text-blue-600" title="Edit" aria-label="Edit Widget">
                                     <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                                 </a>
                             </div>
