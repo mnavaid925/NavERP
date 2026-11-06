@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}Saved Analysis Views — Self-Service Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Analytics</a>
+            <span class="sep">/</span>
+            <span>Saved Views</span>
+        </div>
+        <h1 class="page-title">Saved Views & Workspaces</h1>
+        <p class="text-muted text-sm">Personal exploration sandboxes, shared department views, exploration templates, and shareable deep-links</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Queries</span>
+        </a>
+        <a href="{% url 'bi:saved_analysis_view_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Saved View</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Views</label>
+                <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Name, number, description..." class="form-input">
+            </div>
+            <div>
+                <label for="id_scope" class="form-label">Sharing Scope</label>
+                <select id="id_scope" name="scope" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for code, label in scope_choices %}
+                    <option value="{{ code }}" {% if request.GET.scope == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_favorite" class="form-label">Favorites & Templates</label>
+                <select id="id_favorite" name="favorite" class="form-select">
+                    <option value="">All Saved Views</option>
+                    <option value="1" {% if request.GET.favorite == "1" %}selected{% endif %}>Favorites Only</option>
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:saved_analysis_view_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number & Name</th>
+                    <th>Linked Query</th>
+                    <th>Scope</th>
+                    <th>Views</th>
+                    <th>Template</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in views %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:saved_analysis_view_detail' v.pk %}" class="font-medium text-slate-900 hover:text-blue-600 flex items-center space-x-1.5">
+                            {% if v.is_favorite %}
+                            <i data-lucide="star" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
+                            {% endif %}
+                            <span>{{ v.name }}</span>
+                        </a>
+                        <div class="font-mono text-xs text-muted">{{ v.number }} · {{ v.slug }}</div>
+                        {% if v.description %}
+                        <div class="text-xs text-slate-500 truncate max-w-xs mt-0.5">{{ v.description }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:ad_hoc_query_detail' v.query.pk %}" class="text-blue-600 hover:underline text-xs font-medium">
+                            {{ v.query.name }}
+                        </a>
+                        <div class="font-mono text-[11px] text-muted">{{ v.query.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ v.badge_scope }}">
+                            {{ v.get_sharing_scope_display }}
+                        </span>
+                        {% if v.org_unit %}
+                        <div class="text-[11px] text-slate-600 mt-0.5">{{ v.org_unit.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-700 font-mono">
+                        {{ v.view_count }} views
+                    </td>
+                    <td>
+                        {% if v.is_template %}
+                        <span class="badge badge-purple">Template</span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:saved_analysis_view_explore' v.pk %}" class="btn btn-icon text-blue-600" title="Open Interactive Exploration">
+                            <i data-lucide="compass"></i>
+                        </a>
+                        <a href="{% url 'bi:saved_analysis_view_clone' v.pk %}" class="btn btn-icon" title="Fork / Clone View">
+                            <i data-lucide="copy"></i>
+                        </a>
+                        <a href="{% url 'bi:saved_analysis_view_detail' v.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:saved_analysis_view_edit' v.pk %}" class="btn btn-icon" title="Edit View">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:saved_analysis_view_delete' v.pk %}" class="inline" onsubmit="return confirm('Delete saved view {{ v.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete View">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="bookmark" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Saved Views Found</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Save your ad-hoc query explorations into personal sandboxes or share them with your departmental team.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:saved_analysis_view_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Saved View</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scope %}&scope={{ request.GET.scope }}{% endif %}{% if request.GET.favorite %}&favorite={{ request.GET.favorite }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
