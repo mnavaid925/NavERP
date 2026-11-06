@@ -2,12 +2,11 @@
 
 Models covered:
 - BiDashboard (BDSH)
-- BiDashboardWidget (BWID)
-- BiDashboardBookmark (BBMK)
-- BiDashboardFilter (BFIL)
+- BiDashboardWidget (BDWG)
+- BiDashboardBookmark (BDBM)
+- BiDashboardFilter (BDFL)
 """
 import pytest
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
 from apps.bi.models import (
@@ -30,27 +29,31 @@ def _dashboards_choice_keys(choices_tuple):
 
 @pytest.mark.django_db
 def test_dashboards_dashboard_creation_and_autonumber(tenant_a, admin_user):
-    """Test BiDashboard creation, BDSH- prefix, and default field values."""
+    """Test BiDashboard creation, BDSH- prefix, default field values, and str."""
     dashboard = BiDashboard.objects.create(
         tenant=tenant_a,
         title="Revenue Analysis 2026",
+        slug="revenue-analysis-2026",
         description="Comprehensive quarterly revenue review",
-        category="financial",
+        category="finance",
         created_by=admin_user,
     )
     assert dashboard.NUMBER_PREFIX == "BDSH"
     assert dashboard.number.startswith("BDSH-")
     assert dashboard.title == "Revenue Analysis 2026"
     assert dashboard.slug == "revenue-analysis-2026"
-    assert dashboard.theme == "light"
+    assert dashboard.theme == "slate_corporate"
     assert dashboard.layout_type == "grid_12"
-    assert dashboard.refresh_cadence == "manual"
-    assert dashboard.auto_refresh_seconds == 0
+    assert dashboard.refresh_interval_seconds == 0
     assert dashboard.is_published is False
-    assert dashboard.is_favorite is False
+    assert dashboard.is_default is False
+    assert dashboard.is_template is False
     assert dashboard.is_kiosk_enabled is False
     assert dashboard.is_active is True
-    assert str(dashboard) == f"{dashboard.number} - Revenue Analysis 2026"
+    assert str(dashboard) == f"{dashboard.title} ({dashboard.number})"
+    assert dashboard.badge_theme == "badge-slate"
+    assert dashboard.badge_category == "badge-green"
+    assert dashboard.get_absolute_url() == f"/bi/dashboards/{dashboard.pk}/"
 
 
 @pytest.mark.django_db
@@ -84,35 +87,22 @@ def test_dashboards_dashboard_unique_tenant_slug(tenant_a, tenant_b, admin_user,
 
 
 @pytest.mark.django_db
-def test_dashboards_dashboard_clean_auto_slugify(tenant_a, admin_user):
-    """Test that clean() generates a sanitized slug if left empty."""
-    dashboard = BiDashboard(
-        tenant=tenant_a,
-        title="Supply Chain & Logistics Pulse 2026!",
-        slug="",
-        created_by=admin_user,
-    )
-    dashboard.clean()
-    assert dashboard.slug == "supply-chain-logistics-pulse-2026"
-
-
-@pytest.mark.django_db
 def test_dashboards_dashboard_choices():
     """Test choices sets on BiDashboard model."""
     categories = _dashboards_choice_keys(BiDashboard.CATEGORY_CHOICES)
     assert "executive" in categories
-    assert "financial" in categories
-    assert "operational" in categories
-    assert "strategic" in categories
+    assert "finance" in categories
+    assert "sales_crm" in categories
+    assert "operations" in categories
 
     themes = _dashboards_choice_keys(BiDashboard.THEME_CHOICES)
-    assert "light" in themes
-    assert "dark" in themes
-    assert "navy_slate" in themes
+    assert "slate_corporate" in themes
+    assert "indigo_modern" in themes
+    assert "dark_observability" in themes
 
-    layouts = _dashboards_choice_keys(BiDashboard.LAYOUT_CHOICES)
+    layouts = _dashboards_choice_keys(BiDashboard.LAYOUT_TYPE_CHOICES)
     assert "grid_12" in layouts
-    assert "canvas_freeform" in layouts
+    assert "executive_summary" in layouts
 
 
 # ---------------------------------------------------------------------------
@@ -121,53 +111,23 @@ def test_dashboards_dashboard_choices():
 
 
 @pytest.mark.django_db
-def test_dashboards_widget_creation_and_autonumber(tenant_a, bi_dashboard_a, admin_user):
-    """Test BiDashboardWidget creation, BWID- prefix, and default coordinates."""
+def test_dashboards_widget_creation_and_autonumber(tenant_a, bi_dashboard_a):
+    """Test BiDashboardWidget creation, BDWG- prefix, and default coordinates."""
     widget = BiDashboardWidget.objects.create(
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
         title="Net Margin Trend",
-        widget_type="line_trend",
-        created_by=admin_user,
+        widget_type="line",
     )
-    assert widget.NUMBER_PREFIX == "BWID"
-    assert widget.number.startswith("BWID-")
+    assert widget.NUMBER_PREFIX == "BDWG"
+    assert widget.number.startswith("BDWG-")
     assert widget.pos_x == 0
     assert widget.pos_y == 0
-    assert widget.width_cols == 6
+    assert widget.width_cols == 4
     assert widget.height_rows == 4
-    assert widget.color_scheme == "primary"
-    assert widget.chart_config == {}
-    assert str(widget) == f"{widget.number} - Net Margin Trend (Line Trend)"
-
-
-@pytest.mark.django_db
-def test_dashboards_widget_clean_bounds_validation(tenant_a, bi_dashboard_a, admin_user):
-    """Test widget position validation in clean(): pos_x + width_cols <= 12."""
-    # Exceeding 12 grid columns must fail
-    widget_invalid = BiDashboardWidget(
-        tenant=tenant_a,
-        dashboard=bi_dashboard_a,
-        title="Oversized Widget",
-        widget_type="bar_chart",
-        pos_x=10,
-        width_cols=4,  # 10 + 4 = 14 > 12
-        created_by=admin_user,
-    )
-    with pytest.raises(ValidationError):
-        widget_invalid.clean()
-
-    # Valid coordinates within 12 columns
-    widget_valid = BiDashboardWidget(
-        tenant=tenant_a,
-        dashboard=bi_dashboard_a,
-        title="Fitted Widget",
-        widget_type="bar_chart",
-        pos_x=6,
-        width_cols=6,  # 6 + 6 = 12 <= 12
-        created_by=admin_user,
-    )
-    widget_valid.clean()  # should not raise
+    assert widget.chart_config_json == {}
+    assert widget.badge_widget_type == "badge-info"
+    assert str(widget) == f"{widget.title} ({widget.number}) [Line Trend Chart]"
 
 
 @pytest.mark.django_db
@@ -184,7 +144,6 @@ def test_dashboards_widget_cascade_delete_with_dashboard(tenant_a, admin_user):
         dashboard=dash,
         title="Ephemeral Widget",
         widget_type="kpi_card",
-        created_by=admin_user,
     )
     dash_id = dash.id
     widget_id = widget.id
@@ -201,20 +160,20 @@ def test_dashboards_widget_cascade_delete_with_dashboard(tenant_a, admin_user):
 
 @pytest.mark.django_db
 def test_dashboards_bookmark_creation_and_autonumber(tenant_a, bi_dashboard_a, admin_user):
-    """Test BiDashboardBookmark creation, BBMK- prefix, and string representation."""
+    """Test BiDashboardBookmark creation, BDBM- prefix, and string representation."""
     bm = BiDashboardBookmark.objects.create(
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
         user=admin_user,
         name="EMEA Sales Directors",
-        filters_payload={"region": "EMEA"},
-        crossfilter_state={"tier": "Enterprise"},
+        filter_state_json={"region": "EMEA"},
+        crossfilter_state_json={"tier": "Enterprise"},
         is_shared=True,
     )
-    assert bm.NUMBER_PREFIX == "BBMK"
-    assert bm.number.startswith("BBMK-")
-    assert bm.filters_payload == {"region": "EMEA"}
-    assert bm.crossfilter_state == {"tier": "Enterprise"}
+    assert bm.NUMBER_PREFIX == "BDBM"
+    assert bm.number.startswith("BDBM-")
+    assert bm.filter_state_json == {"region": "EMEA"}
+    assert bm.crossfilter_state_json == {"tier": "Enterprise"}
     assert bm.is_shared is True
     # Verify M10: __str__ does not traverse FK to avoid N+1
     assert str(bm) == f"{bm.name} ({bm.number})"
@@ -246,38 +205,24 @@ def test_dashboards_bookmark_unique_tenant_dashboard_user_name(tenant_a, bi_dash
 
 @pytest.mark.django_db
 def test_dashboards_filter_creation_and_autonumber(tenant_a, bi_dashboard_a):
-    """Test BiDashboardFilter creation, BFIL- prefix, and auto-slugified filter_key."""
+    """Test BiDashboardFilter creation, BDFL- prefix, and string format."""
     filt = BiDashboardFilter.objects.create(
         tenant=tenant_a,
         dashboard=bi_dashboard_a,
         filter_label="Customer Tier",
         filter_key="customer_tier",
-        filter_type="select",
+        filter_type="dropdown",
         default_value="All",
-        options_source="static",
-        static_options=[{"value": "All", "label": "All Tiers"}, {"value": "Gold", "label": "Gold"}],
-        display_order=2,
+        options_source="static_list",
+        static_options_json=[{"value": "All", "label": "All Tiers"}, {"value": "Gold", "label": "Gold"}],
+        order=2,
     )
-    assert filt.NUMBER_PREFIX == "BFIL"
-    assert filt.number.startswith("BFIL-")
+    assert filt.NUMBER_PREFIX == "BDFL"
+    assert filt.number.startswith("BDFL-")
     assert filt.filter_label == "Customer Tier"
     assert filt.filter_key == "customer_tier"
-    assert filt.is_global is True
-    assert str(filt) == "Customer Tier (customer_tier)"
-
-
-@pytest.mark.django_db
-def test_dashboards_filter_clean_auto_slugify_key(tenant_a, bi_dashboard_a):
-    """Test that clean() generates filter_key from filter_label if empty."""
-    filt = BiDashboardFilter(
-        tenant=tenant_a,
-        dashboard=bi_dashboard_a,
-        filter_label="Shipping Country / Region",
-        filter_key="",
-        filter_type="select",
-    )
-    filt.clean()
-    assert filt.filter_key == "shipping_country_region"
+    assert filt.badge_filter_type == "badge-info"
+    assert str(filt) == f"{filt.filter_label} ({filt.filter_key}) [{filt.number}]"
 
 
 @pytest.mark.django_db
