@@ -35,7 +35,7 @@ def test_dashboards_dashboard_form_valid_auto_slug(tenant_a):
         "category": "executive",
         "layout_type": "grid_12",
         "refresh_interval_seconds": 60,
-        "theme": "navy_slate",
+        "theme": "slate_corporate",
         "role_required": "all",
         "description": "Enterprise executive board monitor",
         "is_active": True,
@@ -55,9 +55,9 @@ def test_dashboards_dashboard_form_duplicate_slug_rejected(tenant_a, bi_dashboar
     form_data = {
         "title": "Duplicate Executive Slug",
         "slug": bi_dashboard_a.slug,
-        "category": "financial",
+        "category": "finance",
         "layout_type": "grid_12",
-        "theme": "light",
+        "theme": "slate_corporate",
         "is_active": True,
     }
     form = BiDashboardForm(data=form_data, tenant=tenant_a)
@@ -71,9 +71,9 @@ def test_dashboards_dashboard_form_duplicate_slug_allowed_cross_tenant(tenant_b,
     form_data = {
         "title": "Globex Duplicate Slug",
         "slug": bi_dashboard_a.slug,
-        "category": "operational",
+        "category": "operations",
         "layout_type": "grid_12",
-        "theme": "dark",
+        "theme": "dark_observability",
         "is_active": True,
     }
     form = BiDashboardForm(data=form_data, tenant=tenant_b)
@@ -152,7 +152,7 @@ def test_dashboards_widget_form_grid_overflow_rejected(tenant_a, bi_dashboard_a)
     form_data = {
         "dashboard": bi_dashboard_a.pk,
         "title": "Overflow Widget",
-        "widget_type": "bar_chart",
+        "widget_type": "bar",
         "pos_x": 10,
         "pos_y": 0,
         "width_cols": 4,  # 10 + 4 = 14 > 12
@@ -242,10 +242,10 @@ def test_dashboards_filter_form_auto_slug_key(tenant_a, bi_dashboard_a):
         "dashboard": bi_dashboard_a.pk,
         "filter_label": "Global Currency Code",
         "filter_key": "",  # Blank to test auto-slugification
-        "filter_type": "select",
+        "filter_type": "dropdown",
         "target_field": "currency",
         "default_value": "USD",
-        "options_source": "static",
+        "options_source": "static_list",
         "order": 1,
         "is_required": False,
         "is_active": True,
@@ -265,8 +265,8 @@ def test_dashboards_filter_form_duplicate_key_rejected(tenant_a, bi_dashboard_a,
         "dashboard": bi_dashboard_a.pk,
         "filter_label": "Duplicate Region Filter",
         "filter_key": bi_filter_a.filter_key,
-        "filter_type": "select",
-        "options_source": "static",
+        "filter_type": "dropdown",
+        "options_source": "static_list",
         "is_active": True,
     }
     form = BiDashboardFilterForm(data=form_data, tenant=tenant_a)
