@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit OLAP Cube — {{ cube.name }}{% else %}New OLAP Cube{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:olap_cube_list' %}">OLAP Cubes</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Cube{% else %}New Cube{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit OLAP Cube: {{ cube.name }}{% else %}Create OLAP Cube{% endif %}</h1>
+        <p class="text-muted text-sm">Configure multidimensional cube grain, facts, dimensions, calculated measures, and cuboids</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Basic Information -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Cube Identity & Storage Mode</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Cube Name *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                            {{ form.slug }}
+                            {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.storage_mode.id_for_label }}">Storage Mode *</label>
+                            {{ form.storage_mode }}
+                            <span class="text-xs text-muted">ROLAP executes dynamic queries, Summary Rollup maintains pre-calculated aggregates</span>
+                            {% if form.storage_mode.errors %}<div class="form-error">{{ form.storage_mode.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fact Source Links -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Fact Table & Hierarchy Links</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Governed Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Physical Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.default_hierarchy.id_for_label }}">Default Drill Hierarchy</label>
+                            {{ form.default_hierarchy }}
+                            {% if form.default_hierarchy.errors %}<div class="form-error">{{ form.default_hierarchy.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multidimensional Architecture JSON -->
+                <div class="border-b border-slate-200 pb-5 space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider">Multidimensional Configurations</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.dimensions_config_raw.id_for_label }}">Dimensions Configuration (JSON)</label>
+                        {{ form.dimensions_config_raw }}
+                        <span class="text-xs text-muted">{{ form.dimensions_config_raw.help_text }}</span>
+                        {% if form.dimensions_config_raw.errors %}<div class="form-error">{{ form.dimensions_config_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.measures_config_raw.id_for_label }}">Measures Configuration (JSON)</label>
+                        {{ form.measures_config_raw }}
+                        <span class="text-xs text-muted">{{ form.measures_config_raw.help_text }}</span>
+                        {% if form.measures_config_raw.errors %}<div class="form-error">{{ form.measures_config_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.aggregations_config_raw.id_for_label }}">Pre-Aggregated Cuboid Grain Sets (JSON)</label>
+                        {{ form.aggregations_config_raw }}
+                        <span class="text-xs text-muted">{{ form.aggregations_config_raw.help_text }}</span>
+                        {% if form.aggregations_config_raw.errors %}<div class="form-error">{{ form.aggregations_config_raw.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Engine Features & Cache -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div class="form-group flex items-center gap-3 pt-2">
+                        {{ form.time_intelligence_enabled }}
+                        <div>
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.time_intelligence_enabled.id_for_label }}">Enable Time Intelligence</label>
+                            <div class="text-xs text-muted">Auto-computes period-to-date (YTD, QTD), year-over-year growth, and rolling averages</div>
+                        </div>
+                        {% if form.time_intelligence_enabled.errors %}<div class="form-error">{{ form.time_intelligence_enabled.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cache_ttl_minutes.id_for_label }}">Aggregation Cache TTL (Minutes)</label>
+                        {{ form.cache_ttl_minutes }}
+                        {% if form.cache_ttl_minutes.errors %}<div class="form-error">{{ form.cache_ttl_minutes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'bi:olap_cube_detail' cube.pk %}{% else %}{% url 'bi:olap_cube_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Cube{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
