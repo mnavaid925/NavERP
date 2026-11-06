@@ -27,6 +27,10 @@ from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
 from apps.bi.models.Dashboards.BiDashboardBookmarks import BiDashboardBookmark
 from apps.bi.models.Dashboards.BiDashboardFilters import BiDashboardFilter
+from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
+from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
+from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
+from apps.bi.models.OperationalReporting.ReportParameters import ReportParameter
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -67,4 +71,8 @@ __all__ = [
     "BiDashboardWidget",
     "BiDashboardBookmark",
     "BiDashboardFilter",
+    "ReportDefinition",
+    "ReportParameter",
+    "ReportExecution",
+    "ReportDrillPath",
 ]
