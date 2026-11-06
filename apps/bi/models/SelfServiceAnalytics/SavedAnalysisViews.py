@@ -64,6 +64,7 @@ class SavedAnalysisView(TenantNumbered):
             models.Index(fields=["tenant", "org_unit"], name="idx_bsav_ten_org"),
             models.Index(fields=["tenant", "created_by"], name="idx_bsav_ten_user"),
             models.Index(fields=["tenant", "is_template"], name="idx_bsav_ten_tmpl"),
+            models.Index(fields=["tenant", "query"], name="idx_bsav_ten_qry"),
             models.Index(fields=["tenant", "created_at"], name="idx_bsav_ten_created"),
         ]
 
