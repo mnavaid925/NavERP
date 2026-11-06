@@ -79,8 +79,8 @@ def kpi_definition_list(request):
         qs = qs.filter(calculation_type=calculation_type)
 
     department = request.GET.get("department", "").strip()
-    if department:
-        qs = qs.filter(department_id=department)
+    if department and department.isdigit():
+        qs = qs.filter(department_id=int(department))
 
     paginator = Paginator(qs, 25)
     page_number = request.GET.get("page")
