@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Scenario Writeback Cells — OLAP Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:what_if_scenario_list' %}">What-If Scenarios</a>
+            <span class="sep">/</span>
+            <span>Writeback Cells</span>
+        </div>
+        <h1 class="page-title">Scenario Writeback Cells</h1>
+        <p class="text-muted text-sm">Multidimensional coordinate cell adjustments, reverse-allocation splashing, and budget variance ledger</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:what_if_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="sliders"></i>
+            <span>What-If Scenarios</span>
+        </a>
+        <a href="{% url 'bi:writeback_cell_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Writeback Cell</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="edit-3"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Cells</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Committed Cells</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ committed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pending Simulation</div>
+            <div class="text-2xl font-bold text-amber-600">{{ pending_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Net Variance Delta</div>
+            <div class="text-2xl font-bold font-mono {% if net_variance >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                {% if net_variance > 0 %}+{% endif %}${{ net_variance|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, scenario, account, notes..." class="form-input pl-9 w-full">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                </div>
+            </div>
+            <div class="w-48">
+                <select name="scenario" class="form-select w-full">
+                    <option value="">All Scenarios</option>
+                    {% for sc in scenarios %}
+                    <option value="{{ sc.pk }}" {% if request.GET.scenario == sc.pk|stringformat:"d" %}selected{% endif %}>{{ sc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-44">
+                <select name="spread_method" class="form-select w-full">
+                    <option value="">All Methods</option>
+                    {% for val, label in spread_method_choices %}
+                    <option value="{{ val }}" {% if request.GET.spread_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.scenario or request.GET.spread_method %}
+            <a href="{% url 'bi:writeback_cell_list' %}" class="btn btn-outline">
+                <i data-lucide="x"></i>
+                <span>Clear</span>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Cell</th>
+                    <th>Scenario</th>
+                    <th>GL Account & Org</th>
+                    <th>Coordinates</th>
+                    <th class="text-right">Baseline</th>
+                    <th class="text-right">Adjusted</th>
+                    <th class="text-right">Variance</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cell in cells %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold text-slate-900">
+                        <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="hover:text-blue-600">
+                            {{ cell.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium text-slate-800">
+                            <a href="{% url 'bi:what_if_scenario_detail' cell.scenario.pk %}" class="text-blue-600 hover:underline">
+                                {{ cell.scenario.name }}
+                            </a>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium text-slate-800">
+                            {% if cell.gl_account %}{{ cell.gl_account.code }} - {{ cell.gl_account.name }}{% else %}<span class="text-muted italic">All Accounts</span>{% endif %}
+                        </div>
+                        <div class="text-[11px] text-muted">
+                            {% if cell.org_unit %}{{ cell.org_unit.name }}{% else %}All Departments{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-[11px] font-mono text-slate-600 flex flex-wrap gap-1">
+                            {% for k, v in cell.cell_coordinates.items %}
+                            <span class="px-1 py-0.5 bg-slate-100 rounded">{{ k }}={{ v }}</span>
+                            {% empty %}
+                            <span class="text-muted italic">Leaf Intersection</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td class="text-right font-mono text-xs text-slate-600">${{ cell.baseline_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-xs font-bold text-slate-900">${{ cell.adjusted_value|floatformat:2 }}</td>
+                    <td class="text-right font-mono text-xs font-bold {% if cell.variance_amount >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                        {% if cell.variance_amount > 0 %}+{% endif %}${{ cell.variance_amount|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-[10px]">{{ cell.get_spread_method_display }}</span>
+                    </td>
+                    <td>
+                        {% if cell.is_committed %}
+                        <span class="badge badge-green text-[10px]">Committed</span>
+                        {% else %}
+                        <span class="badge badge-amber text-[10px]">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:writeback_cell_detail' cell.pk %}" class="btn btn-icon" title="View Cell">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-icon" title="Edit Cell">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:writeback_cell_delete' cell.pk %}" onsubmit="return confirm('Delete Writeback Cell {{ cell.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Cell">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="edit-3" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Writeback Cells Recorded</h3>
+                            <p class="text-sm text-muted max-w-sm mx-auto mb-4">Record cell-level adjustments, simulate what-if scenarios, and splash numbers across multidimensional coordinates.</p>
+                            <a href="{% url 'bi:writeback_cell_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus"></i>
+                                <span>Create Writeback Cell</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ total_count }} cells
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scenario %}&scenario={{ request.GET.scenario }}{% endif %}{% if request.GET.spread_method %}&spread_method={{ request.GET.spread_method }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.scenario %}&scenario={{ request.GET.scenario }}{% endif %}{% if request.GET.spread_method %}&spread_method={{ request.GET.spread_method }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
