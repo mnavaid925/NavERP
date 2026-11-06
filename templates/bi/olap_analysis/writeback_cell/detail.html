@@ -32,6 +32,7 @@
             <i data-lucide="play"></i>
             <span>Scenario Workbench</span>
         </a>
+        {% if not cell.is_committed and cell.scenario.status != 'committed' %}
         <a href="{% url 'bi:writeback_cell_edit' cell.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit Cell</span>
@@ -43,6 +44,12 @@
                 <span>Delete</span>
             </button>
         </form>
+        {% else %}
+        <span class="badge badge-slate flex items-center gap-1.5 py-1.5 px-3">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Committed & Locked</span>
+        </span>
+        {% endif %}
     </div>
 </div>
 
