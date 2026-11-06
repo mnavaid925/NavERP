@@ -225,7 +225,7 @@ def performance_scorecard_strategy_map(request, pk):
 
     objectives = bi_scope(StrategicObjective.objects.all(), request).select_related(
         "parent_objective", "owner"
-    ).prefetch_related("child_objectives", "scorecard_kpis__kpi").order_by("sort_order", "name")
+    ).order_by("sort_order", "name")
 
     financial_objectives = [o for o in objectives if o.perspective == "financial"]
     customer_objectives = [o for o in objectives if o.perspective == "customer"]
