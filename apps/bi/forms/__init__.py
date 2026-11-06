@@ -50,6 +50,20 @@ from apps.bi.forms.OperationalReporting.ReportDefinitions import (
 from apps.bi.forms.OperationalReporting.ReportDrillPaths import ReportDrillPathForm
 from apps.bi.forms.OperationalReporting.ReportExecutions import ReportExecutionRunForm
 from apps.bi.forms.OperationalReporting.ReportParameters import ReportParameterForm
+from apps.bi.forms.SelfServiceAnalytics.AdHocCalculatedFields import (
+    AdHocCalculatedFieldForm,
+)
+from apps.bi.forms.SelfServiceAnalytics.AdHocQueries import (
+    AdHocQueryComposerForm,
+    AdHocQueryForm,
+)
+from apps.bi.forms.SelfServiceAnalytics.DataBlendDefinitions import (
+    DataBlendDefinitionForm,
+)
+from apps.bi.forms.SelfServiceAnalytics.SavedAnalysisViews import (
+    SavedAnalysisViewForm,
+    SavedAnalysisViewShareForm,
+)
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -109,4 +123,10 @@ __all__ = [
     "ReportParameterForm",
     "ReportExecutionRunForm",
     "ReportDrillPathForm",
+    "AdHocQueryForm",
+    "AdHocQueryComposerForm",
+    "AdHocCalculatedFieldForm",
+    "DataBlendDefinitionForm",
+    "SavedAnalysisViewForm",
+    "SavedAnalysisViewShareForm",
 ]
