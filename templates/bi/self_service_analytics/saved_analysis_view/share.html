@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Share: {{ view_obj.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:saved_analysis_view_list' %}">Saved Views</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:saved_analysis_view_detail' view_obj.pk %}">{{ view_obj.number }}</a>
+            <span class="sep">/</span>
+            <span>Share</span>
+        </div>
+        <h1 class="page-title">Share Analysis: {{ view_obj.name }}</h1>
+        <p class="text-muted text-sm">Configure permissions, departmental visibility, and copy shareable deep-link tokens</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:saved_analysis_view_detail' view_obj.pk %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6 max-w-2xl">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Sharing Scope</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label for="id_sharing_scope" class="form-label">Scope</label>
+                {{ form.sharing_scope }}
+                {% if form.sharing_scope.errors %}<div class="form-error">{{ form.sharing_scope.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_org_unit" class="form-label">Organizational Unit / Team</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                <p class="text-xs text-muted mt-1">Leave empty to grant view access across the whole workspace.</p>
+            </div>
+            <div class="pt-4 border-t border-slate-100">
+                <label class="form-label">Shareable Token URL</label>
+                <div class="flex items-center space-x-2">
+                    <input type="text" readonly value="https://erp.nav.local/bi/saved-views/{{ view_obj.pk }}/?token={{ view_obj.share_token }}" class="form-input font-mono text-xs bg-slate-50 flex-1">
+                    <button type="button" onclick="navigator.clipboard.writeText('https://erp.nav.local/bi/saved-views/{{ view_obj.pk }}/?token={{ view_obj.share_token }}'); alert('Link copied to clipboard!');" class="btn btn-outline text-xs">
+                        <i data-lucide="copy"></i>
+                        <span>Copy</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer flex justify-end space-x-3">
+            <a href="{% url 'bi:saved_analysis_view_detail' view_obj.pk %}" class="btn btn-outline">
+                Cancel
+            </a>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check"></i>
+                <span>Save Permissions</span>
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}
