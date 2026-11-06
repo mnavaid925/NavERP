@@ -104,7 +104,7 @@ def pivot_view_create(request):
             view.tenant = request.tenant
             view.created_by = request.user
             view.save()
-            write_audit_log(request.user, "create", view, {"name": view.name, "number": view.number})
+            write_audit_log(request.user, view, "create", changes={"name": view.name, "number": view.number}, tenant=request.tenant)
             messages.success(request, f"Pivot Analysis View '{view.name}' ({view.number}) created successfully.")
             return redirect("bi:pivot_view_matrix", pk=view.pk)
     else:
@@ -127,7 +127,7 @@ def pivot_view_edit(request, pk):
         form = PivotAnalysisViewForm(request.POST, instance=view, tenant=request.tenant)
         if form.is_valid():
             view = form.save()
-            write_audit_log(request.user, "update", view, {"name": view.name, "number": view.number})
+            write_audit_log(request.user, view, "update", changes={"name": view.name, "number": view.number}, tenant=request.tenant)
             messages.success(request, f"Pivot View '{view.name}' updated successfully.")
             return redirect("bi:pivot_view_detail", pk=view.pk)
     else:
@@ -151,7 +151,7 @@ def pivot_view_delete(request, pk):
     name = view.name
     number = view.number
     view.delete()
-    write_audit_log(request.user, "delete", view, {"name": name, "number": number})
+    write_audit_log(request.user, view, "delete", changes={"name": name, "number": number}, tenant=request.tenant)
     messages.success(request, f"Pivot Analysis View '{name}' ({number}) deleted successfully.")
     return redirect("bi:pivot_view_list")
 
