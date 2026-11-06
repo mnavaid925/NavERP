@@ -60,9 +60,9 @@ def test_dashboards_create_view(client_a, tenant_a):
     post_data = {
         "title": "Sales Operations 2026",
         "slug": "sales-operations-2026",
-        "category": "operational",
+        "category": "operations",
         "layout_type": "grid_12",
-        "theme": "light",
+        "theme": "slate_corporate",
         "refresh_interval_seconds": 0,
         "is_active": True,
     }
@@ -80,7 +80,7 @@ def test_dashboards_detail_view_null_created_by_safe(client_a, tenant_a):
         tenant=tenant_a,
         title="System Generated Telemetry",
         slug="system-telemetry-null",
-        category="operational",
+        category="operations",
         created_by=None,
     )
     url = reverse("bi:bi_dashboard_detail", kwargs={"pk": dash_null_user.pk})
@@ -101,16 +101,16 @@ def test_dashboards_edit_view(client_a, bi_dashboard_a):
         data={
             "title": "Updated Executive Overview",
             "slug": bi_dashboard_a.slug,
-            "category": "strategic",
+            "category": "custom",
             "layout_type": "grid_12",
-            "theme": "dark",
+            "theme": "dark_observability",
             "is_active": True,
         },
     )
     assert resp_post.status_code == 302
     bi_dashboard_a.refresh_from_db()
     assert bi_dashboard_a.title == "Updated Executive Overview"
-    assert bi_dashboard_a.category == "strategic"
+    assert bi_dashboard_a.category == "custom"
 
 
 @pytest.mark.django_db
@@ -371,8 +371,8 @@ def test_dashboards_filter_list_and_create(client_a, bi_dashboard_a, bi_filter_a
             "dashboard": bi_dashboard_a.pk,
             "filter_label": "Fiscal Quarter",
             "filter_key": "fiscal_quarter",
-            "filter_type": "select",
-            "options_source": "static",
+            "filter_type": "dropdown",
+            "options_source": "static_list",
             "is_active": True,
         },
     )
