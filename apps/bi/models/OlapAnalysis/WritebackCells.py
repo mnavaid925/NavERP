@@ -91,7 +91,7 @@ class ScenarioWritebackCell(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} ({self.scenario.name})"
+        return f"{self.number}"
 
     def get_absolute_url(self):
         return reverse("bi:writeback_cell_detail", kwargs={"pk": self.pk})
