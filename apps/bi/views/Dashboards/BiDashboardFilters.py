@@ -16,7 +16,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_dashboard_filter_list(request):
-    qs = bi_scope(BiDashboardFilter.objects.all(), request).select_related("dashboard")
+    qs = bi_scope(BiDashboardFilter.objects.all(), request).select_related("dashboard").defer("static_options_json")
     total_filters = qs.count()
 
     q = request.GET.get("q", "").strip()
@@ -30,7 +30,7 @@ def bi_dashboard_filter_list(request):
         )
 
     dashboard_id = request.GET.get("dashboard", "").strip()
-    if dashboard_id:
+    if dashboard_id and dashboard_id.isdigit():
         qs = qs.filter(dashboard_id=dashboard_id)
 
     filter_type = request.GET.get("filter_type", "").strip()
@@ -41,7 +41,7 @@ def bi_dashboard_filter_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).order_by("title")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant, is_active=True).only("id", "title").order_by("title")
 
     context = {
         "page_obj": page_obj,
@@ -88,12 +88,11 @@ def bi_dashboard_filter_create(request):
                 filter_obj.tenant = request.tenant
                 filter_obj.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="create",
-                    target_model="BiDashboardFilter",
-                    target_id=str(filter_obj.pk),
+                    request.user,
+                    filter_obj,
+                    "create",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Filter control '{filter_obj.filter_label}' created successfully.")
             return redirect("bi:bi_dashboard_detail", pk=filter_obj.dashboard_id)
@@ -118,12 +117,11 @@ def bi_dashboard_filter_edit(request, pk):
             with transaction.atomic():
                 filter_obj = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="update",
-                    target_model="BiDashboardFilter",
-                    target_id=str(filter_obj.pk),
+                    request.user,
+                    filter_obj,
+                    "update",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Filter control '{filter_obj.filter_label}' updated successfully.")
             return redirect("bi:bi_dashboard_detail", pk=filter_obj.dashboard_id)
@@ -147,12 +145,11 @@ def bi_dashboard_filter_delete(request, pk):
     label = filter_obj.filter_label
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
-            actor=request.user,
-            action="delete",
-            target_model="BiDashboardFilter",
-            target_id=str(filter_obj.pk),
+            request.user,
+            filter_obj,
+            "delete",
             changes={"filter_label": label, "number": filter_obj.number},
+            tenant=request.tenant,
         )
         filter_obj.delete()
     messages.success(request, f"Filter control '{label}' removed.")
