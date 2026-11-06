@@ -168,7 +168,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <span class="badge {% if obj.perspective == 'financial' %}badge-green{% elif obj.perspective == 'customer' %}badge-info{% elif obj.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                        <span class="badge {% if obj.perspective == 'financial' %}badge-green{% elif obj.perspective == 'customer' %}badge-info{% elif obj.perspective == 'internal_process' %}badge-amber{% else %}badge-slate{% endif %}">
                             {{ obj.get_perspective_display }}
                         </span>
                     </td>
