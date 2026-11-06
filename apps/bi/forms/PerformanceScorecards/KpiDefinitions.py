@@ -79,7 +79,7 @@ class KpiDefinitionForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant
             ).order_by("name")
             self.fields["owner"].queryset = User.objects.filter(
-                is_active=True
+                tenant=self.tenant, is_active=True
             ).order_by("username")
         self.fields["slug"].required = False
 
@@ -92,7 +92,7 @@ class KpiDefinitionForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["semantic_measure", "department"])
+        reject_foreign(self, cleaned, ["semantic_measure", "department", "owner"])
         return cleaned
 
 
