@@ -123,6 +123,7 @@ def report_definition_create(request):
                 report.tenant = request.tenant
                 report.created_by = request.user
                 report.save()
+                form.save_m2m()
                 write_audit_log(
                     request.user,
                     report,
