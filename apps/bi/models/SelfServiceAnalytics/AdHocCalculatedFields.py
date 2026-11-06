@@ -70,7 +70,7 @@ class AdHocCalculatedField(TenantNumbered):
         mapping = {
             "decimal": "badge-info",
             "integer": "badge-slate",
-            "percentage": "badge-purple",
+            "percentage": "badge-info",
             "currency": "badge-green",
             "string": "badge-slate",
             "boolean": "badge-amber",
