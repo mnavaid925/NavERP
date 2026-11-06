@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Pivot View — {{ view.name }}{% else %}New Pivot View{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:pivot_view_list' %}">Pivot Views</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Cross-Tab{% else %}New Cross-Tab{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Pivot View: {{ view.name }}{% else %}Create Pivot & Cross-Tab View{% endif %}</h1>
+        <p class="text-muted text-sm">Design interactive multidimensional pivot matrices with row/column dimension hierarchies, measures, and totals</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Parent Cube & Identity -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">View Identity & Parent Cube</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.cube.id_for_label }}">Source OLAP Cube *</label>
+                            {{ form.cube }}
+                            {% if form.cube.errors %}<div class="form-error">{{ form.cube.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">View Name *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                            {{ form.slug }}
+                            {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Multidimensional Dimensions & Measures -->
+                <div class="border-b border-slate-200 pb-5 space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider">Dimension Nesting & Measures</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.row_dimensions_raw.id_for_label }}">Row Dimensions (JSON)</label>
+                        {{ form.row_dimensions_raw }}
+                        <span class="text-xs text-muted">{{ form.row_dimensions_raw.help_text }}</span>
+                        {% if form.row_dimensions_raw.errors %}<div class="form-error">{{ form.row_dimensions_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.column_dimensions_raw.id_for_label }}">Column Dimensions (JSON)</label>
+                        {{ form.column_dimensions_raw }}
+                        <span class="text-xs text-muted">{{ form.column_dimensions_raw.help_text }}</span>
+                        {% if form.column_dimensions_raw.errors %}<div class="form-error">{{ form.column_dimensions_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.selected_measures_raw.id_for_label }}">Selected Measures (JSON)</label>
+                        {{ form.selected_measures_raw }}
+                        <span class="text-xs text-muted">{{ form.selected_measures_raw.help_text }}</span>
+                        {% if form.selected_measures_raw.errors %}<div class="form-error">{{ form.selected_measures_raw.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.filters_json_raw.id_for_label }}">Slicers & Filter Criteria (JSON)</label>
+                        {{ form.filters_json_raw }}
+                        <span class="text-xs text-muted">{{ form.filters_json_raw.help_text }}</span>
+                        {% if form.filters_json_raw.errors %}<div class="form-error">{{ form.filters_json_raw.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Subtotals, Totals & Drill-Through -->
+                <div class="border-b border-slate-200 pb-5 space-y-4">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider">Aggregation Subtotals & Drill-Through</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group flex items-center gap-2 pt-2">
+                            {{ form.show_row_subtotals }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.show_row_subtotals.id_for_label }}">Show Row Subtotals</label>
+                        </div>
+                        <div class="form-group flex items-center gap-2 pt-2">
+                            {{ form.show_col_subtotals }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.show_col_subtotals.id_for_label }}">Show Column Subtotals</label>
+                        </div>
+                        <div class="form-group flex items-center gap-2 pt-2">
+                            {{ form.show_grand_totals }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.show_grand_totals.id_for_label }}">Show Grand Totals</label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.total_position.id_for_label }}">Total Placement Position</label>
+                            {{ form.total_position }}
+                            {% if form.total_position.errors %}<div class="form-error">{{ form.total_position.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center gap-2 pt-6">
+                            {{ form.is_favorite }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.is_favorite.id_for_label }}">Mark as Favorite / Bookmarked</label>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        <div class="form-group flex items-center gap-2 pt-2">
+                            {{ form.drill_through_enabled }}
+                            <label class="form-label mb-0 cursor-pointer" for="{{ form.drill_through_enabled.id_for_label }}">Enable Drill-Through to Transactions</label>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.drill_through_target.id_for_label }}">Drill-Through Route Target</label>
+                            {{ form.drill_through_target }}
+                            {% if form.drill_through_target.errors %}<div class="form-error">{{ form.drill_through_target.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <a href="{% if is_edit %}{% url 'bi:pivot_view_detail' view.pk %}{% else %}{% url 'bi:pivot_view_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Pivot View{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
