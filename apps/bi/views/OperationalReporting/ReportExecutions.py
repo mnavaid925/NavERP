@@ -50,7 +50,7 @@ def report_execution_list(request):
         qs = qs.filter(output_format=output_format)
 
     report_id = request.GET.get("report", "").strip()
-    if report_id:
+    if report_id and report_id.isdigit():
         qs = qs.filter(report_id=report_id)
 
     paginator = Paginator(qs, 15)
