@@ -28,7 +28,7 @@
             }
         }
         {% if report.styling_css %}
-        {{ report.styling_css|safe }}
+        {{ report.styling_css|cut:"</style>"|cut:"</style"|cut:"</Style>"|safe }}
         {% endif %}
     </style>
 </head>
