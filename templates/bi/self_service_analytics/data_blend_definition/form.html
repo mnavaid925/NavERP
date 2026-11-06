@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ blend.name }}{% else %}New Data Blend{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Analytics</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:data_blend_definition_list' %}">Data Blends</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ blend.number }}{% else %}New Blend{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Blend: {{ blend.name }}{% else %}Create Data Blend Definition{% endif %}</h1>
+        <p class="text-muted text-sm">Join distinct governed datasets on-the-fly, declare matching key pairs, and set relationship cardinality</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:data_blend_definition_detail' blend.pk %}{% else %}{% url 'bi:data_blend_definition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Basic Information -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">1. General Metadata</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_name" class="form-label">Blend Name <span class="text-red-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_slug" class="form-label">URL Slug (Auto-generated if blank)</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_status" class="form-label">Blend Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_collision_resolution" class="form-label">Field Collision Resolution</label>
+                {{ form.collision_resolution }}
+                {% if form.collision_resolution.errors %}<div class="form-error">{{ form.collision_resolution.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_description" class="form-label">Analytical Purpose</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Sources -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">2. Source Datasets to Mashup</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Primary Dataset -->
+            <div class="border border-slate-200 p-4 rounded-lg bg-slate-50 space-y-4">
+                <h3 class="text-xs uppercase font-bold text-blue-700 tracking-wider">Primary Dataset (Left Side)</h3>
+                <div class="form-group">
+                    <label for="id_primary_source_type" class="form-label text-xs">Primary Source Type</label>
+                    {{ form.primary_source_type }}
+                </div>
+                <div class="form-group">
+                    <label for="id_primary_semantic_model" class="form-label text-xs">Primary Semantic Model</label>
+                    {{ form.primary_semantic_model }}
+                </div>
+                <div class="form-group">
+                    <label for="id_primary_warehouse_table" class="form-label text-xs">Primary Warehouse Table</label>
+                    {{ form.primary_warehouse_table }}
+                </div>
+            </div>
+
+            <!-- Secondary Dataset -->
+            <div class="border border-slate-200 p-4 rounded-lg bg-slate-50 space-y-4">
+                <h3 class="text-xs uppercase font-bold text-emerald-700 tracking-wider">Secondary Dataset (Right Side)</h3>
+                <div class="form-group">
+                    <label for="id_secondary_source_type" class="form-label text-xs">Secondary Source Type</label>
+                    {{ form.secondary_source_type }}
+                </div>
+                <div class="form-group">
+                    <label for="id_secondary_semantic_model" class="form-label text-xs">Secondary Semantic Model</label>
+                    {{ form.secondary_semantic_model }}
+                </div>
+                <div class="form-group">
+                    <label for="id_secondary_warehouse_table" class="form-label text-xs">Secondary Warehouse Table</label>
+                    {{ form.secondary_warehouse_table }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Configuration -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">3. Join Criteria & Topology</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="id_join_type" class="form-label">Join Type</label>
+                {{ form.join_type }}
+                {% if form.join_type.errors %}<div class="form-error">{{ form.join_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label for="id_cardinality" class="form-label">Cardinality</label>
+                {{ form.cardinality }}
+                {% if form.cardinality.errors %}<div class="form-error">{{ form.cardinality.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label for="id_join_keys_mapping_json" class="form-label">Join Key Mapping Matrix (JSON Array)</label>
+                {{ form.join_keys_mapping_json }}
+                {% if form.join_keys_mapping_json.errors %}<div class="form-error">{{ form.join_keys_mapping_json.errors }}</div>{% endif %}
+                <p class="text-xs text-muted mt-1">Specify field pairs: <code>[{"primary_field": "customer_id", "secondary_field": "account_id"}]</code></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-200">
+        <a href="{% if is_edit %}{% url 'bi:data_blend_definition_detail' blend.pk %}{% else %}{% url 'bi:data_blend_definition_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Data Blend{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
