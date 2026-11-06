@@ -382,7 +382,7 @@ class AdHocCalculatedFieldAdmin(admin.ModelAdmin):
 @admin.register(DataBlendDefinition)
 class DataBlendDefinitionAdmin(admin.ModelAdmin):
     list_display = ("number", "name", "join_type", "cardinality", "status", "tenant")
-    list_select_related = ("tenant", "primary_semantic_model", "secondary_semantic_model")
+    list_select_related = ("tenant", "primary_semantic_model", "secondary_semantic_model", "primary_warehouse_table", "secondary_warehouse_table")
     list_filter = ("join_type", "cardinality", "status", "tenant")
     search_fields = ("number", "name", "slug", "description")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
