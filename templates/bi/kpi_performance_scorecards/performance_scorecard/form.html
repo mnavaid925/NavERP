@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ scorecard.name }}{% else %}New Performance Scorecard{% endif %} — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:performance_scorecard_list' %}">Scorecards</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Scorecard{% else %}New Scorecard{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Scorecard: {{ scorecard.name }}{% else %}Create Performance Scorecard{% endif %}</h1>
+        <p class="text-muted text-sm">Configure strategic perspectives, review cadences, perspective target weights, and accountability</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{{ scorecard.get_absolute_url }}{% else %}{% url 'bi:performance_scorecard_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Scorecard Setup -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Scorecard Details & Alignment</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="form-group sm:col-span-2">
+                <label class="form-label" for="{{ form.name.id_for_label }}">Scorecard Name <span class="text-rose-500">*</span></label>
+                {{ form.name }}
+                {% if form.name.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.name.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                {{ form.slug }}
+                {% if form.slug.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.slug.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.scorecard_type.id_for_label }}">Scorecard Archetype</label>
+                {{ form.scorecard_type }}
+                {% if form.scorecard_type.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.scorecard_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.review_period.id_for_label }}">Review Period Cadence</label>
+                {{ form.review_period }}
+                {% if form.review_period.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.review_period.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.fiscal_year.id_for_label }}">Fiscal Year <span class="text-rose-500">*</span></label>
+                {{ form.fiscal_year }}
+                {% if form.fiscal_year.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.fiscal_year.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group sm:col-span-2 lg:col-span-3">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description & Strategic Scope</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group sm:col-span-2 flex items-center gap-6 pt-5">
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    {{ form.is_default }}
+                    <span class="text-sm font-medium text-slate-700">Set as Organization Default Scorecard</span>
+                </label>
+                <label class="inline-flex items-center gap-2 cursor-pointer">
+                    {{ form.is_published }}
+                    <span class="text-sm font-medium text-slate-700">Publish Scorecard</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4 Kaplan & Norton Perspective Weights -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="font-semibold text-slate-900">Perspective Weights (%)</h3>
+            <span class="text-xs text-muted font-medium">Must sum to exactly 100.00%</span>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-4 rounded-lg bg-emerald-50/50 border border-emerald-200">
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="dollar-sign" class="text-emerald-600"></i>
+                    <label class="form-label text-emerald-900 mb-0 font-semibold" for="{{ form.financial_weight.id_for_label }}">Financial (%)</label>
+                </div>
+                {{ form.financial_weight }}
+                {% if form.financial_weight.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.financial_weight.errors }}</div>{% endif %}
+            </div>
+
+            <div class="p-4 rounded-lg bg-blue-50/50 border border-blue-200">
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="users" class="text-blue-600"></i>
+                    <label class="form-label text-blue-900 mb-0 font-semibold" for="{{ form.customer_weight.id_for_label }}">Customer (%)</label>
+                </div>
+                {{ form.customer_weight }}
+                {% if form.customer_weight.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.customer_weight.errors }}</div>{% endif %}
+            </div>
+
+            <div class="p-4 rounded-lg bg-amber-50/50 border border-amber-200">
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="cog" class="text-amber-600"></i>
+                    <label class="form-label text-amber-900 mb-0 font-semibold" for="{{ form.internal_process_weight.id_for_label }}">Processes (%)</label>
+                </div>
+                {{ form.internal_process_weight }}
+                {% if form.internal_process_weight.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.internal_process_weight.errors }}</div>{% endif %}
+            </div>
+
+            <div class="p-4 rounded-lg bg-indigo-50/50 border border-indigo-200">
+                <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="book-open" class="text-indigo-600"></i>
+                    <label class="form-label text-indigo-900 mb-0 font-semibold" for="{{ form.learning_growth_weight.id_for_label }}">Learning (%)</label>
+                </div>
+                {{ form.learning_growth_weight }}
+                {% if form.learning_growth_weight.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.learning_growth_weight.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Governance & Accountability -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Accountability & Organizational Scope</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.owner.id_for_label }}">Scorecard Owner / Executive Sponsor</label>
+                {{ form.owner }}
+                {% if form.owner.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.owner.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.org_unit.id_for_label }}">Department / Operating Org Unit</label>
+                {{ form.org_unit }}
+                {% if form.org_unit.errors %}<div class="form-error text-xs text-rose-600 mt-1">{{ form.org_unit.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-4">
+        <a href="{% if is_edit %}{{ scorecard.get_absolute_url }}{% else %}{% url 'bi:performance_scorecard_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check"></i>
+            <span>{% if is_edit %}Save Changes{% else %}Create Scorecard{% endif %}</span>
+        </button>
+    </div>
+</form>
+{% endblock %}
