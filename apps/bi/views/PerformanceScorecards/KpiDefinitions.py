@@ -100,7 +100,10 @@ def kpi_definition_detail(request, pk):
         select_related=("semantic_measure", "department", "owner"),
         prefetch_related=("scorecard_assignments__scorecard", "scorecard_assignments__objective"),
     )
-    assignments = kpi.scorecard_assignments.all().order_by("scorecard__name")
+    assignments = sorted(
+        kpi.scorecard_assignments.all(),
+        key=lambda a: (a.scorecard.name if a.scorecard else ""),
+    )
 
     context = {
         "kpi": kpi,
