@@ -131,10 +131,25 @@ class ReportCloneForm(forms.Form):
         widget=forms.TextInput(attrs={"class": "form-input font-mono text-sm", "placeholder": "Auto-generated from name if blank"}),
     )
 
+    def __init__(self, *args, tenant=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.tenant = tenant
+
+    def clean_new_slug(self):
+        slug = self.cleaned_data.get("new_slug")
+        if not slug:
+            return slug
+        if self.tenant and ReportDefinition.objects.filter(tenant=self.tenant, slug=slug).exists():
+            raise forms.ValidationError("A report with this slug already exists.")
+        return slug
+
     def clean(self):
         cleaned = super().clean()
         name = cleaned.get("new_name")
         slug = cleaned.get("new_slug")
         if not slug and name:
-            cleaned["new_slug"] = slugify(name)[:120]
+            slug = slugify(name)[:120]
+            if self.tenant and ReportDefinition.objects.filter(tenant=self.tenant, slug=slug).exists():
+                self.add_error("new_slug", "A report with this auto-generated slug already exists. Please choose a different slug.")
+            cleaned["new_slug"] = slug
         return cleaned
