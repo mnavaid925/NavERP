@@ -23,6 +23,10 @@
         <div class="text-xs text-muted mt-1">Report: <strong class="text-slate-800">{{ execution.report.name }}</strong> ({{ execution.report.number }})</div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:report_execution_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Executions</span>
+        </a>
         <a href="{% url 'bi:report_definition_viewer' execution.report.pk %}" class="btn btn-primary">
             <i data-lucide="play"></i>
             <span>Open in Viewer</span>
