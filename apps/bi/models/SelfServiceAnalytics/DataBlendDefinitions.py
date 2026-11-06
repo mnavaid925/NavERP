@@ -125,6 +125,6 @@ class DataBlendDefinition(TenantNumbered):
             "inner": "badge-info",
             "left_outer": "badge-green",
             "right_outer": "badge-amber",
-            "full_outer": "badge-purple",
+            "full_outer": "badge-amber",
         }
         return mapping.get(self.join_type, "badge-slate")
