@@ -31,10 +31,13 @@
             <i data-lucide="compass"></i>
             <span>Interactive Exploration</span>
         </a>
-        <a href="{% url 'bi:saved_analysis_view_clone' view_obj.pk %}" class="btn btn-outline">
-            <i data-lucide="copy"></i>
-            <span>Fork to My Workspace</span>
-        </a>
+        <form method="post" action="{% url 'bi:saved_analysis_view_clone' view_obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="copy"></i>
+                <span>Fork to My Workspace</span>
+            </button>
+        </form>
         <a href="{% url 'bi:saved_analysis_view_share' view_obj.pk %}" class="btn btn-outline">
             <i data-lucide="share-2"></i>
             <span>Sharing & Permissions</span>
