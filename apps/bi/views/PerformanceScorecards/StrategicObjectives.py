@@ -52,8 +52,8 @@ def strategic_objective_list(request):
         qs = qs.filter(rag_status=rag_status)
 
     org_unit = request.GET.get("org_unit", "").strip()
-    if org_unit:
-        qs = qs.filter(org_unit_id=org_unit)
+    if org_unit and org_unit.isdigit():
+        qs = qs.filter(org_unit_id=int(org_unit))
 
     paginator = Paginator(qs, 25)
     page_number = request.GET.get("page")
