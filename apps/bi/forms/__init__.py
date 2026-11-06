@@ -43,6 +43,12 @@ from apps.bi.forms.Dashboards.BiDashboardWidgetForms import (
     BiDashboardWidgetForm,
     BiDashboardWidgetPositionForm,
 )
+from apps.bi.forms.OlapAnalysis import (
+    OlapCubeForm,
+    PivotAnalysisViewForm,
+    ScenarioWritebackCellForm,
+    WhatIfScenarioForm,
+)
 from apps.bi.forms.OperationalReporting.ReportDefinitions import (
     ReportCloneForm,
     ReportDefinitionForm,
@@ -129,4 +135,8 @@ __all__ = [
     "DataBlendDefinitionForm",
     "SavedAnalysisViewForm",
     "SavedAnalysisViewShareForm",
+    "OlapCubeForm",
+    "PivotAnalysisViewForm",
+    "WhatIfScenarioForm",
+    "ScenarioWritebackCellForm",
 ]
