@@ -327,7 +327,7 @@
                 {% for a in assignments %}
                 <tr>
                     <td>
-                        <div class="font-medium text-primary">
+                        <div class="font-medium text-brand">
                             <a href="{{ a.scorecard.get_absolute_url }}">{{ a.scorecard.name }}</a>
                         </div>
                         <div class="text-xs text-muted">{{ a.scorecard.number }} · {{ a.scorecard.get_scorecard_type_display }}</div>
@@ -339,7 +339,7 @@
                     </td>
                     <td>
                         {% if a.objective %}
-                        <a href="{{ a.objective.get_absolute_url }}" class="text-xs text-primary hover:underline font-medium">{{ a.objective.name }}</a>
+                        <a href="{{ a.objective.get_absolute_url }}" class="text-xs text-brand hover:underline font-medium">{{ a.objective.name }}</a>
                         {% else %}
                         <span class="text-xs text-muted">—</span>
                         {% endif %}
