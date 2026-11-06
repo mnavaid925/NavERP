@@ -131,7 +131,7 @@
                     {% if objective.parent_objective %}
                     <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between mt-1">
                         <div>
-                            <div class="font-semibold text-primary">
+                            <div class="font-semibold text-brand">
                                 <a href="{% url 'bi:strategic_objective_detail' objective.parent_objective.pk %}">{{ objective.parent_objective.name }}</a>
                             </div>
                             <div class="text-xs text-muted">{{ objective.parent_objective.code }} · {{ objective.parent_objective.get_perspective_display }}</div>
@@ -152,7 +152,7 @@
                         {% for child in child_objectives %}
                         <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
                             <div>
-                                <div class="font-semibold text-primary">
+                                <div class="font-semibold text-brand">
                                     <a href="{% url 'bi:strategic_objective_detail' child.pk %}">{{ child.name }}</a>
                                 </div>
                                 <div class="text-xs text-muted">{{ child.code }} · {{ child.get_perspective_display }}</div>
@@ -233,7 +233,7 @@
                 {% for a in assigned_kpis %}
                 <tr>
                     <td>
-                        <a href="{{ a.scorecard.get_absolute_url }}" class="font-medium text-primary hover:underline">{{ a.scorecard.name }}</a>
+                        <a href="{{ a.scorecard.get_absolute_url }}" class="font-medium text-brand hover:underline">{{ a.scorecard.name }}</a>
                     </td>
                     <td>
                         <a href="{% url 'bi:kpi_definition_detail' a.kpi.pk %}" class="font-medium text-slate-900 hover:underline">{{ a.kpi.name }}</a>
