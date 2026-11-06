@@ -135,13 +135,11 @@ def performance_scorecard_create(request):
                 scorecard.owner = request.user
             scorecard.save()
             write_audit_log(
+                request.user,
+                scorecard,
+                "create",
+                changes={"summary": f"Created Scorecard {scorecard.number} ({scorecard.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="PerformanceScorecard",
-                object_id=str(scorecard.pk),
-                object_repr=str(scorecard),
-                change_summary=f"Created Scorecard {scorecard.number} ({scorecard.name})",
             )
             messages.success(request, f"Scorecard '{scorecard.name}' created.")
             return redirect(scorecard.get_absolute_url())
@@ -166,13 +164,11 @@ def performance_scorecard_edit(request, pk):
             scorecard = form.save()
             scorecard.recalculate_performance()
             write_audit_log(
+                request.user,
+                scorecard,
+                "update",
+                changes={"summary": f"Updated Scorecard {scorecard.number} ({scorecard.name})"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="PerformanceScorecard",
-                object_id=str(scorecard.pk),
-                object_repr=str(scorecard),
-                change_summary=f"Updated Scorecard {scorecard.number} ({scorecard.name})",
             )
             messages.success(request, f"Scorecard '{scorecard.name}' updated.")
             return redirect(scorecard.get_absolute_url())
@@ -194,16 +190,14 @@ def performance_scorecard_delete(request, pk):
     scorecard = bi_object(request, PerformanceScorecard, pk)
     sc_name = scorecard.name
     sc_num = scorecard.number
-    scorecard.delete()
     write_audit_log(
+        request.user,
+        scorecard,
+        "delete",
+        changes={"summary": f"Deleted Scorecard {sc_num} ({sc_name})"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="PerformanceScorecard",
-        object_id=str(pk),
-        object_repr=f"{sc_num} - {sc_name}",
-        change_summary=f"Deleted Scorecard {sc_num} ({sc_name})",
     )
+    scorecard.delete()
     messages.success(request, f"Scorecard '{sc_name}' deleted.")
     return redirect("bi:performance_scorecard_list")
 
@@ -214,13 +208,11 @@ def performance_scorecard_recalculate(request, pk):
     scorecard = bi_object(request, PerformanceScorecard, pk)
     scorecard.recalculate_performance()
     write_audit_log(
+        request.user,
+        scorecard,
+        "update",
+        changes={"summary": f"Recalculated Scorecard {scorecard.number} index ({scorecard.overall_score}% - {scorecard.overall_rag_status})"},
         tenant=request.tenant,
-        user=request.user,
-        action="update",
-        model_name="PerformanceScorecard",
-        object_id=str(scorecard.pk),
-        object_repr=str(scorecard),
-        change_summary=f"Recalculated Scorecard {scorecard.number} index ({scorecard.overall_score}% - {scorecard.overall_rag_status})",
     )
     messages.success(request, f"Scorecard '{scorecard.name}' recalculated (Score: {scorecard.overall_score}%).")
     return redirect(scorecard.get_absolute_url())
