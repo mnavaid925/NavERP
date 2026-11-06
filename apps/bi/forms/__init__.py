@@ -43,6 +43,13 @@ from apps.bi.forms.Dashboards.BiDashboardWidgetForms import (
     BiDashboardWidgetForm,
     BiDashboardWidgetPositionForm,
 )
+from apps.bi.forms.OperationalReporting.ReportDefinitions import (
+    ReportCloneForm,
+    ReportDefinitionForm,
+)
+from apps.bi.forms.OperationalReporting.ReportDrillPaths import ReportDrillPathForm
+from apps.bi.forms.OperationalReporting.ReportExecutions import ReportExecutionRunForm
+from apps.bi.forms.OperationalReporting.ReportParameters import ReportParameterForm
 from apps.bi.forms.SemanticLayer.BusinessGlossaryTerms import (
     BusinessGlossaryTermCertificationForm,
     BusinessGlossaryTermForm,
@@ -97,4 +104,9 @@ __all__ = [
     "BiDashboardWidgetPositionForm",
     "BiDashboardBookmarkForm",
     "BiDashboardFilterForm",
+    "ReportDefinitionForm",
+    "ReportCloneForm",
+    "ReportParameterForm",
+    "ReportExecutionRunForm",
+    "ReportDrillPathForm",
 ]
