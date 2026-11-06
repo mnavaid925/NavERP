@@ -117,7 +117,7 @@ class PerformanceScorecard(TenantNumbered):
 
     def recalculate_performance(self):
         """Aggregate KPI scores across 4 perspectives and calculate overall weighted index."""
-        assignments = list(self.kpi_assignments.select_related("kpi").all())
+        assignments = list(self.kpi_assignments.all())
         if not assignments:
             self.overall_score = Decimal("0.00")
             self.overall_rag_status = "gray"
