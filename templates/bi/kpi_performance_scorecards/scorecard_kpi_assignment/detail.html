@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Target Tracking: {{ assignment.kpi.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:scorecard_kpi_assignment_list' %}">Goal Tracking</a>
+            <span class="sep">/</span>
+            <span>{{ assignment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ assignment.kpi.name }}</h1>
+            <span class="font-mono text-sm px-2 py-0.5 rounded bg-slate-100 text-slate-700">{{ assignment.number }}</span>
+
+            {% if assignment.rag_status == 'green' %}
+            <span class="badge badge-green flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> On Track</span>
+            {% elif assignment.rag_status == 'amber' %}
+            <span class="badge badge-amber flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-500"></span> Needs Attention</span>
+            {% elif assignment.rag_status == 'red' %}
+            <span class="badge badge-red flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Critical Off Track</span>
+            {% else %}
+            <span class="badge badge-muted flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-slate-400"></span> Not Evaluated</span>
+            {% endif %}
+
+            {% if assignment.trend_direction == 'improving' %}
+            <span class="text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded flex items-center gap-1">↗ Improving Trend</span>
+            {% elif assignment.trend_direction == 'deteriorating' %}
+            <span class="text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded flex items-center gap-1">↘ Deteriorating Trend</span>
+            {% else %}
+            <span class="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">→ Steady Trend</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm">Target assigned to <a href="{{ assignment.scorecard.get_absolute_url }}" class="text-primary hover:underline font-medium">{{ assignment.scorecard.name }}</a> ({{ assignment.scorecard.number }})</p>
+    </div>
+    <div class="page-actions">
+        <a href="{{ assignment.scorecard.get_absolute_url }}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Scorecard</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_record_actual' assignment.pk %}" class="btn btn-primary">
+            <i data-lucide="edit-3"></i>
+            <span>Record Actual Measurement</span>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_edit' assignment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Target</span>
+        </a>
+        <form method="post" action="{% url 'bi:scorecard_kpi_assignment_delete' assignment.pk %}" class="inline" onsubmit="return confirm('Remove KPI from scorecard?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Remove</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Key Metric Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon {% if assignment.rag_status == 'green' %}green{% elif assignment.rag_status == 'amber' %}orange{% elif assignment.rag_status == 'red' %}slate{% else %}blue{% endif %}">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Actual Value</div>
+            <div class="text-2xl font-bold font-mono text-slate-900">
+                {{ assignment.actual_value|floatformat:2 }}
+                <span class="text-xs font-normal text-muted">{{ assignment.kpi.get_unit_of_measure_display }}</span>
+            </div>
+            {% if assignment.evaluated_at %}
+            <div class="text-[10px] text-muted mt-1">Evaluated: {{ assignment.evaluated_at|date:"M d, H:i" }}</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Target Value</div>
+            <div class="text-2xl font-bold font-mono text-slate-800">
+                {{ assignment.target_value|floatformat:2 }}
+            </div>
+            <div class="text-xs text-muted mt-1">{{ assignment.kpi.get_target_direction_display }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if assignment.variance >= 0 %}green{% else %}orange{% endif %}">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Variance vs Target</div>
+            <div class="text-2xl font-bold font-mono {% if assignment.variance >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+                {% if assignment.variance > 0 %}+{% endif %}{{ assignment.variance|floatformat:2 }}
+            </div>
+            <div class="text-xs text-muted mt-1">
+                {% if assignment.variance_percentage > 0 %}+{% endif %}{{ assignment.variance_percentage|floatformat:1 }}%
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="award"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Normalized Health Index</div>
+            <div class="text-2xl font-bold font-mono text-indigo-700">
+                {{ assignment.normalized_score|floatformat:1 }}%
+            </div>
+            <div class="text-xs text-muted mt-1">Perspective Weight: {{ assignment.weight|floatformat:1 }}%</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Target Alignment Details -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-900">Scorecard & Strategy Alignment</h3>
+        </div>
+        <div class="card-body space-y-4 text-sm">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-muted uppercase">Balanced Scorecard</div>
+                    <div class="font-medium text-primary mt-1">
+                        <a href="{{ assignment.scorecard.get_absolute_url }}">{{ assignment.scorecard.name }}</a>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase">BSC Perspective</div>
+                    <div class="mt-1">
+                        <span class="badge {% if assignment.perspective == 'financial' %}badge-green{% elif assignment.perspective == 'customer' %}badge-info{% elif assignment.perspective == 'internal_process' %}badge-amber{% else %}badge-purple{% endif %}">
+                            {{ assignment.get_perspective_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <div class="text-xs text-muted uppercase">Linked Strategic Objective</div>
+                {% if assignment.objective %}
+                <div class="font-medium text-slate-800 mt-1">
+                    <a href="{% url 'bi:strategic_objective_detail' assignment.objective.pk %}" class="text-primary hover:underline">{{ assignment.objective.name }}</a>
+                    <span class="font-mono text-xs text-muted">({{ assignment.objective.code }})</span>
+                </div>
+                {% else %}
+                <div class="text-slate-500 italic mt-1">No strategic objective linked directly to this target.</div>
+                {% endif %}
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <div class="text-xs text-muted uppercase">Catalog KPI Definition</div>
+                <div class="font-medium text-slate-800 mt-1">
+                    <a href="{% url 'bi:kpi_definition_detail' assignment.kpi.pk %}" class="text-primary hover:underline">{{ assignment.kpi.name }}</a>
+                    <span class="font-mono text-xs text-muted">({{ assignment.kpi.code }})</span>
+                </div>
+                <div class="text-xs text-muted mt-1">{{ assignment.kpi.get_calculation_type_display }} · {{ assignment.kpi.get_tracking_frequency_display }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Benchmark Overlay & Manager Notes -->
+    <div class="space-y-6">
+        <!-- Benchmark Overlay -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-900">Industry Benchmark Overlay</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase">Benchmark Target</div>
+                        <div class="font-mono font-semibold text-slate-800 mt-1">
+                            {% if assignment.benchmark_overlay_value %}{{ assignment.benchmark_overlay_value|floatformat:2 }}{% else %}None specified{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase">Benchmark Gap Delta</div>
+                        <div class="font-mono font-semibold mt-1 {% if assignment.benchmark_gap >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+                            {% if assignment.benchmark_gap is not None %}
+                            {% if assignment.benchmark_gap > 0 %}+{% endif %}{{ assignment.benchmark_gap|floatformat:2 }}
+                            {% else %}—{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Manager Review Notes -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-900">Manager Performance Commentary</h3>
+                <a href="{% url 'bi:scorecard_kpi_assignment_record_actual' assignment.pk %}" class="btn btn-outline btn-sm">
+                    <i data-lucide="edit-3"></i>
+                    <span>Edit Commentary</span>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if assignment.manager_notes %}
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ assignment.manager_notes }}</p>
+                {% else %}
+                <p class="text-sm text-muted italic">No performance notes or root-cause explanations recorded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
