@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ report.name }} — Print Preview — NavERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @page {
+            size: {{ report.paper_size }} {{ report.orientation }};
+            margin: 15mm;
+        }
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+            body {
+                background: white !important;
+                color: black !important;
+                margin: 0;
+                padding: 0;
+            }
+            .page-break {
+                page-break-after: always;
+            }
+            .print-border {
+                border-color: #334155 !important;
+            }
+        }
+        {% if report.styling_css %}
+        {{ report.styling_css|safe }}
+        {% endif %}
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 font-sans p-6 min-h-screen">
+
+    <!-- Top Non-Print Action Bar -->
+    <div class="no-print max-w-5xl mx-auto mb-6 bg-slate-900 text-white p-4 rounded-lg shadow-lg flex justify-between items-center">
+        <div>
+            <div class="text-xs uppercase tracking-wider text-slate-400">Print Preview Mode</div>
+            <div class="font-bold text-lg">{{ report.name }} ({{ report.number }})</div>
+            <div class="text-xs text-slate-300">Format: {{ report.get_paper_size_display }} &bull; Orientation: {{ report.get_orientation_display|capfirst }}</div>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded text-sm flex items-center space-x-1 shadow">
+                <span>Print Document</span>
+            </button>
+            <button onclick="window.close()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2 rounded text-sm">
+                <span>Close Window</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Printable Paper Sheet -->
+    <div class="max-w-5xl mx-auto bg-white p-10 shadow-2xl border border-slate-300 relative print:shadow-none print:border-none print:p-0">
+
+        {% if report.watermark_text %}
+        <div class="absolute inset-0 flex items-center justify-center pointer-events-none select-none opacity-5 overflow-hidden">
+            <span class="text-7xl font-black uppercase text-slate-900 transform -rotate-45 tracking-widest">
+                {{ report.watermark_text }}
+            </span>
+        </div>
+        {% endif %}
+
+        <!-- Header Band -->
+        <div class="border-b-2 border-slate-900 pb-6 mb-6">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h1 class="text-2xl font-bold uppercase tracking-tight text-slate-900">{{ report.name }}</h1>
+                    <div class="text-sm text-slate-600 mt-1">{{ report.description|default:"Enterprise Operational Reporting Document" }}</div>
+                    <div class="text-xs text-slate-500 mt-0.5">Workspace Tenant: <span class="font-semibold">{{ request.tenant.name }}</span></div>
+                </div>
+                <div class="text-right text-xs font-mono text-slate-600 space-y-0.5">
+                    <div><strong>Document ID:</strong> {{ report.number }}</div>
+                    <div><strong>Date Printed:</strong> {{ printed_at|date:"Y-m-d H:i" }}</div>
+                    <div><strong>Paper Geometry:</strong> {{ report.get_paper_size_display }}</div>
+                </div>
+            </div>
+
+            {% if applied_params %}
+            <div class="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+                <span class="font-bold text-slate-700">Filter Criteria:</span>
+                {% for k, v in applied_params.items %}
+                {% if v %}
+                <span><span class="text-slate-500">{{ k }}:</span> <strong class="font-mono">{{ v }}</strong></span>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Detail Data Band -->
+        <table class="w-full text-left border-collapse text-sm mb-8">
+            <thead>
+                <tr class="border-b-2 border-slate-900 bg-slate-100 text-xs font-bold uppercase tracking-wider text-slate-800">
+                    {% for col in columns %}
+                    <th style="width: {{ col.width|default:'auto' }}; text-align: {{ col.align|default:'left' }};" class="py-2.5 px-3">
+                        {{ col.title|default:col.field }}
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr class="border-b border-slate-200 {% if row.status == 'summary' %}font-bold bg-slate-50 border-t-2 border-slate-900{% endif %}">
+                    {% for col in columns %}
+                    <td style="text-align: {{ col.align|default:'left' }};" class="py-2 px-3 {% if col.align == 'right' %}font-mono{% endif %}">
+                        {% if col.field == 'row_id' %}
+                        <span class="text-slate-400 text-xs font-mono">{{ row.row_id }}</span>
+                        {% elif col.field == 'item_code' %}
+                        <span class="font-mono font-semibold">{{ row.item_code }}</span>
+                        {% elif col.field == 'amount' %}
+                        <span class="{% if row.amount < 0 %}text-red-700{% else %}text-slate-900{% endif %}">
+                            ${{ row.amount|floatformat:2 }}
+                        </span>
+                        {% else %}
+                        {{ row|dictsort:col.field }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Page Footer Band -->
+        <div class="border-t-2 border-slate-900 pt-4 mt-8 flex justify-between items-center text-xs text-slate-500">
+            <div>
+                NavERP Enterprise Document System &bull; Certified Operational Schedule
+            </div>
+            <div class="font-mono">
+                Page 1 of 1
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
