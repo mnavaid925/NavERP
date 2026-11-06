@@ -105,3 +105,18 @@
 
 ---
 
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+1. `apps/bi/views/OperationalReporting/ReportDefinitions.py:192-264`, `apps/bi/forms/OperationalReporting/ReportDefinitions.py:123-140` — **[C1] Unhandled HTTP 500 on duplicate slug during report cloning.**
+   - `ReportCloneForm` does not validate tenant uniqueness of `new_slug`. When `ReportDefinition.objects.create(tenant=request.tenant, slug=new_slug, ...)` runs with an existing slug, an `IntegrityError` is thrown violating `bi_brpt_tenant_slug_uniq`.
+   - `TenantNumbered.save()` traps this in a 5-attempt loop assuming it is a number sequence collision, then raises an uncaught `IntegrityError: Could not allocate a unique BRPT number...`, crashing the request with HTTP 500.
+   - Fix: Accept `tenant` in `ReportCloneForm`, validate uniqueness of `new_slug` per tenant, and handle in form clean / view.
+
+### Important
+*None.*
+
+### Minor
+*None.*
+
+---
