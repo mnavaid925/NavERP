@@ -102,6 +102,7 @@ class WhatIfScenario(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bwif_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "cube"], name="idx_bwif_ten_cube"),
             models.Index(fields=["tenant", "status"], name="idx_bwif_ten_stat"),
             models.Index(fields=["tenant", "fiscal_period"], name="idx_bwif_ten_period"),
             models.Index(fields=["tenant", "created_by"], name="idx_bwif_ten_user"),
