@@ -31,6 +31,10 @@ from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefiniti
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
 from apps.bi.models.OperationalReporting.ReportParameters import ReportParameter
+from apps.bi.models.SelfServiceAnalytics.AdHocCalculatedFields import AdHocCalculatedField
+from apps.bi.models.SelfServiceAnalytics.AdHocQueries import AdHocQuery
+from apps.bi.models.SelfServiceAnalytics.DataBlendDefinitions import DataBlendDefinition
+from apps.bi.models.SelfServiceAnalytics.SavedAnalysisViews import SavedAnalysisView
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -75,4 +79,8 @@ __all__ = [
     "ReportParameter",
     "ReportExecution",
     "ReportDrillPath",
+    "AdHocQuery",
+    "AdHocCalculatedField",
+    "DataBlendDefinition",
+    "SavedAnalysisView",
 ]
