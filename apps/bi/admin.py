@@ -37,6 +37,10 @@ from apps.bi.models import (
     ReportParameter,
     ReportExecution,
     ReportDrillPath,
+    AdHocQuery,
+    AdHocCalculatedField,
+    DataBlendDefinition,
+    SavedAnalysisView,
 )
 
 
@@ -355,5 +359,42 @@ class ReportDrillPathAdmin(admin.ModelAdmin):
     list_filter = ("target_type", "is_enabled", "tenant")
     search_fields = ("number", "drill_label", "source_field", "source_report__name", "target_report__name")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(AdHocQuery)
+class AdHocQueryAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "source_type", "visualization_type", "row_limit", "status", "row_count", "tenant")
+    list_select_related = ("tenant", "semantic_model", "warehouse_table", "data_blend", "created_by")
+    list_filter = ("source_type", "visualization_type", "status", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "last_executed_at", "execution_duration_ms", "row_count", "created_at", "updated_at")
+
+
+@admin.register(AdHocCalculatedField)
+class AdHocCalculatedFieldAdmin(admin.ModelAdmin):
+    list_display = ("number", "display_label", "field_name", "query", "return_type", "aggregation_mode", "is_valid", "tenant")
+    list_select_related = ("tenant", "query")
+    list_filter = ("return_type", "aggregation_mode", "is_valid", "tenant")
+    search_fields = ("number", "display_label", "field_name", "formula_expression", "query__name")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(DataBlendDefinition)
+class DataBlendDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "join_type", "cardinality", "status", "tenant")
+    list_select_related = ("tenant", "primary_semantic_model", "secondary_semantic_model")
+    list_filter = ("join_type", "cardinality", "status", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(SavedAnalysisView)
+class SavedAnalysisViewAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "query", "sharing_scope", "org_unit", "is_template", "is_favorite", "view_count", "tenant")
+    list_select_related = ("tenant", "query", "org_unit", "parent_view")
+    list_filter = ("sharing_scope", "is_template", "is_favorite", "tenant")
+    search_fields = ("number", "name", "slug", "description", "share_token")
+    readonly_fields = ("number", "tenant", "share_token", "view_count", "last_viewed_at", "created_at", "updated_at")
+
 
 
