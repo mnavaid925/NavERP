@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Explore: {{ view_obj.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:saved_analysis_view_list' %}">Saved Views</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:saved_analysis_view_detail' view_obj.pk %}">{{ view_obj.number }}</a>
+            <span class="sep">/</span>
+            <span>Explore</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ view_obj.name }}</h1>
+            <span class="badge {{ view_obj.badge_scope }}">{{ view_obj.get_sharing_scope_display }}</span>
+            <span class="badge {{ query.badge_viz }}">{{ query.get_visualization_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ view_obj.number }} · {{ query.name }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_composer' query.pk %}" class="btn btn-outline">
+            <i data-lucide="sliders"></i>
+            <span>Edit in Query Composer</span>
+        </a>
+        <a href="{% url 'bi:saved_analysis_view_clone' view_obj.pk %}" class="btn btn-outline">
+            <i data-lucide="copy"></i>
+            <span>Fork to My Workspace</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_query_export' query.pk %}" class="btn btn-outline">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+        </a>
+    </div>
+</div>
+
+<!-- Main Canvas -->
+<div class="space-y-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold flex items-center space-x-2">
+                <i data-lucide="bar-chart-2" class="w-4 h-4 text-blue-600"></i>
+                <span>Visual Exploration Chart</span>
+            </h3>
+            <div class="text-xs text-muted font-mono">
+                Source: {{ query.get_source_type_display }} · {{ view_obj.view_count }} views
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="relative h-80 w-full mb-6">
+                <canvas id="viewExploreChart"></canvas>
+            </div>
+
+            <div class="table-wrap border border-slate-200 rounded">
+                <table class="table text-xs">
+                    <thead>
+                        <tr>
+                            {% for col in preview_results.columns %}
+                            <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in preview_results.rows %}
+                        <tr>
+                            <td>{{ row.Period }}</td>
+                            <td class="font-mono text-emerald-600 font-semibold">{{ row.Revenue }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('viewExploreChart').getContext('2d');
+    var chartType = '{{ query.visualization_type }}';
+    if (chartType === 'line_chart') chartType = 'line';
+    else if (chartType === 'pie_chart') chartType = 'doughnut';
+    else chartType = 'bar';
+
+    new Chart(ctx, {
+        type: chartType,
+        data: {
+            labels: ['2026-Q1', '2026-Q2', '2026-Q3', '2026-Q4'],
+            datasets: [{
+                label: 'Exploration Metric Trend',
+                data: [145200, 189450, 210100, 255800],
+                backgroundColor: chartType === 'doughnut'
+                    ? ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6']
+                    : 'rgba(59, 130, 246, 0.75)',
+                borderColor: '#2563eb',
+                borderWidth: 1.5
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
