@@ -64,6 +64,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                SavedAnalysisView.objects.all().delete()
+                AdHocCalculatedField.objects.all().delete()
+                AdHocQuery.objects.all().delete()
+                DataBlendDefinition.objects.all().delete()
                 ReportDrillPath.objects.all().delete()
                 ReportExecution.objects.all().delete()
                 ReportParameter.objects.all().delete()
