@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}{{ view.name }} — Pivot View — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:pivot_view_list' %}">Pivot Views</a>
+            <span class="sep">/</span>
+            <span>{{ view.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ view.name }}</h1>
+            {% if view.is_favorite %}
+            <i data-lucide="star" class="w-5 h-5 text-amber-500 fill-amber-500" title="Favorite View"></i>
+            {% endif %}
+            {% if view.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif view.status == 'draft' %}
+            <span class="badge badge-amber">Draft</span>
+            {% else %}
+            <span class="badge badge-muted">Archived</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ view.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>slug: {{ view.slug }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:pivot_view_matrix' view.pk %}" class="btn btn-primary">
+            <i data-lucide="layout-grid"></i>
+            <span>Open Pivot Matrix</span>
+        </a>
+        <a href="{% url 'bi:pivot_view_edit' view.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Configuration</span>
+        </a>
+        <form method="post" action="{% url 'bi:pivot_view_delete' view.pk %}" onsubmit="return confirm('Delete this pivot view?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Cube and Description -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Parent Cube & Analytical Context</h3>
+            </div>
+            <div class="card-body p-5 space-y-4">
+                {% if view.description %}
+                <p class="text-sm text-slate-600">{{ view.description }}</p>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm border-t border-slate-100 pt-3">
+                    <div>
+                        <div class="text-muted text-xs">Parent OLAP Cube</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            <a href="{% url 'bi:olap_cube_detail' view.cube.pk %}" class="text-blue-600 hover:underline">
+                                {{ view.cube.name }} ({{ view.cube.number }})
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Cube Storage Mode</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            <span class="badge badge-info">{{ view.cube.get_storage_mode_display }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Drill-Through Capabilities</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            {% if view.drill_through_enabled %}
+                            <span class="text-emerald-600 font-semibold">Enabled -> {{ view.drill_through_target }}</span>
+                            {% else %}
+                            <span class="text-slate-400">Disabled</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-xs">Total Positioning</div>
+                        <div class="font-medium text-slate-800 mt-0.5">
+                            <span>{{ view.get_total_position_display }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cross-Tab Dimensional Architecture -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Hierarchical Dimension Nesting</h3>
+            </div>
+            <div class="card-body p-5 space-y-4 text-sm">
+                <div>
+                    <div class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Row Dimensions (Plotted Vertically)</div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {% for dim in view.row_dimensions %}
+                        <div class="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-800 rounded text-xs font-medium flex items-center gap-1.5">
+                            <i data-lucide="list" class="w-3.5 h-3.5 text-blue-600"></i>
+                            <span>{{ dim }}</span>
+                        </div>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">No row dimensions selected.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-4">
+                    <div class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Column Dimensions (Plotted Horizontally)</div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {% for dim in view.column_dimensions %}
+                        <div class="px-3 py-1.5 bg-purple-50 border border-purple-200 text-purple-800 rounded text-xs font-medium flex items-center gap-1.5">
+                            <i data-lucide="columns" class="w-3.5 h-3.5 text-purple-600"></i>
+                            <span>{{ dim }}</span>
+                        </div>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">No column dimensions selected (single column matrix).</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-4">
+                    <div class="text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Evaluated Measures</div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {% for meas in view.selected_measures %}
+                        <div class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded text-xs font-medium flex items-center gap-1.5">
+                            <i data-lucide="bar-chart-2" class="w-3.5 h-3.5 text-emerald-600"></i>
+                            <span>{{ meas }}</span>
+                        </div>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">Default cube measures evaluated.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slicers and Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Dimensional Slicers & Context Filters</h3>
+            </div>
+            <div class="card-body p-5">
+                {% if view.filters_json %}
+                <div class="space-y-2">
+                    {% for f in view.filters_json %}
+                    <div class="flex items-center gap-2 text-xs font-mono p-2 bg-slate-50 border border-slate-200 rounded">
+                        <span class="font-semibold text-slate-800">{{ f.field }}</span>
+                        <span class="text-blue-600">{{ f.operator }}</span>
+                        <span class="text-emerald-700 font-bold">{{ f.value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-sm text-muted">No dimensional slicers applied (full cube domain evaluated).</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Settings -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Aggregation Display Controls</h3>
+            </div>
+            <div class="card-body p-5 space-y-3 text-sm">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">Row Subtotals:</span>
+                    {% if view.show_row_subtotals %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">Column Subtotals:</span>
+                    {% if view.show_col_subtotals %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-600">Grand Totals:</span>
+                    {% if view.show_grand_totals %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-slate">Disabled</span>{% endif %}
+                </div>
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-muted text-xs">Total Location</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ view.get_total_position_display }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">View Metadata</h3>
+            </div>
+            <div class="card-body p-5 space-y-3 text-sm">
+                <div>
+                    <div class="text-muted text-xs">Created By</div>
+                    <div class="font-medium text-slate-800 mt-0.5">{{ view.created_by.get_full_name|default:view.created_by.username|default:"System" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Created On</div>
+                    <div class="text-slate-600 mt-0.5">{{ view.created_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                <div>
+                    <div class="text-muted text-xs">Last Updated</div>
+                    <div class="text-slate-600 mt-0.5">{{ view.updated_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
