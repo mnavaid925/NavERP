@@ -32,7 +32,7 @@
 | **I10** | Important | `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` | `PerformanceScorecard.save()` default reset should execute in `transaction.atomic()` after `super().save()` | [x] fixed — wrapped default scorecard reset in transaction.atomic after super save |
 | **M1** | Minor | `apps/bi/views/PerformanceScorecards/*.py` | Non-numeric query parameters in list views (`department`, `fiscal_year`, `org_unit`, `scorecard`) need `.isdigit()` validation | [x] fixed — added isdigit check on all numeric FK and year query params |
 | **M2** | Minor | `apps/bi/views/PerformanceScorecards/*.py` | Non-atomic multi-row mutations in scorecards, targets, and objectives should use `transaction.atomic()` | [x] fixed — wrapped mutations and recalculations in transaction.atomic |
-| **M3** | Minor | `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` | Chained FK traversal in `ScorecardKpiAssignment.__str__` | [ ] open |
+| **M3** | Minor | `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` | Chained FK traversal in `ScorecardKpiAssignment.__str__` | [x] fixed — made str resilient using fields_cache and id fallbacks |
 | **M4** | Minor | `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` | Redundant `select_related("kpi")` in scorecard recalculation and summary methods | [ ] open |
 | **M5** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Undefined utility class `text-primary` used instead of `text-brand` (L13) | [ ] open |
 | **M6** | Minor | `templates/bi/kpi_performance_scorecards/**/*.html` | Filter form labels and quick refresh labels missing `for` / `id` association | [ ] open |
