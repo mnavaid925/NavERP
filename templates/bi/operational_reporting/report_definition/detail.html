@@ -23,6 +23,10 @@
         <div class="text-xs text-muted font-mono mt-1">{{ report.slug }}</div>
     </div>
     <div class="page-actions">
+        <a href="{% url 'bi:report_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to Reports</span>
+        </a>
         <a href="{% url 'bi:report_definition_viewer' report.pk %}" class="btn btn-primary">
             <i data-lucide="play"></i>
             <span>Run / Open Viewer</span>
