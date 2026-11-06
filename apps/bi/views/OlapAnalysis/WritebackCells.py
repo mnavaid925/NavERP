@@ -96,12 +96,18 @@ def writeback_cell_create(request):
     initial = {}
     if scenario_id and str(scenario_id).isdigit():
         scenario = get_object_or_404(WhatIfScenario, pk=scenario_id, tenant=request.tenant)
+        if scenario.status == "committed":
+            messages.error(request, f"Scenario '{scenario.name}' is committed. No adjustments can be added.")
+            return redirect("bi:what_if_scenario_detail", pk=scenario.pk)
         initial["scenario"] = scenario
 
     if request.method == "POST":
         form = ScenarioWritebackCellForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             cell = form.save(commit=False)
+            if cell.scenario.status == "committed":
+                messages.error(request, "Adjustments cannot be added to a committed scenario.")
+                return redirect("bi:what_if_scenario_detail", pk=cell.scenario.pk)
             cell.tenant = request.tenant
             cell.created_by = request.user
             cell.save()
@@ -124,6 +130,9 @@ def writeback_cell_create(request):
 @login_required
 def writeback_cell_edit(request, pk):
     cell = bi_object(request, ScenarioWritebackCell, pk)
+    if cell.is_committed or cell.scenario.status == "committed":
+        messages.error(request, f"Writeback Cell '{cell.number}' is committed and cannot be edited.")
+        return redirect("bi:what_if_scenario_simulate", pk=cell.scenario.pk)
     if request.method == "POST":
         form = ScenarioWritebackCellForm(request.POST, instance=cell, tenant=request.tenant)
         if form.is_valid():
@@ -149,6 +158,9 @@ def writeback_cell_edit(request, pk):
 @require_POST
 def writeback_cell_delete(request, pk):
     cell = bi_object(request, ScenarioWritebackCell, pk)
+    if cell.is_committed or cell.scenario.status == "committed":
+        messages.error(request, f"Writeback Cell '{cell.number}' is committed and cannot be deleted.")
+        return redirect("bi:what_if_scenario_simulate", pk=cell.scenario.pk)
     scenario_pk = cell.scenario.pk
     number = cell.number
     cell.delete()
