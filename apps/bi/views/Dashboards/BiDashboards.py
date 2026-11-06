@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.text import slugify
@@ -18,9 +18,16 @@ from apps.core.utils import write_audit_log
 @login_required
 def bi_dashboard_list(request):
     qs = bi_scope(BiDashboard.objects.all(), request, owner_field="created_by")
-    total_dashboards = qs.count()
-    published_count = qs.filter(is_published=True).count()
-    template_count = qs.filter(is_template=True).count()
+    counts = qs.aggregate(
+        total=Count("id"),
+        published=Count("id", filter=Q(is_published=True)),
+        template=Count("id", filter=Q(is_template=True)),
+    )
+    total_dashboards = counts["total"]
+    published_count = counts["published"]
+    template_count = counts["template"]
+
+    qs = qs.annotate(widget_count=Count("widgets", filter=Q(widgets__is_active=True)))
 
     q = request.GET.get("q", "").strip()
     if q:
@@ -78,7 +85,6 @@ def bi_dashboard_detail(request, pk):
         BiDashboard,
         pk,
         select_related=("created_by", "org_unit"),
-        prefetch_related=("widgets", "filters", "bookmarks"),
     )
 
     # Telemetry: update view count and last viewed
@@ -87,20 +93,24 @@ def bi_dashboard_detail(request, pk):
         last_viewed_at=timezone.now(),
     )
 
-    widgets = dashboard.widgets.filter(is_active=True).order_by("pos_y", "pos_x", "sort_order")
+    widgets = (
+        dashboard.widgets.filter(is_active=True)
+        .select_related("calculated_measure", "semantic_model", "warehouse_table")
+        .order_by("pos_y", "pos_x", "sort_order")
+    )
     filters = dashboard.filters.filter(is_active=True).order_by("order")
-    bookmarks = dashboard.bookmarks.filter(is_active=True).filter(
-        Q(user=request.user) | Q(is_shared=True)
-    ).order_by("-is_default", "name")
+    bookmarks = (
+        dashboard.bookmarks.filter(is_active=True)
+        .filter(Q(user=request.user) | Q(is_shared=True))
+        .select_related("user")
+        .order_by("-is_default", "name")
+    )
 
     user_default_bookmark = dashboard.bookmarks.filter(
         user=request.user, is_default=True, is_active=True
     ).first()
 
-    can_edit = request.user.is_superuser or (
-        dashboard.created_by == request.user
-        or getattr(request, "is_tenant_admin", False)
-    )
+    can_edit = request.user.is_superuser or getattr(request, "is_tenant_admin", False)
 
     context = {
         "dashboard": dashboard,
@@ -126,12 +136,11 @@ def bi_dashboard_create(request):
                 dashboard.created_by = request.user
                 dashboard.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="create",
-                    target_model="BiDashboard",
-                    target_id=str(dashboard.pk),
+                    request.user,
+                    dashboard,
+                    "create",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Dashboard '{dashboard.title}' created successfully.")
             return redirect("bi:bi_dashboard_detail", pk=dashboard.pk)
@@ -156,12 +165,11 @@ def bi_dashboard_edit(request, pk):
             with transaction.atomic():
                 dashboard = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="update",
-                    target_model="BiDashboard",
-                    target_id=str(dashboard.pk),
+                    request.user,
+                    dashboard,
+                    "update",
                     changes=form.cleaned_data,
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Dashboard '{dashboard.title}' updated successfully.")
             return redirect("bi:bi_dashboard_detail", pk=dashboard.pk)
@@ -184,12 +192,11 @@ def bi_dashboard_delete(request, pk):
     title = dashboard.title
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
-            actor=request.user,
-            action="delete",
-            target_model="BiDashboard",
-            target_id=str(dashboard.pk),
+            request.user,
+            dashboard,
+            "delete",
             changes={"title": title, "number": dashboard.number},
+            tenant=request.tenant,
         )
         dashboard.delete()
     messages.success(request, f"Dashboard '{title}' deleted successfully.")
@@ -205,12 +212,11 @@ def bi_dashboard_publish(request, pk):
     dashboard.save(update_fields=["is_published", "updated_at"])
     state_str = "published" if dashboard.is_published else "unpublished (draft)"
     write_audit_log(
-        tenant=request.tenant,
-        actor=request.user,
-        action="update",
-        target_model="BiDashboard",
-        target_id=str(dashboard.pk),
+        request.user,
+        dashboard,
+        "update",
         changes={"is_published": dashboard.is_published},
+        tenant=request.tenant,
     )
     messages.success(request, f"Dashboard '{dashboard.title}' is now {state_str}.")
     return redirect("bi:bi_dashboard_detail", pk=dashboard.pk)
@@ -227,6 +233,13 @@ def bi_dashboard_duplicate(request, pk):
             new_slug = form.cleaned_data["new_slug"] or slugify(new_title)[:100]
             copy_widgets = form.cleaned_data["copy_widgets"]
             copy_filters = form.cleaned_data["copy_filters"]
+
+            # Ensure slug uniqueness for tenant
+            base_slug = new_slug
+            counter = 1
+            while BiDashboard.objects.filter(tenant=request.tenant, slug=new_slug).exists():
+                new_slug = f"{base_slug[:90]}-{counter}"
+                counter += 1
 
             with transaction.atomic():
                 new_dashboard = BiDashboard.objects.create(
@@ -268,12 +281,11 @@ def bi_dashboard_duplicate(request, pk):
                         f_copy.save()
 
                 write_audit_log(
-                    tenant=request.tenant,
-                    actor=request.user,
-                    action="duplicate",
-                    target_model="BiDashboard",
-                    target_id=str(new_dashboard.pk),
+                    request.user,
+                    new_dashboard,
+                    "duplicate",
                     changes={"source_dashboard_id": source_dashboard.pk, "new_title": new_title},
+                    tenant=request.tenant,
                 )
 
             messages.success(request, f"Dashboard cloned successfully as '{new_dashboard.title}'.")
