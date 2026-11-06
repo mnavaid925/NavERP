@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Report Parameters — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_definition_list' %}">Standard & Operational Reporting</a>
+            <span class="sep">/</span>
+            <span>Prompt Parameters</span>
+        </div>
+        <h1 class="page-title">Report Parameters & Prompt Controls</h1>
+        <p class="text-muted text-sm">Dynamic runtime input controls, choice sources, cascading dependencies, and validation rules for operational reports</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:report_definition_list' %}" class="btn btn-outline">
+            <i data-lucide="file-text"></i>
+            <span>Reports Catalog</span>
+        </a>
+        <a href="{% url 'bi:report_parameter_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Parameter</span>
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div>
+                <label for="id_q" class="form-label">Search Parameters</label>
+                <input type="text" id="id_q" name="q" value="{{ q }}" placeholder="Label, token, number..." class="form-input">
+            </div>
+            <div>
+                <label for="id_report" class="form-label">Filter by Report</label>
+                <select id="id_report" name="report" class="form-select">
+                    <option value="">— All Reports —</option>
+                    {% for rpt in reports %}
+                    <option value="{{ rpt.pk }}" {% if report_id == rpt.pk|stringformat:"d" %}selected{% endif %}>{{ rpt.name }} ({{ rpt.number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_parameter_type" class="form-label">Parameter Type</label>
+                <select id="id_parameter_type" name="parameter_type" class="form-select">
+                    <option value="">— All Data Types —</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if parameter_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex space-x-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter"></i>
+                    <span>Filter</span>
+                </button>
+                <a href="{% url 'bi:report_parameter_list' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="rotate-ccw"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Parameters Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Parameter ID</th>
+                    <th>Prompt Label & Token</th>
+                    <th>Associated Report</th>
+                    <th>Type</th>
+                    <th>Choices Source</th>
+                    <th>Order</th>
+                    <th>Default</th>
+                    <th>Required</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for param in parameters %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="text-blue-600 hover:underline">
+                            {{ param.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="hover:underline">{{ param.prompt_label }}</a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ param.parameter_name }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'bi:report_definition_detail' param.report.pk %}" class="text-xs text-slate-800 font-medium hover:underline">
+                            {{ param.report.name }}
+                        </a>
+                        <span class="block text-xs text-muted font-mono">{{ param.report.number }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ param.badge_type }}">
+                            {{ param.get_parameter_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ param.get_choices_source_display }}
+                    </td>
+                    <td class="font-mono text-xs text-slate-700">
+                        {{ param.prompt_order }}
+                    </td>
+                    <td class="font-mono text-xs text-slate-600">
+                        {{ param.default_value|default:"—" }}
+                    </td>
+                    <td>
+                        {% if param.is_required %}
+                        <span class="badge badge-amber">Required</span>
+                        {% else %}
+                        <span class="badge badge-slate">Optional</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'bi:report_parameter_detail' param.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'bi:report_parameter_edit' param.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:report_parameter_delete' param.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete parameter {{ param.prompt_label }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Parameter">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="sliders-horizontal" class="mx-auto h-12 w-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-900">No Parameters Configured</h3>
+                            <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Create runtime prompt parameters to allow operational users to filter report results dynamically.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:report_parameter_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Add Parameter</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="card-footer pagination">
+        <div class="text-xs text-muted">
+            Showing Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </div>
+        <div class="flex space-x-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if report_id %}&report={{ report_id }}{% endif %}{% if parameter_type %}&parameter_type={{ parameter_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if report_id %}&report={{ report_id }}{% endif %}{% if parameter_type %}&parameter_type={{ parameter_type }}{% endif %}" class="btn btn-outline text-xs px-2 py-1">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
