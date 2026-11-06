@@ -228,4 +228,4 @@ def test_dashboards_unauthenticated_redirect(anon_client, bi_dashboard_a):
     for url in urls:
         resp = anon_client.get(url)
         assert resp.status_code == 302
-        assert "/accounts/login/" in resp.url
+        assert "/login/" in resp.url
