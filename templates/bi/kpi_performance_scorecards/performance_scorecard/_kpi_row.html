@@ -1,0 +1,56 @@
+<tr>
+    <td>
+        <div class="font-medium text-slate-900">
+            <a href="{% url 'bi:kpi_definition_detail' a.kpi.pk %}" class="hover:underline">{{ a.kpi.name }}</a>
+        </div>
+        <div class="text-xs text-muted font-mono">{{ a.kpi.code }} · {{ a.kpi.get_unit_of_measure_display }}</div>
+    </td>
+    <td>
+        {% if a.objective %}
+        <a href="{% url 'bi:strategic_objective_detail' a.objective.pk %}" class="text-xs text-primary font-medium hover:underline">{{ a.objective.name }}</a>
+        {% else %}
+        <span class="text-xs text-muted">—</span>
+        {% endif %}
+    </td>
+    <td class="text-right font-mono text-xs">{{ a.weight|floatformat:1 }}%</td>
+    <td class="text-right font-mono text-sm">{{ a.target_value|floatformat:2 }}</td>
+    <td class="text-right font-mono text-sm font-semibold">{{ a.actual_value|floatformat:2 }}</td>
+    <td class="text-right font-mono text-sm {% if a.variance >= 0 %}text-emerald-600{% else %}text-rose-600{% endif %}">
+        {% if a.variance > 0 %}+{% endif %}{{ a.variance|floatformat:2 }}
+        <div class="text-[10px] text-muted">{% if a.variance_percentage > 0 %}+{% endif %}{{ a.variance_percentage|floatformat:1 }}%</div>
+    </td>
+    <td class="text-center">
+        {% if a.trend_direction == 'improving' %}
+        <span class="inline-flex items-center text-emerald-600 font-bold" title="Improving">↗</span>
+        {% elif a.trend_direction == 'deteriorating' %}
+        <span class="inline-flex items-center text-rose-600 font-bold" title="Deteriorating">↘</span>
+        {% else %}
+        <span class="inline-flex items-center text-slate-500 font-bold" title="Steady">→</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if a.rag_status == 'green' %}
+        <span class="badge badge-green">On Track</span>
+        {% elif a.rag_status == 'amber' %}
+        <span class="badge badge-amber">Warning</span>
+        {% elif a.rag_status == 'red' %}
+        <span class="badge badge-red">Critical</span>
+        {% else %}
+        <span class="badge badge-muted">Not Evaluated</span>
+        {% endif %}
+    </td>
+    <td class="text-right table-actions">
+        <a href="{% url 'bi:scorecard_kpi_assignment_record_actual' a.pk %}" class="btn btn-icon btn-outline" title="Record Actual Measurement">
+            <i data-lucide="edit-3"></i>
+        </a>
+        <a href="{% url 'bi:scorecard_kpi_assignment_edit' a.pk %}" class="btn btn-icon btn-outline" title="Edit Assignment">
+            <i data-lucide="pencil"></i>
+        </a>
+        <form method="post" action="{% url 'bi:scorecard_kpi_assignment_delete' a.pk %}" class="inline" onsubmit="return confirm('Remove KPI from scorecard?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-icon btn-danger" title="Remove KPI">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </form>
+    </td>
+</tr>
