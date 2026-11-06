@@ -73,7 +73,7 @@
     - `Index(fields=["tenant", "execution_mode"], name="idx_brun_ten_mode")`
     Generate and apply database migration.
 
-- [ ] **[I8] Missing "Back to Reports" / "Back to List" action button in detail header page-actions**
+- [x] **[I8] Missing "Back to Reports" / "Back to List" action button in detail header page-actions** (Fixed: added back-to-list navigation action buttons across all four detail templates)
   - **Locations**: `templates/bi/operational_reporting/report_definition/detail.html:25-51`, `report_parameter/detail.html:33-51`, `report_execution/detail.html:25-47`, `report_drill_path/detail.html:28-46`
   - **Issue**: Detail page header `.page-actions` omit standard "Back to List" navigation button.
   - **Fix**: Add `<a href="..." class="btn btn-outline"><i data-lucide="arrow-left"></i><span>Back</span></a>` in `.page-actions`.
