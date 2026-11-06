@@ -44,7 +44,7 @@
   - **Issue**: `theme.css` only provides `.badge-green`, `.badge-red`, `.badge-amber`, `.badge-info`, `.badge-muted`, `.badge-slate`. `choice_single`, `choice_multi`, `drill_through`, and `operational_report` map to `badge-purple`, rendering without CSS styles.
   - **Fix**: Map them to valid color-named classes (`badge-info`, `badge-slate`, or `badge-green`).
 
-- [ ] **[I3] CSV Formula Injection in Export Header Row**
+- [x] **[I3] CSV Formula Injection in Export Header Row** (Fixed: wrapped all CSV export column headers in `csv_safe(...)` in `report_execution_export`)
   - **Location**: `apps/bi/views/OperationalReporting/ReportExecutions.py:179`
   - **Issue**: In `report_execution_export`, row cells are sanitized with `csv_safe(...)`, but column titles in the header row are written without sanitization. If a column title begins with `=`, `+`, `-`, or `@`, spreadsheet software executes it as a formula.
   - **Fix**: Apply `csv_safe(...)` to every column title written to the CSV header row.
