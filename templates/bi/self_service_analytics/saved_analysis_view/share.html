@@ -54,8 +54,8 @@
             <div class="pt-4 border-t border-slate-100">
                 <label class="form-label">Shareable Token URL</label>
                 <div class="flex items-center space-x-2">
-                    <input type="text" readonly value="https://erp.nav.local/bi/saved-views/{{ view_obj.pk }}/?token={{ view_obj.share_token }}" class="form-input font-mono text-xs bg-slate-50 flex-1">
-                    <button type="button" onclick="navigator.clipboard.writeText('https://erp.nav.local/bi/saved-views/{{ view_obj.pk }}/?token={{ view_obj.share_token }}'); alert('Link copied to clipboard!');" class="btn btn-outline text-xs">
+                    <input type="text" readonly value="{{ request.scheme }}://{{ request.get_host }}{% url 'bi:saved_analysis_view_detail' view_obj.pk %}?token={{ view_obj.share_token }}" class="form-input font-mono text-xs bg-slate-50 flex-1">
+                    <button type="button" onclick="navigator.clipboard.writeText('{{ request.scheme }}://{{ request.get_host }}{% url 'bi:saved_analysis_view_detail' view_obj.pk %}?token={{ view_obj.share_token }}'); alert('Link copied to clipboard!');" class="btn btn-outline text-xs">
                         <i data-lucide="copy"></i>
                         <span>Copy</span>
                     </button>
