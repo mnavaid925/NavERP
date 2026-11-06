@@ -59,7 +59,7 @@ class BiDashboardBookmark(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.number}) [{self.dashboard.title}]"
+        return f"{self.name} ({self.number})"
 
     def get_absolute_url(self):
         return reverse("bi:bi_dashboard_bookmark_detail", kwargs={"pk": self.pk})
