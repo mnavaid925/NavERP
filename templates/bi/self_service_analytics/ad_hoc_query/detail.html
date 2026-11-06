@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block title %}{{ query.name }} ({{ query.number }}) — Ad-Hoc Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:ad_hoc_query_list' %}">Ad-Hoc Queries</a>
+            <span class="sep">/</span>
+            <span>{{ query.number }}</span>
+        </div>
+        <div class="flex items-center space-x-3 mt-1">
+            <h1 class="page-title">{{ query.name }}</h1>
+            <span class="badge {{ query.badge_status }}">{{ query.get_status_display }}</span>
+            <span class="badge {{ query.badge_source }}">{{ query.get_source_type_display }}</span>
+            <span class="badge {{ query.badge_viz }}">{{ query.get_visualization_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-0.5">{{ query.number }} · {{ query.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:ad_hoc_query_composer' query.pk %}" class="btn btn-primary">
+            <i data-lucide="sliders"></i>
+            <span>Visual Composer</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_query_export' query.pk %}" class="btn btn-outline">
+            <i data-lucide="download"></i>
+            <span>Export CSV</span>
+        </a>
+        <a href="{% url 'bi:saved_analysis_view_create' %}?query={{ query.pk }}" class="btn btn-outline">
+            <i data-lucide="bookmark-plus"></i>
+            <span>Save as View</span>
+        </a>
+        <a href="{% url 'bi:ad_hoc_query_edit' query.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:ad_hoc_query_delete' query.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete ad-hoc query {{ query.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Specs and Overview -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="card-title text-base">Query Specification & Data Source</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Source Type</dt>
+                    <dd class="mt-1 font-semibold text-slate-800">{{ query.get_source_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Bound Source Entity</dt>
+                    <dd class="mt-1 text-slate-800 font-medium">
+                        {% if query.semantic_model %}
+                            <a href="{% url 'bi:semantic_model_detail' query.semantic_model.pk %}" class="text-blue-600 hover:underline">
+                                {{ query.semantic_model.name }} ({{ query.semantic_model.number }})
+                            </a>
+                        {% elif query.warehouse_table %}
+                            <a href="{% url 'bi:warehouse_table_detail' query.warehouse_table.pk %}" class="text-blue-600 hover:underline">
+                                {{ query.warehouse_table.name }} ({{ query.warehouse_table.number }})
+                            </a>
+                        {% elif query.data_blend %}
+                            <a href="{% url 'bi:data_blend_definition_detail' query.data_blend.pk %}" class="text-blue-600 hover:underline">
+                                {{ query.data_blend.name }} ({{ query.data_blend.number }})
+                            </a>
+                        {% else %}
+                            <span class="text-muted">Direct / Unbound Source</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Visualization Format</dt>
+                    <dd class="mt-1 text-slate-800">{{ query.get_visualization_type_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Row Limit</dt>
+                    <dd class="mt-1 text-slate-800 font-mono">{{ query.row_limit }} rows</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Last Executed</dt>
+                    <dd class="mt-1 text-slate-800">
+                        {% if query.last_executed_at %}
+                            {{ query.last_executed_at|date:"Y-m-d H:i" }}
+                        {% else %}
+                            <span class="text-muted">Not executed yet</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-muted uppercase font-medium">Execution Performance</dt>
+                    <dd class="mt-1 text-slate-800">
+                        <span class="font-mono">{{ query.execution_duration_ms }} ms</span>
+                        <span class="text-muted">({{ query.row_count }} records returned)</span>
+                    </dd>
+                </div>
+                <div class="sm:col-span-2">
+                    <dt class="text-xs text-muted uppercase font-medium">Description & Hypothesis</dt>
+                    <dd class="mt-1 text-slate-700">
+                        {{ query.description|default:"No description recorded for this exploratory query." }}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Quick Actions & Links -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base">Analytical Metadata</h2>
+            </div>
+            <div class="card-body text-sm space-y-3">
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Author:</span>
+                    <span class="font-medium text-slate-800">
+                        {% if query.created_by %}
+                            {{ query.created_by.get_full_name|default:query.created_by.username }}
+                        {% else %}
+                            System
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Created:</span>
+                    <span class="text-slate-800">{{ query.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-muted">Last Updated:</span>
+                    <span class="text-slate-800">{{ query.updated_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+            <div class="card-footer bg-slate-50 p-3">
+                <a href="{% url 'bi:ad_hoc_query_composer' query.pk %}" class="btn btn-primary w-full justify-center">
+                    <i data-lucide="play"></i>
+                    <span>Open Composer & Run</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Panels: Fields, Filters, Sorts -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold">Selected Fields & Measures</h3>
+            <span class="badge badge-info text-xs">{{ query.fields_config_json|length }}</span>
+        </div>
+        <div class="card-body p-3">
+            {% if query.fields_config_json %}
+            <ul class="divide-y divide-slate-100 text-xs">
+                {% for item in query.fields_config_json %}
+                <li class="py-2 flex justify-between items-center">
+                    <div>
+                        <div class="font-semibold text-slate-800">{{ item.label|default:item.field }}</div>
+                        <div class="font-mono text-muted text-[11px]">{{ item.field }}</div>
+                    </div>
+                    <span class="badge badge-slate uppercase text-[10px]">{{ item.agg|default:"value" }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="text-xs text-muted text-center py-4">No fields selected yet</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold">Filter Rules</h3>
+            <span class="badge badge-amber text-xs">{{ query.filter_criteria_json|length }}</span>
+        </div>
+        <div class="card-body p-3">
+            {% if query.filter_criteria_json %}
+            <ul class="divide-y divide-slate-100 text-xs">
+                {% for rule in query.filter_criteria_json %}
+                <li class="py-2">
+                    <span class="font-semibold text-slate-800">{{ rule.field }}</span>
+                    <span class="text-purple-600 font-mono text-[11px] mx-1">{{ rule.operator }}</span>
+                    <span class="font-mono bg-slate-100 px-1 py-0.5 rounded">{{ rule.value }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="text-xs text-muted text-center py-4">No filter rules applied</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold">Sorting Order</h3>
+            <span class="badge badge-muted text-xs">{{ query.sort_config_json|length }}</span>
+        </div>
+        <div class="card-body p-3">
+            {% if query.sort_config_json %}
+            <ul class="divide-y divide-slate-100 text-xs">
+                {% for sort in query.sort_config_json %}
+                <li class="py-2 flex justify-between items-center">
+                    <span class="font-semibold text-slate-800">{{ sort.field }}</span>
+                    <span class="badge badge-slate uppercase text-[10px]">{{ sort.direction|default:"asc" }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <div class="text-xs text-muted text-center py-4">Default ordering applied</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Sample Data Preview -->
+{% if sample_data %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="card-title text-sm font-semibold">Sample Result Rows (Preview)</h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    {% for item in query.fields_config_json %}
+                    <th>{{ item.label|default:item.field }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in sample_data %}
+                <tr>
+                    {% for key, val in row.items %}
+                    <td>{{ val }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Related Calculated Fields & Saved Views -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Calculated Fields Card -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold">Custom Calculated Fields</h3>
+            <a href="{% url 'bi:ad_hoc_calculated_field_create' %}?query={{ query.pk }}" class="btn btn-outline text-xs px-2 py-1">
+                <i data-lucide="plus"></i>
+                <span>Add Formula</span>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Field Name</th>
+                        <th>Formula Expression</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cf in calculated_fields %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bi:ad_hoc_calculated_field_detail' cf.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ cf.display_label }}
+                            </a>
+                            <div class="font-mono text-xs text-muted">{{ cf.field_name }}</div>
+                        </td>
+                        <td class="font-mono text-xs text-slate-700 max-w-xs truncate">
+                            {{ cf.formula_expression }}
+                        </td>
+                        <td>
+                            <span class="badge {{ cf.badge_return_type }}">{{ cf.get_return_type_display }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center py-4 text-xs text-muted">No custom calculated fields defined for this query</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Saved Views Card -->
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm font-semibold">Linked Saved Views</h3>
+            <a href="{% url 'bi:saved_analysis_view_create' %}?query={{ query.pk }}" class="btn btn-outline text-xs px-2 py-1">
+                <i data-lucide="plus"></i>
+                <span>Save View</span>
+            </a>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>View Name</th>
+                        <th>Scope</th>
+                        <th>Views</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sv in saved_views %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bi:saved_analysis_view_detail' sv.pk %}" class="font-medium text-blue-600 hover:underline">
+                                {{ sv.name }}
+                            </a>
+                            <div class="font-mono text-xs text-muted">{{ sv.number }}</div>
+                        </td>
+                        <td>
+                            <span class="badge {{ sv.badge_scope }}">{{ sv.get_sharing_scope_display }}</span>
+                        </td>
+                        <td class="text-xs text-slate-600 font-mono">
+                            {{ sv.view_count }} views
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="3" class="text-center py-4 text-xs text-muted">No saved views created from this query</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
