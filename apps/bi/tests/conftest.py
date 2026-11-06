@@ -34,6 +34,10 @@ from apps.bi.models import (
     MdmHierarchyNode,
     MdmReferenceCode,
     MdmSurvivorshipRule,
+    ReportDefinition,
+    ReportDrillPath,
+    ReportExecution,
+    ReportParameter,
     SemanticModel,
     TransformationStep,
     WarehouseStoragePolicy,
@@ -1230,6 +1234,140 @@ def bi_filter_b(db, tenant_b, bi_dashboard_b):
         static_options_json=[{"value": "ALL", "label": "All Segments"}],
         order=1,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 10.9: Standard & Operational Reporting Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def report_definition_a(db, tenant_a, admin_user_a, semantic_model_a):
+    return ReportDefinition.objects.create(
+        tenant=tenant_a,
+        created_by=admin_user_a,
+        name="Acme Monthly Revenue & Margin Report",
+        slug="acme-monthly-revenue-margin-report",
+        category="sales",
+        report_type="tabular",
+        status="published",
+        semantic_model=semantic_model_a,
+        page_orientation="portrait",
+        page_size="A4",
+        is_prebuilt=False,
+        columns_config_json=[
+            {"field": "row_id", "title": "#", "width": "40px", "align": "center"},
+            {"field": "item_code", "title": "SKU / Code", "width": "120px", "align": "left"},
+            {"field": "description", "title": "Product Title", "width": "220px", "align": "left"},
+            {"field": "amount", "title": "Net Total (USD)", "width": "110px", "align": "right"},
+        ],
+    )
+
+
+@pytest.fixture
+def report_definition_b(db, tenant_b, admin_user_b, semantic_model_b):
+    return ReportDefinition.objects.create(
+        tenant=tenant_b,
+        created_by=admin_user_b,
+        name="Globex Monthly Revenue & Margin Report",
+        slug="globex-monthly-revenue-margin-report",
+        category="sales",
+        report_type="tabular",
+        status="published",
+        semantic_model=semantic_model_b,
+        page_orientation="portrait",
+        page_size="A4",
+        is_prebuilt=False,
+        columns_config_json=[
+            {"field": "row_id", "title": "#", "width": "40px", "align": "center"},
+            {"field": "item_code", "title": "SKU / Code", "width": "120px", "align": "left"},
+            {"field": "description", "title": "Product Title", "width": "220px", "align": "left"},
+            {"field": "amount", "title": "Net Total (USD)", "width": "110px", "align": "right"},
+        ],
+    )
+
+
+@pytest.fixture
+def report_parameter_a(db, tenant_a, report_definition_a):
+    return ReportParameter.objects.create(
+        tenant=tenant_a,
+        report=report_definition_a,
+        parameter_name="fiscal_year",
+        prompt_label="Fiscal Year",
+        parameter_type="string",
+        default_value="2026",
+        is_required=True,
+        prompt_order=1,
+    )
+
+
+@pytest.fixture
+def report_parameter_b(db, tenant_b, report_definition_b):
+    return ReportParameter.objects.create(
+        tenant=tenant_b,
+        report=report_definition_b,
+        parameter_name="fiscal_year",
+        prompt_label="Fiscal Year",
+        parameter_type="string",
+        default_value="2026",
+        is_required=True,
+        prompt_order=1,
+    )
+
+
+@pytest.fixture
+def report_execution_a(db, tenant_a, report_definition_a, admin_user_a):
+    return ReportExecution.objects.create(
+        tenant=tenant_a,
+        report=report_definition_a,
+        executed_by=admin_user_a,
+        execution_mode="interactive_view",
+        execution_status="completed",
+        output_format="html",
+        row_count=12,
+        duration_ms=45,
+    )
+
+
+@pytest.fixture
+def report_execution_b(db, tenant_b, report_definition_b, admin_user_b):
+    return ReportExecution.objects.create(
+        tenant=tenant_b,
+        report=report_definition_b,
+        executed_by=admin_user_b,
+        execution_mode="interactive_view",
+        execution_status="completed",
+        output_format="html",
+        row_count=8,
+        duration_ms=30,
+    )
+
+
+@pytest.fixture
+def report_drill_path_a(db, tenant_a, report_definition_a):
+    return ReportDrillPath.objects.create(
+        tenant=tenant_a,
+        source_report=report_definition_a,
+        source_field="item_code",
+        drill_label="Inspect Item Detail",
+        target_type="operational_report",
+        target_report=report_definition_a,
+        sort_order=1,
+    )
+
+
+@pytest.fixture
+def report_drill_path_b(db, tenant_b, report_definition_b):
+    return ReportDrillPath.objects.create(
+        tenant=tenant_b,
+        source_report=report_definition_b,
+        source_field="item_code",
+        drill_label="Inspect Item Detail",
+        target_type="operational_report",
+        target_report=report_definition_b,
+        sort_order=1,
+    )
+
 
 
 
