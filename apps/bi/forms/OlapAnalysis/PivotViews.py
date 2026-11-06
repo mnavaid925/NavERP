@@ -32,6 +32,12 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
         required=False,
         help_text="Slicers applied to the cube space, e.g. [{\"field\": \"FiscalPeriod.Year\", \"operator\": \"eq\", \"value\": \"2026\"}]",
     )
+    conditional_formatting_raw = forms.CharField(
+        label="Conditional Formatting Rules (JSON)",
+        widget=forms.Textarea(attrs={"rows": 2, "class": "form-textarea font-mono text-xs"}),
+        required=False,
+        help_text="Rules for heatmap/threshold styling, e.g. [{\"rule\": \"variance < 0\", \"color\": \"#ef4444\"}]",
+    )
 
     class Meta:
         model = PivotAnalysisView
@@ -73,11 +79,14 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
                 self.fields["selected_measures_raw"].initial = json.dumps(self.instance.selected_measures, indent=2)
             if self.instance.filters_json:
                 self.fields["filters_json_raw"].initial = json.dumps(self.instance.filters_json, indent=2)
+            if self.instance.conditional_formatting:
+                self.fields["conditional_formatting_raw"].initial = json.dumps(self.instance.conditional_formatting, indent=2)
         else:
             self.fields["row_dimensions_raw"].initial = json.dumps(["OrgUnit", "GLAccount"], indent=2)
             self.fields["column_dimensions_raw"].initial = json.dumps(["FiscalPeriod"], indent=2)
             self.fields["selected_measures_raw"].initial = json.dumps(["NetRevenue", "OperatingMargin"], indent=2)
             self.fields["filters_json_raw"].initial = json.dumps([], indent=2)
+            self.fields["conditional_formatting_raw"].initial = json.dumps([], indent=2)
 
     def clean_row_dimensions_raw(self):
         val = self.cleaned_data.get("row_dimensions_raw", "").strip()
@@ -127,6 +136,18 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}")
 
+    def clean_conditional_formatting_raw(self):
+        val = self.cleaned_data.get("conditional_formatting_raw", "").strip()
+        if not val:
+            return []
+        try:
+            parsed = json.loads(val)
+            if not isinstance(parsed, (list, dict)):
+                raise forms.ValidationError("Conditional formatting must be a JSON array or object.")
+            return parsed
+        except json.JSONDecodeError as exc:
+            raise forms.ValidationError(f"Invalid JSON: {exc}")
+
     def clean_drill_through_target(self):
         val = self.cleaned_data.get("drill_through_target", "").strip()
         if val:
@@ -154,6 +175,8 @@ class PivotAnalysisViewForm(TenantUniqueMixin, TenantModelForm):
             instance.selected_measures = self.cleaned_data["selected_measures_raw"]
         if "filters_json_raw" in self.cleaned_data:
             instance.filters_json = self.cleaned_data["filters_json_raw"]
+        if "conditional_formatting_raw" in self.cleaned_data:
+            instance.conditional_formatting = self.cleaned_data["conditional_formatting_raw"]
         if commit:
             instance.save()
         return instance
