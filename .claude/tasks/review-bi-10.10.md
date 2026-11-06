@@ -49,7 +49,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
       changes=form.cleaned_data if 'form' in locals() else None,
   )
   ```
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): align write_audit_log call signature across SelfServiceAnalytics views
 
 ### C2 — Duplicate clone slug collision causes HTTP 500 and sequence retry exhaustion
 - **Found by:** code-reviewer, explorer, qa-smoke-tester
@@ -64,7 +64,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
       slug = f"{base_slug}-{counter}"
       counter += 1
   ```
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): prevent slug collision when cloning saved analysis views
 
 ---
 
@@ -79,7 +79,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `templates/bi/self_service_analytics/saved_analysis_view/explore.html:29`
 - **Problem:** Endpoint creates records on GET requests via `<a href>` links without CSRF protection.
 - **Fix:** Add `@require_POST`, wrap in `transaction.atomic()`, and update template links to use a small POST form with `{% csrf_token %}`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(bi): require POST and atomic transaction for view cloning
 
 ### I2 — Intra-tenant authorization bypass on personal saved views (Horizontal Privilege Escalation)
 - **Found by:** security-reviewer
@@ -88,7 +88,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
 - **Fix:** Enforce access control in `SavedAnalysisViews.py`:
   - In `detail` and `explore`: allow access if `view_obj.sharing_scope != "personal"` or `view_obj.created_by == request.user` or `request.user.is_superuser` or `getattr(request, "is_tenant_admin", False)`.
   - In `edit`, `delete`, `share`: allow access only if `view_obj.created_by == request.user` or `request.user.is_superuser` or `getattr(request, "is_tenant_admin", False)`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(bi): enforce intra-tenant authorization on personal saved views
 
 ### I3 — State mutation on HTTP GET in `ad_hoc_query_execute`
 - **Found by:** security-reviewer
@@ -97,7 +97,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `templates/bi/self_service_analytics/ad_hoc_query/composer.html:265`
 - **Problem:** `ad_hoc_query_execute` mutates execution statistics and runtime counters on GET requests.
 - **Fix:** Add `@require_POST` to `ad_hoc_query_execute` and update `composer.html` JavaScript to issue a POST request with `X-CSRFToken`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — security(bi): require POST for ad-hoc query execution
 
 ### I4 — Design system palette violation: `badge-purple` is invalid in `theme.css` (Lesson L33)
 - **Found by:** explorer, frontend-reviewer
@@ -109,14 +109,14 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `templates/bi/self_service_analytics/saved_analysis_view/detail.html:21`
 - **Problem:** `badge-purple` is not defined in `static/css/theme.css` (only `badge-green/red/amber/info/muted/slate` exist).
 - **Fix:** Replace `badge-purple` with `badge-info` (and `badge-amber` for `full_outer`).
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(bi): replace invalid badge-purple across models and templates
 
 ### I5 — Contract mismatch & blank cells in explore data grid
 - **Found by:** code-reviewer, explorer
 - **Location:** `templates/bi/self_service_analytics/saved_analysis_view/explore.html:69-70`
 - **Problem:** Table headers dynamically iterate `preview_results.columns`, but table row cells hardcode `{{ row.Period }}` and `{{ row.Revenue }}`.
 - **Fix:** Dynamically iterate over `row.items` or `row.values`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): render explore table row cells dynamically
 
 ### I6 — View-template contract omission in `saved_analysis_view_list` filter bar
 - **Found by:** explorer
@@ -125,28 +125,28 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `templates/bi/self_service_analytics/saved_analysis_view/list.html:33-65`
 - **Problem:** `org_units` passed in context but omitted from template filter bar; `template=1` filter option missing from dropdown; pagination links drop `&template=` and `&org_unit=`.
 - **Fix:** Support `org_unit` filter in view, add `org_unit` select dropdown and `template=1` option in `list.html`, and preserve query params in pagination links.
-- **Status:** [ ] open
+- **Status:** [x] fixed — feat(bi): add org_unit and template filters to saved analysis view list
 
 ### I7 — Dropped `query` filter on pagination in calculated field list
 - **Found by:** code-reviewer, explorer
 - **Location:** `templates/bi/self_service_analytics/ad_hoc_calculated_field/list.html:155`
 - **Problem:** Pagination links omit `&query={{ request.GET.query }}`, dropping filter on page 2+.
 - **Fix:** Preserve `{% if request.GET.query %}&query={{ request.GET.query }}{% endif %}` on pagination links.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): preserve query filter on pagination in calculated fields list
 
 ### I8 — Hardcoded domain `https://erp.nav.local` in share token URL
 - **Found by:** code-reviewer, explorer, frontend-reviewer
 - **Location:** `templates/bi/self_service_analytics/saved_analysis_view/share.html:57`
 - **Problem:** Shareable token input hardcodes domain `https://erp.nav.local`.
 - **Fix:** Replace with `{{ request.scheme }}://{{ request.get_host }}{% url 'bi:saved_analysis_view_detail' view_obj.pk %}?token={{ view_obj.share_token }}`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): replace hardcoded domain with dynamic host in share URL
 
 ### I9 — Missing 10.10 tables in seeder `--flush` block
 - **Found by:** code-reviewer, explorer
 - **Location:** `apps/bi/management/commands/seed_bi.py:66-70`
 - **Problem:** The `if flush:` block omits the four 10.10 tables (`SavedAnalysisView`, `AdHocCalculatedField`, `AdHocQuery`, `DataBlendDefinition`), breaking `--flush` wipe idempotence.
 - **Fix:** Add deletion of `SavedAnalysisView`, `AdHocCalculatedField`, `AdHocQuery`, `DataBlendDefinition` to flush block.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): include 10.10 self-service models in seed_bi --flush
 
 ### I10 — Missing composite database indexes on tenant-filtered FKs
 - **Found by:** performance-reviewer
@@ -155,7 +155,7 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `apps/bi/models/SelfServiceAnalytics/DataBlendDefinitions.py:95`
 - **Problem:** Missing composite indexes on `(tenant, query)` for `SavedAnalysisView` and `(tenant, created_by)` for `DataBlendDefinition`.
 - **Fix:** Add composite indexes to `Meta.indexes` and generate a clean migration.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(bi): add composite indexes on tenant-filtered FKs for self-service analytics
 
 ---
 
@@ -170,49 +170,49 @@ as you go. Never delete a finding; a wrong one gets `[~] skipped — not a defec
   - `apps/bi/views/SelfServiceAnalytics/AdHocCalculatedFields.py:69`
 - **Problem:** View functions execute manual queries for models that `TenantModelForm` already scopes.
 - **Fix:** Remove unused manual model queries and context variables.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(bi): remove redundant model queries across self-service views
 
 ### M2 — Literal route declared after parameterized `<int:pk>/` route
 - **Found by:** code-reviewer, explorer
 - **Location:** `apps/bi/urls/SelfServiceAnalytics/AdHocCalculatedFields.py:11`
 - **Problem:** `calculated-fields/validate/` declared after `calculated-fields/<int:pk>/`.
 - **Fix:** Move literal route above parameterized route.
-- **Status:** [ ] open
+- **Status:** [x] fixed — fix(bi): place literal validate route before parameterized pk route
 
 ### M3 — Missing `<label for>` and `<input id>` association
 - **Found by:** frontend-reviewer
 - **Location:** `templates/bi/self_service_analytics/saved_analysis_view/share.html:55-57`
 - **Problem:** Share token input has no `id` and label has no `for`.
 - **Fix:** Add `for="id_shareable_token_url"` and `id="id_shareable_token_url"`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — accessibility(bi): associate label and input with id for share token
 
 ### M4 — Filter grid column balance in calculated field list
 - **Found by:** frontend-reviewer
 - **Location:** `templates/bi/self_service_analytics/ad_hoc_calculated_field/list.html:33`
 - **Problem:** Filter grid specifies `lg:grid-cols-4` but contains only 3 elements.
 - **Fix:** Change `lg:grid-cols-4` to `lg:grid-cols-3`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(bi): balance filter grid columns in calculated field list
 
 ### M5 — Action column icon consistency in data blend list
 - **Found by:** frontend-reviewer
 - **Location:** `templates/bi/self_service_analytics/data_blend_definition/list.html:129`
 - **Problem:** Eye icon in action column links to preview instead of standard detail view.
 - **Fix:** Link eye icon to detail view and sliders/play icon to preview.
-- **Status:** [ ] open
+- **Status:** [x] fixed — style(bi): link eye icon to detail and play icon to preview in data blends list
 
 ### M6 — Lazy FK retrieval in `saved_analysis_view_clone`
 - **Found by:** performance-reviewer
 - **Location:** `apps/bi/views/SelfServiceAnalytics/SavedAnalysisViews.py:184-197`
 - **Problem:** `original.query` and `original.org_unit` dereference FK instances, causing lazy queries.
 - **Fix:** Use `query_id=original.query_id` and `org_unit_id=original.org_unit_id`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(bi): use query_id and org_unit_id to avoid lazy queries on view clone
 
 ### M7 — `DataBlendDefinitionAdmin.list_select_related` omits warehouse tables
 - **Found by:** performance-reviewer
 - **Location:** `apps/bi/admin.py:385`
 - **Problem:** `list_select_related` omits `primary_warehouse_table` and `secondary_warehouse_table`.
 - **Fix:** Add warehouse table fields to `list_select_related`.
-- **Status:** [ ] open
+- **Status:** [x] fixed — perf(bi): expand list_select_related for DataBlendDefinitionAdmin
 
 ---
 
