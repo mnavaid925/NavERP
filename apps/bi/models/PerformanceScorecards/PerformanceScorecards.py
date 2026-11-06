@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
@@ -105,9 +105,12 @@ class PerformanceScorecard(TenantNumbered):
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:120]
-        if self.is_default and self.tenant_id:
-            PerformanceScorecard.objects.filter(tenant=self.tenant, is_default=True).exclude(pk=self.pk).update(is_default=False)
         super().save(*args, **kwargs)
+        if self.is_default and self.tenant_id:
+            with transaction.atomic():
+                PerformanceScorecard.objects.filter(
+                    tenant=self.tenant, is_default=True
+                ).exclude(pk=self.pk).update(is_default=False)
 
     def get_absolute_url(self):
         return reverse("bi:performance_scorecard_detail", kwargs={"pk": self.pk})
