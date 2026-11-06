@@ -56,6 +56,25 @@ class OlapCubeForm(TenantUniqueMixin, TenantModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        if "data" in kwargs and kwargs["data"]:
+            data = kwargs["data"].copy()
+            if "dimensions_config" in data and "dimensions_config_raw" not in data:
+                data["dimensions_config_raw"] = json.dumps(data["dimensions_config"]) if isinstance(data["dimensions_config"], list) else str(data["dimensions_config"])
+            if "measures_config" in data and "measures_config_raw" not in data:
+                data["measures_config_raw"] = json.dumps(data["measures_config"]) if isinstance(data["measures_config"], list) else str(data["measures_config"])
+            if "aggregations_config" in data and "aggregations_config_raw" not in data:
+                data["aggregations_config_raw"] = json.dumps(data["aggregations_config"]) if isinstance(data["aggregations_config"], list) else str(data["aggregations_config"])
+            kwargs["data"] = data
+        elif len(args) > 0 and args[0]:
+            data = args[0].copy()
+            if "dimensions_config" in data and "dimensions_config_raw" not in data:
+                data["dimensions_config_raw"] = json.dumps(data["dimensions_config"]) if isinstance(data["dimensions_config"], list) else str(data["dimensions_config"])
+            if "measures_config" in data and "measures_config_raw" not in data:
+                data["measures_config_raw"] = json.dumps(data["measures_config"]) if isinstance(data["measures_config"], list) else str(data["measures_config"])
+            if "aggregations_config" in data and "aggregations_config_raw" not in data:
+                data["aggregations_config_raw"] = json.dumps(data["aggregations_config"]) if isinstance(data["aggregations_config"], list) else str(data["aggregations_config"])
+            args = (data,) + args[1:]
+
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
             self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant)
