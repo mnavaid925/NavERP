@@ -90,11 +90,69 @@ class ScenarioWritebackCell(TenantNumbered):
             models.Index(fields=["tenant", "is_committed"], name="idx_bwbc_ten_sync"),
         ]
 
+    def __init__(self, *args, **kwargs):
+        if "coordinate_keys_json" in kwargs and "cell_coordinates" not in kwargs:
+            kwargs["cell_coordinates"] = kwargs.pop("coordinate_keys_json")
+        if "baseline_amount" in kwargs and "baseline_value" not in kwargs:
+            kwargs["baseline_value"] = kwargs.pop("baseline_amount")
+        if "simulated_amount" in kwargs and "adjusted_value" not in kwargs:
+            kwargs["adjusted_value"] = kwargs.pop("simulated_amount")
+        if "adjustment_delta" in kwargs:
+            delta = kwargs.pop("adjustment_delta")
+            if "adjusted_value" not in kwargs and "baseline_value" in kwargs:
+                kwargs["adjusted_value"] = kwargs["baseline_value"] + delta
+        if "adjustment_method" in kwargs and "spread_method" not in kwargs:
+            method = kwargs.pop("adjustment_method")
+            if method == "absolute":
+                method = "direct_leaf"
+            kwargs["spread_method"] = method
+        super().__init__(*args, **kwargs)
+
     def __str__(self):
         return f"{self.number}"
 
     def get_absolute_url(self):
         return reverse("bi:writeback_cell_detail", kwargs={"pk": self.pk})
+
+    @property
+    def coordinate_keys_json(self):
+        return self.cell_coordinates
+
+    @coordinate_keys_json.setter
+    def coordinate_keys_json(self, value):
+        self.cell_coordinates = value
+
+    @property
+    def baseline_amount(self):
+        return self.baseline_value
+
+    @baseline_amount.setter
+    def baseline_amount(self, value):
+        self.baseline_value = value
+
+    @property
+    def simulated_amount(self):
+        return self.adjusted_value
+
+    @simulated_amount.setter
+    def simulated_amount(self, value):
+        self.adjusted_value = value
+
+    @property
+    def adjustment_delta(self):
+        return self.variance_amount
+
+    @adjustment_delta.setter
+    def adjustment_delta(self, value):
+        self.variance_amount = value
+
+    @property
+    def adjustment_method(self):
+        return self.spread_method
+
+    @adjustment_method.setter
+    def adjustment_method(self, value):
+        self.spread_method = value
 
     def save(self, *args, **kwargs):
         self.variance_amount = self.adjusted_value - self.baseline_value
