@@ -80,3 +80,28 @@
 2. `templates/bi/operational_reporting/*/*.html` — **[M2] Raw Tailwind color utilities lack paired `dark:` variants in certain headings/subheadings.**
 
 ---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+*None.*
+
+### Important
+1. `apps/bi/views/OperationalReporting/ReportDefinitions.py:95-97` & `templates/.../detail.html:142, 146, 150` — **Redundant COUNT queries and sliced QuerySet count drift in `report_definition_detail`.**
+   - `parameters.count` and `drill_paths.count` run separate `SELECT COUNT(*)` queries before loops iterate the same objects.
+   - Slicing `executions[:10]` and calling `executions.count` produces a subquery count bounded at 10.
+   - Fix: Evaluate `list(report.parameters...)`, `list(report.source_drill_paths...)`, and `total_executions_count = report.executions.count()` in view.
+2. `apps/bi/views/OperationalReporting/ReportParameters.py:42`, `ReportExecutions.py:60`, `ReportDrillPaths.py:45` — **Unused heavy JSON & Text fields loaded in list filter dropdowns.**
+   - Filter querysets pull large JSON/text columns (`columns_config_json`, `bands_config_json`, `raw_query`, `styling_css`).
+   - Fix: Use `.only("id", "name", "number")` for filter dropdown querysets.
+3. `apps/bi/models/OperationalReporting/ReportExecutions.py:102-107` — **Missing composite indexes on high-velocity `ReportExecution` table.**
+   - Add `Index(fields=["tenant", "report", "-started_at"], name="idx_brun_ten_rpt_start")`
+   - Add `Index(fields=["tenant", "output_format"], name="idx_brun_ten_format")`
+   - Add `Index(fields=["tenant", "execution_mode"], name="idx_brun_ten_mode")`
+
+### Minor
+1. `apps/bi/views/OperationalReporting/ReportExecutions.py:150-158` — **Unselected foreign key lookup in `report_execution_delete`.**
+   - `bi_object(request, ReportExecution, pk)` lacks `select_related=("report",)`, causing extra query when reading `execution.report.number` for audit log.
+
+---
+
