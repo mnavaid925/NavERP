@@ -44,7 +44,10 @@ def what_if_scenario_list(request):
 
     period_id = request.GET.get("fiscal_period", "").strip()
     if period_id:
-        qs = qs.filter(fiscal_period_id=period_id)
+        if period_id.isdigit():
+            qs = qs.filter(fiscal_period_id=int(period_id))
+        else:
+            qs = qs.none()
 
     status = request.GET.get("status", "").strip()
     if status:
@@ -97,7 +100,7 @@ def what_if_scenario_detail(request, pk):
 def what_if_scenario_create(request):
     cube_id = request.GET.get("cube")
     initial = {}
-    if cube_id:
+    if cube_id and str(cube_id).isdigit():
         from apps.bi.models.OlapAnalysis.OlapCubes import OlapCube
         cube = get_object_or_404(OlapCube, pk=cube_id, tenant=request.tenant)
         initial["cube"] = cube
