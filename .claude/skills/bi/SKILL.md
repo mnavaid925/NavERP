@@ -572,3 +572,81 @@ Enterprise Data Catalog, searchable metadata repository, automated dataset disco
 - **Audit Logging Before Deletion**: `write_audit_log` is executed before `obj.delete()` to ensure `obj.pk` / `AuditLog.object_id` is permanently captured in compliance logs.
 - **Atomic Star Rating Calculation**: `_recalculate_asset_rating(asset)` is wrapped in `transaction.atomic()` across endorsement create, edit, and delete operations.
 - **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.7"]`.
+
+---
+
+## Sub-module 10.8: Dashboards & Visualization
+
+### Overview
+Enterprise multi-tenant executive dashboards, interactive analytical visualization canvases, visual layout builder with drag-and-drop coordinate persistence, full-screen auto-refreshing kiosk wallboards, customizable KPI/chart widgets (KPI card, line, area, bar, column, pie, donut, gauge, heatmap, funnel, treemap, table/pivot, streaming counter), cross-filtering dimensions, personal and shared view bookmarks, and dynamic dashboard filters.
+
+### Models
+1. **`BiDashboard`** (`apps/bi/models/Dashboards/BiDashboards.py`)
+   - Prefix: `BDSH-`
+   - Fields: `title`, `slug` (unique per tenant), `category` (executive, finance, sales_crm, supply_chain, operations, hr, custom), `layout_type` (grid_12, executive_summary, operational_monitoring, freeform), `refresh_interval_seconds` (0 = manual, 10, 30, 60, 300, 900, 3600), `theme` (slate_corporate, indigo_modern, emerald_growth, amber_industrial, dark_observability), `role_required` (all, executive, etc.), `org_unit` (FK `core.OrgUnit`), `is_published`, `is_template`, `is_default`, `is_kiosk_enabled`, `view_count`, `last_viewed_at`, `description`, `is_active`.
+2. **`BiDashboardWidget`** (`apps/bi/models/Dashboards/BiDashboardWidgets.py`)
+   - Prefix: `BDWG-`
+   - Fields: `dashboard` (FK `bi.BiDashboard`), `title`, `subtitle`, `widget_type` (kpi_card, line, area, bar, column, pie, donut, gauge, heatmap, funnel, treemap, table_pivot, streaming_counter), `semantic_model` (FK `bi.SemanticModel`), `calculated_measure` (FK `bi.CalculatedMeasure`), `warehouse_table` (FK `bi.WarehouseTable`), `drill_hierarchy` (FK `bi.DrillHierarchy`), `aggregation_type` (sum, avg, count, count_distinct, min, max, last), `pos_x` (0–11), `pos_y` (0–100), `width_cols` (1–12), `height_rows` (1–12), `refresh_interval_seconds`, `drilldown_target_url`, `chart_config_json` (JSON), `filter_overrides_json` (JSON), `sort_order`, `is_active`.
+3. **`BiDashboardBookmark`** (`apps/bi/models/Dashboards/BiDashboardBookmarks.py`)
+   - Prefix: `BDBM-`
+   - Fields: `dashboard` (FK `bi.BiDashboard`), `user` (FK `auth.User`), `name` (unique per tenant, dashboard, user), `filter_state_json` (JSON), `crossfilter_state_json` (JSON), `is_default`, `is_shared`, `view_count`, `last_viewed_at`, `description`, `is_active`.
+4. **`BiDashboardFilter`** (`apps/bi/models/Dashboards/BiDashboardFilters.py`)
+   - Prefix: `BDFL-`
+   - Fields: `dashboard` (FK `bi.BiDashboard`), `filter_label`, `filter_key` (slug unique per tenant + dashboard), `filter_type` (dropdown, multi_select, date_range, date_preset, number_range, search_text), `target_field`, `default_value`, `options_source` (static_list, semantic_distinct, warehouse_column), `static_options_json` (JSON list), `order`, `is_required`, `is_active`.
+
+### URLs & Routes
+- Dashboards:
+  - `bi:bi_dashboard_list` (`/bi/dashboards/`)
+  - `bi:bi_dashboard_create` (`/bi/dashboards/create/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_detail` (`/bi/dashboards/<int:pk>/`)
+  - `bi:bi_dashboard_edit` (`/bi/dashboards/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_delete` (`/bi/dashboards/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+  - `bi:bi_dashboard_duplicate` (`/bi/dashboards/<int:pk>/duplicate/` - clone with widgets and filters)
+  - `bi:bi_dashboard_publish` (`/bi/dashboards/<int:pk>/publish/` - POST only, toggle publish status)
+  - `bi:bi_dashboard_canvas_view` (`/bi/dashboards/<int:pk>/view/` - visual interactive canvas with cross-filtering)
+  - `bi:bi_dashboard_canvas_builder` (`/bi/dashboards/<int:pk>/builder/` - drag-and-drop layout builder, `@tenant_admin_required`)
+  - `bi:bi_dashboard_kiosk_view` (`/bi/dashboards/<int:pk>/kiosk/` - full-screen wallboard view)
+- Dashboard Widgets:
+  - `bi:bi_dashboard_widget_list` (`/bi/dashboards/widgets/`)
+  - `bi:bi_dashboard_widget_create` (`/bi/dashboards/widgets/create/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_widget_detail` (`/bi/dashboards/widgets/<int:pk>/`)
+  - `bi:bi_dashboard_widget_edit` (`/bi/dashboards/widgets/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_widget_delete` (`/bi/dashboards/widgets/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+  - `bi:bi_dashboard_widget_data` (`/bi/dashboards/widgets/<int:pk>/data/` - JSON telemetry data feed)
+- Dashboard Bookmarks:
+  - `bi:bi_dashboard_bookmark_list` (`/bi/dashboards/bookmarks/`)
+  - `bi:bi_dashboard_bookmark_create` (`/bi/dashboards/bookmarks/create/`)
+  - `bi:bi_dashboard_bookmark_detail` (`/bi/dashboards/bookmarks/<int:pk>/`)
+  - `bi:bi_dashboard_bookmark_edit` (`/bi/dashboards/bookmarks/<int:pk>/edit/` - Owner/Admin gate)
+  - `bi:bi_dashboard_bookmark_delete` (`/bi/dashboards/bookmarks/<int:pk>/delete/` - POST only, Owner/Admin gate)
+  - `bi:bi_dashboard_bookmark_apply` (`/bi/dashboards/bookmarks/<int:pk>/apply/` - loads and applies saved view)
+- Dashboard Filters:
+  - `bi:bi_dashboard_filter_list` (`/bi/dashboards/filters/`)
+  - `bi:bi_dashboard_filter_create` (`/bi/dashboards/filters/create/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_filter_detail` (`/bi/dashboards/filters/<int:pk>/`)
+  - `bi:bi_dashboard_filter_edit` (`/bi/dashboards/filters/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:bi_dashboard_filter_delete` (`/bi/dashboards/filters/<int:pk>/delete/` - POST only, `@tenant_admin_required`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/dashboards/`:
+  - `dashboard/` (`list.html` with card grid & widget count badges, `detail.html` with tabbed widgets/filters/bookmarks tables and null-user safe rendering, `form.html`, `duplicate_form.html`)
+  - `canvas/` (`viewer.html` visual interactive canvas with Chart.js charts and filter bar, `builder.html` interactive drag-and-drop grid layout tool, `kiosk.html` full-screen dark TV wallboard with auto-reloading timer)
+  - `widget/` (`list.html` with widget type badges, `detail.html` with chart preview card and telemetry link, `form.html`)
+  - `bookmark/` (`list.html` with default/shared badges, `detail.html` with JSON filter state view, `form.html`)
+  - `filter/` (`list.html` with filter type badges, `detail.html` with option preview chips, `form.html`)
+- Design System: Colour-named badges (`.badge-green`, `.badge-info`, `.badge-amber`, `.badge-slate`, `.badge-muted`), card grid, `.stat-card`, `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Dashboards & Visualization records:
+  - Dashboards: Executive Command Center, Financial Operations & Margin Monitor, Supply Chain & Logistics Pulse, Globex Strategic Dashboard.
+  - Widgets: Monthly Recurring Revenue KPI, Operating Margin KPI, Regional Revenue Share Donut, Quarterly Sales Growth Trend, Inventory Turn Rate Ticker.
+  - Bookmarks: Q3 Fiscal Review View (Shared), EMEA Enterprise Slice (Default), Globex APAC Operations View.
+  - Filters: Operating Region (Dropdown), Fiscal Year (Dropdown), Product Category (Multi-Select).
+- 100% idempotent with cascade flush.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Baseline queries scoped by `request.tenant` via `bi_scope` and `bi_object`. All forms reject foreign tenant FKs via `reject_foreign`.
+- **Draft Access Gate**: Unpublished draft dashboards (`is_published=False`) return 403 when accessed by non-creator regular users on canvas and kiosk views.
+- **Bookmark Scoping**: Cross-user bookmark IDOR prevention via `Q(user=request.user) | Q(is_shared=True)` in canvas viewer and `apply` route.
+- **Visual Builder Security**: `bi_dashboard_canvas_builder` and its AJAX coordinate updater are protected by `@tenant_admin_required` with coordinate clamping (`0 <= pos_x <= 11`, `1 <= width_cols <= 12`, `pos_x + width_cols <= 12`).
+- **Sidebar Wiring**: Live links registered in `apps/core/navigation.py` under `LIVE_LINKS["10.8"]`.
