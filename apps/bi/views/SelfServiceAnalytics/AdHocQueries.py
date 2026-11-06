@@ -294,6 +294,7 @@ def ad_hoc_query_composer(request, pk):
 
 
 @login_required
+@require_POST
 def ad_hoc_query_execute(request, pk):
     query = bi_object(request, AdHocQuery, pk)
     start_time = time.time()
