@@ -59,6 +59,10 @@ from apps.bi.forms.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsigh
 from apps.bi.forms.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestionForm
 from apps.bi.forms.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysisForm
 from apps.bi.forms.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendationForm
+from apps.bi.forms.ConversationalBi.BiConversationSessions import BiConversationSessionForm
+from apps.bi.forms.ConversationalBi.NarrativeExplanations import NarrativeExplanationForm
+from apps.bi.forms.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQueryForm
+from apps.bi.forms.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndexForm
 from apps.bi.forms.OperationalReporting.ReportDefinitions import (
     ReportCloneForm,
     ReportDefinitionForm,
@@ -173,4 +177,8 @@ __all__ = [
     "SmartDataPrepSuggestionForm",
     "TextSentimentAnalysisForm",
     "AnalyticsRecommendationForm",
+    "NaturalLanguageQueryForm",
+    "BiConversationSessionForm",
+    "NarrativeExplanationForm",
+    "SearchDiscoveryIndexForm",
 ]
