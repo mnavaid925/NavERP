@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}{{ rule.number }} — {{ rule.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_alert_rule_list' %}">Alert Rules</a>
+            <span class="sep">/</span>
+            <span>{{ rule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ rule.name }}</h1>
+            <span class="badge {{ rule.severity_badge_class }}">{{ rule.get_severity_display }}</span>
+            <span class="badge {{ rule.status_badge_class }}">{{ rule.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Rule ID: {{ rule.number }} • Created {{ rule.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:bi_alert_rule_test_evaluate' rule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700">
+                <i data-lucide="play"></i>
+                <span>Evaluate Now</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:bi_alert_rule_edit' rule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Rule</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_alert_rule_delete' rule.pk %}" class="inline" onsubmit="return confirm('Delete alert rule {{ rule.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Configuration Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Alert Condition & Trigger Configuration</h2>
+            </div>
+            <div class="card-body">
+                {% if rule.description %}
+                <div class="mb-4 text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">
+                    {{ rule.description }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Alert Type</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ rule.get_alert_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Target Metric / Anchor</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">
+                            {% if rule.kpi_definition %}
+                            <a href="{% url 'bi:kpi_definition_detail' rule.kpi_definition.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="target" class="w-4 h-4"></i>
+                                <span>{{ rule.kpi_definition.name }}</span>
+                            </a>
+                            {% elif rule.anomaly_detection %}
+                            <a href="{% url 'bi:statistical_anomaly_detail' rule.anomaly_detection.pk %}" class="text-purple-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                <span>{{ rule.anomaly_detection.metric_name }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-muted">General Evaluation</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Condition Operator</div>
+                        <div class="text-sm font-mono font-semibold text-slate-900 mt-1">{{ rule.get_condition_operator_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Threshold Baseline</div>
+                        <div class="text-sm font-mono text-slate-900 mt-1">
+                            {{ rule.threshold_value }}
+                            {% if rule.secondary_threshold_value %}
+                            <span class="text-muted">to</span> {{ rule.secondary_threshold_value }}
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Evaluation Cadence</div>
+                        <div class="text-sm text-slate-900 mt-1">{{ rule.get_evaluation_cadence_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Trigger Frequency</div>
+                        <div class="text-sm text-slate-900 mt-1">{{ rule.get_trigger_frequency_display }}</div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Delivery Channels</div>
+                        <div class="text-sm text-slate-900 mt-1">{{ rule.get_delivery_channel_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Downstream Workflow</div>
+                        <div class="text-sm font-semibold text-indigo-700 mt-1">{{ rule.get_downstream_workflow_display }}</div>
+                    </div>
+                </div>
+
+                {% if rule.webhook_url %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold">Webhook Destination</div>
+                    <div class="text-xs font-mono text-slate-800 break-all mt-1 bg-slate-100 p-2 rounded">
+                        {{ rule.webhook_url }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if rule.notification_email_list %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold">External Email Subscribers</div>
+                    <div class="text-xs text-slate-700 mt-1">
+                        {{ rule.notification_email_list }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Notifications Triggered -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-base font-semibold">Recent Triggered Notifications</h2>
+                <a href="{% url 'bi:bi_notification_item_list' %}" class="text-xs text-blue-600 hover:underline">View All Notifications</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Notice ID</th>
+                            <th>Recipient</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for n in recent_notifications %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:bi_notification_item_detail' n.pk %}" class="text-blue-600 hover:underline">
+                                    {{ n.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm">{{ n.recipient.username }}</td>
+                            <td><span class="badge {{ n.status_badge_class }}">{{ n.get_status_display }}</span></td>
+                            <td class="text-xs text-muted">{{ n.created_at|date:"M d, H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-6 text-sm text-muted">
+                                No notifications generated yet for this rule.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Status & Telemetry -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Execution Telemetry</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Total Times Tripped</div>
+                    <div class="text-2xl font-bold font-mono text-slate-900 mt-1">{{ rule.trigger_count }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last Evaluated</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if rule.last_evaluated_at %}
+                        {{ rule.last_evaluated_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-muted">Never evaluated</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last Tripped At</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if rule.last_triggered_at %}
+                        {{ rule.last_triggered_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-muted">Never tripped</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last Observed Value</div>
+                    <div class="text-sm font-mono font-semibold text-slate-800 mt-1">
+                        {% if rule.last_trigger_value is not None %}
+                        {{ rule.last_trigger_value }}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Rule Author</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if rule.created_by %}
+                        {{ rule.created_by.get_full_name|default:rule.created_by.username }}
+                        {% else %}
+                        <span class="text-muted">System</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Assigned In-App Users</h2>
+            </div>
+            <div class="card-body">
+                {% if rule.recipient_users.all %}
+                <ul class="divide-y divide-slate-100 text-sm">
+                    {% for u in rule.recipient_users.all %}
+                    <li class="py-2 flex items-center justify-between">
+                        <span class="font-medium text-slate-800">{{ u.username }}</span>
+                        <span class="text-xs text-muted">{{ u.email }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-xs text-muted">No individual user accounts assigned.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
