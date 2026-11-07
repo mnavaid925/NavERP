@@ -70,15 +70,15 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
             <div class="lg:col-span-2">
-                <label class="form-label text-xs">Search Recommendations</label>
+                <label for="filter_rec_q" class="form-label text-xs">Search Recommendations</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, URL, rationale, user..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter_rec_q" name="q" value="{{ request.GET.q }}" placeholder="Search title, URL, rationale, user..." class="form-input text-sm pl-9">
                     <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Asset Type</label>
-                <select name="recommendation_type" class="form-select text-sm">
+                <label for="filter_rec_type" class="form-label text-xs">Asset Type</label>
+                <select id="filter_rec_type" name="recommendation_type" class="form-select text-sm">
                     <option value="">All Types</option>
                     {% for code, label in recommendation_type_choices %}
                     <option value="{{ code }}" {% if request.GET.recommendation_type == code %}selected{% endif %}>{{ label }}</option>
@@ -86,8 +86,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Reason Rationale</label>
-                <select name="reason" class="form-select text-sm">
+                <label for="filter_rec_reason" class="form-label text-xs">Reason Rationale</label>
+                <select id="filter_rec_reason" name="reason" class="form-select text-sm">
                     <option value="">All Reasons</option>
                     {% for code, label in reason_choices %}
                     <option value="{{ code }}" {% if request.GET.reason == code %}selected{% endif %}>{{ label }}</option>
@@ -95,8 +95,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="filter_rec_status" class="form-label text-xs">Status</label>
+                <select id="filter_rec_status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
