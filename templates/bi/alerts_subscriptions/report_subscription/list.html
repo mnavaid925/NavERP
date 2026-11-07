@@ -126,7 +126,7 @@
             <div class="flex gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
                 {% if q or selected_target_type or selected_cadence or selected_format or selected_status %}
-                <a href="{% url 'bi:report_subscription_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'bi:report_subscription_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -204,19 +204,19 @@
                     <td class="table-actions text-right whitespace-nowrap">
                         <form method="post" action="{% url 'bi:report_subscription_run_now' s.pk %}" class="inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-outline text-emerald-600" title="Dispatch & Run Now">
+                            <button type="submit" class="btn btn-icon btn-outline text-emerald-600" title="Dispatch & Run Now" aria-label="Dispatch & Run Now">
                                 <i data-lucide="play" class="w-4 h-4"></i>
                             </button>
                         </form>
-                        <a href="{% url 'bi:report_subscription_detail' s.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                        <a href="{% url 'bi:report_subscription_detail' s.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'bi:report_subscription_edit' s.pk %}" class="btn btn-icon btn-outline" title="Edit Subscription">
+                        <a href="{% url 'bi:report_subscription_edit' s.pk %}" class="btn btn-icon btn-outline" title="Edit Subscription" aria-label="Edit Subscription">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'bi:report_subscription_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete subscription {{ s.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Subscription">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Subscription" aria-label="Delete Subscription">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
