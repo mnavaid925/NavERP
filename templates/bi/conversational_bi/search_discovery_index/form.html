@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Asset {{ index.number }}{% else %}Register Discovery Asset{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:search_discovery_index_list' %}">Discovery Catalog</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ index.number }}{% else %}Register Asset{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Discovery Asset: {{ index.number }}{% else %}Register Search Discovery Asset{% endif %}</h1>
+        <p class="text-muted text-sm">Index analytical assets with business synonyms and ranking multipliers</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:search_discovery_index_detail' index.pk %}{% else %}{% url 'bi:search_discovery_index_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Asset Name -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.asset_name.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Asset Name <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.asset_name }}
+                    {% if form.asset_name.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.asset_name.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Asset Type -->
+                <div>
+                    <label for="{{ form.asset_type.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Asset Type <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.asset_type }}
+                    {% if form.asset_type.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.asset_type.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Category -->
+                <div>
+                    <label for="{{ form.category.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Functional Category
+                    </label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.category.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Target URL -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.target_url.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Target Navigation URL <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.target_url }}
+                    <p class="text-xs text-muted mt-1">Relative path starting with '/' or absolute external link.</p>
+                    {% if form.target_url.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.target_url.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Description -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Description
+                    </label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.description.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Synonyms -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.synonyms.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Business Synonyms & Colloquial Aliases
+                    </label>
+                    {{ form.synonyms }}
+                    <p class="text-xs text-muted mt-1">Enter a JSON list e.g. <code>["sales", "revenue", "top line"]</code> or comma-separated terms.</p>
+                    {% if form.synonyms.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.synonyms.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Search Keywords -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.search_keywords.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Search Keywords & Tokens
+                    </label>
+                    {{ form.search_keywords }}
+                    {% if form.search_keywords.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.search_keywords.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Linked Core Entities -->
+                <div>
+                    <label for="{{ form.semantic_model.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound Semantic Model (Optional)
+                    </label>
+                    {{ form.semantic_model }}
+                    {% if form.semantic_model.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.semantic_model.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.dashboard.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound Dashboard (Optional)
+                    </label>
+                    {{ form.dashboard }}
+                    {% if form.dashboard.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.dashboard.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.report.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound Report (Optional)
+                    </label>
+                    {{ form.report }}
+                    {% if form.report.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.report.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.kpi.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound KPI (Optional)
+                    </label>
+                    {{ form.kpi }}
+                    {% if form.kpi.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.kpi.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.warehouse_table.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound Warehouse Table (Optional)
+                    </label>
+                    {{ form.warehouse_table }}
+                    {% if form.warehouse_table.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.warehouse_table.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.glossary_term.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Bound Glossary Term (Optional)
+                    </label>
+                    {{ form.glossary_term }}
+                    {% if form.glossary_term.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.glossary_term.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Ranking and Trust -->
+                <div>
+                    <label for="{{ form.relevance_weight.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Relevance Weight Multiplier <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.relevance_weight }}
+                    <p class="text-xs text-muted mt-1">Default 1.00. Values above 1.00 boost ranking in search results.</p>
+                    {% if form.relevance_weight.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.relevance_weight.errors }}</div>{% endif %}
+                </div>
+
+                <div class="flex items-center gap-6 pt-6">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_featured }}
+                        <span class="text-sm font-medium text-slate-800">Featured Asset</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_verified }}
+                        <span class="text-sm font-medium text-slate-800">Verified Corporate Truth</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:search_discovery_index_detail' index.pk %}{% else %}{% url 'bi:search_discovery_index_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Register Asset{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
