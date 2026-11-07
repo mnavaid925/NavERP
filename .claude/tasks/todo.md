@@ -170,12 +170,12 @@
 - [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (27/27 fixed: 0C, 16I, 11M)
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Add shared 10.15 fixtures to `conftest.py`
-- [ ] Write `test_conversationalbi_models.py`
-- [ ] Write `test_conversationalbi_forms.py`
-- [ ] Write `test_conversationalbi_views.py`
-- [ ] Write `test_conversationalbi_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/bi/tests/`
+- [x] Add shared 10.15 fixtures to `conftest.py`
+- [x] Write `test_conversationalbi_models.py` (41 tests passed)
+- [x] Write `test_conversationalbi_forms.py` (55 tests passed)
+- [x] Write `test_conversationalbi_views.py` (37 tests passed)
+- [x] Write `test_conversationalbi_security.py` (14 tests passed)
+- [x] Run full unfiltered test suite: `pytest apps/bi/tests/` (179 passed)
 
 ### Phase 7: Skill & Close-Out
 - [ ] Update `.claude/skills/bi/SKILL.md` with 10.15 models, routes, templates, and conventions
