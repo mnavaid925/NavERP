@@ -201,12 +201,14 @@ def bi_notification_item_create(request):
 
     rules = BiAlertRule.objects.filter(tenant=request.tenant)
     burst_runs = DistributionBurstRun.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
         "notification": None,
         "rules": rules,
         "burst_runs": burst_runs,
+        "users": users,
     }
     return render(
         request, "bi/alerts_subscriptions/bi_notification_item/form.html", context
@@ -239,12 +241,14 @@ def bi_notification_item_edit(request, pk):
 
     rules = BiAlertRule.objects.filter(tenant=request.tenant)
     burst_runs = DistributionBurstRun.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
         "notification": notification,
         "rules": rules,
         "burst_runs": burst_runs,
+        "users": users,
     }
     return render(
         request, "bi/alerts_subscriptions/bi_notification_item/form.html", context
