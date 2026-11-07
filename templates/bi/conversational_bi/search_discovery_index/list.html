@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Search & Discovery Catalog — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Search & Discovery</span>
+        </div>
+        <h1 class="page-title">Search-Driven Discovery Catalog</h1>
+        <p class="text-muted text-sm">Indexed dashboards, reports, KPIs, semantic models, and business synonyms</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:search_discovery_hub' %}" class="btn btn-outline text-sky-700 border-sky-300 hover:bg-sky-50">
+            <i data-lucide="compass"></i>
+            <span>Discovery Hub</span>
+        </a>
+        <a href="{% url 'bi:natural_language_query_list' %}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>NLQ Search</span>
+        </a>
+        <a href="{% url 'bi:search_discovery_index_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Register Asset</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats-grid mb-6">
+    <div class="stat-card">
+        <div class="stat-icon bg-sky-50 text-sky-600">
+            <i data-lucide="search"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Indexed Assets</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-emerald-50 text-emerald-600">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Verified Enterprise Truth</div>
+            <div class="stat-value text-emerald-600">{{ verified_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-amber-50 text-amber-600">
+            <i data-lucide="star"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Featured & Pinned</div>
+            <div class="stat-value text-amber-600">{{ featured_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <div class="relative">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted w-4 h-4"></i>
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by name, synonyms, category, keywords..." class="form-input pl-9 text-sm w-full">
+                </div>
+            </div>
+
+            <div class="w-48">
+                <select name="type" class="form-select text-sm w-full">
+                    <option value="">All Asset Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="w-36">
+                <select name="verified" class="form-select text-sm w-full">
+                    <option value="">All Trust</option>
+                    <option value="1" {% if request.GET.verified == '1' %}selected{% endif %}>Verified Only</option>
+                    <option value="0" {% if request.GET.verified == '0' %}selected{% endif %}>Unverified</option>
+                </select>
+            </div>
+
+            <div class="w-36">
+                <select name="featured" class="form-select text-sm w-full">
+                    <option value="">All Features</option>
+                    <option value="1" {% if request.GET.featured == '1' %}selected{% endif %}>Featured Only</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-outline text-sm">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.type or request.GET.verified or request.GET.featured %}
+            <a href="{% url 'bi:search_discovery_index_list' %}" class="btn btn-ghost text-sm text-muted">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Asset Name & Number</th>
+                    <th>Asset Type</th>
+                    <th>Category</th>
+                    <th>Target Route</th>
+                    <th>Relevance Boost</th>
+                    <th>Hits / Views</th>
+                    <th>Badges</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for idx in indexes %}
+                <tr>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            {% if idx.is_featured %}
+                            <i data-lucide="star" class="w-4 h-4 text-amber-500 fill-amber-400 shrink-0" title="Featured Asset"></i>
+                            {% endif %}
+                            <a href="{% url 'bi:search_discovery_index_detail' idx.pk %}" class="font-medium text-slate-900 hover:text-sky-600 block">
+                                {{ idx.asset_name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">
+                            {{ idx.number }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ idx.asset_type_badge_color }} text-xs">{{ idx.get_asset_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="text-xs text-slate-700">{{ idx.category|default:"—" }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ idx.target_url }}" target="_blank" rel="noopener noreferrer" class="text-xs text-sky-600 hover:underline font-mono truncate max-w-[160px] block" title="{{ idx.target_url }}">
+                            {{ idx.target_url }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-semibold text-slate-800">{{ idx.relevance_weight }}x</span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-700">
+                            <span class="font-medium text-slate-900">{{ idx.search_hit_count }}</span> hits · 
+                            <span class="font-medium text-slate-900">{{ idx.view_count }}</span> views
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1.5">
+                            {% if idx.is_verified %}
+                            <span class="badge badge-green text-xs" title="Verified Corporate Truth">Verified</span>
+                            {% else %}
+                            <span class="badge badge-slate text-xs">Unverified</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-2">
+                            <form method="post" action="{% url 'bi:search_discovery_index_reweight' idx.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ghost btn-sm text-xs p-1 text-sky-600 hover:bg-sky-50" title="Boost Relevance (+0.50x)">
+                                    <i data-lucide="arrow-up-circle"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:search_discovery_index_detail' idx.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:search_discovery_index_edit' idx.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:search_discovery_index_delete' idx.pk %}" class="inline" onsubmit="return confirm('Delete discovery index {{ idx.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ghost btn-sm text-xs text-rose-600 p-1" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-12 text-muted">
+                        <div class="flex flex-col items-center justify-center">
+                            <i data-lucide="search" class="w-10 h-10 text-slate-300 mb-2"></i>
+                            <p class="text-base font-medium text-slate-700">No indexed analytical assets found</p>
+                            <p class="text-xs text-slate-500 mt-1">Register dashboards, reports, and semantic models into the discovery index with business synonyms.</p>
+                            <a href="{% url 'bi:search_discovery_index_create' %}" class="btn btn-primary btn-sm mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Register First Asset</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if indexes.has_other_pages %}
+    <div class="card-footer flex items-center justify-between border-t border-slate-100 p-4">
+        <div class="text-xs text-muted">
+            Page {{ indexes.number }} of {{ indexes.paginator.num_pages }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if indexes.has_previous %}
+            <a href="?page={{ indexes.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}{% if request.GET.featured %}&featured={{ request.GET.featured }}{% endif %}" class="btn btn-outline btn-sm text-xs">Previous</a>
+            {% endif %}
+            {% if indexes.has_next %}
+            <a href="?page={{ indexes.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}{% if request.GET.featured %}&featured={{ request.GET.featured }}{% endif %}" class="btn btn-outline btn-sm text-xs">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
