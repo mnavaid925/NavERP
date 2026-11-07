@@ -224,6 +224,7 @@ def search_discovery_hub(request):
     )
 
     results = []
+    result_count = 0
     if search_query:
         matched = base_qs.filter(
             Q(asset_name__icontains=search_query)
@@ -234,6 +235,8 @@ def search_discovery_hub(request):
             | Q(synonyms__icontains=search_query)
         ).order_by("-is_featured", "-relevance_weight", "-view_count")
 
+        result_count = matched.count()
+
         # Telemetry: Increment search_hit_count on top results
         top_ids = list(matched[:10].values_list("id", flat=True))
         if top_ids:
@@ -241,7 +244,7 @@ def search_discovery_hub(request):
                 SearchDiscoveryIndex.objects.filter(id__in=top_ids).update(
                     search_hit_count=F("search_hit_count") + 1
                 )
-        results = matched
+        results = matched[:24]
 
     categories = list(
         base_qs.exclude(category="").values_list("category", flat=True).distinct().order_by("category")
@@ -251,6 +254,7 @@ def search_discovery_hub(request):
     context = {
         "search_query": search_query,
         "results": results,
+        "result_count": result_count,
         "categories": categories,
         "featured_assets": featured_assets,
     }
