@@ -1,4 +1,5 @@
 import json
+import secrets
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -211,24 +212,49 @@ def kiosk_wallboard_display_player(request, pk):
 
 
 @csrf_exempt
+@require_POST
 def kiosk_wallboard_display_heartbeat(request, pk):
-    # Public or internal heartbeat endpoint
-    try:
-        display = KioskWallboardDisplay.objects.get(pk=pk)
-    except KioskWallboardDisplay.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "Display not found"}, status=404)
+    # Enforce tenant isolation for authenticated users; verify passcode for public kiosks
+    passcode = (
+        request.GET.get("passcode")
+        or request.POST.get("passcode")
+        or request.headers.get("X-Kiosk-Passcode")
+        or ""
+    )
+    display = None
+    if request.user.is_authenticated:
+        if getattr(request, "tenant", None):
+            display = KioskWallboardDisplay.objects.filter(pk=pk, tenant=request.tenant).first()
+        elif request.user.is_superuser:
+            display = KioskWallboardDisplay.objects.filter(pk=pk).first()
 
+    if display is None:
+        public_display = KioskWallboardDisplay.objects.filter(pk=pk, is_public_kiosk=True).first()
+        if public_display:
+            if not public_display.access_passcode or (
+                passcode and secrets.compare_digest(public_display.access_passcode, passcode)
+            ):
+                display = public_display
+
+    if not display:
+        return JsonResponse({"status": "error", "message": "Display not found or access denied"}, status=404)
+
+    now = timezone.now()
     ip_address = request.META.get("HTTP_X_FORWARDED_FOR") or request.META.get("REMOTE_ADDR")
     if ip_address and "," in ip_address:
         ip_address = ip_address.split(",")[0].strip()
 
     user_agent = request.META.get("HTTP_USER_AGENT", "")
-    display.record_heartbeat(ip_address=ip_address, user_agent=user_agent)
+    KioskWallboardDisplay.objects.filter(pk=display.pk).update(
+        last_heartbeat_at=now,
+        device_ip_address=ip_address,
+        device_user_agent=(user_agent[:250] if user_agent else ""),
+    )
 
     return JsonResponse(
         {
             "status": "ok",
             "display_number": display.number,
-            "last_heartbeat_at": display.last_heartbeat_at.isoformat() if display.last_heartbeat_at else None,
+            "last_heartbeat_at": now.isoformat(),
         }
     )
