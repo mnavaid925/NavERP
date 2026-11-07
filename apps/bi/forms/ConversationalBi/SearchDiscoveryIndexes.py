@@ -72,8 +72,11 @@ class SearchDiscoveryIndexForm(TenantUniqueMixin, TenantModelForm):
 
     def clean_target_url(self):
         url = self.cleaned_data.get("target_url", "").strip()
-        if url and not (url.startswith("/") or url.startswith("http://") or url.startswith("https://")):
-            raise ValidationError("Target URL must start with a leading slash '/' or valid HTTP(S) scheme.")
+        if url:
+            if url.startswith("//"):
+                raise ValidationError("Protocol-relative URLs are not allowed.")
+            if not (url.startswith("/") or url.startswith("http://") or url.startswith("https://")):
+                raise ValidationError("Target URL must start with a leading slash '/' or valid HTTP(S) scheme.")
         return url
 
     def clean_synonyms(self):
