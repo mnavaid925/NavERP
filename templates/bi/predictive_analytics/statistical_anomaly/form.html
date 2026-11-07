@@ -64,6 +64,11 @@
                             {% if form.model.errors %}<div class="form-error">{{ form.model.errors }}</div>{% endif %}
                         </div>
                         <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
                             <label class="form-label" for="{{ form.kpi_definition.id_for_label }}">Target KPI</label>
                             {{ form.kpi_definition }}
                             {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
