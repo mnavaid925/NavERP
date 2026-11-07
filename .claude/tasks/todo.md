@@ -105,15 +105,15 @@
   - [x] `templates/bi/conversational_bi/natural_language_query/list.html`
   - [x] `templates/bi/conversational_bi/natural_language_query/detail.html`
   - [x] `templates/bi/conversational_bi/natural_language_query/form.html`
-- [ ] **Entity 2: BiConversationSession (`BCON`)**
-  - [ ] `apps/bi/models/ConversationalBi/BiConversationSessions.py`
-  - [ ] `apps/bi/forms/ConversationalBi/BiConversationSessions.py`
-  - [ ] `apps/bi/views/ConversationalBi/BiConversationSessions.py` (CRUD + `chat_workspace` + `toggle_pin` + `close_session` actions)
-  - [ ] `apps/bi/urls/ConversationalBi/BiConversationSessions.py`
-  - [ ] `templates/bi/conversational_bi/bi_conversation_session/list.html`
-  - [ ] `templates/bi/conversational_bi/bi_conversation_session/detail.html` (Interactive chat conversation thread)
-  - [ ] `templates/bi/conversational_bi/bi_conversation_session/form.html`
-  - [ ] `templates/bi/conversational_bi/chat_workspace.html` (Interactive Conversational BI Assistant multi-turn chat workspace)
+- [x] **Entity 2: BiConversationSession (`BCON`)**
+  - [x] `apps/bi/models/ConversationalBi/BiConversationSessions.py`
+  - [x] `apps/bi/forms/ConversationalBi/BiConversationSessions.py`
+  - [x] `apps/bi/views/ConversationalBi/BiConversationSessions.py` (CRUD + `chat_workspace` + `toggle_pin` + `close_session` actions)
+  - [x] `apps/bi/urls/ConversationalBi/BiConversationSessions.py`
+  - [x] `templates/bi/conversational_bi/bi_conversation_session/list.html`
+  - [x] `templates/bi/conversational_bi/bi_conversation_session/detail.html` (Interactive chat conversation thread)
+  - [x] `templates/bi/conversational_bi/bi_conversation_session/form.html`
+  - [x] `templates/bi/conversational_bi/chat_workspace.html` (Interactive Conversational BI Assistant multi-turn chat workspace)
 - [ ] **Entity 3: NarrativeExplanation (`BNLG`)**
   - [ ] `apps/bi/models/ConversationalBi/NarrativeExplanations.py`
   - [ ] `apps/bi/forms/ConversationalBi/NarrativeExplanations.py`
