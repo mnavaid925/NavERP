@@ -57,6 +57,10 @@ from apps.bi.models.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsig
 from apps.bi.models.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestion
 from apps.bi.models.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysis
 from apps.bi.models.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendation
+from apps.bi.models.ConversationalBi.BiConversationSessions import BiConversationSession
+from apps.bi.models.ConversationalBi.NarrativeExplanations import NarrativeExplanation
+from apps.bi.models.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQuery
+from apps.bi.models.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndex
 from apps.accounting.models import Budget, FiscalPeriod, GLAccount
 from apps.core.models import OrgUnit, Party
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
@@ -3747,5 +3751,275 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded AI & Augmented Analytics for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  AI & Augmented Analytics already seeded for tenant: {tenant.name}")
+            # ==========================================
+            # Sub-module 10.15: Natural Language & Conversational BI
+            # ==========================================
+            if not NaturalLanguageQuery.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"  Seeding Natural Language & Conversational BI for tenant: {tenant.name}...")
+
+                with transaction.atomic():
+                    # 1. Conversational BI Sessions
+                    sess_revenue, _ = BiConversationSession.objects.get_or_create(
+                        tenant=tenant,
+                        title="Q4 Executive Revenue & Profitability Analysis",
+                        defaults={
+                            "user": tenant_admin,
+                            "session_status": "active",
+                            "is_pinned": True,
+                            "primary_semantic_model": sem_model,
+                            "primary_dashboard": dash,
+                            "suggested_prompts": [
+                                "Show regional breakdown for revenue",
+                                "What were the key margin drivers?",
+                                "Forecast next quarter revenue pace",
+                            ],
+                            "message_count": 2,
+                        },
+                    )
+
+                    sess_logistics, _ = BiConversationSession.objects.get_or_create(
+                        tenant=tenant,
+                        title="Logistics Lead Time & OTIF Investigation",
+                        defaults={
+                            "user": tenant_admin,
+                            "session_status": "active",
+                            "is_pinned": False,
+                            "primary_semantic_model": sem_model,
+                            "suggested_prompts": [
+                                "Top 5 suppliers by on-time delivery rate",
+                                "Customs processing variance trends",
+                            ],
+                            "message_count": 1,
+                        },
+                    )
+
+                    # 2. Natural Language Queries
+                    NaturalLanguageQuery.objects.get_or_create(
+                        tenant=tenant,
+                        query_text="Show quarterly gross margin trend by product family for FY2026",
+                        defaults={
+                            "conversation_session": sess_revenue,
+                            "user": tenant_admin,
+                            "input_modality": "text",
+                            "intent_type": "trend_analysis",
+                            "semantic_model": sem_model,
+                            "chart_type": "line_chart",
+                            "parsed_measures": ["Gross Margin %", "Revenue"],
+                            "parsed_dimensions": ["Product Family", "Fiscal Quarter"],
+                            "generated_sql": (
+                                f"SELECT product_family, fiscal_quarter, AVG(gross_margin_pct) AS margin_pct\n"
+                                f"FROM bi_warehouse_sales_fact\n"
+                                f"WHERE tenant_id = '{tenant.id}'\n"
+                                f"GROUP BY product_family, fiscal_quarter ORDER BY fiscal_quarter;"
+                            ),
+                            "chart_config": {
+                                "type": "line",
+                                "labels": ["Q1 2026", "Q2 2026", "Q3 2026", "Q4 2026"],
+                                "datasets": [{"label": "Gross Margin %", "data": [42.5, 43.1, 41.8, 45.2]}],
+                            },
+                            "result_summary": {
+                                "row_count": 4,
+                                "metric_value": "45.2%",
+                                "summary_text": "Q4 gross margin expanded +3.4% driven by Enterprise tier direct sales.",
+                            },
+                            "confidence_score": Decimal("94.50"),
+                            "execution_status": "completed",
+                            "execution_duration_ms": 42,
+                            "user_rating": "helpful",
+                        },
+                    )
+
+                    NaturalLanguageQuery.objects.get_or_create(
+                        tenant=tenant,
+                        query_text="Top 5 suppliers by on-time delivery rate",
+                        defaults={
+                            "conversation_session": sess_logistics,
+                            "user": tenant_admin,
+                            "input_modality": "voice",
+                            "audio_duration_seconds": Decimal("3.40"),
+                            "intent_type": "ranking_top_bottom",
+                            "semantic_model": sem_model,
+                            "chart_type": "horizontal_bar",
+                            "parsed_measures": ["OTIF Rate %"],
+                            "parsed_dimensions": ["Supplier Name"],
+                            "generated_sql": (
+                                f"SELECT supplier_name, AVG(otif_pct) AS otif_rate\n"
+                                f"FROM bi_warehouse_procurement_fact\n"
+                                f"WHERE tenant_id = '{tenant.id}'\n"
+                                f"GROUP BY supplier_name ORDER BY otif_rate DESC LIMIT 5;"
+                            ),
+                            "chart_config": {
+                                "type": "bar",
+                                "labels": ["Apex Global", "Titan Supply", "Pinnacle Logistics", "Zenith Corp", "Omega Industrial"],
+                                "datasets": [{"label": "OTIF %", "data": [98.5, 96.2, 95.8, 94.1, 93.5]}],
+                            },
+                            "result_summary": {
+                                "row_count": 5,
+                                "metric_value": "98.5% Top Supplier",
+                                "summary_text": "Apex Global ranks #1 with 98.5% on-time and in-full delivery rate.",
+                            },
+                            "confidence_score": Decimal("91.00"),
+                            "execution_status": "completed",
+                            "execution_duration_ms": 36,
+                            "user_rating": "helpful",
+                        },
+                    )
+
+                    NaturalLanguageQuery.objects.get_or_create(
+                        tenant=tenant,
+                        query_text="Total logistics freight cost vs budget Q3",
+                        defaults={
+                            "conversation_session": sess_revenue,
+                            "user": tenant_admin,
+                            "input_modality": "text",
+                            "intent_type": "metric_lookup",
+                            "semantic_model": sem_model,
+                            "chart_type": "bar_chart",
+                            "parsed_measures": ["Freight Cost", "Budget Target"],
+                            "parsed_dimensions": ["Fiscal Quarter"],
+                            "generated_sql": (
+                                f"SELECT SUM(freight_cost) AS actual_cost, SUM(budget_amt) AS budget_cost\n"
+                                f"FROM bi_warehouse_logistics_fact\n"
+                                f"WHERE tenant_id = '{tenant.id}' AND fiscal_quarter = 'Q3 2026';"
+                            ),
+                            "result_summary": {
+                                "row_count": 1,
+                                "metric_value": "$420,000 Actual vs $400,000 Budget",
+                                "summary_text": "Freight cost exceeded budget by 5% in Q3 due to expedited air freight surcharges.",
+                            },
+                            "confidence_score": Decimal("88.00"),
+                            "execution_status": "completed",
+                            "execution_duration_ms": 28,
+                            "user_rating": "unrated",
+                        },
+                    )
+
+                    # 3. Narrative Explanations (NLG)
+                    NarrativeExplanation.objects.get_or_create(
+                        tenant=tenant,
+                        title="Q4 Executive Revenue Performance Briefing",
+                        defaults={
+                            "headline": "Gross Margin expanded +3.4% driven by European direct sales growth",
+                            "target_artifact_type": "dashboard",
+                            "dashboard": dash,
+                            "narrative_style": "executive_briefing",
+                            "narrative_body": (
+                                "### Executive Summary — FY2026 Q4\n\n"
+                                "Consolidated revenue pace exceeded upper tolerance bands, closing at $2.36M (+11% YoY). "
+                                "Gross margin expansion was primarily bolstered by favorable enterprise contract renewals in EMEA. "
+                                "Logistics surcharges remained the primary headwind, tracking at +5% against planned targets.\n\n"
+                                "#### Key Drivers:\n"
+                                "- European direct sales volume accounted for 64% of positive variance.\n"
+                                "- Product family A gross margins expanded to 45.2%.\n"
+                            ),
+                            "key_takeaways": [
+                                "Gross Margin expanded +3.4% to reach 45.2% in Q4.",
+                                "EMEA direct enterprise accounts drove the largest positive delta.",
+                                "Freight surcharge volatility remains the primary margin watchpoint.",
+                            ],
+                            "top_positive_driver": "European Direct Sales Expansion",
+                            "top_negative_driver": "Expedited Air Freight Surcharges",
+                            "audio_ready_script": (
+                                f"Good morning. Here is your executive briefing for {tenant.name}. "
+                                "Gross margin expanded 3.4 percent in the fourth quarter to reach 45.2 percent. "
+                                "Performance was led by European direct sales volume, partially offset by nominal freight surcharges. "
+                                "Overall metrics remain in target green territory."
+                            ),
+                            "language": "en",
+                            "status": "published",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    NarrativeExplanation.objects.get_or_create(
+                        tenant=tenant,
+                        title="APAC Supplier OTIF Risk Alert",
+                        defaults={
+                            "headline": "On-time delivery dipped below 90% SLA threshold in two regional ports",
+                            "target_artifact_type": "report",
+                            "report": rpt,
+                            "narrative_style": "anomaly_alert",
+                            "narrative_body": (
+                                "### Operational Risk Alert — Supplier Logistics\n\n"
+                                "Two Tier-1 component suppliers experienced port clearance bottlenecks during November, "
+                                "causing localized on-time delivery rates to compress to 88.4% against the contractual 95% SLA.\n\n"
+                                "#### Remediation Actions:\n"
+                                "- Alternative regional carrier routes activated for critical orders.\n"
+                                "- SCM team notified for vendor scorecard penalty review.\n"
+                            ),
+                            "key_takeaways": [
+                                "Port customs clearance delays impacted 2 suppliers.",
+                                "Overall OTIF dipped to 88.4% against 95% threshold.",
+                                "Mitigation routing deployed through secondary distribution hubs.",
+                            ],
+                            "top_positive_driver": "Alternative Hub Routing",
+                            "top_negative_driver": "Customs Processing Bottleneck",
+                            "audio_ready_script": (
+                                "Attention. Operational risk notification. "
+                                "APAC regional supplier on-time delivery dipped below contractual SLA thresholds. "
+                                "Alternative routing is active and procurement scorecards have been updated."
+                            ),
+                            "language": "en",
+                            "status": "reviewed",
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 4. Search Discovery Indexes
+                    SearchDiscoveryIndex.objects.get_or_create(
+                        tenant=tenant,
+                        asset_name="Executive Revenue & Margin Dashboard",
+                        defaults={
+                            "asset_type": "dashboard",
+                            "target_url": f"/bi/dashboards/{dash.pk}/" if dash else "/bi/dashboards/",
+                            "description": "Consolidated executive overview of enterprise revenue, profit margins, and territory pace.",
+                            "category": "Executive",
+                            "synonyms": ["revenue", "sales", "turnover", "margin", "ebitda", "top line"],
+                            "search_keywords": "revenue margin executive sales profitability quarterly",
+                            "relevance_weight": Decimal("1.50"),
+                            "is_featured": True,
+                            "is_verified": True,
+                            "dashboard": dash,
+                        },
+                    )
+
+                    SearchDiscoveryIndex.objects.get_or_create(
+                        tenant=tenant,
+                        asset_name="Gross Margin % KPI Definition",
+                        defaults={
+                            "asset_type": "kpi",
+                            "target_url": f"/bi/kpis/{kpi.pk}/" if kpi else "/bi/kpis/",
+                            "description": "Standardized enterprise formula and historical trend tracking for Gross Profit Margin percentage.",
+                            "category": "Finance",
+                            "synonyms": ["gross profit", "margin rate", "profitability", "product margin"],
+                            "search_keywords": "margin kpi formula finance gross profit percentage",
+                            "relevance_weight": Decimal("1.20"),
+                            "is_featured": True,
+                            "is_verified": True,
+                            "kpi": kpi,
+                        },
+                    )
+
+                    SearchDiscoveryIndex.objects.get_or_create(
+                        tenant=tenant,
+                        asset_name="Sales Fact Table Dataset",
+                        defaults={
+                            "asset_type": "warehouse_table",
+                            "target_url": f"/bi/warehouse/tables/{tbl_sales.pk}/" if tbl_sales else "/bi/warehouse/tables/",
+                            "description": "Star-schema fact table recording line-item sales orders, freight costs, and net realized margins.",
+                            "category": "Data Warehouse",
+                            "synonyms": ["sales fact", "orders fact", "transactions", "warehouse sales"],
+                            "search_keywords": "sales fact warehouse transactions line items",
+                            "relevance_weight": Decimal("1.00"),
+                            "is_featured": False,
+                            "is_verified": True,
+                            "warehouse_table": tbl_sales,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Natural Language & Conversational BI for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Natural Language & Conversational BI already seeded for tenant: {tenant.name}")
+
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
