@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -15,6 +16,8 @@ from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefiniti
 from apps.bi.views._common import bi_object, bi_scope
 from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
+
+User = get_user_model()
 
 
 @login_required
@@ -142,6 +145,7 @@ def report_subscription_create(request):
     dashboards = BiDashboard.objects.filter(tenant=request.tenant)
     reports = ReportDefinition.objects.filter(tenant=request.tenant)
     org_units = OrgUnit.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
@@ -149,6 +153,7 @@ def report_subscription_create(request):
         "dashboards": dashboards,
         "reports": reports,
         "org_units": org_units,
+        "users": users,
     }
     return render(
         request, "bi/alerts_subscriptions/report_subscription/form.html", context
@@ -182,6 +187,7 @@ def report_subscription_edit(request, pk):
     dashboards = BiDashboard.objects.filter(tenant=request.tenant)
     reports = ReportDefinition.objects.filter(tenant=request.tenant)
     org_units = OrgUnit.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
@@ -189,6 +195,7 @@ def report_subscription_edit(request, pk):
         "dashboards": dashboards,
         "reports": reports,
         "org_units": org_units,
+        "users": users,
     }
     return render(
         request, "bi/alerts_subscriptions/report_subscription/form.html", context
