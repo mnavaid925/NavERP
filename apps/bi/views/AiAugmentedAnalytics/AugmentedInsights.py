@@ -116,21 +116,31 @@ def augmented_insight_detail(request, pk):
         select_related=("semantic_model", "kpi_definition", "warehouse_table", "created_by"),
     )
 
-    drivers = []
+    normalized_drivers = []
+    raw_drivers = []
     if isinstance(insight.driver_decomposition, list):
-        drivers = insight.driver_decomposition
+        raw_drivers = insight.driver_decomposition
     elif isinstance(insight.driver_decomposition, str) and insight.driver_decomposition.strip():
         try:
-            drivers = json.loads(insight.driver_decomposition)
+            raw_drivers = json.loads(insight.driver_decomposition)
         except json.JSONDecodeError:
-            drivers = []
+            raw_drivers = []
+    if isinstance(raw_drivers, list):
+        for item in raw_drivers:
+            if isinstance(item, dict):
+                normalized_drivers.append({
+                    "name": item.get("name") or item.get("factor") or item.get("dimension") or "Unknown Driver",
+                    "weight": item.get("weight") or item.get("contribution") or 0,
+                    "impact": item.get("impact") or item.get("direction") or "neutral",
+                    "explanation": item.get("explanation") or item.get("description") or "—",
+                })
 
     return render(
         request,
         "bi/ai_augmented_analytics/augmented_insight/detail.html",
         {
             "insight": insight,
-            "drivers": drivers,
+            "drivers": normalized_drivers,
         },
     )
 
