@@ -95,13 +95,11 @@ def analytics_recommendation_create(request):
             rec.tenant = request.tenant
             rec.save()
             write_audit_log(
+                request.user,
+                rec,
+                "create",
+                changes={"details": f"Created recommendation {rec.number} for user {rec.user.username}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="AnalyticsRecommendation",
-                object_id=str(rec.pk),
-                object_repr=str(rec),
-                details=f"Created recommendation {rec.number} for user {rec.user.username}",
             )
             messages.success(request, f"Recommendation {rec.number} created successfully.")
             return redirect("bi:analytics_recommendation_detail", pk=rec.pk)
@@ -127,13 +125,11 @@ def analytics_recommendation_edit(request, pk):
         if form.is_valid():
             recommendation = form.save()
             write_audit_log(
+                request.user,
+                recommendation,
+                "update",
+                changes={"details": f"Updated recommendation {recommendation.number}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="AnalyticsRecommendation",
-                object_id=str(recommendation.pk),
-                object_repr=str(recommendation),
-                details=f"Updated recommendation {recommendation.number}",
             )
             messages.success(request, f"Recommendation {recommendation.number} updated successfully.")
             return redirect("bi:analytics_recommendation_detail", pk=recommendation.pk)
@@ -156,16 +152,14 @@ def analytics_recommendation_edit(request, pk):
 def analytics_recommendation_delete(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
     number = recommendation.number
-    recommendation.delete()
     write_audit_log(
+        request.user,
+        recommendation,
+        "delete",
+        changes={"number": number, "details": f"Deleted recommendation {number}"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="AnalyticsRecommendation",
-        object_id=str(pk),
-        object_repr=number,
-        details=f"Deleted recommendation {number}",
     )
+    recommendation.delete()
     messages.success(request, f"Recommendation {number} was deleted.")
     return redirect("bi:analytics_recommendation_list")
 
@@ -188,13 +182,11 @@ def analytics_recommendation_interact(request, pk):
         recommendation.save()
 
         write_audit_log(
+            request.user,
+            recommendation,
+            interaction_type,
+            changes={"interaction": interaction_type, "status": recommendation.status, "details": f"User {request.user.username} {interaction_type}ed recommendation {recommendation.number}"},
             tenant=request.tenant,
-            user=request.user,
-            action=f"rec_{interaction_type}",
-            model_name="AnalyticsRecommendation",
-            object_id=str(recommendation.pk),
-            object_repr=str(recommendation),
-            details=f"User {request.user.username} {interaction_type}ed recommendation {recommendation.number}",
         )
         messages.success(request, f"Recommendation {recommendation.number} marked as {recommendation.get_status_display()}.")
 
