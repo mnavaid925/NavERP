@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Natural Language Generation Narratives — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Natural Language Generation</span>
+        </div>
+        <h1 class="page-title">Natural Language Generation (NLG)</h1>
+        <p class="text-muted text-sm">Automated narrative explanations, executive briefings, and spoken audio scripts</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:natural_language_query_list' %}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>NLQ Search</span>
+        </a>
+        <a href="{% url 'bi:bi_conversation_session_list' %}" class="btn btn-outline">
+            <i data-lucide="bot"></i>
+            <span>Conversations</span>
+        </a>
+        <a href="{% url 'bi:narrative_explanation_create' %}" class="btn btn-primary">
+            <i data-lucide="sparkles"></i>
+            <span>New Narrative</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats-grid mb-6">
+    <div class="stat-card">
+        <div class="stat-icon bg-indigo-50 text-indigo-600">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Total Narratives</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-emerald-50 text-emerald-600">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Published & Live</div>
+            <div class="stat-value text-emerald-600">{{ published_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-sky-50 text-sky-600">
+            <i data-lucide="briefcase"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Executive Briefings</div>
+            <div class="stat-value text-sky-600">{{ executive_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-amber-50 text-amber-600">
+            <i data-lucide="volume-2"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-label">Voice TTS Scripts</div>
+            <div class="stat-value text-amber-600">{{ audio_script_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <div class="relative">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-muted w-4 h-4"></i>
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by title, headline, key drivers..." class="form-input pl-9 text-sm w-full">
+                </div>
+            </div>
+
+            <div class="w-44">
+                <select name="status" class="form-select text-sm w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="w-48">
+                <select name="style" class="form-select text-sm w-full">
+                    <option value="">All Narrative Styles</option>
+                    {% for val, label in style_choices %}
+                    <option value="{{ val }}" {% if request.GET.style == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="w-48">
+                <select name="artifact" class="form-select text-sm w-full">
+                    <option value="">All Target Artifacts</option>
+                    {% for val, label in artifact_choices %}
+                    <option value="{{ val }}" {% if request.GET.artifact == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-outline text-sm">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.status or request.GET.style or request.GET.artifact %}
+            <a href="{% url 'bi:narrative_explanation_list' %}" class="btn btn-ghost text-sm text-muted">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number & Title</th>
+                    <th>Target Artifact</th>
+                    <th>Style</th>
+                    <th>Status</th>
+                    <th>Voice Audio</th>
+                    <th>Author</th>
+                    <th>Created</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for n in narratives %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:narrative_explanation_detail' n.pk %}" class="font-medium text-slate-900 hover:text-sky-600 block">
+                            {{ n.title }}
+                        </a>
+                        <div class="text-xs text-muted flex items-center gap-2 mt-0.5">
+                            <span class="font-mono">{{ n.number }}</span>
+                            <span>·</span>
+                            <span class="truncate max-w-xs italic">{{ n.headline }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs">{{ n.get_target_artifact_type_display }}</span>
+                        {% if n.dashboard %}
+                        <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.dashboard.name }}</div>
+                        {% elif n.report %}
+                        <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.report.name }}</div>
+                        {% elif n.kpi %}
+                        <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.kpi.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ n.style_badge_color }} text-xs">{{ n.get_narrative_style_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ n.status_badge_color }} text-xs">{{ n.get_status_display }}</span>
+                    </td>
+                    <td>
+                        {% if n.audio_ready_script %}
+                        <span class="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-medium">
+                            <i data-lucide="volume-2" class="w-3 h-3"></i>
+                            <span>TTS Ready</span>
+                        </span>
+                        {% else %}
+                        <span class="text-xs text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ n.created_by|default:"System NLG" }}
+                    </td>
+                    <td class="text-xs text-muted whitespace-nowrap">
+                        {{ n.created_at|date:"M d, Y" }}
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                        <div class="flex items-center justify-end gap-2">
+                            <a href="{% url 'bi:narrative_explanation_detail' n.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:narrative_explanation_edit' n.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:narrative_explanation_delete' n.pk %}" class="inline" onsubmit="return confirm('Delete narrative {{ n.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-ghost btn-sm text-xs text-rose-600 p-1" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-12 text-muted">
+                        <div class="flex flex-col items-center justify-center">
+                            <i data-lucide="file-text" class="w-10 h-10 text-slate-300 mb-2"></i>
+                            <p class="text-base font-medium text-slate-700">No narrative explanations found</p>
+                            <p class="text-xs text-slate-500 mt-1">Generate automated executive narratives and spoken audio briefings directly from your analytics.</p>
+                            <a href="{% url 'bi:narrative_explanation_create' %}" class="btn btn-primary btn-sm mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Generate Narrative</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if narratives.has_other_pages %}
+    <div class="card-footer flex items-center justify-between border-t border-slate-100 p-4">
+        <div class="text-xs text-muted">
+            Page {{ narratives.number }} of {{ narratives.paginator.num_pages }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if narratives.has_previous %}
+            <a href="?page={{ narratives.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact %}&artifact={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Previous</a>
+            {% endif %}
+            {% if narratives.has_next %}
+            <a href="?page={{ narratives.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact %}&artifact={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
