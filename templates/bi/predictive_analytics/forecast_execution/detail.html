@@ -157,10 +157,11 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{ forecast_obj.forecast_output_data|json_script:"forecast-output-data" }}
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    const rawData = {{ forecast_obj.forecast_output_data|safe }};
+    const dataEl = document.getElementById("forecast-output-data");
+    const rawData = dataEl ? JSON.parse(dataEl.textContent) : [];
     if (!rawData || rawData.length === 0) return;
 
     const labels = rawData.map(d => d.label);
