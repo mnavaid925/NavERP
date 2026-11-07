@@ -24,7 +24,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 
 ### Minor Priority
 - [x] **M1**: fixed in 7d3e0c13 — Removed unused imports in apps/bi/views/AiAugmentedAnalytics/*.py (Decimal, get_object_or_404, timezone).
-- [ ] **M2**: Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` to table quick action forms in `smart_data_prep_suggestion/list.html` and `text_sentiment_analysis/list.html`.
+- [x] **M2**: fixed in 93589335 — Added next input to table quick action forms in smart_data_prep_suggestion/list.html and text_sentiment_analysis/list.html and handled in view.
 - [ ] **M3**: Add matching `id` and `for` attributes on search and filter inputs across list templates.
 - [ ] **M4**: Add dark mode contrast utilities for active filter pills and card callouts in `feed.html` (`dark:bg-slate-800`, `dark:text-indigo-300`).
 - [ ] **M5**: Add composite index `models.Index(fields=["tenant", "-created_at"], name="idx_bsdp_ten_created")` to `SmartDataPrepSuggestion.Meta.indexes`.
