@@ -121,5 +121,12 @@ class MobileBiConfiguration(TenantNumbered):
         ]
 
     def __str__(self):
-        user_label = f" ({self.target_user.username})" if self.target_user else " (Tenant Default)" if self.is_default_profile else ""
+        if "target_user" in self._state.fields_cache and self.target_user:
+            user_label = f" ({self.target_user.username})"
+        elif self.target_user_id:
+            user_label = f" (User #{self.target_user_id})"
+        elif self.is_default_profile:
+            user_label = " (Tenant Default)"
+        else:
+            user_label = ""
         return f"{self.number} - {self.name}{user_label}"
