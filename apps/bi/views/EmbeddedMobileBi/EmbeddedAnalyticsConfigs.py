@@ -88,10 +88,10 @@ def embedded_analytics_config_create(request):
                 config.created_by = request.user
                 config.save()
                 write_audit_log(
-                    request,
-                    action="CREATE",
-                    instance=config,
-                    description=f"Created embedded analytics config {config.number} ({config.name})",
+                    request.user,
+                    config,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Embedded configuration '{config.name}' created successfully.")
             return redirect("bi:embedded_analytics_config_detail", pk=config.pk)
@@ -170,10 +170,10 @@ def embedded_analytics_config_edit(request, pk):
             with transaction.atomic():
                 config = form.save()
                 write_audit_log(
-                    request,
-                    action="UPDATE",
-                    instance=config,
-                    description=f"Updated embedded analytics config {config.number}",
+                    request.user,
+                    config,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Configuration '{config.name}' updated successfully.")
             return redirect("bi:embedded_analytics_config_detail", pk=config.pk)
@@ -194,10 +194,10 @@ def embedded_analytics_config_delete(request, pk):
     config = bi_object(request, EmbeddedAnalyticsConfig, pk)
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="DELETE",
-            instance=config,
-            description=f"Deleted embedded analytics config {config.number}",
+            request.user,
+            config,
+            "delete",
+            tenant=request.tenant,
         )
         config.delete()
     messages.success(request, "Embedded configuration removed.")
