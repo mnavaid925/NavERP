@@ -1,3 +1,4 @@
+import json
 from django import forms
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
@@ -59,6 +60,27 @@ class AugmentedInsightForm(TenantUniqueMixin, TenantModelForm):
         self.fields["semantic_model"].required = False
         self.fields["kpi_definition"].required = False
         self.fields["warehouse_table"].required = False
+
+    def clean_driver_decomposition(self):
+        raw = getattr(self, "cleaned_data", {}).get("driver_decomposition")
+        if raw is None and hasattr(self, "data") and "driver_decomposition" in self.data:
+            raw = self.data.get("driver_decomposition")
+        if raw is None:
+            return []
+        if isinstance(raw, (list, dict)):
+            return raw
+        if isinstance(raw, str):
+            raw = raw.strip()
+            if not raw:
+                return []
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, (list, dict)):
+                    raise forms.ValidationError("Driver decomposition must be a valid JSON list or object.")
+                return parsed
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise forms.ValidationError(f"Invalid JSON for driver decomposition: {exc}")
+        raise forms.ValidationError("Driver decomposition must be a valid JSON list or object.")
 
     def clean(self):
         cleaned_data = super().clean()
