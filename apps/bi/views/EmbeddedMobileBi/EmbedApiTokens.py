@@ -76,10 +76,10 @@ def embed_api_token_create(request):
                 token.token_hash = token_hash
                 token.save()
                 write_audit_log(
-                    request,
-                    action="CREATE",
-                    instance=token,
-                    description=f"Generated embed API token {token.number} ({token.name}) with prefix {prefix}",
+                    request.user,
+                    token,
+                    "create",
+                    tenant=request.tenant,
                 )
             request.session["newly_generated_token"] = raw_token
             messages.success(request, f"API Token '{token.name}' generated successfully. Copy your key now!")
@@ -157,10 +157,10 @@ def embed_api_token_edit(request, pk):
             with transaction.atomic():
                 token = form.save()
                 write_audit_log(
-                    request,
-                    action="UPDATE",
-                    instance=token,
-                    description=f"Updated API token {token.number}",
+                    request.user,
+                    token,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Token '{token.name}' updated successfully.")
             return redirect("bi:embed_api_token_detail", pk=token.pk)
@@ -181,10 +181,10 @@ def embed_api_token_delete(request, pk):
     token = bi_object(request, EmbedApiToken, pk)
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="DELETE",
-            instance=token,
-            description=f"Deleted API token {token.number}",
+            request.user,
+            token,
+            "delete",
+            tenant=request.tenant,
         )
         token.delete()
     messages.success(request, "API Token deleted.")
@@ -200,10 +200,10 @@ def embed_api_token_revoke(request, pk):
         token.status = "revoked"
         token.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            request,
-            action="UPDATE",
-            instance=token,
-            description=f"Revoked API token {token.number}",
+            request.user,
+            token,
+            "revoke",
+            tenant=request.tenant,
         )
     messages.warning(request, f"API Token '{token.name}' has been permanently revoked.")
     return redirect("bi:embed_api_token_detail", pk=token.pk)
