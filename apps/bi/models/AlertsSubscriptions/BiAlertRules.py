@@ -179,6 +179,7 @@ class BiAlertRule(TenantNumbered):
             )
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_balr_ten_created"),
             models.Index(fields=["tenant", "alert_type"], name="idx_balr_ten_type"),
             models.Index(fields=["tenant", "status"], name="idx_balr_ten_status"),
             models.Index(fields=["tenant", "severity"], name="idx_balr_ten_sev"),
