@@ -99,6 +99,23 @@
 2. `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py:95` & `SearchDiscoveryIndexes.py:82` — Detail views perform lazy lookups on frequently displayed FKs. Fix: Pass `select_related(...)` to `bi_object`.
 3. `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py:122-127` — Missing composite index for curated discovery ranking `(tenant, is_featured, -relevance_weight)`. Fix: Add composite index to `Meta.indexes`.
 
+## 5. QA Smoke Tester
+**Verdict**: 100% green on 23 endpoints with zero 500 crashes and complete cross-tenant IDOR protection (Acme vs Globex 404 confirmed). Confirmed runtime functional issues on artifact filter mismatch, unstyled badge property lookup, blank linked report/glossary text, workspace ask redirect, and Decimal NaN guard.
+
+### Important
+1. `templates/bi/conversational_bi/narrative_explanation/list.html:102` & `apps/bi/views/ConversationalBi/NarrativeExplanations.py:55` — Filter Parameter Mismatch breaks artifact filtering. Template submits `artifact` but view checks `artifact_type`.
+2. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `hub.html:83, 154` — `type_badge_color` renders unstyled badges because model defines `asset_type_badge_color`.
+3. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — `index.report.title` renders blank report link because `ReportDefinition` has `name`.
+4. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — `index.glossary_term.term` renders blank glossary link because `BusinessGlossaryTerm` has `name`.
+5. `apps/bi/views/ConversationalBi/BiConversationSessions.py:336` & `chat_workspace.html:186` — Unconditional redirect in `bi_conversation_session_ask` forces user out of workspace to thread detail page.
+6. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:190-198` — `search_discovery_index_reweight` missing explicit `is_finite()` guard (Lesson L35).
+
+### Minor
+1. `templates/bi/conversational_bi/search_explorer.html:1` — Orphan unrouted template file. Fix: Delete.
+2. `apps/bi/views/ConversationalBi/BiConversationSessions.py:118-120` — Workspace fallback on foreign tenant session param falls back to first session instead of 404.
+3. `natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — Non-standard palette classes `badge-purple` and `badge-indigo` (L33).
+
+
 
 
 
