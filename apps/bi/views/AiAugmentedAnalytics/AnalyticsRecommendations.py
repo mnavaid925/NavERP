@@ -148,6 +148,7 @@ def analytics_recommendation_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def analytics_recommendation_delete(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
