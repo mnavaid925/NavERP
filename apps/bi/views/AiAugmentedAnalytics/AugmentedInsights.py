@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.bi.forms.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsightForm
@@ -248,6 +249,6 @@ def augmented_insight_triage(request, pk):
         messages.success(request, f"Insight {insight.number} updated to {insight.get_status_display()}.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
         return redirect(next_url)
     return redirect("bi:augmented_insight_detail", pk=insight.pk)
