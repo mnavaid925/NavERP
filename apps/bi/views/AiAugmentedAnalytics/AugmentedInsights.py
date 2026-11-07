@@ -155,13 +155,11 @@ def augmented_insight_create(request):
             insight.created_by = request.user
             insight.save()
             write_audit_log(
+                request.user,
+                insight,
+                "create",
+                changes={"details": f"Created insight {insight.number}: {insight.title}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="AugmentedInsight",
-                object_id=str(insight.pk),
-                object_repr=str(insight),
-                details=f"Created insight {insight.number}: {insight.title}",
             )
             messages.success(request, f"Augmented insight {insight.number} created successfully.")
             return redirect("bi:augmented_insight_detail", pk=insight.pk)
@@ -187,13 +185,11 @@ def augmented_insight_edit(request, pk):
         if form.is_valid():
             insight = form.save()
             write_audit_log(
+                request.user,
+                insight,
+                "update",
+                changes={"details": f"Updated insight {insight.number}: {insight.title}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="AugmentedInsight",
-                object_id=str(insight.pk),
-                object_repr=str(insight),
-                details=f"Updated insight {insight.number}: {insight.title}",
             )
             messages.success(request, f"Augmented insight {insight.number} updated successfully.")
             return redirect("bi:augmented_insight_detail", pk=insight.pk)
@@ -216,16 +212,14 @@ def augmented_insight_edit(request, pk):
 def augmented_insight_delete(request, pk):
     insight = bi_object(request, AugmentedInsight, pk)
     number = insight.number
-    insight.delete()
     write_audit_log(
+        request.user,
+        insight,
+        "delete",
+        changes={"number": number, "details": f"Deleted insight {number}"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="AugmentedInsight",
-        object_id=str(pk),
-        object_repr=number,
-        details=f"Deleted insight {number}",
     )
+    insight.delete()
     messages.success(request, f"Augmented insight {number} was deleted.")
     return redirect("bi:augmented_insight_list")
 
@@ -244,13 +238,11 @@ def augmented_insight_triage(request, pk):
             insight.action_notes = action_notes
         insight.save()
         write_audit_log(
+            request.user,
+            insight,
+            "triage",
+            changes={"status": new_status, "details": f"Triaged insight {insight.number} to status '{new_status}'"},
             tenant=request.tenant,
-            user=request.user,
-            action="triage",
-            model_name="AugmentedInsight",
-            object_id=str(insight.pk),
-            object_repr=str(insight),
-            details=f"Triaged insight {insight.number} to status '{new_status}'",
         )
         messages.success(request, f"Insight {insight.number} updated to {insight.get_status_display()}.")
 
