@@ -72,7 +72,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div class="form-group mb-0 lg:col-span-2">
                 <label class="form-label" for="search-input">Search Runs</label>
                 <div class="relative">
@@ -84,8 +84,8 @@
             </div>
 
             <div class="form-group mb-0">
-                <label class="form-label">Run Trigger</label>
-                <select name="trigger" class="form-select">
+                <label class="form-label" for="filter-trigger">Run Trigger</label>
+                <select name="trigger" id="filter-trigger" class="form-select">
                     <option value="">All Triggers</option>
                     {% for val, label in run_trigger_choices %}
                     <option value="{{ val }}" {% if selected_trigger == val %}selected{% endif %}>{{ label }}</option>
@@ -94,11 +94,21 @@
             </div>
 
             <div class="form-group mb-0">
-                <label class="form-label">Delivery Channel</label>
-                <select name="channel" class="form-select">
+                <label class="form-label" for="filter-channel">Delivery Channel</label>
+                <select name="channel" id="filter-channel" class="form-select">
                     <option value="">All Channels</option>
                     {% for val, label in delivery_channel_choices %}
                     <option value="{{ val }}" {% if selected_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group mb-0">
+                <label class="form-label" for="filter-status">Status</label>
+                <select name="status" id="filter-status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
