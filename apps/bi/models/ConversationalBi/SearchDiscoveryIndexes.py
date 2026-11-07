@@ -134,6 +134,13 @@ class SearchDiscoveryIndex(TenantNumbered):
         return reverse("bi:search_discovery_index_detail", kwargs={"pk": self.pk})
 
     @property
+    def effective_score(self):
+        base = float(self.relevance_weight)
+        boost = 1.25 if self.is_featured else 1.00
+        engagement = (self.search_hit_count + self.view_count) / 100.0
+        return round(base * boost * (1.0 + engagement), 2)
+
+    @property
     def asset_type_badge_color(self):
         if self.asset_type == "dashboard":
             return "badge-info"
