@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Embedded Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:embedded_analytics_config_list' %}">Embedded Analytics</a>
+            <span class="sep">/</span>
+            <span>{% if config %}Edit {{ config.number }}{% else %}New Configuration{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Configure white-labeled analytics for external applications, portals, and ERP views</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if config %}{% url 'bi:embedded_analytics_config_detail' config.pk %}{% else %}{% url 'bi:embedded_analytics_config_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: General Information -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="info" class="w-4 h-4 text-primary-600"></i>
+                    <span>General Configuration</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Configuration Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.slug.id_for_label }}" class="form-label">URL Slug (leave blank to auto-generate)</label>
+                        {{ form.slug }}
+                        {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                        {{ form.description }}
+                        {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Configuration Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Target Asset & Delivery Mode -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="layout" class="w-4 h-4 text-blue-600"></i>
+                    <span>Target Asset & Integration Mode</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.target_type.id_for_label }}" class="form-label">Target Analytical Asset Type *</label>
+                        {{ form.target_type }}
+                        {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.embedding_mode.id_for_label }}" class="form-label">Embedding Delivery Mode *</label>
+                        {{ form.embedding_mode }}
+                        {% if form.embedding_mode.errors %}<div class="form-error">{{ form.embedding_mode.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div id="field_dashboard">
+                        <label for="{{ form.dashboard.id_for_label }}" class="form-label">Select Dashboard</label>
+                        {{ form.dashboard }}
+                        {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div id="field_report">
+                        <label for="{{ form.report.id_for_label }}" class="form-label">Select Operational Report</label>
+                        {{ form.report }}
+                        {% if form.report.errors %}<div class="form-error">{{ form.report.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div id="field_semantic_model" class="md:col-span-2">
+                        <label for="{{ form.semantic_model.id_for_label }}" class="form-label">Select Semantic Model</label>
+                        {{ form.semantic_model }}
+                        {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Theming & Custom Styling -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="palette" class="w-4 h-4 text-purple-600"></i>
+                    <span>White-Label Branding & Colors</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.theme_mode.id_for_label }}" class="form-label">Theme Mode Preset</label>
+                        {{ form.theme_mode }}
+                        {% if form.theme_mode.errors %}<div class="form-error">{{ form.theme_mode.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.primary_color.id_for_label }}" class="form-label">Primary Brand Color</label>
+                        {{ form.primary_color }}
+                        {% if form.primary_color.errors %}<div class="form-error">{{ form.primary_color.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.accent_color.id_for_label }}" class="form-label">Accent Color</label>
+                        {{ form.accent_color }}
+                        {% if form.accent_color.errors %}<div class="form-error">{{ form.accent_color.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="{{ form.custom_css.id_for_label }}" class="form-label">Custom CSS Overrides</label>
+                        {{ form.custom_css }}
+                        <span class="text-xs text-muted">Optional CSS rules applied inside the embedded host frame</span>
+                        {% if form.custom_css.errors %}<div class="form-error">{{ form.custom_css.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Security, Authentication & RLS -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="shield" class="w-4 h-4 text-emerald-600"></i>
+                    <span>Security, Authentication & Row-Level Security</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.auth_mode.id_for_label }}" class="form-label">Authentication Mode *</label>
+                        {{ form.auth_mode }}
+                        {% if form.auth_mode.errors %}<div class="form-error">{{ form.auth_mode.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.allowed_origins.id_for_label }}" class="form-label">Allowed Domain Origins (CORS / frame-ancestors)</label>
+                        {{ form.allowed_origins }}
+                        <span class="text-xs text-muted">Use * for any, or comma-separated origins (e.g. https://portal.example.com)</span>
+                        {% if form.allowed_origins.errors %}<div class="form-error">{{ form.allowed_origins.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 flex items-center gap-2 pt-2">
+                        {{ form.enable_rls_filter }}
+                        <label for="{{ form.enable_rls_filter.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Enforce Row-Level Security (RLS) Filter Attributes
+                        </label>
+                        {% if form.enable_rls_filter.errors %}<div class="form-error">{{ form.enable_rls_filter.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.default_rls_attributes_raw.id_for_label }}" class="form-label">
+                            {{ form.default_rls_attributes_raw.label }}
+                        </label>
+                        {{ form.default_rls_attributes_raw }}
+                        <span class="text-xs text-muted">{{ form.default_rls_attributes_raw.help_text }}</span>
+                        {% if form.default_rls_attributes_raw.errors %}<div class="form-error">{{ form.default_rls_attributes_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if config %}{% url 'bi:embedded_analytics_config_detail' config.pk %}{% else %}{% url 'bi:embedded_analytics_config_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>Save Configuration</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
