@@ -80,12 +80,15 @@ class BiNotificationItemForm(TenantUniqueMixin, TenantModelForm):
             self.fields["burst_run"].queryset = DistributionBurstRun.objects.filter(
                 tenant=self.tenant
             )
+            self.fields["recipient"].queryset = User.objects.filter(
+                tenant=self.tenant
+            ).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
             self,
             cleaned,
-            ["alert_rule", "burst_run"],
+            ["alert_rule", "burst_run", "recipient"],
         )
         return cleaned
