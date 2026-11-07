@@ -58,4 +58,22 @@ Target changeset: `a3d989bc06eda3b74ce2a67a70785992ec94fca0..HEAD`
 - **M2 (frontend-reviewer)**: `templates/bi/embedded_mobile_bi/embedapitoken/detail.html:59,89,104` and `embeddedanalyticsconfig/detail.html:90,105,120` — Clipboard copy handlers lack Promise rejection handling. Fix: Use `.then().catch()`.
 - **M3 (frontend-reviewer)**: `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/preview.html:15` — `primary_color` and `accent_color` injected into style/script without regex validation in form. Fix: Add hex regex validator `^#[0-9a-fA-F]{6}$` in form clean.
 
+---
+
+## Pass 4: Performance Reviewer Findings
+
+### Critical
+- **C1 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/KioskWallboardDisplays.py:214-234` — Redundant full-model SELECT and unthrottled write amplification on heartbeat endpoint. Loads large JSON fields then updates. Fix: Add `@require_POST` and collapse into a single atomic `filter(pk=pk).update(...)` query.
+
+### Important
+- **I1 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py:217-220` — Non-atomic in-memory view count increment causes lost updates under concurrency. Fix: Use `F('view_count') + 1` in `EmbeddedAnalyticsConfig.objects.filter(pk=config.pk).update(...)`.
+- **I2 (performance-reviewer)**: `apps/bi/models/EmbeddedMobileBi/MobileBiConfigurations.py:123-125` — Chained N+1 hazard in `MobileBiConfiguration.__str__` (Lesson L18) when dereferencing `self.target_user.username`. Fix: Check `_state.fields_cache.get('target_user')` or format safely without triggering queries.
+- **I3 (performance-reviewer)**: `apps/bi/models/EmbeddedMobileBi/KioskWallboardDisplays.py:108-113` & `MobileBiConfigurations.py:116-121` — Missing database indexes on tenant-filtered columns (`display_schedule`, `touch_layout_preset`, `push_digest_frequency`). Fix: Add composite indexes to model `Meta.indexes`.
+
+### Minor
+- **M1 (performance-reviewer)**: `apps/bi/forms/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py:64-66` — Form FK dropdown querysets load large JSON blobs. Fix: Add `.only('id', 'title', 'number')` / `.only('id', 'name', 'number')`.
+- **M2 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/MobileBiConfigurations.py:123-124` — Unprojected querysets for pinned dashboard/report previews in detail view. Fix: Add `.only('id', 'title', 'number')`.
+- **M3 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/KioskWallboardDisplays.py:232` — Stale timestamp returned in JsonResponse from `kiosk_wallboard_display_heartbeat`. Fix: Pass `now.isoformat()` directly.
+
+
 
