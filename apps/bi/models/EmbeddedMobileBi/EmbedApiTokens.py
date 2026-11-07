@@ -3,6 +3,7 @@ import secrets
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.bi.models._base import TenantNumbered
 
@@ -93,3 +94,18 @@ class EmbedApiToken(TenantNumbered):
     def verify_token(self, raw_token):
         computed_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
         return secrets.compare_digest(self.token_hash, computed_hash)
+
+    @property
+    def is_valid(self):
+        if self.status != "active":
+            return False
+        if self.expires_at and timezone.now() > self.expires_at:
+            return False
+        return True
+
+    def revoke(self):
+        self.status = "revoked"
+        if self.pk:
+            self.save(update_fields=["status", "updated_at"])
+        else:
+            self.save()
