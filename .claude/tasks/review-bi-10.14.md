@@ -56,5 +56,17 @@ Changeset under review: `831d4a2fa67f1876bab24a5541f0e35ea4ec45e9...HEAD` (focus
   2. `apps/bi/forms/AiAugmentedAnalytics/*.py` — Unprojected foreign key queryset evaluation in form select fields.
   3. `templates/bi/ai_augmented_analytics/feed.html:95-114` — Ensure triage micro-actions in feed digest wrap triage update and audit log in `transaction.atomic`.
 
+### Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+- **Verdict**: FAIL (1 Critical, 2 Important, 2 Minor)
+- **Critical**:
+  1. `apps/bi/views/AiAugmentedAnalytics/*.py` (16 callsites) — `write_audit_log()` signature mismatch. Views pass unsupported kwargs (`model_name`, `object_id`, `object_repr`, `details`), raising `TypeError` and HTTP 500 on all mutating POST operations (create, edit, delete, triage, recalculate, action). Correct signature is `write_audit_log(user, obj, action, changes=None, tenant=None)`.
+- **Important**:
+  1. `apps/bi/views/AiAugmentedAnalytics/{AugmentedInsights,SmartDataPrepSuggestions,TextSentimentAnalyses,AnalyticsRecommendations}.py` — Missing `@tenant_admin_required` on all 4 delete views.
+  2. `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` & `AugmentedInsights.py` — Stat card Key Drivers reflects current page slice rather than total count.
+- **Minor**:
+  1. Action views unvalidated `next` redirect target (`augmented_insight_triage`, `smart_data_prep_suggestion_action`, `analytics_recommendation_interact`).
+  2. Missing hidden `next` input on inline table quick actions in list views.
+
+
 
 
