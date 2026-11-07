@@ -326,7 +326,12 @@ def notification_acknowledge(request, pk):
 @require_POST
 def notification_snooze(request, pk):
     notification = bi_object(request, BiNotificationItem, pk=pk)
-    hours = int(request.POST.get("hours", "4"))
+    try:
+        hours = int(request.POST.get("hours", "4"))
+        if hours not in (1, 4, 24, 72):
+            hours = 4
+    except (ValueError, TypeError, OverflowError):
+        hours = 4
     now = timezone.now()
 
     notification.status = "snoozed"
