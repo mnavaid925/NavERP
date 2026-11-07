@@ -108,8 +108,10 @@ class OptimizationScenarioForm(TenantUniqueMixin, TenantModelForm):
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}") from exc
 
-    def clean_kpi_definition(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("kpi_definition"))
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["kpi_definition"])
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
