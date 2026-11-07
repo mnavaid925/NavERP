@@ -197,7 +197,7 @@
                     <span class="text-xs uppercase text-muted block">Bound Dashboard</span>
                     {% if session.primary_dashboard %}
                     <a href="{% url 'bi:bi_dashboard_detail' session.primary_dashboard.pk %}" class="text-indigo-600 font-medium hover:underline">
-                        {{ session.primary_dashboard.name }}
+                        {{ session.primary_dashboard.title }}
                     </a>
                     {% else %}
                     <span class="text-muted italic">No dashboard pinned</span>
