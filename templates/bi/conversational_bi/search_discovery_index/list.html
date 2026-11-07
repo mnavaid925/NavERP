@@ -192,10 +192,10 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" class="text-center py-12 text-muted">
-                        <div class="flex flex-col items-center justify-center">
+                    <td colspan="8">
+                        <div class="empty-state text-center py-12">
                             <i data-lucide="search" class="w-10 h-10 text-slate-300 mb-2"></i>
-                            <p class="text-base font-medium text-slate-700">No indexed analytical assets found</p>
+                            <h3 class="text-base font-medium text-slate-700">No indexed analytical assets found</h3>
                             <p class="text-xs text-slate-500 mt-1">Register dashboards, reports, and semantic models into the discovery index with business synonyms.</p>
                             <a href="{% url 'bi:search_discovery_index_create' %}" class="btn btn-primary btn-sm mt-4">
                                 <i data-lucide="plus"></i>
