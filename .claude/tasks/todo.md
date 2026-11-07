@@ -7,6 +7,186 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.15: Natural Language & Conversational BI (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.15.md` (2026-11-07)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.14.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0033_smartdataprepsuggestion_idx_bsdp_ten_created.py` (from 10.14), so **10.15 claims `0034`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.15.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/ConversationalBi/`
+> Template folder name: `templates/bi/conversational_bi/{natural_language_query,bi_conversation_session,narrative_explanation,search_discovery_index}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Natural Language & Conversational BI Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Collision-free 4-character uppercase prefixes starting with `B`:
+    - `NaturalLanguageQuery` -> `NUMBER_PREFIX = "BNLQ"` (format: `BNLQ-YYYYMM-XXXX`)
+    - `BiConversationSession` -> `NUMBER_PREFIX = "BCON"` (format: `BCON-YYYYMM-XXXX`)
+    - `NarrativeExplanation` -> `NUMBER_PREFIX = "BNLG"` (format: `BNLG-YYYYMM-XXXX`)
+    - `SearchDiscoveryIndex` -> `NUMBER_PREFIX = "BSDI"` (format: `BSDI-YYYYMM-XXXX`)
+  - Conversational & Natural Language Scope:
+    - `NaturalLanguageQuery` [BNLQ-]:
+      - Core query execution, semantic intent classification, grounded SQL/ORM generation, and automated visualization recommendation.
+      - Plain-language question text: `query_text` (CharField 500).
+      - Modality: `input_modality` (`text`, `voice`, `api`, default `text`).
+      - Intent type: `intent_type` (`metric_lookup`, `trend_analysis`, `ranking_top_bottom`, `comparative_analysis`, `distribution`, `correlation`, `drill_down`, default `metric_lookup`).
+      - Verified analytical anchors: optional FKs to `bi.SemanticModel` (`semantic_model`, SET_NULL), `bi.WarehouseTable` (`warehouse_table`, SET_NULL), `bi.KpiDefinition` (`kpi_definition`, SET_NULL).
+      - Multi-turn conversational parent: optional FK to `BiConversationSession` (`conversation_session`, CASCADE, null=True, blank=True, related_name="queries").
+      - User ownership: FK to `settings.AUTH_USER_MODEL` (`user`, SET_NULL, null=True, blank=True).
+      - Parsed AST tokens: `parsed_measures` (JSONField list), `parsed_dimensions` (JSONField list), `parsed_filters` (JSONField dict).
+      - Grounded query execution: `generated_sql` (TextField blank=True).
+      - Dynamic visualization: `chart_type` (`metric_card`, `bar_chart`, `horizontal_bar`, `line_chart`, `donut_chart`, `scatter_plot`, `pivot_table`, `data_table`, default `bar_chart`), `chart_config` (JSONField dict), `result_summary` (JSONField dict).
+      - Accuracy & Telemetry: `confidence_score` (DecimalField 5,2, default 85.00), `execution_status` (`pending`, `completed`, `failed`, `ambiguous`, default `completed`), `execution_duration_ms` (IntegerField default=0), `audio_duration_seconds` (DecimalField 5,2 default 0.00).
+      - User feedback & reinforcement: `user_rating` (`unrated`, `helpful`, `unhelpful`, default `unrated`), `user_feedback_notes` (TextField blank=True).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `user`, `parsed_measures`, `parsed_dimensions`, `parsed_filters`, `generated_sql`, `chart_config`, `result_summary`, `confidence_score`, `execution_status`, `execution_duration_ms`, `audio_duration_seconds`.
+    - `BiConversationSession` [BCON-]:
+      - Multi-turn conversational chat thread preserving active analytical context, filters, and suggested follow-up chips across turns.
+      - User ownership: FK to `settings.AUTH_USER_MODEL` (`user`, CASCADE, related_name="bi_conversations").
+      - Session metadata: `title` (CharField 200), `session_status` (`active`, `closed`, `archived`, default `active`), `is_pinned` (BooleanField default=False).
+      - Context anchors: optional FKs to `bi.SemanticModel` (`primary_semantic_model`, SET_NULL) and `bi.BiDashboard` (`primary_dashboard`, SET_NULL).
+      - Conversational context state: `context_state` (JSONField dict storing pinned dimensions, active filters, and dataset focal points), `suggested_prompts` (JSONField list of starter and follow-up prompt chips).
+      - Telemetry: `message_count` (PositiveIntegerField default=0), `last_interaction_at` (DateTimeField auto_now=True).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `user`, `context_state`, `suggested_prompts`, `message_count`, `last_interaction_at`.
+    - `NarrativeExplanation` [BNLG-]:
+      - Automated natural language generation (NLG) translating charts, reports, dashboards, and KPI scorecards into executive prose, variance highlights, and audio-ready scripts.
+      - User attribution: FK to `settings.AUTH_USER_MODEL` (`created_by`, SET_NULL, null=True, blank=True).
+      - Target artifact: `target_artifact_type` (`dashboard`, `report`, `kpi_scorecard`, `query_result`, `custom_dataset`, default `dashboard`).
+      - Bound BI anchors: optional FKs to `bi.BiDashboard` (`dashboard`, SET_NULL), `bi.ReportDefinition` (`report`, SET_NULL), `bi.KpiDefinition` (`kpi`, SET_NULL), `NaturalLanguageQuery` (`query`, SET_NULL), `bi.AugmentedInsight` (`insight`, SET_NULL).
+      - Editorial style: `narrative_style` (`executive_briefing`, `analytical_deepdive`, `bulleted_highlights`, `anomaly_alert`, `spoken_voice_script`, default `executive_briefing`).
+      - Narrative content: `title` (CharField 200), `headline` (CharField 255), `narrative_body` (TextField formatted markdown/HTML), `key_takeaways` (JSONField list).
+      - Statistical driver attribution: `top_positive_driver` (CharField 150 blank=True), `top_negative_driver` (CharField 150 blank=True).
+      - Voice/Audio delivery: `audio_ready_script` (TextField blank=True, synthesized spoken text formatted for TTS audio playback), `language` (CharField 8 default="en").
+      - Lifecycle: `status` (`draft`, `generated`, `reviewed`, `published`, default `generated`).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `audio_ready_script`, `key_takeaways`.
+    - `SearchDiscoveryIndex` [BSDI-]:
+      - Unified enterprise search dictionary and discovery index mapping business vernacular, synonyms, and keywords across analytical assets.
+      - Asset indexing: `asset_name` (CharField 200), `asset_type` (`dashboard`, `report`, `kpi`, `semantic_model`, `warehouse_table`, `glossary_term`, `ad_hoc_query`, default `dashboard`), `target_url` (CharField 255), `description` (TextField blank=True), `category` (CharField 64 blank=True).
+      - Linguistic dictionary & keywords: `synonyms` (JSONField list, e.g. `["revenue", "sales", "turnover", "top line"]`), `search_keywords` (TextField blank=True).
+      - Analytical target anchors: optional FKs to `bi.SemanticModel` (`semantic_model`, SET_NULL), `bi.BiDashboard` (`dashboard`, SET_NULL), `bi.ReportDefinition` (`report`, SET_NULL), `bi.KpiDefinition` (`kpi`, SET_NULL), `bi.WarehouseTable` (`warehouse_table`, SET_NULL), `bi.BusinessGlossaryTerm` (`glossary_term`, SET_NULL).
+      - Relevance & Trust: `relevance_weight` (DecimalField 4,2 default 1.00), `search_hit_count` (PositiveIntegerField default=0), `view_count` (PositiveIntegerField default=0), `is_featured` (BooleanField default=False), `is_verified` (BooleanField default=True).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `search_hit_count`, `view_count`.
+  - Sibling Hand-offs & Boundaries:
+    - 10.3 (`DataWarehouse`): `WarehouseTable` fact/dim tables indexed in `SearchDiscoveryIndex` and queried by `NaturalLanguageQuery`.
+    - 10.4 (`SemanticLayer`): `SemanticModel` business metrics and `BusinessGlossaryTerm` terms grounded in NLQ parsing and discovery dictionary.
+    - 10.8 (`Dashboards`): `BiDashboard` assets linked in conversational sessions and summarized by `NarrativeExplanation`.
+    - 10.9 (`OperationalReporting`): `ReportDefinition` templates indexed in discovery search and explained via narrative summaries.
+    - 10.10 (`SelfServiceAnalytics`): `AdHocQuery` analyses discovered through synonym search and referenced in conversational Q&A.
+    - 10.11 (`PerformanceScorecards`): `KpiDefinition` performance metrics explained through automated NLG and queried via natural language.
+    - 10.12 (`OlapAnalysis`): `OlapCube` multidimensional cubes provide aggregated measures for conversational queries.
+    - 10.14 (`AiAugmentedAnalytics`): `AugmentedInsight` statistical findings summarized and converted into spoken briefing scripts in 10.15.
+    - 10.16 (`AlertsAndSubscriptions` - DOWNSTREAM): Scheduled distribution jobs consume 10.15 narrative explanations and spoken scripts for email/Slack digests.
+    - 10.17 (`EmbeddedAndMobileBi` - DOWNSTREAM): Embedded chat widget and mobile voice recording UI embed 10.15 conversational sessions and spoken scripts.
+    - Module 23 (`AiAutomation` - DOWNSTREAM): External LLM orchestration, model gateways, and vector embedding pipelines hook into 10.15 NLQ endpoints.
+  - Audit logging: Administrative actions, query execution, session pinning/archival, narrative publication, and search index reweighting write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BNLQ` (NaturalLanguageQuery), `BCON` (BiConversationSession), `BNLG` (NarrativeExplanation), `BSDI` (SearchDiscoveryIndex) verified 100% collision-free repository-wide.
+
+---
+
+## 10.15-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO external heavy cloud LLM API or proprietary network dependencies (e.g. OpenAI / Anthropic API calls)** — Natural language intent classification, template-based narrative generation, voice script formatting, and synonym expansion run natively and deterministically in Python/Django without runtime cloud API requirements.
+- [ ] **NO automated schema mutation or unapproved database DDL execution** — Natural language queries parse into safe read-only SQL/ORM aggregates; no automatic DDL alteration of tenant tables.
+- [ ] **NO external billing, metering, or token quota dependencies** — All processing is tenant-isolated, deterministic, and audited without external token meter lockouts.
+- [ ] **NO live microphone hardware streaming or browser WebRTC media server dependencies** — Voice queries accept audio duration and transcribed intent payloads; live in-browser audio capture is handled via front-end HTML5 audio in 10.17.
+- [ ] **NO duplicate customer/vendor or accounting ledger tables** — Reuses verified core spine `core.Tenant`, `settings.AUTH_USER_MODEL`, `core.OrgUnit`, and `core.AuditLog`.
+
+---
+
+## Sub-module 10.15 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.15.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: NaturalLanguageQuery (`BNLQ`)**
+  - [ ] `apps/bi/models/ConversationalBi/NaturalLanguageQueries.py`
+  - [ ] `apps/bi/forms/ConversationalBi/NaturalLanguageQueries.py`
+  - [ ] `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py` (CRUD + `rate` feedback action)
+  - [ ] `apps/bi/urls/ConversationalBi/NaturalLanguageQueries.py`
+  - [ ] `templates/bi/conversational_bi/natural_language_query/list.html`
+  - [ ] `templates/bi/conversational_bi/natural_language_query/detail.html`
+  - [ ] `templates/bi/conversational_bi/natural_language_query/form.html`
+- [ ] **Entity 2: BiConversationSession (`BCON`)**
+  - [ ] `apps/bi/models/ConversationalBi/BiConversationSessions.py`
+  - [ ] `apps/bi/forms/ConversationalBi/BiConversationSessions.py`
+  - [ ] `apps/bi/views/ConversationalBi/BiConversationSessions.py` (CRUD + `toggle_pin` + `close_session` actions)
+  - [ ] `apps/bi/urls/ConversationalBi/BiConversationSessions.py`
+  - [ ] `templates/bi/conversational_bi/bi_conversation_session/list.html`
+  - [ ] `templates/bi/conversational_bi/bi_conversation_session/detail.html` (Interactive chat conversation thread)
+  - [ ] `templates/bi/conversational_bi/bi_conversation_session/form.html`
+- [ ] **Entity 3: NarrativeExplanation (`BNLG`)**
+  - [ ] `apps/bi/models/ConversationalBi/NarrativeExplanations.py`
+  - [ ] `apps/bi/forms/ConversationalBi/NarrativeExplanations.py`
+  - [ ] `apps/bi/views/ConversationalBi/NarrativeExplanations.py` (CRUD + `publish` + `regenerate` actions)
+  - [ ] `apps/bi/urls/ConversationalBi/NarrativeExplanations.py`
+  - [ ] `templates/bi/conversational_bi/narrative_explanation/list.html`
+  - [ ] `templates/bi/conversational_bi/narrative_explanation/detail.html` (Narrative view with TTS script preview)
+  - [ ] `templates/bi/conversational_bi/narrative_explanation/form.html`
+- [ ] **Entity 4: SearchDiscoveryIndex (`BSDI`)**
+  - [ ] `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [ ] `apps/bi/forms/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [ ] `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py` (CRUD + `reweight` + `search` query endpoint)
+  - [ ] `apps/bi/urls/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [ ] `templates/bi/conversational_bi/search_discovery_index/list.html`
+  - [ ] `templates/bi/conversational_bi/search_discovery_index/detail.html`
+  - [ ] `templates/bi/conversational_bi/search_discovery_index/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Package re-exports in `apps/bi/models/ConversationalBi/__init__.py` and `apps/bi/models/__init__.py`
+- [ ] Package re-exports in `apps/bi/forms/ConversationalBi/__init__.py` and `apps/bi/forms/__init__.py`
+- [ ] Package re-exports in `apps/bi/views/ConversationalBi/__init__.py` and `apps/bi/views/__init__.py`
+- [ ] Package re-exports in `apps/bi/urls/ConversationalBi/__init__.py` and `apps/bi/urls/__init__.py`
+- [ ] Register 4 models in `apps/bi/admin.py`
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.15
+- [ ] Add `LIVE_LINKS["10.15"]` in `apps/core/navigation.py`:
+  - `"Natural Language Query (NLQ)"`: `bi:natural_language_query_list`
+  - `"Conversational BI Assistant"`: `bi:bi_conversation_session_list`
+  - `"Natural Language Generation (NLG)"`: `bi:narrative_explanation_list`
+  - `"Voice-Enabled Analytics"`: `bi:narrative_explanation_list`
+  - `"Search-Driven Discovery"`: `bi:search_discovery_index_list`
+  - Plural alias keys:
+    - `"Natural Language Queries"`: `bi:natural_language_query_list`
+    - `"Conversational BI Sessions"`: `bi:bi_conversation_session_list`
+    - `"Narrative Explanations"`: `bi:narrative_explanation_list`
+    - `"Search Discovery Indexes"`: `bi:search_discovery_index_list`
+- [ ] Run `makemigrations bi` (claiming `0034`) & `migrate`
+- [ ] Run `seed_bi` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_10_15.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.15.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Add shared 10.15 fixtures to `conftest.py`
+- [ ] Write `test_conversationalbi_models.py`
+- [ ] Write `test_conversationalbi_forms.py`
+- [ ] Write `test_conversationalbi_views.py`
+- [ ] Write `test_conversationalbi_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/bi/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.15 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.15 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.15.md`
+
+### Later passes / deferred
+- Voice audio streaming WebRTC / MediaStream front-end recording integration (10.17 Embedded & Mobile BI)
+- External cloud LLM provider orchestration and token gateway (Module 23 AI Automation)
+- pgvector vector embeddings / hybrid semantic search indexing (Module 23 AI Automation)
+
+---
+
 # Sub-module 10.13: Predictive & Advanced Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.13.md` (2026-11-07)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.12.
