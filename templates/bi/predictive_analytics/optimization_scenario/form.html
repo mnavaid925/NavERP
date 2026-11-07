@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Scenario — {{ scenario_obj.name }}{% else %}New Optimization Scenario{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:optimization_scenario_list' %}">Optimization Scenarios</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Scenario{% else %}New Scenario{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Scenario: {{ scenario_obj.name }}{% else %}Formulate Optimization Scenario{% endif %}</h1>
+        <p class="text-muted text-sm">Define objective direction, target metric, controllable decision variables, and constraints</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Scenario Identity -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Scenario Identity & Objective</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Scenario Name *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                            {{ form.slug }}
+                            {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.objective_type.id_for_label }}">Objective Type *</label>
+                            {{ form.objective_type }}
+                            {% if form.objective_type.errors %}<div class="form-error">{{ form.objective_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.solver_algorithm.id_for_label }}">Solver Algorithm *</label>
+                            {{ form.solver_algorithm }}
+                            {% if form.solver_algorithm.errors %}<div class="form-error">{{ form.solver_algorithm.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Target & Baseline -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Metric Target & Baseline Calibration</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_metric_name.id_for_label }}">Target Metric *</label>
+                            {{ form.target_metric_name }}
+                            {% if form.target_metric_name.errors %}<div class="form-error">{{ form.target_metric_name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.baseline_value.id_for_label }}">Baseline Value *</label>
+                            {{ form.baseline_value }}
+                            {% if form.baseline_value.errors %}<div class="form-error">{{ form.baseline_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_value.id_for_label }}">Goal Target Value</label>
+                            {{ form.target_value }}
+                            {% if form.target_value.errors %}<div class="form-error">{{ form.target_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.kpi_definition.id_for_label }}">Linked Strategic KPI</label>
+                            {{ form.kpi_definition }}
+                            {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Levers & Constraints -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Mathematical Levers & Operational Boundaries</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.decision_variables_raw.id_for_label }}">Decision Variables (JSON Array)</label>
+                            {{ form.decision_variables_raw }}
+                            <span class="text-xs text-muted">Controllable parameters with min/max bounds and step sizes</span>
+                            {% if form.decision_variables_raw.errors %}<div class="form-error">{{ form.decision_variables_raw.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.constraint_rules_raw.id_for_label }}">Operational Constraints (JSON Array)</label>
+                            {{ form.constraint_rules_raw }}
+                            <span class="text-xs text-muted">Mathematical inequalities and boundary rules</span>
+                            {% if form.constraint_rules_raw.errors %}<div class="form-error">{{ form.constraint_rules_raw.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:optimization_scenario_detail' scenario_obj.pk %}{% else %}{% url 'bi:optimization_scenario_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Formulate Scenario{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
