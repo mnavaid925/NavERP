@@ -3405,6 +3405,7 @@ class Command(BaseCommand):
             if not AugmentedInsight.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
                     from apps.core.models import OrgUnit, Party
+                    tenant_admin = get_user_model().objects.filter(tenant=tenant).first()
                     wt_cust = WarehouseTable.objects.filter(tenant=tenant).first()
                     smod = SemanticModel.objects.filter(tenant=tenant).first()
                     kpi = KpiDefinition.objects.filter(tenant=tenant).first()
