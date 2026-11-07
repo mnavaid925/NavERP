@@ -116,7 +116,7 @@
             <div class="flex gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
                 {% if q or selected_category or selected_severity or selected_status %}
-                <a href="{% url 'bi:bi_notification_item_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'bi:bi_notification_item_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -175,15 +175,15 @@
                         {{ n.created_at|date:"M d, H:i" }}
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'bi:bi_notification_item_detail' n.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                        <a href="{% url 'bi:bi_notification_item_detail' n.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'bi:bi_notification_item_edit' n.pk %}" class="btn btn-icon btn-outline" title="Edit Notification">
+                        <a href="{% url 'bi:bi_notification_item_edit' n.pk %}" class="btn btn-icon btn-outline" title="Edit Notification" aria-label="Edit Notification">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'bi:bi_notification_item_delete' n.pk %}" class="inline" onsubmit="return confirm('Delete notification {{ n.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Notification">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Notification" aria-label="Delete Notification">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
