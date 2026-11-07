@@ -350,6 +350,14 @@ def notification_snooze(request, pk):
     notification.snoozed_until = now + timedelta(hours=hours)
     notification.save(update_fields=["status", "snoozed_until", "updated_at"])
 
+    write_audit_log(
+        request.user,
+        notification,
+        "update",
+        changes={"details": f"Snoozed {notification.number} for {hours} hours"},
+        tenant=request.tenant,
+    )
+
     messages.info(
         request, f"Notification {notification.number} snoozed for {hours} hours."
     )
