@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -147,6 +148,7 @@ def augmented_insight_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def augmented_insight_create(request):
     if request.method == "POST":
         form = AugmentedInsightForm(request.POST, tenant=request.tenant)
@@ -179,6 +181,7 @@ def augmented_insight_create(request):
 
 
 @login_required
+@transaction.atomic
 def augmented_insight_edit(request, pk):
     insight = bi_object(request, AugmentedInsight, pk)
     if request.method == "POST":
@@ -211,6 +214,7 @@ def augmented_insight_edit(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def augmented_insight_delete(request, pk):
     insight = bi_object(request, AugmentedInsight, pk)
     number = insight.number
@@ -228,6 +232,7 @@ def augmented_insight_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def augmented_insight_triage(request, pk):
     insight = bi_object(request, AugmentedInsight, pk)
     new_status = request.POST.get("status", "").strip()
