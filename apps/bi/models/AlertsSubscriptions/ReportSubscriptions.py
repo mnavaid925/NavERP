@@ -141,6 +141,7 @@ class ReportSubscription(TenantNumbered):
             )
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bsub_ten_created"),
             models.Index(fields=["tenant", "target_asset_type"], name="idx_bsub_ten_target"),
             models.Index(fields=["tenant", "cadence"], name="idx_bsub_ten_cadence"),
             models.Index(fields=["tenant", "status"], name="idx_bsub_ten_status"),
