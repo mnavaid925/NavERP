@@ -57,6 +57,10 @@ from apps.bi.models import (
     SmartDataPrepSuggestion,
     TextSentimentAnalysis,
     AnalyticsRecommendation,
+    NaturalLanguageQuery,
+    BiConversationSession,
+    NarrativeExplanation,
+    SearchDiscoveryIndex,
 )
 
 
@@ -554,4 +558,40 @@ class OptimizationScenarioAdmin(admin.ModelAdmin):
     list_select_related = ('tenant', 'kpi_definition', 'owner')
     list_filter = ('objective_type', 'solver_algorithm', 'solver_status', 'status', 'tenant')
     search_fields = ('number', 'name', 'slug', 'target_metric_name', 'description')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(NaturalLanguageQuery)
+class NaturalLanguageQueryAdmin(admin.ModelAdmin):
+    list_display = ('number', 'query_text', 'input_modality', 'intent_type', 'chart_type', 'confidence_score', 'execution_status', 'user_rating', 'tenant')
+    list_select_related = ('tenant', 'semantic_model', 'warehouse_table', 'kpi_definition', 'conversation_session', 'user')
+    list_filter = ('input_modality', 'intent_type', 'chart_type', 'execution_status', 'user_rating', 'tenant')
+    search_fields = ('number', 'query_text', 'generated_sql', 'user_feedback_notes')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(BiConversationSession)
+class BiConversationSessionAdmin(admin.ModelAdmin):
+    list_display = ('number', 'title', 'user', 'session_status', 'is_pinned', 'message_count', 'last_interaction_at', 'tenant')
+    list_select_related = ('tenant', 'user', 'primary_semantic_model', 'primary_dashboard')
+    list_filter = ('session_status', 'is_pinned', 'tenant')
+    search_fields = ('number', 'title', 'user__username')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at', 'last_interaction_at')
+
+
+@admin.register(NarrativeExplanation)
+class NarrativeExplanationAdmin(admin.ModelAdmin):
+    list_display = ('number', 'title', 'headline', 'target_artifact_type', 'narrative_style', 'language', 'status', 'tenant')
+    list_select_related = ('tenant', 'dashboard', 'report', 'kpi', 'query', 'insight', 'created_by')
+    list_filter = ('target_artifact_type', 'narrative_style', 'status', 'tenant')
+    search_fields = ('number', 'title', 'headline', 'narrative_body')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(SearchDiscoveryIndex)
+class SearchDiscoveryIndexAdmin(admin.ModelAdmin):
+    list_display = ('number', 'asset_name', 'asset_type', 'category', 'relevance_weight', 'search_hit_count', 'view_count', 'is_featured', 'is_verified', 'tenant')
+    list_select_related = ('tenant', 'semantic_model', 'dashboard', 'report', 'kpi', 'warehouse_table', 'glossary_term')
+    list_filter = ('asset_type', 'is_featured', 'is_verified', 'category', 'tenant')
+    search_fields = ('number', 'asset_name', 'target_url', 'description', 'search_keywords')
     readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
