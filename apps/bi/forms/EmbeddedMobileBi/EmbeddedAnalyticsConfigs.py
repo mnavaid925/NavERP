@@ -75,6 +75,15 @@ class EmbeddedAnalyticsConfigForm(TenantUniqueMixin, TenantModelForm):
         else:
             self.fields["default_rls_attributes_raw"].initial = "{}"
 
+    def clean_custom_css(self):
+        css = self.cleaned_data.get("custom_css", "") or ""
+        lowered = css.lower()
+        forbidden = ["<script", "</script", "<style", "</style", "javascript:", "expression("]
+        for token in forbidden:
+            if token in lowered:
+                raise forms.ValidationError("HTML or script tags and executable expressions are not allowed in custom CSS.")
+        return css
+
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["dashboard", "report", "semantic_model"])
