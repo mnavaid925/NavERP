@@ -41,11 +41,7 @@ class ForecastExecutionForm(TenantModelForm):
             self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant)
             self.fields["kpi_definition"].queryset = KpiDefinition.objects.filter(tenant=self.tenant, is_active=True)
 
-    def clean_model(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("model"))
-
-    def clean_semantic_model(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("semantic_model"))
-
-    def clean_kpi_definition(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("kpi_definition"))
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["model", "semantic_model", "kpi_definition"])
+        return cleaned_data
