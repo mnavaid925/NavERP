@@ -208,6 +208,7 @@ def augmented_insight_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def augmented_insight_delete(request, pk):
     insight = bi_object(request, AugmentedInsight, pk)
