@@ -139,6 +139,14 @@ class NarrativeExplanation(TenantNumbered):
         return reverse("bi:narrative_explanation_detail", kwargs={"pk": self.pk})
 
     @property
+    def is_published(self):
+        return self.status == "published"
+
+    @property
+    def has_voice_script(self):
+        return bool(self.audio_ready_script)
+
+    @property
     def status_badge_color(self):
         if self.status == "published":
             return "badge-green"
