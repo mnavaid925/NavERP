@@ -1852,3 +1852,15 @@ frozen contract, because all three transcribed `max_length=8` from each other. A
 (`checks.run_checks()`, which prints each `e.id` and message) is the cheapest possible check and it
 must run before `makemigrations`, not after: a migration that encodes a bad `max_length` is a
 migration you have to hand-edit.
+
+## L66 — `write_audit_log` signature is `(user, obj, action, changes=None, tenant=None)` — passing `request` or kwargs `instance=` / `description=` crashes with TypeError on mutation
+Hit across all 4 entities in Sub-module 10.17 during QA smoke and review. Every state mutation view crashed with HTTP 500 on valid POST submissions.
+
+1. **Root Cause**: `apps/core/utils.py` defines:
+   ```python
+   def write_audit_log(user, obj, action, changes=None, tenant=None):
+   ```
+   Calling it like `write_audit_log(request, action="CREATE", instance=obj, description="...")` fails with `TypeError: write_audit_log() got an unexpected keyword argument 'instance'`.
+2. **Impact**: Because mutations are wrapped in `with transaction.atomic():`, this unexpected exception rolls back the transaction, aborting every create, edit, delete, and revoke operation with a 500 server error.
+3. **Rule**: Always invoke `write_audit_log(request.user, obj, action.lower(), tenant=request.tenant)` (or pass a dict to `changes=`). Never pass `request` as the first argument and never pass `instance` or `description` keyword arguments.
+
