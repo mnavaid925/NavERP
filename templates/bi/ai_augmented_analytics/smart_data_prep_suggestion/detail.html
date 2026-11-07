@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}{{ suggestion.number }} — Data Prep Suggestion — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:smart_data_prep_suggestion_list' %}">AI & Augmented Analytics</a>
+            <span class="sep">/</span>
+            <span>{{ suggestion.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ suggestion.get_suggestion_type_display }}</h1>
+            <span class="badge {{ suggestion.badge_color }} text-xs">{{ suggestion.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm">{{ suggestion.number }} · Target: <span class="font-semibold text-slate-800">{{ suggestion.target_table.name }}.{{ suggestion.target_column }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:smart_data_prep_suggestion_edit' suggestion.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:smart_data_prep_suggestion_delete' suggestion.pk %}" onsubmit="return confirm('Delete suggestion {{ suggestion.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Left Column: Suggestion details (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Relationship & Transformation Mapping Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Schema Mapping & Target Relationship</h2>
+                <span class="text-xs font-semibold text-indigo-600">Confidence: {{ suggestion.confidence_score }}%</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Target Entity Column</div>
+                        <div class="text-lg font-mono font-bold text-slate-900 mt-1">
+                            {{ suggestion.target_table.name }}.<span class="text-indigo-600">{{ suggestion.target_column }}</span>
+                        </div>
+                        <div class="text-xs text-muted mt-1">Table Type: {{ suggestion.target_table.get_table_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Related Reference Column</div>
+                        {% if suggestion.related_table %}
+                        <div class="text-lg font-mono font-bold text-slate-800 mt-1">
+                            {{ suggestion.related_table.name }}.<span class="text-slate-900">{{ suggestion.related_column }}</span>
+                        </div>
+                        <div class="text-xs text-muted mt-1">Table Type: {{ suggestion.related_table.get_table_type_display }}</div>
+                        {% else %}
+                        <div class="text-sm text-slate-400 mt-2 font-mono">No external join table (In-place transform)</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-2">Transformation Rationale</h3>
+                    <div class="p-4 bg-white rounded-lg border border-slate-200 text-slate-700 leading-relaxed text-sm">
+                        {{ suggestion.rationale|linebreaks }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Configuration Parameters -->
+        <div class="card">
+            <div class="card-header flex items-center gap-2">
+                <i data-lucide="sliders" class="w-5 h-5 text-slate-600"></i>
+                <h2 class="text-base font-semibold">Suggested Configuration & Rules</h2>
+            </div>
+            <div class="card-body">
+                {% if config_items %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Parameter / Option</th>
+                                <th>Configured Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for key, val in config_items %}
+                            <tr>
+                                <td class="font-mono text-xs font-semibold text-slate-800">{{ key }}</td>
+                                <td class="font-mono text-xs text-indigo-700">{{ val }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state py-6 text-center text-muted">
+                    <p class="text-sm">Standard automated configuration logic applied.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Approval & Review Actions (1 col) -->
+    <div class="space-y-6">
+        <!-- Action Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-muted">Review & Decision</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <form method="post" action="{% url 'bi:smart_data_prep_suggestion_action' suggestion.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-3">
+                        <label class="form-label text-xs">Reviewer Notes</label>
+                        <textarea name="review_notes" rows="3" class="form-textarea text-xs" placeholder="Add commentary...">{{ suggestion.review_notes }}</textarea>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        {% if suggestion.status != 'accepted' and suggestion.status != 'applied' %}
+                        <button type="submit" name="action_type" value="accept" class="btn btn-outline text-xs text-emerald-700 hover:bg-emerald-50 w-full flex items-center justify-center gap-1.5">
+                            <i data-lucide="check" class="w-4 h-4"></i>
+                            <span>Accept Suggestion</span>
+                        </button>
+                        {% endif %}
+
+                        {% if suggestion.status != 'applied' %}
+                        <button type="submit" name="action_type" value="apply" class="btn btn-primary text-xs w-full flex items-center justify-center gap-1.5">
+                            <i data-lucide="play" class="w-4 h-4"></i>
+                            <span>Mark as Applied to Model</span>
+                        </button>
+                        {% endif %}
+
+                        {% if suggestion.status != 'rejected' %}
+                        <button type="submit" name="action_type" value="reject" class="btn btn-outline text-xs text-red-600 hover:bg-red-50 w-full flex items-center justify-center gap-1.5">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                            <span>Reject Suggestion</span>
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Review Metadata -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-muted">Audit & Traceability</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Target Warehouse Table:</span>
+                    <a href="{% url 'bi:warehouse_table_detail' suggestion.target_table.pk %}" class="font-medium text-indigo-600 hover:underline">
+                        {{ suggestion.target_table.name }}
+                    </a>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Reviewed By:</span>
+                    <span class="text-xs">{% if suggestion.reviewed_by %}{{ suggestion.reviewed_by.get_full_name|default:suggestion.reviewed_by.username }}{% else %}Pending Review{% endif %}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Reviewed At:</span>
+                    <span class="font-mono text-xs">{{ suggestion.reviewed_at|date:"Y-m-d H:i"|default:"—" }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Created At:</span>
+                    <span class="font-mono text-xs">{{ suggestion.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
