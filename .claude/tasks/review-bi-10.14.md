@@ -9,7 +9,7 @@ Changeset under review: `831d4a2fa67f1876bab24a5541f0e35ea4ec45e9...HEAD` (focus
 All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) were executed serially. Findings have been deduplicated, categorized by severity (Critical → Important → Minor), and assigned deterministic action IDs.
 
 ### Critical Priority
-- [ ] **C1**: Correct `write_audit_log()` call signature across all 16 mutating views in `apps/bi/views/AiAugmentedAnalytics/*.py` (`AugmentedInsights.py`, `SmartDataPrepSuggestions.py`, `TextSentimentAnalyses.py`, `AnalyticsRecommendations.py`) to `write_audit_log(request.user, obj, action, changes={...}, tenant=request.tenant)` and ensure `action` string length <= 10 characters, eliminating HTTP 500 `TypeError` crashes on POST requests.
+- [x] **C1**: fixed in e46f3add — Corrected write_audit_log(request.user, obj, action, changes={...}, tenant=request.tenant) call signature and ensured action <= 10 chars across all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py.
 
 ### Important Priority
 - [ ] **I1**: Apply `@tenant_admin_required` decorator to all 4 delete views in `apps/bi/views/AiAugmentedAnalytics/*.py` (`augmented_insight_delete`, `smart_data_prep_suggestion_delete`, `text_sentiment_analysis_delete`, `analytics_recommendation_delete`).
