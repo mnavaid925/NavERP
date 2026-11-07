@@ -7,6 +7,162 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.14: AI & Augmented Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.14.md` (2026-11-07)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.12.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0029_alter_scorecardkpiassignment_options_and_more.py`, so **10.14 claims `0030`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.14.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/AiAugmentedAnalytics/`
+> Template folder name: `templates/bi/ai_augmented_analytics/{augmented_insight,smart_data_prep_suggestion,text_sentiment_analysis,analytics_recommendation}/` + `feed.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **AI & Augmented Analytics Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Analytical & Augmented Scope:
+    - `AugmentedInsight`:
+      - Automated statistical insights, key-driver variance decomposition, anomaly detection, trend shifts, and natural language narrative explanations.
+      - Number: `BAIN-#####`.
+      - Insight classification: `insight_type` (`key_driver`, `anomaly`, `trend_shift`, `outlier`, `period_comparison`).
+      - Narrative explanation: `narrative_summary` (plain-text NLG description), `title`.
+      - Statistical baseline & variance: `metric_name`, `baseline_value`, `observed_value`, `variance_percentage`.
+      - Business impact: `impact_direction` (`favorable`, `unfavorable`, `neutral`), `severity` (`low`, `medium`, `high`, `critical`).
+      - Statistical rigor: `confidence_score` (Decimal 0.00–100.00).
+      - Dimensional decomposition: `dimension_name`, `dimension_value`, `driver_decomposition` (JSONField storing top positive & negative contributing drivers).
+      - Workflow state: `status` (`new`, `bookmarked`, `dismissed`, `actioned`), `action_notes`.
+      - Foreign Keys: `semantic_model` (FK `bi.SemanticModel`, SET_NULL), `kpi_definition` (FK `bi.KpiDefinition`, SET_NULL), `warehouse_table` (FK `bi.WarehouseTable`, SET_NULL).
+    - `SmartDataPrepSuggestion`:
+      - Machine-assisted data wrangling, relationship/join discovery, data type inference, null imputation, and cleaning suggestions.
+      - Number: `BSDP-#####`.
+      - Target entity: `target_table` (FK `bi.WarehouseTable`, CASCADE), `target_column`.
+      - Suggestion type: `suggestion_type` (`join_relationship`, `type_cast`, `split_column`, `impute_missing`, `deduplicate_fuzzy`, `filter_outliers`).
+      - Related candidate: `related_table` (FK `bi.WarehouseTable`, SET_NULL, optional), `related_column`.
+      - Confidence & rationale: `confidence_score` (Decimal 0.00–100.00), `rationale`.
+      - Suggested configuration: `suggested_config` (JSONField with transformation rules / join clauses).
+      - Acceptance workflow: `status` (`pending`, `accepted`, `rejected`, `applied`), `reviewed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL), `reviewed_at`.
+    - `TextSentimentAnalysis`:
+      - Unstructured text ingestion, sentiment classification, polarity and subjectivity quantification, and thematic keyword extraction.
+      - Number: `BSNT-#####`.
+      - Source tracking: `source_type` (`customer_review`, `support_ticket`, `survey_feedback`, `crm_note`, `internal_comment`), `source_reference`.
+      - Qualitative text: `text_content`, `language` (default 'en').
+      - Sentiment scoring: `sentiment_category` (`very_positive`, `positive`, `neutral`, `negative`, `very_negative`), `polarity_score` (Decimal -1.00 to +1.00), `subjectivity_score` (Decimal 0.00 to 1.00).
+      - Thematic extraction: `thematic_tags` (JSONField storing extracted topic tags and keywords).
+      - Linked business entity: `linked_party` (FK `core.Party`, SET_NULL, optional), `linked_org_unit` (FK `core.OrgUnit`, SET_NULL, optional), `analyzed_at`.
+    - `AnalyticsRecommendation`:
+      - Role- and behavior-aware personalized analytical discovery engine suggesting dashboards, reports, KPIs, and datasets.
+      - Number: `BARC-#####`.
+      - Recipient: `user` (FK `settings.AUTH_USER_MODEL`, CASCADE).
+      - Recommendation target: `recommendation_type` (`dashboard`, `report`, `kpi`, `dataset`, `drill_path`), `target_title`, `target_url`.
+      - Algorithmic rationale: `reason` (`peer_usage`, `trending_metric`, `anomaly_in_domain`, `recent_search`, `role_relevance`), `affinity_score` (Decimal 0.00–100.00).
+      - User engagement lifecycle: `status` (`active`, `clicked`, `dismissed`, `saved`).
+      - Catalog target FKs: `dashboard` (FK `bi.BiDashboard`, SET_NULL), `report` (FK `bi.ReportDefinition`, SET_NULL), `kpi` (FK `bi.KpiDefinition`, SET_NULL), `semantic_model` (FK `bi.SemanticModel`, SET_NULL).
+  - Sibling Hand-offs & Boundaries:
+    - 10.3 (`DataWarehouse`): `WarehouseTable` provides structured storage tables analyzed by smart data prep suggestions and augmented insights.
+    - 10.4 (`SemanticLayer`): `SemanticModel` provides curated metrics and dimensional context for key-driver decomposition.
+    - 10.8 (`Dashboards`): `BiDashboard` provides interactive dashboards recommended to users based on relevance.
+    - 10.9 (`OperationalReporting`): `ReportDefinition` provides operational reports recommended to users.
+    - 10.11 (`PerformanceScorecards`): `KpiDefinition` metrics serve as target objectives analyzed for automated anomalies and key drivers.
+    - 10.15 (`NaturalLanguageConversationalBI` - DOWNSTREAM): Future natural language query chatbot will consume `AugmentedInsight` summaries for conversational Q&A.
+    - 10.16 (`AlertsAndSubscriptions` - DOWNSTREAM): Automated push alerts will route high-severity `AugmentedInsight` records across external channels.
+  - Audit logging: Administrative, status transition, and data prep acceptance actions write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BAIN` (AugmentedInsight), `BSDP` (SmartDataPrepSuggestion), `BSNT` (TextSentimentAnalysis), `BARC` (AnalyticsRecommendation) verified 100% collision-free repository-wide.
+
+---
+
+## 10.14-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO external heavy cloud LLM API or proprietary network dependencies (e.g. live OpenAI/Anthropic network calls)** — Statistical driver decomposition, natural language generation templates, sentiment rule engines, and recommendation scoring run fully local, deterministic, and offline within Django.
+- [ ] **NO automated schema mutation or unapproved database DDL execution** — Smart data prep suggestions generate advisory configurations; applying a suggestion updates status and logs audit records without running destructive live DDL on tenant databases.
+- [ ] **NO duplicate customer/vendor/employee or audit tables** — Reuses `core.Party`, `core.OrgUnit`, and `core.AuditLog`.
+
+---
+
+## Sub-module 10.14 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.14.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AugmentedInsight (`BAIN`)**
+  - [ ] `apps/bi/models/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [ ] `apps/bi/forms/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [ ] `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py` (CRUD + `feed` interactive feed view + `triage` action)
+  - [ ] `apps/bi/urls/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/list.html`
+  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/detail.html`
+  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/form.html`
+  - [ ] `templates/bi/ai_augmented_analytics/feed.html` (Smart Insight Feed interactive stream)
+- [ ] **Entity 2: SmartDataPrepSuggestion (`BSDP`)**
+  - [ ] `apps/bi/models/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [ ] `apps/bi/forms/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [ ] `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py` (CRUD + `accept` / `reject` actions)
+  - [ ] `apps/bi/urls/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/list.html`
+  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/detail.html`
+  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/form.html`
+- [ ] **Entity 3: TextSentimentAnalysis (`BSNT`)**
+  - [ ] `apps/bi/models/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [ ] `apps/bi/forms/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [ ] `apps/bi/views/AiAugmentedAnalytics/TextSentimentAnalyses.py` (CRUD + sentiment score recalculation)
+  - [ ] `apps/bi/urls/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/list.html`
+  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/detail.html`
+  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/form.html`
+- [ ] **Entity 4: AnalyticsRecommendation (`BARC`)**
+  - [ ] `apps/bi/models/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [ ] `apps/bi/forms/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [ ] `apps/bi/views/AiAugmentedAnalytics/AnalyticsRecommendations.py` (CRUD + `interact` action for click/dismiss)
+  - [ ] `apps/bi/urls/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/list.html`
+  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/detail.html`
+  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/form.html`
+
+### Phase 3.4: Integrate
+- [ ] Update `apps/bi/models/__init__.py` re-export block
+- [ ] Update `apps/bi/forms/__init__.py` re-export block
+- [ ] Update `apps/bi/views/__init__.py` re-export block
+- [ ] Update `apps/bi/urls/__init__.py` re-export block & concatenate urlpatterns
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.14
+- [ ] Add `LIVE_LINKS["10.14"]` in `apps/core/navigation.py`:
+  - `"Auto-Generated Insights"`: `bi:augmented_insight_list`
+  - `"Smart Insight Feed"`: `bi:augmented_insight_feed`
+  - `"Automated Data Preparation"`: `bi:smart_data_prep_suggestion_list`
+  - `"Text & Sentiment Analytics"`: `bi:text_sentiment_analysis_list`
+  - `"Recommendation Engine"`: `bi:analytics_recommendation_list`
+- [ ] Run `makemigrations bi` (claiming `0030`) & `migrate`
+- [ ] Run `seed_bi` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_10_14.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.14.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Add shared 10.14 fixtures to `conftest.py`
+- [ ] Write `test_aiaugmentedanalytics_models.py`
+- [ ] Write `test_aiaugmentedanalytics_forms.py`
+- [ ] Write `test_aiaugmentedanalytics_views.py`
+- [ ] Write `test_aiaugmentedanalytics_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/bi/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.14 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.14 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.14.md`
+
+---
+
 # Sub-module 10.11: KPI & Performance Scorecards (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.11.md` (2026-11-06)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.10.
