@@ -84,6 +84,14 @@ class BiConversationSession(TenantNumbered):
         return reverse("bi:bi_conversation_session_detail", kwargs={"pk": self.pk})
 
     @property
+    def is_active(self):
+        return self.session_status == "active"
+
+    @property
+    def suggested_followups(self):
+        return self.suggested_prompts
+
+    @property
     def status_badge_color(self):
         if self.session_status == "active":
             return "badge-green"
