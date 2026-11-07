@@ -1,5 +1,6 @@
 import json
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.bi.forms._common import reject_foreign
 from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
@@ -71,6 +72,11 @@ class StatisticalAnomalyForm(TenantModelForm):
             self.fields["model"].queryset = PredictiveModel.objects.filter(tenant=self.tenant)
             self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant)
             self.fields["kpi_definition"].queryset = KpiDefinition.objects.filter(tenant=self.tenant)
+            self.fields["assigned_to"].queryset = (
+                get_user_model().objects.filter(tenant=self.tenant).order_by("first_name", "username")
+            )
+        else:
+            self.fields["assigned_to"].queryset = get_user_model().objects.none()
 
         if self.instance and self.instance.pk:
             if self.instance.root_cause_factors:
@@ -97,7 +103,7 @@ class StatisticalAnomalyForm(TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["model", "semantic_model", "kpi_definition"])
+        reject_foreign(self, cleaned_data, ["model", "semantic_model", "kpi_definition", "assigned_to"])
         return cleaned_data
 
     def save(self, commit=True):
