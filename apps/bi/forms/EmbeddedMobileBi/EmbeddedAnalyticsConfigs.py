@@ -61,9 +61,9 @@ class EmbeddedAnalyticsConfigForm(TenantUniqueMixin, TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant:
-            self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant).order_by("title")
-            self.fields["report"].queryset = ReportDefinition.objects.filter(tenant=self.tenant).order_by("name")
-            self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant).order_by("name")
+            self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant).only("id", "title", "number").order_by("title")
+            self.fields["report"].queryset = ReportDefinition.objects.filter(tenant=self.tenant).only("id", "name", "number").order_by("name")
+            self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant).only("id", "name", "number").order_by("name")
 
         if self.instance and self.instance.pk:
             if self.instance.default_rls_attributes:
