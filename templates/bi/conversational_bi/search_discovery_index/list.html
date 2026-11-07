@@ -171,19 +171,19 @@
                         <div class="flex items-center justify-end gap-2">
                             <form method="post" action="{% url 'bi:search_discovery_index_reweight' idx.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-ghost btn-sm text-xs p-1 text-sky-600 hover:bg-sky-50" title="Boost Relevance (+0.50x)">
+                                <button type="submit" class="btn btn-icon text-sky-600" title="Boost Relevance (+0.50x)">
                                     <i data-lucide="arrow-up-circle"></i>
                                 </button>
                             </form>
-                            <a href="{% url 'bi:search_discovery_index_detail' idx.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="View Detail">
+                            <a href="{% url 'bi:search_discovery_index_detail' idx.pk %}" class="btn btn-icon" title="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:search_discovery_index_edit' idx.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="Edit">
+                            <a href="{% url 'bi:search_discovery_index_edit' idx.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'bi:search_discovery_index_delete' idx.pk %}" class="inline" onsubmit="return confirm('Delete discovery index {{ idx.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-ghost btn-sm text-xs text-rose-600 p-1" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
