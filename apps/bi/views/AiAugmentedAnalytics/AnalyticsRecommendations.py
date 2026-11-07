@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
@@ -175,6 +176,13 @@ def analytics_recommendation_delete(request, pk):
 @transaction.atomic
 def analytics_recommendation_interact(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
+    if not (
+        recommendation.user == request.user
+        or getattr(request.user, "is_tenant_admin", False)
+        or request.user.is_superuser
+    ):
+        raise PermissionDenied("Only the designated user or tenant administrator can interact with this recommendation.")
+
     interaction_type = request.POST.get("interaction_type", "").strip()
 
     status_map = {
