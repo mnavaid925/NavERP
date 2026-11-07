@@ -32,6 +32,27 @@ Changeset under review: `831d4a2fa67f1876bab24a5541f0e35ea4ec45e9...HEAD` (focus
   1. `apps/bi/forms/AiAugmentedAnalytics/TextSentimentAnalyses.py` — Widget input type step and decimal bounds for `polarity_score` and `subjectivity_score`.
   2. `templates/bi/ai_augmented_analytics/{smart_data_prep_suggestion,text_sentiment_analysis}/list.html` — Missing `next` hidden field on quick action forms.
 
+### Pass 3: Frontend Reviewer (`frontend-reviewer`)
+- **Verdict**: PASS WITH FINDINGS (0 Critical, 1 Important, 4 Minor)
+- **Critical**: None
+- **Important**:
+  1. `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` — Stat card Key Drivers renders `{{ insights|length }}` (current page slice) rather than total tenant count (`key_driver_count`).
+- **Minor**:
+  1. `templates/bi/ai_augmented_analytics/{smart_data_prep_suggestion,text_sentiment_analysis}/list.html` — Missing explicit `<input type="hidden" name="next">` on inline action forms.
+  2. List filter forms accessibility — Missing `for` / `id` pairing on search & filter inputs across list templates.
+  3. `feed.html:34-50` — Dark mode contrast utilities for active filter pills and card callouts (`dark:bg-slate-800`, `dark:text-indigo-300`).
+  4. `analytics_recommendation/{list,detail}.html` — External asset links (`target_url`) should include `rel="noopener noreferrer"`.
+
+- **Verdict**: PASS WITH FINDINGS (0 Critical, 3 Important, 2 Minor)
+- **Critical**: None
+- **Important**:
+  1. `apps/bi/{models,forms,views}/AiAugmentedAnalytics/__init__.py` — Missing sub-package `__init__.py` files re-exporting entity modules.
+  2. `apps/bi/models/AiAugmentedAnalytics/*.py` — Omission of explicit `db_table` in Meta (`bi_augmented_insight`, `bi_smart_data_prep_suggestion`, `bi_text_sentiment_analysis`, `bi_analytics_recommendation`).
+  3. `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` & `AugmentedInsights.py` — Stat card Key Drivers reflects current page length instead of total tenant count `key_driver_count`.
+- **Minor**:
+  1. `apps/bi/forms/AiAugmentedAnalytics/TextSentimentAnalyses.py` — Widget input type step and decimal bounds for `polarity_score` and `subjectivity_score`.
+  2. `templates/bi/ai_augmented_analytics/{smart_data_prep_suggestion,text_sentiment_analysis}/list.html` — Missing `next` hidden field on quick action forms.
+
 - **Verdict**: PASS WITH FIXES (0 Critical, 6 Important, 3 Minor)
 - **Critical**: None
 - **Important**:
