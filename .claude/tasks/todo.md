@@ -97,14 +97,14 @@
 - [x] Freeze contract in `.claude/tasks/contract-bi-10.15.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: NaturalLanguageQuery (`BNLQ`)**
-  - [ ] `apps/bi/models/ConversationalBi/NaturalLanguageQueries.py`
-  - [ ] `apps/bi/forms/ConversationalBi/NaturalLanguageQueries.py`
-  - [ ] `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py` (CRUD + `rate` feedback action)
-  - [ ] `apps/bi/urls/ConversationalBi/NaturalLanguageQueries.py`
-  - [ ] `templates/bi/conversational_bi/natural_language_query/list.html`
-  - [ ] `templates/bi/conversational_bi/natural_language_query/detail.html`
-  - [ ] `templates/bi/conversational_bi/natural_language_query/form.html`
+- [x] **Entity 1: NaturalLanguageQuery (`BNLQ`)**
+  - [x] `apps/bi/models/ConversationalBi/NaturalLanguageQueries.py`
+  - [x] `apps/bi/forms/ConversationalBi/NaturalLanguageQueries.py`
+  - [x] `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py` (CRUD + `rate` feedback action)
+  - [x] `apps/bi/urls/ConversationalBi/NaturalLanguageQueries.py`
+  - [x] `templates/bi/conversational_bi/natural_language_query/list.html`
+  - [x] `templates/bi/conversational_bi/natural_language_query/detail.html`
+  - [x] `templates/bi/conversational_bi/natural_language_query/form.html`
 - [ ] **Entity 2: BiConversationSession (`BCON`)**
   - [ ] `apps/bi/models/ConversationalBi/BiConversationSessions.py`
   - [ ] `apps/bi/forms/ConversationalBi/BiConversationSessions.py`
