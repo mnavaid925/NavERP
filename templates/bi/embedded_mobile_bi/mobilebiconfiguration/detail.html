@@ -256,7 +256,7 @@
                 </div>
                 <div class="flex justify-between items-center py-1 border-b border-slate-100">
                     <span class="text-muted">Created By</span>
-                    <span class="font-medium text-slate-800">{{ config.created_by.get_full_name|default:config.created_by.username|default:"System" }}</span>
+                    <span class="font-medium text-slate-800">{% if config.created_by %}{{ config.created_by.get_full_name|default:config.created_by.username }}{% else %}System{% endif %}</span>
                 </div>
                 <div class="flex justify-between items-center py-1">
                     <span class="text-muted">Created At</span>
