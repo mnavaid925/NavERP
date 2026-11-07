@@ -103,7 +103,7 @@
                 <select id="filter_dashboard" name="dashboard" class="form-select text-sm">
                     <option value="">All Dashboards</option>
                     {% for d in dashboards %}
-                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.title }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -162,7 +162,7 @@
                         <div class="text-sm font-medium text-slate-800">{{ sess.primary_semantic_model.name }}</div>
                         <div class="text-xs text-muted">Semantic Model</div>
                         {% elif sess.primary_dashboard %}
-                        <div class="text-sm font-medium text-slate-800">{{ sess.primary_dashboard.name }}</div>
+                        <div class="text-sm font-medium text-slate-800">{{ sess.primary_dashboard.title }}</div>
                         <div class="text-xs text-muted">Dashboard Context</div>
                         {% else %}
                         <span class="text-xs text-muted italic">Global Context</span>
