@@ -124,11 +124,10 @@ def bi_alert_rule_create(request):
                 form.save_m2m()
 
                 write_audit_log(
-                    request,
-                    action="create",
-                    model_name="BiAlertRule",
-                    object_id=rule.pk,
-                    object_repr=str(rule),
+                    request.user,
+                    rule,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Alert rule {rule.number} created successfully.")
             return redirect("bi:bi_alert_rule_detail", pk=rule.pk)
@@ -157,11 +156,10 @@ def bi_alert_rule_edit(request, pk):
             with transaction.atomic():
                 rule = form.save()
                 write_audit_log(
-                    request,
-                    action="update",
-                    model_name="BiAlertRule",
-                    object_id=rule.pk,
-                    object_repr=str(rule),
+                    request.user,
+                    rule,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Alert rule {rule.number} updated successfully.")
             return redirect("bi:bi_alert_rule_detail", pk=rule.pk)
@@ -188,11 +186,10 @@ def bi_alert_rule_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="delete",
-            model_name="BiAlertRule",
-            object_id=rule.pk,
-            object_repr=str(rule),
+            request.user,
+            rule,
+            "delete",
+            tenant=request.tenant,
         )
         rule.delete()
 
@@ -259,10 +256,10 @@ def bi_alert_rule_test_evaluate(request, pk):
     rule.save()
 
     write_audit_log(
-        request,
-        action="update",
-        model_name="BiAlertRule",
-        object_id=rule.pk,
-        object_repr=f"Evaluate {rule.number} -> tripped={tripped}",
+        request.user,
+        rule,
+        "update",
+        changes={"details": f"Evaluate {rule.number} -> tripped={tripped}"},
+        tenant=request.tenant,
     )
     return redirect("bi:bi_alert_rule_detail", pk=rule.pk)
