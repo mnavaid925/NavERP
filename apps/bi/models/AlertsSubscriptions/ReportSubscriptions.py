@@ -168,7 +168,7 @@ class ReportSubscription(TenantNumbered):
         mapping = {
             "pdf": "badge-red",
             "xlsx": "badge-green",
-            "csv": "badge-blue",
-            "html_inline": "badge-purple",
+            "csv": "badge-info",
+            "html_inline": "badge-slate",
         }
         return mapping.get(self.export_format, "badge-slate")
