@@ -2029,6 +2029,36 @@ Migrations `apps/bi/migrations/0024_datablenddefinition_adhocquery_savedanalysis
 
 ---
 
+### Module 10 10.11 — KPI & Performance Scorecards (built)
+
+10.11 delivers enterprise KPI management and Kaplan & Norton Balanced Scorecards with 4 strategic perspectives (Financial, Customer, Internal Process, Learning & Growth), centralized KPI definitions, automated target tracking with plan-vs-actual variance and trend directions, industry benchmark overlays, and interactive cause-and-effect Strategy Maps.
+
+- **Ownership boundaries & Spine Alignment (L28/L29/L36/L37)**:
+  - Extends `apps/bi/` with four `TenantNumbered` models (`BKPI-`, `BSCR-`, `BSCI-`, `BOBJ-`) under strict multi-tenant isolation (`core.Tenant`, CASCADE).
+  - Integration with `bi.CalculatedMeasure` (10.4 Semantic Layer), `core.OrgUnit` (departments/business units), and `auth.User` (ownership and assignment).
+  - Balanced Scorecard Roll-up: Automated roll-up of weighted KPI achievement across all 4 perspectives into composite scorecard performance scores (0.00-100.00%) and overall traffic-light RAG status indicators.
+  - Role-Based Authorization: Enforces `@tenant_admin_required` across all create, edit, delete, metric refresh, scorecard recalculation, and actual recording actions.
+  - Performance & Optimization: Optimized ORM queries eliminating N+1 query loops in detail views, SQL conditional counts in list aggregations, and compound tenant indexes (`idx_bscr_ten_rag`, `idx_bsci_ten_trend`, `idx_bobj_ten_rag`).
+
+**What shipped**
+
+1. **`KpiDefinition`** (`BKPI-`): Centralized metric catalog with formula expressions, target directions (maximize, minimize, in-range), UOM, tracking frequencies, warning/critical thresholds, historical values, and external industry benchmark percentiles.
+2. **`PerformanceScorecard`** (`BSCR-`): Strategic scorecards with customizable perspective weights summing to 100%, review periods, overall score roll-ups, and default scorecard handling.
+3. **`ScorecardKpiAssignment`** (`BSCI-`): Relational binding between scorecards, KPIs, and strategic objectives, tracking targets, actual measurements, plan-vs-actual variance, normalized scores, and trend arrows (↗/→/↘).
+4. **`StrategicObjective`** (`BOBJ-`): Cause-and-effect strategic goals organized by perspective, hierarchical parent-child relationships, statement of intent narrative, and automated alignment health recalculation.
+
+**Routes & Management Hub**:
+- **KPI Library**: `bi:kpi_definition_list` (`/bi/kpis/`) with status, perspective, and category filtering, plus 1-click measurement refresh (`bi:kpi_definition_refresh` - `@tenant_admin_required`, `@require_POST`).
+- **Balanced Scorecards**: `bi:performance_scorecard_list` (`/bi/scorecards/`) and detail with perspective completion summaries and instant roll-up recalculation (`bi:performance_scorecard_recalculate` - `@tenant_admin_required`, `@require_POST`).
+- **Strategy Map**: `bi:performance_scorecard_strategy_map` (`/bi/scorecards/<pk>/strategy-map/`) rendering Kaplan & Norton visual cause-and-effect alignment across all 4 perspectives.
+- **KPI Assignments & Actuals**: `bi:scorecard_kpi_assignment_list` (`/bi/assignments/`) and actual measurement recording workbench (`bi:scorecard_kpi_assignment_record_actual` - `@tenant_admin_required`).
+- **Strategic Objectives**: `bi:strategic_objective_list` (`/bi/objectives/`) with parent-child hierarchy and health status.
+- **18 Complete Routes**: Full CRUD, measurement refresh, roll-up recalculation, strategy map visualization, and actual recording workflows.
+
+Migrations `apps/bi/migrations/0027_kpidefinition_performancescorecard_and_more.py` and `0029_alter_scorecardkpiassignment_options_and_more.py` provide the 10.11 schema, unique constraints, and compound indexes. `seed_bi` idempotently seeds balanced scorecards, strategic objectives, KPI definitions, and assignments for both Acme and Globex with full `--flush` wipe support. The test suite for 10.11 is **complete and green** with 183 dedicated tests across 4 modules (`test_performancescorecards_models.py`, `_forms.py`, `_views.py`, and `_security.py`) bringing the entire `apps/bi` test suite to 1,613 passing tests (100% green). See `.claude/tasks/research-bi-10.11.md` for domain research, `.claude/tasks/contract-bi-10.11.md` for the build contract, `.claude/tasks/review-bi-10.11.md` for the 6-lane review record, and `.claude/skills/bi/SKILL.md` for the living module documentation.
+
+---
+
 ### Module 10 10.12 — OLAP & Multidimensional Analysis (built)
 
 10.12 delivers enterprise multidimensional Online Analytical Processing (OLAP), pre-aggregated multidimensional cubes with configurable storage modes (ROLAP, MOLAP, HOLAP), interactive pivot and cross-tab matrix analysis with nested row/column dimensions and subtotal calculations, dynamic drill-through navigation to accounting and reporting detail, time-intelligence planning, and what-if simulation workbenches with financial budget writeback ledgers.
