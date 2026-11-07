@@ -29,7 +29,7 @@
             background-color: {% if config.theme_mode == 'dark' %}#0f172a{% else %}#f8fafc{% endif %};
             color: {% if config.theme_mode == 'dark' %}#f1f5f9{% else %}#1e293b{% endif %};
         }
-        {{ config.custom_css|safe }}
+        {% if config.custom_css %}{{ config.custom_css|striptags|safe }}{% endif %}
     </style>
 </head>
 <body class="p-4 md:p-6 min-h-screen">
