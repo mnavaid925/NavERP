@@ -1811,7 +1811,7 @@ def predictive_model_a(db, tenant_a, semantic_model_a, admin_user):
         slug="acme-demand-forecasting-model",
         problem_type="time_series_forecast",
         target_metric="sales_units",
-        algorithm="auto_arima",
+        algorithm="arima",
         status="active",
         created_by=admin_user,
         features_list=["historical_sales", "promotions", "seasonality"],
