@@ -29,7 +29,7 @@ def smart_data_prep_suggestion_list(request):
     )
     pending_count = counts["pending"] or 0
 
-    tables = WarehouseTable.objects.filter(tenant=request.tenant).order_by("name")
+    tables = WarehouseTable.objects.filter(tenant=request.tenant).order_by("name").only("id", "name")
 
     # Search
     q = request.GET.get("q", "").strip()
