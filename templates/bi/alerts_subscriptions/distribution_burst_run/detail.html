@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}{{ burst_run.number }} — Burst Run Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:distribution_burst_run_list' %}">Burst Runs</a>
+            <span class="sep">/</span>
+            <span>{{ burst_run.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Burst Run: {{ burst_run.number }}</h1>
+            <span class="badge {{ burst_run.status_badge_class }}">{{ burst_run.get_status_display }}</span>
+            <span class="badge {{ burst_run.channel_badge_class }}">{{ burst_run.get_delivery_channel_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Dispatched at {{ burst_run.started_at|date:"M d, Y H:i:s" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:distribution_burst_run_edit' burst_run.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:distribution_burst_run_delete' burst_run.pk %}" class="inline" onsubmit="return confirm('Delete burst run {{ burst_run.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Execution & Slicing Telemetry</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Origin Source</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">
+                            {% if burst_run.subscription %}
+                            <a href="{% url 'bi:report_subscription_detail' burst_run.subscription.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="calendar" class="w-4 h-4"></i>
+                                <span>{{ burst_run.subscription.name }}</span>
+                            </a>
+                            {% elif burst_run.alert_rule %}
+                            <a href="{% url 'bi:bi_alert_rule_detail' burst_run.alert_rule.pk %}" class="text-amber-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                                <span>{{ burst_run.alert_rule.name }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-muted">Ad-Hoc Manual Dispatch</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Run Trigger</div>
+                        <div class="text-sm text-slate-900 mt-1">{{ burst_run.get_run_trigger_display }}</div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Delivery Channel</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-1">{{ burst_run.get_delivery_channel_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Execution Latency</div>
+                        <div class="text-sm font-mono text-slate-900 mt-1">{{ burst_run.execution_duration_ms }} ms</div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Recipient Batch Success</div>
+                        <div class="text-sm font-mono mt-1">
+                            <span class="font-semibold text-emerald-700">{{ burst_run.delivered_count }} delivered</span>
+                            <span class="text-muted">of {{ burst_run.recipient_count }} targeted</span>
+                            {% if burst_run.failed_count > 0 %}
+                            <span class="text-rose-600 font-semibold">({{ burst_run.failed_count }} failed)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Generated File Artifact</div>
+                        <div class="text-sm font-mono text-slate-800 mt-1 truncate">
+                            {{ burst_run.generated_file_name|default:"—" }}
+                            {% if burst_run.file_size_bytes %}
+                            <span class="text-xs text-muted">({{ burst_run.file_size_bytes }} bytes)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if burst_run.error_summary %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold text-rose-600">Diagnostics / Error Summary</div>
+                    <div class="text-xs font-mono text-rose-700 bg-rose-50 p-3 rounded mt-1 border border-rose-200">
+                        {{ burst_run.error_summary }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if burst_run.burst_slicing_metadata %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold">Slicing & Partition Metadata</div>
+                    <pre class="text-xs font-mono bg-slate-900 text-slate-100 p-3 rounded mt-1 overflow-x-auto">{{ burst_run.burst_slicing_metadata }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Notifications Generated -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-base font-semibold">In-App Notices Dispatched</h2>
+                <a href="{% url 'bi:bi_notification_item_list' %}" class="text-xs text-blue-600 hover:underline">Notification Center</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Notice ID</th>
+                            <th>Recipient</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for n in notifications %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:bi_notification_item_detail' n.pk %}" class="text-blue-600 hover:underline">
+                                    {{ n.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm">{{ n.recipient.username }}</td>
+                            <td><span class="badge {{ n.status_badge_class }}">{{ n.get_status_display }}</span></td>
+                            <td class="text-xs text-muted">{{ n.created_at|date:"M d, H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center py-6 text-sm text-muted">
+                                No direct in-app inbox items linked to this burst run.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Execution Context</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Started At</div>
+                    <div class="text-sm text-slate-800 mt-1">{{ burst_run.started_at|date:"M d, Y H:i:s" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Completed At</div>
+                    <div class="text-sm text-slate-800 mt-1">
+                        {% if burst_run.completed_at %}
+                        {{ burst_run.completed_at|date:"M d, Y H:i:s" }}
+                        {% else %}
+                        <span class="text-muted">Still running / indeterminate</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Executed By User</div>
+                    <div class="text-sm text-slate-800 mt-1">
+                        {% if burst_run.executed_by %}
+                        {{ burst_run.executed_by.get_full_name|default:burst_run.executed_by.username }}
+                        {% else %}
+                        <span class="text-muted">Automated Scheduler</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
