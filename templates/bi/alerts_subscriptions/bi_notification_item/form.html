@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{% if notification %}Edit {{ notification.number }}{% else %}New Notification{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_notification_item_list' %}">Notifications</a>
+            <span class="sep">/</span>
+            <span>{% if notification %}Edit {{ notification.number }}{% else %}New Notice{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if notification %}Edit Notification: {{ notification.number }}{% else %}Dispatch In-App Notification{% endif %}</h1>
+        <p class="text-muted text-sm">Issue alerts, operational directives, and subscription digests directly to user inboxes</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if notification %}{% url 'bi:bi_notification_item_detail' notification.pk %}{% else %}{% url 'bi:bi_notification_item_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Notification Parameters</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 rounded bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.title.id_for_label }}">Notification Title <span class="text-rose-500">*</span></label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.message.id_for_label }}">Message Body <span class="text-rose-500">*</span></label>
+                        {{ form.message }}
+                        {% if form.message.errors %}<div class="form-error">{{ form.message.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.recipient.id_for_label }}">Recipient User <span class="text-rose-500">*</span></label>
+                        {{ form.recipient }}
+                        {% if form.recipient.errors %}<div class="form-error">{{ form.recipient.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.category.id_for_label }}">Category</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.severity.id_for_label }}">Severity</label>
+                        {{ form.severity }}
+                        {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.alert_rule.id_for_label }}">Origin Alert Rule</label>
+                        {{ form.alert_rule }}
+                        {% if form.alert_rule.errors %}<div class="form-error">{{ form.alert_rule.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.burst_run.id_for_label }}">Origin Burst Run</label>
+                        {{ form.burst_run }}
+                        {% if form.burst_run.errors %}<div class="form-error">{{ form.burst_run.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.action_url.id_for_label }}">Deep Link / Action URL</label>
+                        {{ form.action_url }}
+                        {% if form.action_url.errors %}<div class="form-error">{{ form.action_url.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.acknowledgment_notes.id_for_label }}">Acknowledgment Notes</label>
+                        {{ form.acknowledgment_notes }}
+                        {% if form.acknowledgment_notes.errors %}<div class="form-error">{{ form.acknowledgment_notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if notification %}{% url 'bi:bi_notification_item_detail' notification.pk %}{% else %}{% url 'bi:bi_notification_item_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if notification %}Save Changes{% else %}Send Notification{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
