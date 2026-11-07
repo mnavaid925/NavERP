@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}{{ anomaly_obj.title }} — Statistical Anomaly — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:statistical_anomaly_list' %}">Statistical Anomalies</a>
+            <span class="sep">/</span>
+            <span>{{ anomaly_obj.title }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ anomaly_obj.title }}</h1>
+            {% if anomaly_obj.severity == 'critical' %}
+            <span class="badge badge-red">Critical Severity</span>
+            {% elif anomaly_obj.severity == 'warning' %}
+            <span class="badge badge-amber">Warning</span>
+            {% else %}
+            <span class="badge badge-info">Informational</span>
+            {% endif %}
+
+            {% if anomaly_obj.triage_status == 'resolved' %}
+            <span class="badge badge-green">Resolved</span>
+            {% elif anomaly_obj.triage_status == 'open' %}
+            <span class="badge badge-red">Open Triage</span>
+            {% elif anomaly_obj.triage_status == 'acknowledged' %}
+            <span class="badge badge-amber">Acknowledged</span>
+            {% elif anomaly_obj.triage_status == 'investigating' %}
+            <span class="badge badge-info">Under Investigation</span>
+            {% else %}
+            <span class="badge badge-muted">False Positive</span>
+            {% endif %}
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ anomaly_obj.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>Metric: {{ anomaly_obj.metric_name }}</span>
+            <span class="text-slate-300">•</span>
+            <span>Timestamp: {{ anomaly_obj.anomaly_timestamp|date:"M d, Y H:i" }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:statistical_anomaly_edit' anomaly_obj.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Incident</span>
+        </a>
+        <form method="post" action="{% url 'bi:statistical_anomaly_delete' anomaly_obj.pk %}" onsubmit="return confirm('Delete anomaly {{ anomaly_obj.title }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-icon" title="Delete Anomaly">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Observed Value</div>
+            <div class="text-2xl font-bold font-mono text-red-600">{{ anomaly_obj.observed_value }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Expected Baseline</div>
+            <div class="text-2xl font-bold font-mono text-slate-700">{{ anomaly_obj.expected_value }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="percent"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Deviation Delta</div>
+            <div class="text-2xl font-bold font-mono text-amber-600">{{ anomaly_obj.deviation_percentage }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Detection Method</div>
+            <div class="text-base font-bold text-indigo-700 truncate">{{ anomaly_obj.get_detection_method_display }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Triage Workflow Bar -->
+<div class="card mb-6 bg-slate-50 border-slate-200">
+    <div class="card-body p-4 flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h4 class="text-sm font-semibold text-slate-800">Operational Triage Workflow</h4>
+            <p class="text-xs text-muted">Update lifecycle status or mark resolution notes</p>
+        </div>
+        <form method="post" action="{% url 'bi:statistical_anomaly_triage' anomaly_obj.pk %}" class="flex flex-wrap items-center gap-2">
+            {% csrf_token %}
+            <input type="text" name="resolution_notes" placeholder="Optional triage note..." class="form-input text-xs w-64">
+            <button type="submit" name="triage_status" value="acknowledged" class="btn btn-outline btn-sm">
+                <span>Acknowledge</span>
+            </button>
+            <button type="submit" name="triage_status" value="investigating" class="btn btn-outline btn-sm">
+                <span>Investigate</span>
+            </button>
+            <button type="submit" name="triage_status" value="resolved" class="btn btn-primary btn-sm">
+                <i data-lucide="check"></i>
+                <span>Resolve</span>
+            </button>
+            <button type="submit" name="triage_status" value="false_positive" class="btn btn-outline btn-sm text-slate-500">
+                <span>False Positive</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Incident Metadata Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="info" class="w-4 h-4 text-blue-500"></i>
+                Anomaly Telemetry & Context
+            </h3>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-2 gap-4 text-sm mb-6">
+                <div>
+                    <span class="text-muted block text-xs">Monitored Metric:</span>
+                    <span class="font-mono font-semibold text-slate-800">{{ anomaly_obj.metric_name }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Anomaly Archetype:</span>
+                    <span class="font-semibold text-slate-800">{{ anomaly_obj.get_anomaly_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Predictive Model:</span>
+                    {% if anomaly_obj.model %}
+                    <a href="{% url 'bi:predictive_model_detail' anomaly_obj.model.pk %}" class="text-blue-600 hover:underline">
+                        {{ anomaly_obj.model.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">&mdash;</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">KPI Definition:</span>
+                    {% if anomaly_obj.kpi_definition %}
+                    <a href="{% url 'bi:kpi_definition_detail' anomaly_obj.kpi_definition.pk %}" class="text-blue-600 hover:underline">
+                        {{ anomaly_obj.kpi_definition.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">&mdash;</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Assigned Owner:</span>
+                    <span class="text-slate-700">
+                        {% if anomaly_obj.assigned_to %}
+                        {{ anomaly_obj.assigned_to.get_full_name|default:anomaly_obj.assigned_to.username }}
+                        {% else %}
+                        &mdash;
+                        {% endif %}
+                    </span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Detection Timestamp:</span>
+                    <span class="text-slate-700">{{ anomaly_obj.anomaly_timestamp|date:"M d, Y H:i:s" }}</span>
+                </div>
+            </div>
+
+            {% if anomaly_obj.resolution_notes %}
+            <div class="border-t border-slate-200 pt-4">
+                <span class="text-muted block text-xs font-semibold uppercase mb-1">Resolution & Investigation Notes</span>
+                <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">
+                    {{ anomaly_obj.resolution_notes }}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Root-Cause Segments Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="git-pull-request" class="w-4 h-4 text-emerald-500"></i>
+                Contributing Segments
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if anomaly_obj.root_cause_factors %}
+            <div class="space-y-4">
+                {% for factor in anomaly_obj.root_cause_factors %}
+                <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                    <div class="text-xs font-medium text-muted uppercase">{{ factor.dimension }}</div>
+                    <div class="text-sm font-semibold text-slate-800">{{ factor.segment }}</div>
+                    {% if factor.contribution_percentage %}
+                    <div class="mt-2">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-muted">Contribution:</span>
+                            <span class="font-bold text-slate-700">{{ factor.contribution_percentage }}%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-1.5">
+                            <div class="bg-amber-500 h-1.5 rounded-full" style="width: {{ factor.contribution_percentage }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6 text-muted text-xs">
+                No segment-level root-cause drivers attributed.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
