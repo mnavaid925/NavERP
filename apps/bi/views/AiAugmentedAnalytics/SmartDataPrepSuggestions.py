@@ -136,7 +136,7 @@ def smart_data_prep_suggestion_create(request):
 @login_required
 @transaction.atomic
 def smart_data_prep_suggestion_edit(request, pk):
-    suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
+    suggestion = bi_object(request, SmartDataPrepSuggestion, pk, select_related=("target_table",))
     if request.method == "POST":
         form = SmartDataPrepSuggestionForm(request.POST, instance=suggestion, tenant=request.tenant)
         if form.is_valid():
@@ -169,7 +169,7 @@ def smart_data_prep_suggestion_edit(request, pk):
 @require_POST
 @transaction.atomic
 def smart_data_prep_suggestion_delete(request, pk):
-    suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
+    suggestion = bi_object(request, SmartDataPrepSuggestion, pk, select_related=("target_table",))
     number = suggestion.number
     write_audit_log(
         request.user,
@@ -187,7 +187,7 @@ def smart_data_prep_suggestion_delete(request, pk):
 @require_POST
 @transaction.atomic
 def smart_data_prep_suggestion_action(request, pk):
-    suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
+    suggestion = bi_object(request, SmartDataPrepSuggestion, pk, select_related=("target_table",))
     if suggestion.status == "applied":
         messages.warning(request, f"Data prep suggestion {suggestion.number} has already been applied and cannot be modified.")
         return redirect("bi:smart_data_prep_suggestion_detail", pk=suggestion.pk)
