@@ -78,4 +78,33 @@ Request Changes.
 - All tables enclosed in `.table-wrap`.
 - All mutation forms include CSRF tokens and confirm dialogs.
 
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Verdict
+Request Changes (1 Important finding, 3 Minor findings).
+
+### Critical
+*None.* (Zero N+1 queries detected in loops, zero cartesian product joins, and all list views employ strict pre-pagination filtering with `Paginator(qs, 15)`).
+
+### Important
+1. `apps/bi/forms/PredictiveAnalytics/StatisticalAnomalies.py:37,70-74` — Unbounded and un-scoped query to User table on form load.
+   - **Symptom:** `StatisticalAnomalyForm` declares `assigned_to` as `ModelChoiceField` without scoping `queryset` to `self.tenant` in `__init__`.
+   - **Impact:** Django queries all users across all tenants in `auth_user`, causing memory bloat and potential leakage.
+   - **Fix:** In `StatisticalAnomalyForm.__init__`, filter `self.fields["assigned_to"].queryset = get_user_model().objects.filter(tenant=self.tenant).order_by("first_name", "username")`.
+
+### Minor
+1. `apps/bi/views/PredictiveAnalytics/ForecastExecutions.py:95-96` — Redundant double-write (INSERT + immediate UPDATE) during forecast creation. Generate points in-memory before save or pass `commit=False` to avoid two database writes.
+2. `apps/bi/models/PredictiveAnalytics/` — Missing composite database indexes on tenant and default ordering timestamp columns (`(tenant, -created_at)`, `(tenant, -executed_at)`, `(tenant, -anomaly_timestamp)`).
+3. `apps/bi/views/PredictiveAnalytics/PredictiveModels.py:78,86` — `anomalies` queryset passed to template context in `predictive_model_detail` but never rendered. Either render the table in template or remove context key.
+
+### Performance Strengths / Done Well
+- Complete prefetching via `select_related` on all foreign relations across list and detail views (0 N+1 queries).
+- Single SQL queries for KPI stat card metrics using `.aggregate(total=Count("id"), ...)`.
+- Bounded list views with `Paginator(qs, 15)` and pre-pagination filtering.
+- Surgical `update_fields` on status and action mutations.
+- Fast, atomic, idempotent seeder.
+
+
 
