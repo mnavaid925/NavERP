@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Conversational BI Assistant Workspace — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_conversation_session_list' %}">Conversations</a>
+            <span class="sep">/</span>
+            <span>AI Chat Assistant Workspace</span>
+        </div>
+        <h1 class="page-title flex items-center gap-2">
+            <i data-lucide="sparkles" class="w-6 h-6 text-indigo-600"></i>
+            <span>Conversational BI Assistant</span>
+        </h1>
+        <p class="text-muted text-sm">Interactive Q&A assistant over multi-tenant enterprise metrics, semantic datasets, and financial scorecards</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_conversation_session_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Session Catalog</span>
+        </a>
+        <a href="{% url 'bi:natural_language_query_create' %}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>New Standalone Query</span>
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[780px]">
+    <!-- Left Drawer: Conversation Sessions List -->
+    <div class="card flex flex-col h-full overflow-hidden">
+        <div class="p-3 bg-slate-50 border-b flex justify-between items-center">
+            <h2 class="font-semibold text-sm text-slate-800">Conversations</h2>
+            <a href="{% url 'bi:bi_conversation_session_create' %}" class="btn btn-primary text-xs py-1 px-2.5" title="Start New Conversation">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                <span>New</span>
+            </a>
+        </div>
+        <div class="flex-1 overflow-y-auto divide-y divide-slate-100 p-1">
+            {% for sess in sessions %}
+            <a href="?session={{ sess.pk }}" class="block p-3 rounded-lg hover:bg-slate-50 transition {% if active_session and active_session.pk == sess.pk %}bg-indigo-50/70 border border-indigo-200{% endif %}">
+                <div class="flex items-start justify-between gap-1">
+                    <div class="font-medium text-xs text-slate-900 line-clamp-1">
+                        {% if sess.is_pinned %}<i data-lucide="pin" class="w-3 h-3 text-amber-500 fill-amber-500 inline mr-1"></i>{% endif %}
+                        {{ sess.title }}
+                    </div>
+                    <span class="badge {{ sess.status_badge_color }} text-[10px] py-0 px-1.5 flex-shrink-0">{{ sess.get_session_status_display }}</span>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-muted mt-1.5">
+                    <span class="font-mono">{{ sess.number }}</span>
+                    <span>{{ sess.message_count }} turns</span>
+                </div>
+            </a>
+            {% empty %}
+            <div class="p-6 text-center text-muted text-xs">
+                No active conversations.<br>Click "New" to start.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Main Chat Workspace (3 cols) -->
+    <div class="lg:col-span-3 card flex flex-col h-full overflow-hidden">
+        <!-- Thread Header -->
+        <div class="p-3.5 bg-slate-50 border-b flex justify-between items-center">
+            {% if active_session %}
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                    AI
+                </div>
+                <div>
+                    <h2 class="font-semibold text-sm text-slate-900">{{ active_session.title }}</h2>
+                    <div class="text-[11px] text-muted font-mono">
+                        {{ active_session.number }} • {{ active_session.user.get_full_name|default:active_session.user.username }} •
+                        {% if active_session.primary_semantic_model %}{{ active_session.primary_semantic_model.name }}{% else %}Global Metrics{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'bi:bi_conversation_session_detail' active_session.pk %}" class="btn btn-outline text-xs py-1" title="Open Full View">
+                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                    <span>Full Details</span>
+                </a>
+            </div>
+            {% else %}
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-xs">
+                    AI
+                </div>
+                <span class="font-semibold text-sm text-slate-700">No session selected</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Chat Stream -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-5 bg-white" id="workspaceStream">
+            <!-- Welcome Bot Message -->
+            <div class="flex gap-3 max-w-2xl">
+                <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0 flex items-center justify-center font-semibold text-xs">
+                    AI
+                </div>
+                <div class="bg-slate-100 text-slate-800 p-3.5 rounded-2xl rounded-tl-none border border-slate-200 text-sm leading-relaxed">
+                    Welcome to the NavERP Conversational Assistant. How can I assist your business analysis today?
+                </div>
+            </div>
+
+            {% if active_session %}
+                {% for turn in turns %}
+                <!-- User Question Bubble -->
+                <div class="flex justify-end gap-3">
+                    <div class="bg-indigo-600 text-white p-3 rounded-2xl rounded-tr-none text-sm max-w-xl shadow-sm">
+                        <p class="font-medium">{{ turn.query_text }}</p>
+                        <div class="text-[11px] text-indigo-200 mt-1 text-right">{{ turn.created_at|time:"H:i" }}</div>
+                    </div>
+                    <div class="w-7 h-7 rounded-full bg-slate-800 text-white flex-shrink-0 flex items-center justify-center font-semibold text-xs">
+                        {{ turn.user.username|slice:":1"|upper|default:"U" }}
+                    </div>
+                </div>
+
+                <!-- Assistant Answer Bubble -->
+                <div class="flex gap-3 max-w-3xl">
+                    <div class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex-shrink-0 flex items-center justify-center font-semibold text-xs">
+                        AI
+                    </div>
+                    <div class="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-none shadow-sm text-sm space-y-3 w-full">
+                        <div class="flex justify-between items-start">
+                            <div class="font-semibold text-slate-900 text-sm">
+                                {{ turn.result_summary.summary_text|default:"Aggregated calculations:" }}
+                            </div>
+                            <span class="badge {{ turn.status_badge_color }} text-xs">{{ turn.get_execution_status_display }}</span>
+                        </div>
+
+                        {% if turn.result_summary.metric_value %}
+                        <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-lg text-indigo-900 font-bold text-base">
+                            <i data-lucide="trending-up" class="w-4 h-4 text-indigo-600"></i>
+                            <span>{{ turn.result_summary.metric_value }}</span>
+                        </div>
+                        {% endif %}
+
+                        <details class="text-xs bg-slate-50 p-2.5 rounded border border-slate-200">
+                            <summary class="cursor-pointer font-medium text-slate-700 hover:text-indigo-600">Generated SQL & parsed intent</summary>
+                            <div class="mt-2 space-y-2">
+                                <div class="text-[11px] text-muted"><strong>Intent:</strong> {{ turn.get_intent_type_display }} • <strong>Confidence:</strong> {{ turn.confidence_score }}%</div>
+                                <pre class="bg-slate-900 text-emerald-400 p-2.5 rounded font-mono text-[11px] overflow-x-auto leading-tight"><code>{{ turn.generated_sql }}</code></pre>
+                            </div>
+                        </details>
+
+                        <div class="flex justify-between items-center text-xs text-muted pt-1 border-t border-slate-100">
+                            <span>Query <a href="{% url 'bi:natural_language_query_detail' turn.pk %}" class="text-indigo-600 hover:underline font-mono">{{ turn.number }}</a></span>
+                            <span>{{ turn.created_at|time:"H:i" }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-12 text-muted">
+                    <p class="text-sm">No queries in this thread yet. Type a question or click a suggestion below.</p>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="text-center py-16 text-muted">
+                <i data-lucide="message-square" class="w-10 h-10 mx-auto text-slate-300 mb-2"></i>
+                <h3 class="font-semibold text-slate-800">Select or Start a Conversation</h3>
+                <p class="text-xs mt-1">Select a conversation thread from the left pane or click "New" to start.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Suggestion Chips Bar -->
+        {% if active_session %}
+        <div class="p-3 bg-slate-50 border-t border-slate-200">
+            <div class="flex flex-wrap gap-2">
+                {% for prompt in suggested_prompts %}
+                <button type="button" class="text-xs px-3 py-1 rounded-full bg-white border border-slate-300 hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 transition cursor-pointer text-slate-700" onclick="document.getElementById('workspaceInput').value='{{ prompt|escapejs }}';">
+                    {{ prompt }}
+                </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Chat Input Form -->
+        <div class="p-3 bg-white border-t border-slate-200">
+            <form method="post" action="{% url 'bi:bi_conversation_session_ask' active_session.pk %}" class="flex gap-2">
+                {% csrf_token %}
+                <input type="text" id="workspaceInput" name="query_text" placeholder="Ask about metrics, anomalies, or sales trends..." class="form-input flex-1 text-sm rounded-xl py-2 px-4 border-slate-300 focus:border-indigo-500" required autocomplete="off">
+                <button type="submit" class="btn btn-primary rounded-xl px-5 flex items-center gap-1.5">
+                    <i data-lucide="send" class="w-4 h-4"></i>
+                    <span>Ask</span>
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script orientation="auto">
+document.addEventListener("DOMContentLoaded", function() {
+    const stream = document.getElementById('workspaceStream');
+    if (stream) {
+        stream.scrollTop = stream.scrollHeight;
+    }
+});
+</script>
+{% endblock %}
