@@ -7,6 +7,187 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.16: Alerts, Subscriptions & Distribution (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.16.md` (2026-11-07)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.15.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0035_searchdiscoveryindex_idx_bsdi_ten_feat_rw.py` (from 10.15), so **10.16 claims `0036`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.16.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/AlertsSubscriptions/`
+> Template folder name: `templates/bi/alerts_subscriptions/{bi_alert_rule,report_subscription,distribution_burst_run,bi_notification_item}/` + `notification_center.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Alerts, Subscriptions & Distribution Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Collision-free 4-character uppercase prefixes starting with `B`:
+    - `BiAlertRule` -> `NUMBER_PREFIX = "BALR"` (format: `BALR-YYYYMM-XXXX`)
+    - `ReportSubscription` -> `NUMBER_PREFIX = "BSUB"` (format: `BSUB-YYYYMM-XXXX`)
+    - `DistributionBurstRun` -> `NUMBER_PREFIX = "BBRS"` (format: `BBRS-YYYYMM-XXXX`)
+    - `BiNotificationItem` -> `NUMBER_PREFIX = "BNTF"` (format: `BNTF-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `BiAlertRule` [BALR-]:
+      - Continuous metric and anomaly monitoring against user-defined thresholds, percentage variances, and target bands with multi-channel notification dispatch.
+      - Rule name & details: `name` (CharField 150), `description` (TextField blank=True).
+      - Metric trigger anchors: optional FK to `bi.KpiDefinition` (`kpi`, SET_NULL, null=True, blank=True, related_name="alert_rules"), optional FK to `bi.StatisticalAnomaly` (`anomaly`, SET_NULL, null=True, blank=True, related_name="alert_rules"), fallback `metric_name` (CharField 100 blank=True).
+      - Condition logic: `condition_type` (`greater_than`, `less_than`, `equal_to`, `outside_range`, `pct_change_exceeds`, `anomaly_detected`, `zero_results`, `has_results`, default `greater_than`).
+      - Evaluation thresholds: `threshold_value` (DecimalField 16,4 null=True, blank=True), `threshold_ceiling` (DecimalField 16,4 null=True, blank=True), `pct_change_threshold` (DecimalField 7,2 null=True, blank=True).
+      - Cadence & Evaluation: `evaluation_frequency` (`hourly`, `daily`, `weekly`, `on_data_refresh`, `custom_cron`, default `daily`), `cron_expression` (CharField 64 blank=True).
+      - Urgency & Notification mode: `severity` (`info`, `warning`, `critical`, `urgent`, default `warning`), `trigger_mode` (`every_time`, `once_until_resolved`, `disposable_one_off`, default `once_until_resolved`).
+      - Multi-channel delivery targets: `channel_in_app` (BooleanField default=True), `channel_email` (BooleanField default=True), `channel_slack_teams` (BooleanField default=False), `channel_webhook` (BooleanField default=False), `webhook_url` (URLField blank=True).
+      - Downstream Action Triggering: `downstream_action` (`none`, `create_task`, `trigger_approval`, `webhook_call`, `retrigger_pipeline`, default `none`), `action_assignee` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="assigned_bi_alerts").
+      - State & Telemetry: `is_active` (BooleanField default=True), `last_evaluated_at` (DateTimeField null=True, blank=True), `last_triggered_at` (DateTimeField null=True, blank=True), `trigger_count` (IntegerField default=0), `created_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="created_bi_alert_rules").
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `last_evaluated_at`, `last_triggered_at`, `trigger_count`.
+    - `ReportSubscription` [BSUB-]:
+      - Scheduled recurring delivery configurations for dashboards and tabular reports across multi-channel destinations with per-recipient bursting and filter overrides.
+      - Subscription name: `name` (CharField 150).
+      - Analytical target assets: optional FK to `bi.BiDashboard` (`dashboard`, SET_NULL, null=True, blank=True, related_name="subscriptions"), optional FK to `bi.ReportDefinition` (`report_definition`, SET_NULL, null=True, blank=True, related_name="subscriptions").
+      - Recurrence cadence: `cadence` (`daily`, `weekly`, `monthly`, `quarterly`, `cron_custom`, default `weekly`), `delivery_time` (TimeField default "08:00:00"), `delivery_day_of_week` (IntegerField null=True, blank=True, choices=[(0, "Monday"), (1, "Tuesday"), (2, "Wednesday"), (3, "Thursday"), (4, "Friday"), (5, "Saturday"), (6, "Sunday")]), `delivery_day_of_month` (IntegerField null=True, blank=True).
+      - Export presentation format: `export_format` (`pdf`, `excel_xlsx`, `csv`, `png_image`, `html_inline`, default `pdf`).
+      - Recipient audience targeting: optional FK to `settings.AUTH_USER_MODEL` (`recipient_user`, SET_NULL, null=True, blank=True, related_name="bi_subscriptions"), optional FK to `core.OrgUnit` (`recipient_org_unit`, SET_NULL, null=True, blank=True, related_name="bi_subscriptions"), `recipient_emails` (TextField blank=True, help_text="Comma-separated external recipient email addresses").
+      - Data bursting mode: `burst_mode` (`single_recipient`, `group_broadcast`, `data_bursting`, default `single_recipient`), `burst_slicing_attribute` (CharField 64 blank=True, help_text="Attribute used to slice data per recipient (e.g. department, region)").
+      - Filter overrides & options: `filter_overrides` (JSONField default=dict, blank=True), `destination_channel` (`email`, `portal_inbox`, `sftp_server`, `slack_teams`, `webhook`, default `email`), `sftp_path` (CharField 255 blank=True), `skip_if_empty` (BooleanField default=True), `zip_attachment` (BooleanField default=False).
+      - State & Telemetry: `is_active` (BooleanField default=True), `last_sent_at` (DateTimeField null=True, blank=True), `next_run_at` (DateTimeField null=True, blank=True), `send_count` (IntegerField default=0), `created_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="created_bi_subscriptions").
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `last_sent_at`, `next_run_at`, `send_count`.
+    - `DistributionBurstRun` [BBRS-]:
+      - Batch execution telemetry and delivery audit log for report distributions and data bursting dispatches.
+      - Associated configuration: optional FK to `ReportSubscription` (`subscription`, SET_NULL, null=True, blank=True, related_name="burst_runs"), optional FK to `BiAlertRule` (`alert_rule`, SET_NULL, null=True, blank=True, related_name="burst_runs").
+      - Execution parameters: `run_mode` (`scheduled`, `manual_burst`, `alert_triggered`, default `scheduled`), `destination_channel` (`email`, `portal_inbox`, `sftp_server`, `slack_teams`, `webhook`, default `email`), `burst_slicing_attribute` (CharField 64 blank=True).
+      - Delivery status & metrics: `status` (`queued`, `generating`, `dispatching`, `completed`, `partial_failure`, `failed`, default `queued`), `total_recipients` (IntegerField default=0), `successful_deliveries` (IntegerField default=0), `failed_deliveries` (IntegerField default=0).
+      - Output artifact metadata: `artifact_file_name` (CharField 255 blank=True), `artifact_file_size_bytes` (BigIntegerField default=0), `artifact_storage_uri` (CharField 500 blank=True).
+      - Diagnostic logs & telemetry: `error_summary` (TextField blank=True), `delivery_telemetry` (JSONField default=dict, blank=True), `duration_ms` (IntegerField default=0), `started_at` (DateTimeField default=timezone.now), `completed_at` (DateTimeField null=True, blank=True), `triggered_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="triggered_bi_burst_runs").
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `triggered_by`, `artifact_file_size_bytes`, `artifact_storage_uri`, `duration_ms`, `started_at`, `completed_at`, `delivery_telemetry`.
+    - `BiNotificationItem` [BNTF-]:
+      - In-app notification center inbox entry with read/unread flags, severity badges, acknowledgment tracking, snooze controls, escalation routing, and downstream task conversion.
+      - Stakeholder recipient: FK to `settings.AUTH_USER_MODEL` (`recipient`, CASCADE, related_name="bi_notifications").
+      - Generating source: optional FK to `BiAlertRule` (`alert_rule`, SET_NULL, null=True, blank=True, related_name="notifications"), optional FK to `ReportSubscription` (`subscription`, SET_NULL, null=True, blank=True, related_name="notifications").
+      - Headline & body: `title` (CharField 200), `message` (TextField).
+      - Urgency & lifecycle status: `severity` (`info`, `warning`, `critical`, `urgent`, default `info`), `status` (`unread`, `read`, `acknowledged`, `snoozed`, `escalated`, `archived`, default `unread`).
+      - Acknowledgment tracking: `is_acknowledged` (BooleanField default=False), `acknowledged_at` (DateTimeField null=True, blank=True), `acknowledged_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="acknowledged_bi_notifications").
+      - Snooze & escalation: `snoozed_until` (DateTimeField null=True, blank=True), `escalation_level` (IntegerField default=0, help_text="0=Normal, 1=Manager Escalation, 2=Executive Escalation"), `escalated_to` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="escalated_bi_notifications").
+      - Context & Downstream conversion: `action_url` (CharField 255 blank=True), `workflow_converted_type` (`none`, `task`, `approval`, `incident`, default `none`), `workflow_reference_id` (CharField 64 blank=True).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `acknowledged_at`, `acknowledged_by`, `snoozed_until`, `workflow_reference_id`.
+  - Sibling Hand-offs & Boundaries:
+    - 10.8 (`Dashboards`): `BiDashboard` assets scheduled for automated multi-format subscription delivery.
+    - 10.9 (`OperationalReporting`): `ReportDefinition` templates scheduled for automated bursting and tabular PDF/Excel export.
+    - 10.11 (`PerformanceScorecards`): `KpiDefinition` metric values monitored by `BiAlertRule` for threshold breaches and variance triggers.
+    - 10.13 (`PredictiveAnalytics`): `StatisticalAnomaly` outlier discoveries automatically routed to `BiAlertRule` for alert dispatch.
+    - 10.14 (`AiAugmentedAnalytics`): `AugmentedInsight` findings converted into push alerts and digests.
+    - 10.15 (`ConversationalBi`): `NarrativeExplanation` auto-generated briefings attached to scheduled report emails.
+    - 10.17 (`EmbeddedAndMobileBi` - DOWNSTREAM): In-app notification center inbox and alert badges embedded into mobile PWA app.
+    - Module 13 (`Projects` / Task Engine - DOWNSTREAM): Operational tasks spawned from unhandled critical alerts.
+    - Module 1 (`Core` / Approval Workflow - DOWNSTREAM): Incident approvals triggered on extreme threshold breaches.
+  - Audit logging: Alert creation, threshold updates, manual evaluation, subscription triggering, burst dispatching, alert acknowledgment, snoozing, and task conversions write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BALR` (BiAlertRule), `BSUB` (ReportSubscription), `BBRS` (DistributionBurstRun), `BNTF` (BiNotificationItem) verified 100% collision-free repository-wide.
+
+---
+
+## 10.16-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO live external SMTP/SendGrid network socket dependencies during test/seeder execution** — Report distributions, alerts, and notifications run deterministically within local fixtures and storage mocks; outbound email headers and payloads are verified via Django's test mail outbox or delivery telemetry JSON without external SMTP server lockouts.
+- [ ] **NO live Celery worker daemon requirement for synchronous smoke runs** — Ad-hoc burst dispatches and alert evaluations execute synchronously in request-response handlers when triggered by the UI or smoke test, storing telemetry in `DistributionBurstRun.delivery_telemetry`.
+- [ ] **NO heavy external message broker dependencies (Kafka, RabbitMQ, Redis Streams)** — Alert evaluation cadences and burst queues are managed within Django's transactional ORM.
+- [ ] **NO direct SFTP remote socket transmission during tests** — File artifacts are generated to local tenant-isolated mock storage URIs logged in `artifact_storage_uri`.
+- [ ] **NO duplicate user or organization tables** — Reuses verified core spine `settings.AUTH_USER_MODEL` and `core.OrgUnit`.
+
+---
+
+## Sub-module 10.16 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.16.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: BiAlertRule (`BALR`)**
+  - [ ] `apps/bi/models/AlertsSubscriptions/BiAlertRules.py`
+  - [ ] `apps/bi/forms/AlertsSubscriptions/BiAlertRules.py`
+  - [ ] `apps/bi/views/AlertsSubscriptions/BiAlertRules.py` (CRUD + `evaluate` + `toggle_active` actions)
+  - [ ] `apps/bi/urls/AlertsSubscriptions/BiAlertRules.py`
+  - [ ] `templates/bi/alerts_subscriptions/bi_alert_rule/list.html`
+  - [ ] `templates/bi/alerts_subscriptions/bi_alert_rule/detail.html`
+  - [ ] `templates/bi/alerts_subscriptions/bi_alert_rule/form.html`
+- [ ] **Entity 2: ReportSubscription (`BSUB`)**
+  - [ ] `apps/bi/models/AlertsSubscriptions/ReportSubscriptions.py`
+  - [ ] `apps/bi/forms/AlertsSubscriptions/ReportSubscriptions.py`
+  - [ ] `apps/bi/views/AlertsSubscriptions/ReportSubscriptions.py` (CRUD + `trigger_burst` + `toggle_active` actions)
+  - [ ] `apps/bi/urls/AlertsSubscriptions/ReportSubscriptions.py`
+  - [ ] `templates/bi/alerts_subscriptions/report_subscription/list.html`
+  - [ ] `templates/bi/alerts_subscriptions/report_subscription/detail.html`
+  - [ ] `templates/bi/alerts_subscriptions/report_subscription/form.html`
+- [ ] **Entity 3: DistributionBurstRun (`BBRS`)**
+  - [ ] `apps/bi/models/AlertsSubscriptions/DistributionBurstRuns.py`
+  - [ ] `apps/bi/forms/AlertsSubscriptions/DistributionBurstRuns.py`
+  - [ ] `apps/bi/views/AlertsSubscriptions/DistributionBurstRuns.py` (CRUD + `retry` action)
+  - [ ] `apps/bi/urls/AlertsSubscriptions/DistributionBurstRuns.py`
+  - [ ] `templates/bi/alerts_subscriptions/distribution_burst_run/list.html`
+  - [ ] `templates/bi/alerts_subscriptions/distribution_burst_run/detail.html` (Delivery Telemetry & Per-Recipient Audit)
+  - [ ] `templates/bi/alerts_subscriptions/distribution_burst_run/form.html`
+- [ ] **Entity 4: BiNotificationItem (`BNTF`)**
+  - [ ] `apps/bi/models/AlertsSubscriptions/BiNotificationItems.py`
+  - [ ] `apps/bi/forms/AlertsSubscriptions/BiNotificationItems.py`
+  - [ ] `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py` (CRUD + `acknowledge` + `snooze` + `mark_read` + `mark_all_read` + `escalate` + `convert_task` + `notification_center` workspace)
+  - [ ] `apps/bi/urls/AlertsSubscriptions/BiNotificationItems.py`
+  - [ ] `templates/bi/alerts_subscriptions/bi_notification_item/list.html`
+  - [ ] `templates/bi/alerts_subscriptions/bi_notification_item/detail.html`
+  - [ ] `templates/bi/alerts_subscriptions/bi_notification_item/form.html`
+  - [ ] `templates/bi/alerts_subscriptions/notification_center.html` (Unified Operational Inbox & Alert Triage Workspace)
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Package re-exports in `apps/bi/models/AlertsSubscriptions/__init__.py` and `apps/bi/models/__init__.py`
+- [ ] Package re-exports in `apps/bi/forms/AlertsSubscriptions/__init__.py` and `apps/bi/forms/__init__.py`
+- [ ] Package re-exports in `apps/bi/views/AlertsSubscriptions/__init__.py` and `apps/bi/views/__init__.py`
+- [ ] Package re-exports in `apps/bi/urls/AlertsSubscriptions/__init__.py` and `apps/bi/urls/__init__.py`
+- [ ] Register 4 models in `apps/bi/admin.py`
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.16
+- [ ] Add `LIVE_LINKS["10.16"]` in `apps/core/navigation.py`:
+  - `"Threshold & Anomaly Alerts"`: `bi:bi_alert_rule_list`
+  - `"Report Subscriptions"`: `bi:report_subscription_list`
+  - `"Distribution & Bursting"`: `bi:distribution_burst_run_list`
+  - `"Notification Center"`: `bi:bi_notification_item_list`
+  - `"Trigger-Based Workflows"`: `bi:bi_alert_rule_list`
+  - Plural alias keys:
+    - `"Alert Rules"`: `bi:bi_alert_rule_list`
+    - `"Subscriptions"`: `bi:report_subscription_list`
+    - `"Burst Runs"`: `bi:distribution_burst_run_list`
+    - `"Notifications"`: `bi:bi_notification_item_list`
+    - `"Notification Inbox"`: `bi:notification_center`
+- [ ] Run `makemigrations bi` (claiming `0036`) & `migrate`
+- [ ] Run `seed_bi` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_10_16.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.16.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Add shared 10.16 fixtures to `conftest.py`
+- [ ] Write `test_alerts_subscriptions_models.py`
+- [ ] Write `test_alerts_subscriptions_forms.py`
+- [ ] Write `test_alerts_subscriptions_views.py`
+- [ ] Write `test_alerts_subscriptions_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/bi/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.16 models, routes, templates, and conventions
+- [ ] Update `README.md` marking 10.16 complete
+- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.16.md`
+
+### Later passes / deferred
+- Direct SFTP remote socket streaming (deferred to Celery background worker infrastructure)
+- Bi-directional Slack bot / Microsoft Teams interactive card bot listeners (deferred to Module 23 AI Automation)
+- Headless Chromium daemon PDF rendering adapter (modular PDF generator plugin)
+
+---
+
 # Sub-module 10.15: Natural Language & Conversational BI (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.15.md` (2026-11-07)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.14.
