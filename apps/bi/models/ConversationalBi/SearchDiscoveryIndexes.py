@@ -145,5 +145,9 @@ class SearchDiscoveryIndex(TenantNumbered):
         return "badge-muted"
 
     @property
+    def type_badge_color(self):
+        return self.asset_type_badge_color
+
+    @property
     def verification_badge_color(self):
         return "badge-green" if self.is_verified else "badge-slate"
