@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}Report Subscriptions — Alerts & Subscriptions — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Alerts & Subscriptions</span>
+        </div>
+        <h1 class="page-title">Report & Dashboard Subscriptions</h1>
+        <p class="text-muted text-sm">Schedule automated recurring delivery of dashboards and operational reports across PDF, Excel, and CSV</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_alert_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-alert"></i>
+            <span>Alert Rules</span>
+        </a>
+        <a href="{% url 'bi:distribution_burst_run_list' %}" class="btn btn-outline">
+            <i data-lucide="send"></i>
+            <span>Burst Runs</span>
+        </a>
+        <a href="{% url 'bi:report_subscription_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Subscription</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Schedules</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active & Scheduled</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="file-text"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">PDF Deliveries</div>
+            <div class="text-2xl font-bold text-rose-600">{{ pdf_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="table"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Excel / CSV Deliveries</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ excel_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div class="form-group mb-0 lg:col-span-2">
+                <label class="form-label" for="search-input">Search Subscriptions</label>
+                <div class="relative">
+                    <input type="text" id="search-input" name="q" value="{{ q }}" class="form-input pl-9" placeholder="Number, name, recipient emails...">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted">
+                        <i data-lucide="search" class="w-4 h-4"></i>
+                    </span>
+                </div>
+            </div>
+
+            <div class="form-group mb-0">
+                <label class="form-label">Asset Type</label>
+                <select name="target_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in target_asset_type_choices %}
+                    <option value="{{ val }}" {% if selected_target_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group mb-0">
+                <label class="form-label">Cadence</label>
+                <select name="cadence" class="form-select">
+                    <option value="">All Cadences</option>
+                    {% for val, label in cadence_choices %}
+                    <option value="{{ val }}" {% if selected_cadence == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group mb-0">
+                <label class="form-label">Export Format</label>
+                <select name="format" class="form-select">
+                    <option value="">All Formats</option>
+                    {% for val, label in export_format_choices %}
+                    <option value="{{ val }}" {% if selected_format == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary w-full">Filter</button>
+                {% if q or selected_target_type or selected_cadence or selected_format or selected_status %}
+                <a href="{% url 'bi:report_subscription_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Subscription ID</th>
+                    <th>Name</th>
+                    <th>Target Asset</th>
+                    <th>Format</th>
+                    <th>Cadence & Time</th>
+                    <th>Burst Mode</th>
+                    <th>Status</th>
+                    <th>Runs</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in subscriptions %}
+                <tr>
+                    <td class="font-mono text-xs font-semibold whitespace-nowrap">
+                        <a href="{% url 'bi:report_subscription_detail' s.pk %}" class="text-blue-600 hover:underline">
+                            {{ s.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ s.name }}</div>
+                        {% if s.external_recipient_emails %}
+                        <div class="text-xs text-muted truncate max-w-xs">{{ s.external_recipient_emails }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {% if s.target_asset_type == 'dashboard' and s.dashboard %}
+                        <span class="inline-flex items-center gap-1 text-slate-800">
+                            <i data-lucide="layout-dashboard" class="w-3.5 h-3.5 text-blue-500"></i>
+                            <span>{{ s.dashboard.title }}</span>
+                        </span>
+                        {% elif s.target_asset_type == 'report' and s.report %}
+                        <span class="inline-flex items-center gap-1 text-slate-800">
+                            <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-500"></i>
+                            <span>{{ s.report.name }}</span>
+                        </span>
+                        {% else %}
+                        <span class="text-muted text-xs">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.format_badge_class }}">
+                            {{ s.export_format|upper }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-700 whitespace-nowrap">
+                        <div class="font-medium">{{ s.get_cadence_display }}</div>
+                        <div class="text-muted font-mono">{{ s.scheduled_time|time:"H:i" }}</div>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ s.get_burst_mode_display }}
+                    </td>
+                    <td>
+                        <span class="badge {{ s.status_badge_class }}">
+                            {{ s.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-center font-mono text-sm font-semibold">
+                        {{ s.run_count }}
+                    </td>
+                    <td class="table-actions text-right whitespace-nowrap">
+                        <form method="post" action="{% url 'bi:report_subscription_run_now' s.pk %}" class="inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-outline text-emerald-600" title="Dispatch & Run Now">
+                                <i data-lucide="play" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                        <a href="{% url 'bi:report_subscription_detail' s.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </a>
+                        <a href="{% url 'bi:report_subscription_edit' s.pk %}" class="btn btn-icon btn-outline" title="Edit Subscription">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </a>
+                        <form method="post" action="{% url 'bi:report_subscription_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete subscription {{ s.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Subscription">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state text-center py-12">
+                            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-100 text-slate-500 mb-3">
+                                <i data-lucide="calendar" class="w-6 h-6"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-900">No report subscriptions scheduled</h3>
+                            <p class="text-sm text-muted mt-1 max-w-sm mx-auto">
+                                Configure scheduled distributions to automatically generate and email reports to teams.
+                            </p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:report_subscription_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Subscription</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if subscriptions.paginator.num_pages > 1 %}
+    <div class="pagination flex items-center justify-between px-6 py-4 border-t border-slate-200">
+        <div class="text-sm text-slate-600">
+            Showing Page <span class="font-semibold">{{ subscriptions.number }}</span> of <span class="font-semibold">{{ subscriptions.paginator.num_pages }}</span> ({{ subscriptions.paginator.count }} total)
+        </div>
+        <div class="flex gap-2">
+            {% if subscriptions.has_previous %}
+            <a href="?page={{ subscriptions.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_target_type %}&target_type={{ selected_target_type }}{% endif %}{% if selected_cadence %}&cadence={{ selected_cadence }}{% endif %}{% if selected_format %}&format={{ selected_format }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                <span>Previous</span>
+            </a>
+            {% endif %}
+            {% if subscriptions.has_next %}
+            <a href="?page={{ subscriptions.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_target_type %}&target_type={{ selected_target_type }}{% endif %}{% if selected_cadence %}&cadence={{ selected_cadence }}{% endif %}{% if selected_format %}&format={{ selected_format }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">
+                <span>Next</span>
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
