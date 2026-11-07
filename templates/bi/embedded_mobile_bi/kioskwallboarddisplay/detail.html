@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}{{ display.name }} ({{ display.number }}) — TV Wallboard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:kiosk_wallboard_display_list' %}">TV & Kiosks</a>
+            <span class="sep">/</span>
+            <span>{{ display.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ display.name }}</h1>
+            <span class="badge {% if display.status == 'active' %}badge-green{% elif display.status == 'standby' %}badge-amber{% else %}badge-red{% endif %}">
+                {{ display.get_status_display }}
+            </span>
+            <span class="badge badge-info">
+                {{ display.get_theme_display }}
+            </span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ display.kiosk_slug }} • {{ display.location_description|default:"Location Unassigned" }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:kiosk_wallboard_display_player' display.pk %}" class="btn btn-primary" target="_blank">
+            <i data-lucide="play"></i>
+            <span>Launch Fullscreen Player</span>
+        </a>
+        <a href="{% url 'bi:kiosk_wallboard_display_edit' display.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Display</span>
+        </a>
+        <form method="post" action="{% url 'bi:kiosk_wallboard_display_delete' display.pk %}" onsubmit="return confirm('Delete wallboard display {{ display.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Playlist Sequence & Screen Settings -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Playlist Sequence Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="film" class="w-5 h-5 text-primary-600"></i>
+                    <h2 class="text-base font-semibold">Active Presentation Playlist</h2>
+                </div>
+                <span class="text-xs text-muted">{{ playlist_items|length }} slides configured</span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="w-12 text-center">#</th>
+                            <th>Slide Title / Item</th>
+                            <th>Slide Type</th>
+                            <th>Dwell Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for slide in playlist_items %}
+                        <tr>
+                            <td class="text-center font-mono text-muted text-xs">{{ forloop.counter }}</td>
+                            <td>
+                                <div class="font-medium text-slate-900">{{ slide.title|default:"Analytical Slide" }}</div>
+                                {% if slide.id %}
+                                <div class="text-xs text-muted font-mono">Target ID: {{ slide.id }}</div>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-info text-xs">{{ slide.type|default:"dashboard"|upper }}</span>
+                            </td>
+                            <td>
+                                <div class="font-mono text-xs text-slate-800">{{ slide.duration_seconds|default:display.default_slide_duration_seconds }}s</div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="p-6 text-center text-muted text-sm">
+                                No custom slides defined. Display will loop the default overview dashboard.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Operating Hours & Display Schedule Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="calendar" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="text-base font-semibold">Operating Schedule & Heartbeat Telemetry</h2>
+                </div>
+                <span class="badge badge-slate">{{ display.get_display_schedule_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                        <div class="text-xs text-muted uppercase tracking-wider mb-1">Rotation Timing</div>
+                        <div class="text-sm font-semibold text-slate-800">Slide Dwell: {{ display.default_slide_duration_seconds }}s</div>
+                        <div class="text-xs text-slate-600 mt-1">Data Reload Every: {{ display.auto_refresh_data_interval_seconds }}s</div>
+                        <div class="text-xs text-slate-600 mt-1">Transition: {{ display.get_transition_effect_display }}</div>
+                    </div>
+                    <div class="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                        <div class="text-xs text-muted uppercase tracking-wider mb-1">Remote Device Telemetry</div>
+                        {% if display.last_heartbeat_at %}
+                        <div class="text-sm font-semibold text-emerald-600 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>Connected (Pinged {{ display.last_heartbeat_at|timesince }} ago)</span>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-1">IP: {{ display.device_ip_address|default:"127.0.0.1" }}</div>
+                        <div class="text-[11px] text-muted truncate max-w-xs mt-0.5">{{ display.device_user_agent }}</div>
+                        {% else %}
+                        <div class="text-sm font-medium text-slate-500">No heartbeat ping recorded yet</div>
+                        <div class="text-xs text-muted mt-1">Heartbeat pings automatically when player runs</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Side Column: Kiosk Access & Properties -->
+    <div class="space-y-6">
+        <!-- Direct Launch Card -->
+        <div class="card bg-gradient-to-br from-slate-900 to-indigo-950 text-white border-0">
+            <div class="card-body">
+                <div class="flex items-center gap-2 mb-3">
+                    <i data-lucide="tv" class="w-6 h-6 text-indigo-400"></i>
+                    <h3 class="text-base font-semibold">Broadcasting Screen</h3>
+                </div>
+                <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                    Open the wallboard player on dedicated TV screens, plant floor kiosks, or conference room monitors.
+                </p>
+                <a href="{% url 'bi:kiosk_wallboard_display_player' display.pk %}" target="_blank" class="btn bg-indigo-500 hover:bg-indigo-600 text-white w-full justify-center">
+                    <i data-lucide="external-link"></i>
+                    <span>Open Fullscreen Wallboard</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Access Mode Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">Access & Authentication</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Access Mode</div>
+                    <div class="font-medium text-slate-800">
+                        {% if display.is_public_kiosk %}
+                            <span class="text-emerald-700 font-semibold">Public Kiosk Link with Passcode</span>
+                        {% else %}
+                            <span class="text-slate-800">Tenant SSO Login Required</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if display.access_passcode %}
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Kiosk Access PIN / Passcode</div>
+                    <div class="font-mono text-sm bg-slate-100 p-2 rounded mt-1 font-bold">{{ display.access_passcode }}</div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Unique Screen Identifier</div>
+                    <div class="font-mono text-xs text-slate-700 mt-1">{{ display.kiosk_slug }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Display Properties Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">Display Properties</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Installation Location</span>
+                    <span class="font-medium text-slate-800">{{ display.location_description|default:"—" }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Wallboard Theme</span>
+                    <span class="font-medium text-slate-800">{{ display.get_theme_display }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Transition Effect</span>
+                    <span class="font-medium text-slate-800">{{ display.get_transition_effect_display }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Created By</span>
+                    <span class="font-medium text-slate-800">{{ display.created_by.get_full_name|default:display.created_by.username|default:"System" }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-muted">Created At</span>
+                    <span class="font-medium text-slate-800">{{ display.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
