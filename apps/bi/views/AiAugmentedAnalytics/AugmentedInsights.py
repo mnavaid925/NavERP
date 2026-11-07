@@ -26,9 +26,11 @@ def augmented_insight_list(request):
     counts = qs.aggregate(
         total=Count("id"),
         critical=Count("id", filter=Q(severity="critical")),
+        key_drivers=Count("id", filter=Q(insight_type="key_driver")),
     )
     total_count = counts["total"] or 0
     critical_count = counts["critical"] or 0
+    key_driver_count = counts["key_drivers"] or 0
 
     # Search
     q = request.GET.get("q", "").strip()
@@ -74,6 +76,7 @@ def augmented_insight_list(request):
             "status_choices": AugmentedInsight.STATUS_CHOICES,
             "total_count": total_count,
             "critical_count": critical_count,
+            "key_driver_count": key_driver_count,
         },
     )
 
