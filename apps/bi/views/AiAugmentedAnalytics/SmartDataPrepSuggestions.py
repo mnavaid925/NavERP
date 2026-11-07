@@ -188,6 +188,10 @@ def smart_data_prep_suggestion_delete(request, pk):
 @transaction.atomic
 def smart_data_prep_suggestion_action(request, pk):
     suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
+    if suggestion.status == "applied":
+        messages.warning(request, f"Data prep suggestion {suggestion.number} has already been applied and cannot be modified.")
+        return redirect("bi:smart_data_prep_suggestion_detail", pk=suggestion.pk)
+
     action_type = request.POST.get("action_type", "").strip()
     review_notes = request.POST.get("review_notes", "").strip()
 
