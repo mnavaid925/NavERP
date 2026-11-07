@@ -85,7 +85,7 @@ def bi_conversation_session_list(request):
 @login_required
 def bi_conversation_session_detail(request, pk):
     session = bi_object(request, BiConversationSession, pk)
-    turns = session.queries.all().order_by("created_at")
+    turns = session.queries.select_related("user").order_by("created_at")
 
     suggested_prompts = session.suggested_prompts
     if not suggested_prompts:
@@ -119,7 +119,7 @@ def bi_chat_workspace(request):
     if not active_session:
         active_session = sessions.first()
 
-    turns = active_session.queries.all().order_by("created_at") if active_session else []
+    turns = active_session.queries.select_related("user").order_by("created_at") if active_session else []
     suggested_prompts = active_session.suggested_prompts if active_session and active_session.suggested_prompts else [
         "What is our YTD Revenue vs Plan?",
         "Show quarterly gross margin trend by product family",
