@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}{{ index.asset_name }} — Search & Discovery — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:search_discovery_index_list' %}">Discovery Catalog</a>
+            <span class="sep">/</span>
+            <span>{{ index.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title text-xl font-bold text-slate-900">{{ index.asset_name }}</h1>
+            <span class="badge {{ index.asset_type_badge_color }} text-xs">{{ index.get_asset_type_display }}</span>
+            <span class="badge {{ index.verification_badge_color }} text-xs">{% if index.is_verified %}Verified Truth{% else %}Unverified{% endif %}</span>
+            {% if index.is_featured %}
+            <span class="badge badge-amber text-xs">Featured Asset</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">
+            {{ index.number }} · Category: <span class="font-medium text-slate-800">{{ index.category|default:"General BI" }}</span>
+            · Relevance Boost: <span class="font-mono text-slate-800 font-semibold">{{ index.relevance_weight }}x</span>
+        </p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:search_discovery_index_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
+        <a href="{{ index.target_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+            <i data-lucide="external-link"></i>
+            <span>Open Asset</span>
+        </a>
+        <form method="post" action="{% url 'bi:search_discovery_index_reweight' index.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-sky-700 border-sky-300 hover:bg-sky-50" title="Boost relevance weight (+0.50x)">
+                <i data-lucide="arrow-up-circle"></i>
+                <span>Boost</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:search_discovery_index_edit' index.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:search_discovery_index_delete' index.pk %}" onsubmit="return confirm('Delete discovery index {{ index.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Left Column: Description, Synonyms & Keywords (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Asset Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Asset Overview & Description</h2>
+            </div>
+            <div class="card-body">
+                {% if index.description %}
+                <p class="text-sm text-slate-800 leading-relaxed">{{ index.description }}</p>
+                {% else %}
+                <p class="text-muted text-sm italic">No detailed description provided for this indexed asset.</p>
+                {% endif %}
+
+                <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                    <div>
+                        <div class="text-xs uppercase tracking-wider text-muted font-medium">Target Navigation Route</div>
+                        <div class="text-xs font-mono text-slate-800 mt-0.5 break-all">{{ index.target_url }}</div>
+                    </div>
+                    <a href="{{ index.target_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm text-xs shrink-0">
+                        <i data-lucide="external-link"></i>
+                        <span>Visit</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Business Synonyms Dictionary -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="book-open" class="w-4 h-4 text-sky-600"></i>
+                    <h2 class="text-base font-semibold">Business Synonyms & Colloquial Aliases</h2>
+                </div>
+                <span class="text-xs text-muted">{{ synonyms_list|length }} registered synonyms</span>
+            </div>
+            <div class="card-body space-y-3">
+                <p class="text-xs text-muted">
+                    When conversational searches or NLQ prompts use any of these colloquial terms, the discovery engine grounds intent directly to this certified asset.
+                </p>
+                {% if synonyms_list %}
+                <div class="flex flex-wrap gap-2 pt-1">
+                    {% for syn in synonyms_list %}
+                    <span class="badge badge-info text-xs py-1 px-2.5 font-medium">
+                        "{{ syn }}"
+                    </span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-sm italic">No synonym phrases mapped yet. Edit this asset to add colloquial phrases.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Search Keyword Tokens -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Search Keywords & Taxonomy Tokens</h2>
+            </div>
+            <div class="card-body">
+                {% if index.search_keywords %}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-800 leading-relaxed">
+                    {{ index.search_keywords }}
+                </div>
+                {% else %}
+                <p class="text-muted text-sm italic">No extra search keywords configured.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Bound Models & Discovery Telemetry (1 col) -->
+    <div class="space-y-6">
+        <!-- Telemetry Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Discovery Telemetry & Ranking</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100 text-center">
+                        <div class="text-xs text-muted font-medium uppercase">Search Hits</div>
+                        <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ index.search_hit_count }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100 text-center">
+                        <div class="text-xs text-muted font-medium uppercase">Views</div>
+                        <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ index.view_count }}</div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Relevance Multiplier Boost</label>
+                    <form method="post" action="{% url 'bi:search_discovery_index_reweight' index.pk %}" class="flex gap-2">
+                        {% csrf_token %}
+                        <input type="number" step="0.10" min="0.10" max="99.99" name="weight" value="{{ index.relevance_weight }}" class="form-input text-xs font-mono w-24">
+                        <button type="submit" class="btn btn-outline btn-sm text-xs flex-1">
+                            <span>Update Boost</span>
+                        </button>
+                    </form>
+                    <p class="text-[11px] text-muted mt-1">Multiplies full-text match score during search ordering.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bound Analytical Model -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Underlying Analytical Asset</h2>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Asset Type</dt>
+                        <dd class="font-medium text-slate-900">{{ index.get_asset_type_display }}</dd>
+                    </div>
+                    {% if index.semantic_model %}
+                    <div>
+                        <dt class="text-xs text-muted">Semantic Model</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:semantic_model_detail' index.semantic_model.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.semantic_model.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if index.dashboard %}
+                    <div>
+                        <dt class="text-xs text-muted">Dashboard</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:bi_dashboard_detail' index.dashboard.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.dashboard.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if index.report %}
+                    <div>
+                        <dt class="text-xs text-muted">Report</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:report_definition_detail' index.report.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.report.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if index.kpi %}
+                    <div>
+                        <dt class="text-xs text-muted">KPI Definition</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:kpi_definition_detail' index.kpi.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.kpi.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if index.warehouse_table %}
+                    <div>
+                        <dt class="text-xs text-muted">Warehouse Table</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:warehouse_table_detail' index.warehouse_table.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.warehouse_table.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    {% if index.glossary_term %}
+                    <div>
+                        <dt class="text-xs text-muted">Glossary Term</dt>
+                        <dd class="font-medium text-slate-900">
+                            <a href="{% url 'bi:business_glossary_term_detail' index.glossary_term.pk %}" class="text-sky-600 hover:underline">
+                                {{ index.glossary_term.name }}
+                            </a>
+                        </dd>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <dt class="text-xs text-muted">Registered On</dt>
+                        <dd class="text-slate-700 text-xs">{{ index.created_at|date:"Y-m-d H:i:s" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
