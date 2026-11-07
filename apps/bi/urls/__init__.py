@@ -39,6 +39,9 @@ from apps.bi.urls.AiAugmentedAnalytics import (
 from apps.bi.urls.ConversationalBi import (
     urlpatterns as conversational_bi_urlpatterns,
 )
+from apps.bi.urls.AlertsSubscriptions import (
+    urlpatterns as alerts_subscriptions_urlpatterns,
+)
 from apps.bi.urls.EmbeddedMobileBi import (
     urlpatterns as embedded_mobile_bi_urlpatterns,
 )
@@ -96,5 +99,6 @@ urlpatterns = (
     + predictive_analytics_urlpatterns
     + ai_augmented_analytics_urlpatterns
     + conversational_bi_urlpatterns
+    + alerts_subscriptions_urlpatterns
     + embedded_mobile_bi_urlpatterns
 )
