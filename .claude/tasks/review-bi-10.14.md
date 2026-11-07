@@ -4,6 +4,37 @@ Changeset under review: `831d4a2fa67f1876bab24a5541f0e35ea4ec45e9...HEAD` (focus
 
 ---
 
+## Executive Summary & Action Register
+
+All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) were executed serially. Findings have been deduplicated, categorized by severity (Critical → Important → Minor), and assigned deterministic action IDs.
+
+### Critical Priority
+- [ ] **C1**: Correct `write_audit_log()` call signature across all 16 mutating views in `apps/bi/views/AiAugmentedAnalytics/*.py` (`AugmentedInsights.py`, `SmartDataPrepSuggestions.py`, `TextSentimentAnalyses.py`, `AnalyticsRecommendations.py`) to `write_audit_log(request.user, obj, action, changes={...}, tenant=request.tenant)` and ensure `action` string length <= 10 characters, eliminating HTTP 500 `TypeError` crashes on POST requests.
+
+### Important Priority
+- [ ] **I1**: Apply `@tenant_admin_required` decorator to all 4 delete views in `apps/bi/views/AiAugmentedAnalytics/*.py` (`augmented_insight_delete`, `smart_data_prep_suggestion_delete`, `text_sentiment_analysis_delete`, `analytics_recommendation_delete`).
+- [ ] **I2**: Validate `next` redirect parameter using `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()})` in action views (`augmented_insight_triage`, `smart_data_prep_suggestion_action`, `analytics_recommendation_interact`).
+- [ ] **I3**: Add `clean_target_url()` validation to `AnalyticsRecommendationForm` restricting `target_url` to relative paths starting with `/` (rejecting `//` and `javascript:`), and add `rel="noopener noreferrer"` to external links in templates.
+- [ ] **I4**: Wrap all 16 mutating views in `apps/bi/views/AiAugmentedAnalytics/*.py` with `@transaction.atomic` (or `with transaction.atomic():`).
+- [ ] **I5**: In `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py:augmented_insight_list`, aggregate `key_drivers=Count("id", filter=Q(insight_type="key_driver"))` and pass `key_driver_count` to context; update `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` from `{{ insights|length }}` to `{{ key_driver_count }}`.
+- [ ] **I6**: Create sub-package `__init__.py` files re-exporting entity classes:
+  - `apps/bi/models/AiAugmentedAnalytics/__init__.py`
+  - `apps/bi/forms/AiAugmentedAnalytics/__init__.py`
+  - `apps/bi/views/AiAugmentedAnalytics/__init__.py`
+- [ ] **I7**: Add state transition guards and ownership checks in action views: guard `smart_data_prep_suggestion_action` against modifying suggestions already `applied`, and verify user ownership/admin in `analytics_recommendation_interact`.
+- [ ] **I8**: Add `select_related` to `bi_object` calls in mutating views (`SmartDataPrepSuggestions.py` for `target_table`, `AnalyticsRecommendations.py` for `user`) to prevent secondary lazy `__str__` queries during audit logging.
+- [ ] **I9**: Add `.only("id", "name")` to `WarehouseTable.objects.filter(tenant=request.tenant).order_by("name")` in `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py:30`.
+
+### Minor Priority
+- [ ] **M1**: Remove unused imports in `apps/bi/views/AiAugmentedAnalytics/*.py` (`Decimal`, `get_object_or_404`, `timezone`).
+- [ ] **M2**: Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` to table quick action forms in `smart_data_prep_suggestion/list.html` and `text_sentiment_analysis/list.html`.
+- [ ] **M3**: Add matching `id` and `for` attributes on search and filter inputs across list templates.
+- [ ] **M4**: Add dark mode contrast utilities for active filter pills and card callouts in `feed.html` (`dark:bg-slate-800`, `dark:text-indigo-300`).
+- [ ] **M5**: Add composite index `models.Index(fields=["tenant", "-created_at"], name="idx_bsdp_ten_created")` to `SmartDataPrepSuggestion.Meta.indexes`.
+- [ ] **M6**: Add explicit decimal step `step="0.01"` and bounds for polarity and subjectivity score widgets in `TextSentimentAnalysisForm`.
+
+---
+
 ## Lane Review Outputs
 
 ### Pass 1: Code Reviewer (`code-reviewer`)
@@ -67,6 +98,14 @@ Changeset under review: `831d4a2fa67f1876bab24a5541f0e35ea4ec45e9...HEAD` (focus
   1. Action views unvalidated `next` redirect target (`augmented_insight_triage`, `smart_data_prep_suggestion_action`, `analytics_recommendation_interact`).
   2. Missing hidden `next` input on inline table quick actions in list views.
 
-
-
-
+### Pass 6: Security Reviewer (`security-reviewer`)
+- **Verdict**: FAIL (1 Critical, 3 Important, 2 Minor)
+- **Critical**:
+  1. `write_audit_log()` Signature Mismatch Causing Audit Trail Failure / 500 Crashes across 16 callsites in `apps/bi/views/AiAugmentedAnalytics/*.py`.
+- **Important**:
+  1. Broken Access Control: Missing `@tenant_admin_required` on Destructive Deletions (`augmented_insight_delete`, `smart_data_prep_suggestion_delete`, `text_sentiment_analysis_delete`, `analytics_recommendation_delete`).
+  2. Open Redirect Vulnerability via Unvalidated `next` Parameter (CWE-601) in `augmented_insight_triage`, `smart_data_prep_suggestion_action`, `analytics_recommendation_interact`.
+  3. Stored XSS / Protocol Injection in `AnalyticsRecommendation.target_url` (CWE-79 / CWE-601).
+- **Minor**:
+  1. AuditLog action length truncation (action > 10 chars, e.g. `prep_accept`, `rec_dismiss`) & non-atomic mutations.
+  2. Missing state transition and ownership guards in `smart_data_prep_suggestion_action` (allow changes once `applied`) and `analytics_recommendation_interact` (allow any user to interact with others' recommendations).
