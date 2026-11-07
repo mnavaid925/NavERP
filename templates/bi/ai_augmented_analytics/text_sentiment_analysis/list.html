@@ -164,6 +164,7 @@
                             </a>
                             <form method="post" action="{% url 'bi:text_sentiment_analysis_recalculate' item.pk %}" class="inline">
                                 {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
                                 <button type="submit" class="btn btn-icon text-indigo-600 hover:bg-indigo-50" title="Re-score sentiment">
                                     <i data-lucide="refresh-cw" class="w-4 h-4"></i>
                                 </button>
