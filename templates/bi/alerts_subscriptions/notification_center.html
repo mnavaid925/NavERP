@@ -96,7 +96,8 @@
 
         <form method="get" class="flex items-center gap-2">
             <input type="hidden" name="tab" value="{{ active_tab }}">
-            <select name="category" class="form-select text-xs py-1.5" onchange="this.form.submit()">
+            <label for="filter-category" class="sr-only">Filter by Category</label>
+            <select name="category" id="filter-category" class="form-select text-xs py-1.5" onchange="this.form.submit()">
                 <option value="">All Categories</option>
                 {% for val, label in category_choices %}
                 <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
