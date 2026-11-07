@@ -14,7 +14,7 @@
         </div>
         <div class="flex items-center gap-3">
             <h1 class="page-title">{{ subscription.name }}</h1>
-            <span class="badge {{ subscription.format_badge_class }}">{{ subscription.export_format|upper }}</span>
+            <span class="badge {{ subscription.format_badge_class }}">{% if subscription.export_format == 'html_inline' %}HTML{% else %}{{ subscription.export_format|upper }}{% endif %}</span>
             <span class="badge {{ subscription.status_badge_class }}">{{ subscription.get_status_display }}</span>
         </div>
         <p class="text-muted text-sm font-mono mt-1">Schedule ID: {{ subscription.number }} • Created {{ subscription.created_at|date:"M d, Y H:i" }}</p>
