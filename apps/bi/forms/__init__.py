@@ -63,6 +63,10 @@ from apps.bi.forms.ConversationalBi.BiConversationSessions import BiConversation
 from apps.bi.forms.ConversationalBi.NarrativeExplanations import NarrativeExplanationForm
 from apps.bi.forms.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQueryForm
 from apps.bi.forms.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndexForm
+from apps.bi.forms.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnalyticsConfigForm
+from apps.bi.forms.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplayForm
+from apps.bi.forms.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfigurationForm
+from apps.bi.forms.EmbeddedMobileBi.EmbedApiTokens import EmbedApiTokenForm
 from apps.bi.forms.OperationalReporting.ReportDefinitions import (
     ReportCloneForm,
     ReportDefinitionForm,
@@ -181,4 +185,8 @@ __all__ = [
     "BiConversationSessionForm",
     "NarrativeExplanationForm",
     "SearchDiscoveryIndexForm",
+    "EmbeddedAnalyticsConfigForm",
+    "KioskWallboardDisplayForm",
+    "MobileBiConfigurationForm",
+    "EmbedApiTokenForm",
 ]
