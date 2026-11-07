@@ -86,6 +86,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                NarrativeExplanation.objects.all().delete()
+                SearchDiscoveryIndex.objects.all().delete()
+                NaturalLanguageQuery.objects.all().delete()
+                BiConversationSession.objects.all().delete()
                 AnalyticsRecommendation.objects.all().delete()
                 TextSentimentAnalysis.objects.all().delete()
                 SmartDataPrepSuggestion.objects.all().delete()
