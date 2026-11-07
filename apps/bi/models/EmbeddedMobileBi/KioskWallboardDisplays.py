@@ -121,7 +121,10 @@ class KioskWallboardDisplay(TenantNumbered):
             base_slug = slugify(self.name) or "kiosk-display"
             slug = base_slug
             counter = 1
-            while KioskWallboardDisplay.objects.filter(tenant=self.tenant, kiosk_slug=slug).exclude(pk=self.pk).exists():
+            qs = KioskWallboardDisplay.objects.filter(tenant=self.tenant)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            while qs.filter(kiosk_slug=slug).exists():
                 slug = f"{base_slug}-{counter}"
                 counter += 1
             self.kiosk_slug = slug
