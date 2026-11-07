@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}{{ model_obj.name }} — Predictive Model — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:predictive_model_list' %}">Predictive Models</a>
+            <span class="sep">/</span>
+            <span>{{ model_obj.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ model_obj.name }}</h1>
+            {% if model_obj.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif model_obj.status == 'training' %}
+            <span class="badge badge-info">Training</span>
+            {% elif model_obj.status == 'under_review' %}
+            <span class="badge badge-amber">Under Review</span>
+            {% elif model_obj.status == 'retired' %}
+            <span class="badge badge-muted">Retired</span>
+            {% else %}
+            <span class="badge badge-slate">{{ model_obj.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-info">{{ model_obj.get_problem_type_display }}</span>
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ model_obj.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>Version: v{{ model_obj.model_version }}</span>
+            <span class="text-slate-300">•</span>
+            <span>slug: {{ model_obj.slug }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:predictive_model_train' model_obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Trigger AutoML model training and validation">
+                <i data-lucide="play-circle"></i>
+                <span>Fit / Retrain</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:forecast_execution_create' %}?model={{ model_obj.pk }}" class="btn btn-outline">
+            <i data-lucide="trending-up"></i>
+            <span>Run Forecast</span>
+        </a>
+        <a href="{% url 'bi:predictive_model_edit' model_obj.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Model</span>
+        </a>
+        <form method="post" action="{% url 'bi:predictive_model_delete' model_obj.pk %}" onsubmit="return confirm('Are you sure you want to delete {{ model_obj.name }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-icon" title="Delete Model">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Validation Accuracy</div>
+            <div class="text-2xl font-bold font-mono text-blue-600">
+                {% if model_obj.accuracy_metric_value %}
+                {{ model_obj.accuracy_metric_name }}: {{ model_obj.accuracy_metric_value }}
+                {% else %}
+                Pending Fit
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="target"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Target Metric</div>
+            <div class="text-xl font-bold font-mono text-emerald-700 truncate">{{ model_obj.target_metric }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Drift Threshold</div>
+            <div class="text-2xl font-bold text-indigo-600 font-mono">{{ model_obj.drift_threshold }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Executions / Anomalies</div>
+            <div class="text-2xl font-bold text-amber-600 font-mono">{{ executions_count }} / {{ anomalies_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Configuration Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i>
+                Model Architecture & Governance
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if model_obj.description %}
+            <p class="text-sm text-slate-600 mb-4">{{ model_obj.description }}</p>
+            {% endif %}
+
+            <div class="grid grid-cols-2 gap-4 text-sm mb-6">
+                <div>
+                    <span class="text-muted block text-xs">Algorithm:</span>
+                    <span class="font-semibold text-slate-800">{{ model_obj.get_algorithm_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Problem Archetype:</span>
+                    <span class="font-semibold text-slate-800">{{ model_obj.get_problem_type_display }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Semantic Model:</span>
+                    {% if model_obj.semantic_model %}
+                    <a href="{% url 'bi:semantic_model_detail' model_obj.semantic_model.pk %}" class="text-blue-600 hover:underline">
+                        {{ model_obj.semantic_model.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">&mdash;</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Warehouse Fact Table:</span>
+                    {% if model_obj.warehouse_table %}
+                    <a href="{% url 'bi:warehouse_table_detail' model_obj.warehouse_table.pk %}" class="text-blue-600 hover:underline">
+                        {{ model_obj.warehouse_table.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">&mdash;</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Registered By:</span>
+                    <span class="text-slate-700">
+                        {% if model_obj.created_by %}
+                        {{ model_obj.created_by.get_full_name|default:model_obj.created_by.username }}
+                        {% else %}
+                        &mdash;
+                        {% endif %}
+                    </span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Created At:</span>
+                    <span class="text-slate-700">{{ model_obj.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+
+            <!-- Training Features List -->
+            <div class="mb-4">
+                <span class="text-muted block text-xs font-semibold uppercase mb-2">Input Features ({{ model_obj.features_list|length }})</span>
+                <div class="flex flex-wrap gap-2">
+                    {% for feat in model_obj.features_list %}
+                    <span class="px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-mono border border-slate-200">
+                        {{ feat }}
+                    </span>
+                    {% empty %}
+                    <span class="text-slate-400 text-xs">No explicit features defined</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Importance / SHAP Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="bar-chart-2" class="w-4 h-4 text-emerald-500"></i>
+                Relative Feature Importance
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if model_obj.feature_importance %}
+            <div class="space-y-3">
+                {% for feat, weight in model_obj.feature_importance.items %}
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="font-mono text-slate-700">{{ feat }}</span>
+                        <span class="font-semibold text-slate-900">{{ weight }}</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full" style="width: {% widthratio weight 1 100 %}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-6 text-muted text-xs">
+                Feature weightings will populate after triggering model training.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Recent Forecast Executions Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="trending-up" class="w-4 h-4 text-indigo-500"></i>
+            Forecast Runs Generated by this Model
+        </h3>
+        <a href="{% url 'bi:forecast_execution_create' %}?model={{ model_obj.pk }}" class="btn btn-outline btn-sm">
+            <i data-lucide="plus"></i>
+            <span>New Run</span>
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Forecast Run</th>
+                    <th>Cadence</th>
+                    <th>Horizon</th>
+                    <th>Trend</th>
+                    <th>MAPE Error</th>
+                    <th>Status</th>
+                    <th>Executed At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exec in executions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:forecast_execution_detail' exec.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ exec.name }}
+                        </a>
+                        <div class="text-xs text-muted">{{ exec.number }}</div>
+                    </td>
+                    <td>{{ exec.get_cadence_display }}</td>
+                    <td>{{ exec.horizon_periods }} periods</td>
+                    <td>
+                        <span class="badge badge-info">{{ exec.get_trend_direction_display }}</span>
+                    </td>
+                    <td class="font-mono text-sm">
+                        {% if exec.mape_score %}{{ exec.mape_score }}%{% else %}&mdash;{% endif %}
+                    </td>
+                    <td>
+                        {% if exec.status == 'completed' %}
+                        <span class="badge badge-green">Completed</span>
+                        {% else %}
+                        <span class="badge badge-amber">{{ exec.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-500">{{ exec.executed_at|date:"M d, Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-6 text-muted text-sm">
+                        No forecast runs recorded for this model yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
