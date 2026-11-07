@@ -121,6 +121,7 @@ class ForecastExecution(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bfor_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-executed_at"], name="idx_bfor_ten_exec"),
             models.Index(fields=["tenant", "status"], name="idx_bfor_ten_stat"),
             models.Index(fields=["tenant", "cadence"], name="idx_bfor_ten_cad"),
             models.Index(fields=["tenant", "executed_by"], name="idx_bfor_ten_user"),
