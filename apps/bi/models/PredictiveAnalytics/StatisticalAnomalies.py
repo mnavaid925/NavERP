@@ -103,6 +103,7 @@ class StatisticalAnomaly(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_banm_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-anomaly_timestamp"], name="idx_banm_ten_time"),
             models.Index(fields=["tenant", "triage_status"], name="idx_banm_ten_triage"),
             models.Index(fields=["tenant", "severity"], name="idx_banm_ten_sev"),
             models.Index(fields=["tenant", "assigned_to"], name="idx_banm_ten_user"),
