@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}Developer API Tokens — Embedded & Mobile BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:embedded_analytics_config_list' %}">Embedded & Mobile BI</a>
+            <span class="sep">/</span>
+            <span>Developer API Tokens</span>
+        </div>
+        <h1 class="page-title">Developer & Embed API Tokens</h1>
+        <p class="text-muted text-sm">Issue cryptographically secure tokens for embedding SDKs, headless REST queries, and portal integration</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:embedded_analytics_config_list' %}" class="btn btn-outline">
+            <i data-lucide="layout"></i>
+            <span>Embedded Configs</span>
+        </a>
+        <a href="{% url 'bi:kiosk_wallboard_display_list' %}" class="btn btn-outline">
+            <i data-lucide="tv"></i>
+            <span>TV & Kiosks</span>
+        </a>
+        <a href="{% url 'bi:mobile_bi_config_list' %}" class="btn btn-outline">
+            <i data-lucide="smartphone"></i>
+            <span>Mobile BI</span>
+        </a>
+        <a href="{% url 'bi:embed_api_token_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Generate Token</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="key"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Tokens</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active & Valid</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="shield-alert"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Revoked Tokens</div>
+            <div class="text-2xl font-bold text-red-600">{{ revoked_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="sm:col-span-2">
+                <label for="filter_q" class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input id="filter_q" type="text" name="q" value="{{ request.GET.q }}" placeholder="Search token name, prefix, number..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label for="filter_status" class="form-label text-xs">Status</label>
+                <select id="filter_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="sm:col-span-3 flex justify-end gap-2 mt-1">
+                <a href="{% url 'bi:embed_api_token_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Tokens</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">API Tokens Registry</h2>
+        <span class="text-xs text-muted">{{ tokens.paginator.count }} total tokens</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Token Name & Number</th>
+                    <th>Key Prefix</th>
+                    <th>Scopes</th>
+                    <th>Attached Config</th>
+                    <th>Rate Limit & Expiry</th>
+                    <th>Status</th>
+                    <th>Usage Telemetry</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in tokens %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:embed_api_token_detail' item.pk %}" class="hover:text-primary-600">
+                                {{ item.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ item.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-700 bg-slate-100 py-0.5 px-2 rounded inline-block">
+                            {{ item.token_prefix }}••••••••
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex flex-wrap gap-1 max-w-xs">
+                            {% for scope in item.scopes %}
+                            <span class="badge badge-info text-[10px] py-0 px-1.5">{{ scope }}</span>
+                            {% empty %}
+                            <span class="text-xs text-muted">read:dashboard</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    <td>
+                        {% if item.embedded_config %}
+                        <div class="text-xs font-medium text-slate-800">
+                            <a href="{% url 'bi:embedded_analytics_config_detail' item.embedded_config.pk %}" class="text-primary-600 hover:underline">
+                                {{ item.embedded_config.name }}
+                            </a>
+                        </div>
+                        <div class="text-[11px] text-muted font-mono">{{ item.embedded_config.number }}</div>
+                        {% else %}
+                        <span class="text-xs text-muted">Global / All Embeds</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold text-slate-800">{{ item.rate_limit_rpm }} req/min</div>
+                        <div class="text-[11px] text-muted">
+                            {% if item.expires_at %}
+                                Expires: {{ item.expires_at|date:"M d, Y" }}
+                            {% else %}
+                                Never expires
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'active' %}badge-green{% elif item.status == 'expired' %}badge-amber{% else %}badge-red{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold text-slate-800">{{ item.total_requests_count }} requests</div>
+                        <div class="text-[11px] text-muted">
+                            {% if item.last_used_at %}
+                                {{ item.last_used_at|date:"M d, H:i" }}
+                            {% else %}
+                                Unused
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:embed_api_token_detail' item.pk %}" class="btn btn-icon btn-outline" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:embed_api_token_edit' item.pk %}" class="btn btn-icon btn-outline" title="Edit Token">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if item.status == 'active' %}
+                            <form method="post" action="{% url 'bi:embed_api_token_revoke' item.pk %}" onsubmit="return confirm('Revoke token {{ item.number }}? This cannot be undone.');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-amber-600 hover:bg-amber-50" title="Revoke Key">
+                                    <i data-lucide="slash"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'bi:embed_api_token_delete' item.pk %}" onsubmit="return confirm('Delete token {{ item.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="key" class="w-12 h-12 text-muted mb-2"></i>
+                            <h3 class="text-base font-semibold">No API Tokens Found</h3>
+                            <p class="text-sm text-muted mb-4">Generate your first API token to authenticate embedded SDKs and REST queries.</p>
+                            <a href="{% url 'bi:embed_api_token_create' %}" class="btn btn-primary text-xs">
+                                <i data-lucide="plus"></i>
+                                <span>Generate Token</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if tokens.paginator.num_pages > 1 %}
+    <div class="card-footer flex justify-between items-center text-xs text-muted">
+        <div>
+            Page {{ tokens.number }} of {{ tokens.paginator.num_pages }}
+        </div>
+        <div class="pagination flex gap-1">
+            {% if tokens.has_previous %}
+            <a href="?page={{ tokens.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">
+                Previous
+            </a>
+            {% endif %}
+            {% if tokens.has_next %}
+            <a href="?page={{ tokens.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline text-xs">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
