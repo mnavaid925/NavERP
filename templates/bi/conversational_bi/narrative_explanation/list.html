@@ -181,15 +181,15 @@
                     </td>
                     <td class="text-right whitespace-nowrap">
                         <div class="flex items-center justify-end gap-2">
-                            <a href="{% url 'bi:narrative_explanation_detail' n.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="View Detail">
+                            <a href="{% url 'bi:narrative_explanation_detail' n.pk %}" class="btn btn-icon" title="View Detail">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:narrative_explanation_edit' n.pk %}" class="btn btn-ghost btn-sm text-xs p-1" title="Edit">
+                            <a href="{% url 'bi:narrative_explanation_edit' n.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'bi:narrative_explanation_delete' n.pk %}" class="inline" onsubmit="return confirm('Delete narrative {{ n.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-ghost btn-sm text-xs text-rose-600 p-1" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
