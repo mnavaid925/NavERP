@@ -3404,6 +3404,7 @@ class Command(BaseCommand):
             # --- 10.14 AI & Augmented Analytics Seeding ---
             if not AugmentedInsight.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
+                    from apps.core.models import OrgUnit, Party
                     wt_cust = WarehouseTable.objects.filter(tenant=tenant).first()
                     smod = SemanticModel.objects.filter(tenant=tenant).first()
                     kpi = KpiDefinition.objects.filter(tenant=tenant).first()
