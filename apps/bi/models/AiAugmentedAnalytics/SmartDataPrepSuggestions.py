@@ -65,6 +65,7 @@ class SmartDataPrepSuggestion(TenantNumbered):
             models.Index(fields=["tenant", "suggestion_type"], name="idx_bsdp_ten_type"),
             models.Index(fields=["tenant", "status"], name="idx_bsdp_ten_stat"),
             models.Index(fields=["tenant", "target_table"], name="idx_bsdp_ten_tbl"),
+            models.Index(fields=["tenant", "-created_at"], name="idx_bsdp_ten_created"),
         ]
 
     def __str__(self):
