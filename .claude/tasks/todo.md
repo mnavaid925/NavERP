@@ -133,13 +133,13 @@
   - [x] `templates/bi/conversational_bi/search_explorer.html` (Search-Driven Discovery asset explorer & synonym search console)
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Package re-exports in `apps/bi/models/ConversationalBi/__init__.py` and `apps/bi/models/__init__.py`
-- [ ] Package re-exports in `apps/bi/forms/ConversationalBi/__init__.py` and `apps/bi/forms/__init__.py`
-- [ ] Package re-exports in `apps/bi/views/ConversationalBi/__init__.py` and `apps/bi/views/__init__.py`
-- [ ] Package re-exports in `apps/bi/urls/ConversationalBi/__init__.py` and `apps/bi/urls/__init__.py`
-- [ ] Register 4 models in `apps/bi/admin.py`
-- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.15
-- [ ] Add `LIVE_LINKS["10.15"]` in `apps/core/navigation.py`:
+- [x] Package re-exports in `apps/bi/models/ConversationalBi/__init__.py` and `apps/bi/models/__init__.py`
+- [x] Package re-exports in `apps/bi/forms/ConversationalBi/__init__.py` and `apps/bi/forms/__init__.py`
+- [x] Package re-exports in `apps/bi/views/ConversationalBi/__init__.py` and `apps/bi/views/__init__.py`
+- [x] Package re-exports in `apps/bi/urls/ConversationalBi/__init__.py` and `apps/bi/urls/__init__.py`
+- [x] Register 4 models in `apps/bi/admin.py`
+- [x] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.15
+- [x] Add `LIVE_LINKS["10.15"]` in `apps/core/navigation.py`:
   - `"Natural Language Query (NLQ)"`: `bi:natural_language_query_list`
   - `"Conversational BI Assistant"`: `bi:bi_conversation_session_list`
   - `"Natural Language Generation (NLG)"`: `bi:narrative_explanation_list`
@@ -150,9 +150,9 @@
     - `"Conversational BI Sessions"`: `bi:bi_conversation_session_list`
     - `"Narrative Explanations"`: `bi:narrative_explanation_list`
     - `"Search Discovery Indexes"`: `bi:search_discovery_index_list`
-- [ ] Run `makemigrations bi` (claiming `0034`) & `migrate`
-- [ ] Run `seed_bi` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations bi` (claiming `0034`) & `migrate`
+- [x] Run `seed_bi` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
 - [ ] Create `temp/smoke_10_15.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
