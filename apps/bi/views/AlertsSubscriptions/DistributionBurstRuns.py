@@ -21,11 +21,9 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def distribution_burst_run_list(request):
-    qs = bi_scope(DistributionBurstRun.objects.all(), request).select_related(
-        "subscription", "alert_rule", "executed_by"
-    )
+    base_qs = bi_scope(DistributionBurstRun.objects.all(), request)
 
-    counts = qs.aggregate(
+    counts = base_qs.aggregate(
         total=Count("id"),
         completed=Count("id", filter=Q(status="completed")),
         failed=Count("id", filter=Q(status__in=["failed", "partial_failure"])),
@@ -35,6 +33,10 @@ def distribution_burst_run_list(request):
     completed_runs = counts["completed"] or 0
     failed_runs = counts["failed"] or 0
     total_delivered_recipients = counts["delivered_sum"] or 0
+
+    qs = base_qs.select_related(
+        "subscription", "alert_rule", "executed_by"
+    )
 
     # Search
     q = request.GET.get("q", "").strip()
