@@ -18,7 +18,7 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.8 Master Data Management (MDM) Analytics**: Golden record resolution, survivorship rules, entity matching.
 - **10.9 Data Quality & Governance**: Validation rules, anomaly detection, threshold alerting, quarantine workflows.
 - **10.10 Real-time Streaming Analytics**: Micro-batch processing, stream windows, live telemetry feeds.
-- **10.11 Operational Reporting**: Paginated tabular reports, print-ready PDFs, report schedules, bursting distributions.
+- **10.11 KPI & Performance Scorecards**: KPI library, Balanced Scorecards (4 Kaplan & Norton perspectives: Financial, Customer, Internal Process, Learning & Growth), plan-vs-actual variance, trend arrows, industry benchmarks, and strategy maps.
 - **10.12 OLAP & Multidimensional Analysis**: Pre-aggregated cubes, hierarchies, pivot matrix analysis, what-if planning scenarios, writeback adjustments.
 - **10.13 Geospatial Analytics & Mapping**: Choropleth maps, territory heatmaps, spatial clustering.
 - **10.14 Financial Analytics & Planning**: Variance analysis, budget vs. actuals, financial ratio scorecards.
@@ -825,6 +825,87 @@ Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
 - **Slug De-duplication on Clone**: View cloning generates a unique tenant-scoped slug in a loop (`copy-of-...-<counter>`) avoiding database unique constraint collisions.
 - **CSV Formula Injection Mitigation**: All exported columns and cells are sanitized via `csv_safe(...)`.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.10"]`.
+
+---
+
+## Sub-module 10.11: KPI & Performance Scorecards
+
+### Models
+1. **`KpiDefinition`** (`apps/bi/models/PerformanceScorecards/KpiDefinitions.py`)
+   - Table: `bi_kpidefinition`, Prefix: `BKPI-` (`TenantNumbered`).
+   - Fields: `name`, `code`, `slug`, `description`, `category`, `perspective` (`financial`, `customer`, `internal_process`, `learning_growth`), `target_direction` (`maximize`, `minimize`, `in_range`), `unit_of_measure` (`percentage`, `currency`, `count`, `days`, `hours`, `ratio`, `score`), `tracking_frequency` (`daily`, `weekly`, `monthly`, `quarterly`, `annual`), `calculation_type` (`manual`, `semantic_measure`, `formula_expression`, `aggregation`), `semantic_measure` (FK `CalculatedMeasure`), `formula_expression`, `target_value`, `warning_threshold`, `critical_threshold`, `current_value`, `previous_value`, `industry_benchmark_value`, `benchmark_source`, `benchmark_percentile`, `status` (`draft`, `active`, `under_review`, `deprecated`, `archived`), `is_active`, `owner` (FK `User`), `department` (FK `OrgUnit`), `last_calculated_at`.
+   - Methods: `calculate_rag_status()`, `record_measurement(new_value, save=True)`, `variance_from_target`, `benchmark_variance`.
+   - Badges: `badge_status` (`badge-slate`, `badge-green`, `badge-amber`, `badge-red`), `badge_perspective`.
+
+2. **`PerformanceScorecard`** (`apps/bi/models/PerformanceScorecards/PerformanceScorecards.py`)
+   - Table: `bi_performancescorecard`, Prefix: `BSCR-` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `scorecard_type` (`balanced_scorecard`, `departmental`, `strategic_initiative`, `operational`, `individual`), `review_period` (`monthly`, `quarterly`, `semi_annual`, `annual`), `fiscal_year`, `financial_weight`, `customer_weight`, `internal_process_weight`, `learning_growth_weight`, `overall_score`, `overall_rag_status` (`green`, `amber`, `red`, `gray`), `status` (`draft`, `active`, `under_review`, `archived`), `is_default`, `is_published`, `owner` (FK `User`), `org_unit` (FK `OrgUnit`), `last_recalculated_at`.
+   - Methods: `recalculate_performance()`, `get_perspective_summary(assignments=None)`, `save()` (atomic default reset).
+   - Indexes: composite on `(tenant, overall_rag_status)` (`idx_bscr_ten_rag`).
+
+3. **`ScorecardKpiAssignment`** (`apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py`)
+   - Table: `bi_scorecardkpiassignment`, Prefix: `BSCI-` (`TenantNumbered`).
+   - Fields: `scorecard` (FK `PerformanceScorecard`), `kpi` (FK `KpiDefinition`), `objective` (FK `StrategicObjective`), `perspective`, `weight`, `target_value`, `actual_value`, `variance`, `variance_percentage`, `rag_status` (`green`, `amber`, `red`, `gray`), `trend_direction` (`improving`, `steady`, `declining`), `normalized_score`, `benchmark_overlay_value`, `benchmark_variance`, `measurement_date`, `notes`, `sort_order`.
+   - Methods: `calculate_performance_metrics()`, `record_actual_value(actual_value, save=True)`.
+   - Constraints & Indexes: unique together on `(scorecard, kpi)`, index on `(tenant, trend_direction)` (`idx_bsci_ten_trend`).
+
+4. **`StrategicObjective`** (`apps/bi/models/PerformanceScorecards/StrategicObjectives.py`)
+   - Table: `bi_strategic_objective`, Prefix: `BOBJ-` (`TenantNumbered`).
+   - Fields: `name`, `code`, `slug`, `perspective`, `statement_of_intent`, `parent_objective` (FK `self`), `target_date`, `rag_status`, `alignment_score`, `status` (`draft`, `active`, `achieved`, `canceled`, `postponed`), `owner` (FK `User`), `org_unit` (FK `OrgUnit`), `sort_order`.
+   - Methods: `recalculate_alignment()`.
+   - Indexes: composite on `(tenant, rag_status)` (`idx_bobj_ten_rag`).
+
+### URLs & Routes
+- KPI Definitions:
+  - `bi:kpi_definition_list` (`/bi/kpis/`)
+  - `bi:kpi_definition_create` (`/bi/kpis/create/` - `@tenant_admin_required`)
+  - `bi:kpi_definition_detail` (`/bi/kpis/<int:pk>/`)
+  - `bi:kpi_definition_edit` (`/bi/kpis/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:kpi_definition_delete` (`/bi/kpis/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:kpi_definition_refresh` (`/bi/kpis/<int:pk>/refresh/` - `@tenant_admin_required`, `@require_POST`)
+- Performance Scorecards:
+  - `bi:performance_scorecard_list` (`/bi/scorecards/`)
+  - `bi:performance_scorecard_create` (`/bi/scorecards/create/` - `@tenant_admin_required`)
+  - `bi:performance_scorecard_detail` (`/bi/scorecards/<int:pk>/`)
+  - `bi:performance_scorecard_edit` (`/bi/scorecards/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:performance_scorecard_delete` (`/bi/scorecards/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:performance_scorecard_strategy_map` (`/bi/scorecards/<int:pk>/strategy-map/`)
+  - `bi:performance_scorecard_recalculate` (`/bi/scorecards/<int:pk>/recalculate/` - `@tenant_admin_required`, `@require_POST`)
+- Scorecard KPI Assignments:
+  - `bi:scorecard_kpi_assignment_list` (`/bi/assignments/`)
+  - `bi:scorecard_kpi_assignment_create` (`/bi/assignments/create/` - `@tenant_admin_required`)
+  - `bi:scorecard_kpi_assignment_detail` (`/bi/assignments/<int:pk>/`)
+  - `bi:scorecard_kpi_assignment_edit` (`/bi/assignments/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:scorecard_kpi_assignment_delete` (`/bi/assignments/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:scorecard_kpi_assignment_record_actual` (`/bi/assignments/<int:pk>/record-actual/` - `@tenant_admin_required`)
+- Strategic Objectives:
+  - `bi:strategic_objective_list` (`/bi/objectives/`)
+  - `bi:strategic_objective_create` (`/bi/objectives/create/` - `@tenant_admin_required`)
+  - `bi:strategic_objective_detail` (`/bi/objectives/<int:pk>/`)
+  - `bi:strategic_objective_edit` (`/bi/objectives/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:strategic_objective_delete` (`/bi/objectives/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/kpi_performance_scorecards/`:
+  - `kpi_definition/` (`list.html`, `detail.html`, `form.html`).
+  - `performance_scorecard/` (`list.html`, `detail.html`, `form.html`, `strategy_map.html`, `_kpi_row.html`, `_objective_card.html`).
+  - `scorecard_kpi_assignment/` (`list.html`, `detail.html`, `form.html`, `record_actual.html`).
+  - `strategic_objective/` (`list.html`, `detail.html`, `form.html`).
+- Design System: Colour-named badge modifiers only (`badge-green`, `badge-red`, `badge-amber`, `badge-slate`, `badge-info`), card components, stat-cards, table wrappers, and interactive strategy map.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant KPI & Performance Scorecards demo data:
+  - KPI Definitions: Net Profit Margin (financial), Customer Retention Rate (customer), Order Fulfillment Cycle Time (internal_process), Employee Training Completion Rate (learning_growth).
+  - Performance Scorecards: Corporate Balanced Scorecard (default, published, weighted across 4 perspectives).
+  - Strategic Objectives: Expand High-Margin Enterprise Services, Deliver Frictionless Customer Experience, Automate Supply Chain & Manufacturing Fulfillment, Build Data & AI Capabilities.
+  - Scorecard KPI Assignments: Linked to scorecards and objectives with actual measurements, target values, normalized scores, and trend arrows.
+- 100% idempotent with `--flush` support.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all create, edit, delete, refresh, recalculate, and record-actual views.
+- **Audit Logging**: `write_audit_log(request.user, obj, action, changes=..., tenant=request.tenant)` implemented across all mutation endpoints.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.11"]`.
 
 ---
 
