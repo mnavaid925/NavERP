@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — TV Wallboards & Kiosks — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:kiosk_wallboard_display_list' %}">TV & Kiosks</a>
+            <span class="sep">/</span>
+            <span>{% if display %}Edit {{ display.number }}{% else %}New Display{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Configure automated slideshow wallboards and kiosk screens for operations, boardrooms, and plant floors</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if display %}{% url 'bi:kiosk_wallboard_display_detail' display.pk %}{% else %}{% url 'bi:kiosk_wallboard_display_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Identification & Location -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="tv" class="w-4 h-4 text-primary-600"></i>
+                    <span>Screen Identification & Location</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Display Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.kiosk_slug.id_for_label }}" class="form-label">Screen Slug (URL identifier)</label>
+                        {{ form.kiosk_slug }}
+                        {% if form.kiosk_slug.errors %}<div class="form-error">{{ form.kiosk_slug.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.location_description.id_for_label }}" class="form-label">Physical Installation Location</label>
+                        {{ form.location_description }}
+                        <span class="text-xs text-muted">e.g. Command Center Wall 1, Plant Floor 2 Assembly</span>
+                        {% if form.location_description.errors %}<div class="form-error">{{ form.location_description.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Display Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Display Access & Security -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="lock" class="w-4 h-4 text-emerald-600"></i>
+                    <span>Access Mode & Passcode</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.is_public_kiosk }}
+                        <label for="{{ form.is_public_kiosk.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Enable Unattended Public Kiosk Mode
+                        </label>
+                        {% if form.is_public_kiosk.errors %}<div class="form-error">{{ form.is_public_kiosk.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.access_passcode.id_for_label }}" class="form-label">Kiosk Access Passcode / PIN</label>
+                        {{ form.access_passcode }}
+                        <span class="text-xs text-muted">Optional PIN required to open kiosk on untrusted displays</span>
+                        {% if form.access_passcode.errors %}<div class="form-error">{{ form.access_passcode.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Slideshow Timing & Theming -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="clock" class="w-4 h-4 text-purple-600"></i>
+                    <span>Slideshow Timing & Visual Theme</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.default_slide_duration_seconds.id_for_label }}" class="form-label">Default Slide Dwell (Seconds) *</label>
+                        {{ form.default_slide_duration_seconds }}
+                        {% if form.default_slide_duration_seconds.errors %}<div class="form-error">{{ form.default_slide_duration_seconds.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.auto_refresh_data_interval_seconds.id_for_label }}" class="form-label">Data Reload Interval (Seconds) *</label>
+                        {{ form.auto_refresh_data_interval_seconds }}
+                        {% if form.auto_refresh_data_interval_seconds.errors %}<div class="form-error">{{ form.auto_refresh_data_interval_seconds.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.transition_effect.id_for_label }}" class="form-label">Transition Animation</label>
+                        {{ form.transition_effect }}
+                        {% if form.transition_effect.errors %}<div class="form-error">{{ form.transition_effect.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.theme.id_for_label }}" class="form-label">Wallboard Theme *</label>
+                        {{ form.theme }}
+                        {% if form.theme.errors %}<div class="form-error">{{ form.theme.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.display_schedule.id_for_label }}" class="form-label">Broadcasting Schedule *</label>
+                        {{ form.display_schedule }}
+                        {% if form.display_schedule.errors %}<div class="form-error">{{ form.display_schedule.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Playlist Items & Schedule JSON -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="film" class="w-4 h-4 text-blue-600"></i>
+                    <span>Playlist Sequence & Hours (JSON)</span>
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.playlist_items_raw.id_for_label }}" class="form-label">
+                            {{ form.playlist_items_raw.label }}
+                        </label>
+                        {{ form.playlist_items_raw }}
+                        <span class="text-xs text-muted">{{ form.playlist_items_raw.help_text }}</span>
+                        {% if form.playlist_items_raw.errors %}<div class="form-error">{{ form.playlist_items_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.operating_hours_raw.id_for_label }}" class="form-label">
+                            {{ form.operating_hours_raw.label }}
+                        </label>
+                        {{ form.operating_hours_raw }}
+                        <span class="text-xs text-muted">{{ form.operating_hours_raw.help_text }}</span>
+                        {% if form.operating_hours_raw.errors %}<div class="form-error">{{ form.operating_hours_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if display %}{% url 'bi:kiosk_wallboard_display_detail' display.pk %}{% else %}{% url 'bi:kiosk_wallboard_display_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>Save Display</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
