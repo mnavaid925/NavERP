@@ -132,7 +132,7 @@ class ForecastExecution(TenantNumbered):
     def get_absolute_url(self):
         return reverse("bi:forecast_execution_detail", kwargs={"pk": self.pk})
 
-    def generate_forecast_points(self, base_value=100000.0, trend_rate=0.03):
+    def generate_forecast_points(self, base_value=100000.0, trend_rate=0.03, save=True):
         """Generates realistic time-series projection series with upper/lower bounds."""
         import random
         from decimal import Decimal
@@ -164,4 +164,6 @@ class ForecastExecution(TenantNumbered):
         if not self.mape_score:
             self.mape_score = Decimal(str(round(random.uniform(4.2, 8.8), 2)))
         self.status = "completed"
-        self.save(update_fields=["forecast_output_data", "mape_score", "status", "updated_at"])
+        if save and self.pk:
+            self.save(update_fields=["forecast_output_data", "mape_score", "status", "updated_at"])
+        return points
