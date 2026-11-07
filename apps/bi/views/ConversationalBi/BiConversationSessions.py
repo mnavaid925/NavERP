@@ -110,7 +110,11 @@ def bi_conversation_session_detail(request, pk):
 
 @login_required
 def bi_chat_workspace(request):
-    sessions = bi_scope(BiConversationSession.objects.all(), request).order_by("-is_pinned", "-last_interaction_at")
+    sessions = (
+        bi_scope(BiConversationSession.objects.all(), request)
+        .select_related("user", "primary_semantic_model")
+        .order_by("-is_pinned", "-last_interaction_at")
+    )
     active_session_id = request.GET.get("session")
     active_session = None
 
