@@ -14,7 +14,7 @@
 > Migration is **incremental**: previous leaf is `0033_smartdataprepsuggestion_idx_bsdp_ten_created.py` (from 10.14), so **10.15 claims `0034`** (see L43).
 > Plan written from `.claude/tasks/research-bi-10.15.md` (Phase 1).
 > Package folder name: `apps/bi/{models,forms,views,urls}/ConversationalBi/`
-> Template folder name: `templates/bi/conversational_bi/{natural_language_query,bi_conversation_session,narrative_explanation,search_discovery_index}/`
+> Template folder name: `templates/bi/conversational_bi/{natural_language_query,bi_conversation_session,narrative_explanation,search_discovery_index}/` + `chat_workspace.html`, `search_explorer.html`
 
 ## The Pinned Architectural Rulings (L28, L29, L36, L37)
 - **Natural Language & Conversational BI Spine Integration (L28/L29)**:
@@ -94,7 +94,7 @@
 ## Sub-module 10.15 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.15.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.15.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
 - [ ] **Entity 1: NaturalLanguageQuery (`BNLQ`)**
@@ -108,11 +108,12 @@
 - [ ] **Entity 2: BiConversationSession (`BCON`)**
   - [ ] `apps/bi/models/ConversationalBi/BiConversationSessions.py`
   - [ ] `apps/bi/forms/ConversationalBi/BiConversationSessions.py`
-  - [ ] `apps/bi/views/ConversationalBi/BiConversationSessions.py` (CRUD + `toggle_pin` + `close_session` actions)
+  - [ ] `apps/bi/views/ConversationalBi/BiConversationSessions.py` (CRUD + `chat_workspace` + `toggle_pin` + `close_session` actions)
   - [ ] `apps/bi/urls/ConversationalBi/BiConversationSessions.py`
   - [ ] `templates/bi/conversational_bi/bi_conversation_session/list.html`
   - [ ] `templates/bi/conversational_bi/bi_conversation_session/detail.html` (Interactive chat conversation thread)
   - [ ] `templates/bi/conversational_bi/bi_conversation_session/form.html`
+  - [ ] `templates/bi/conversational_bi/chat_workspace.html` (Interactive Conversational BI Assistant multi-turn chat workspace)
 - [ ] **Entity 3: NarrativeExplanation (`BNLG`)**
   - [ ] `apps/bi/models/ConversationalBi/NarrativeExplanations.py`
   - [ ] `apps/bi/forms/ConversationalBi/NarrativeExplanations.py`
@@ -124,11 +125,12 @@
 - [ ] **Entity 4: SearchDiscoveryIndex (`BSDI`)**
   - [ ] `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py`
   - [ ] `apps/bi/forms/ConversationalBi/SearchDiscoveryIndexes.py`
-  - [ ] `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py` (CRUD + `reweight` + `search` query endpoint)
+  - [ ] `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py` (CRUD + `search_explorer` + `reweight` + `search` query endpoint)
   - [ ] `apps/bi/urls/ConversationalBi/SearchDiscoveryIndexes.py`
   - [ ] `templates/bi/conversational_bi/search_discovery_index/list.html`
   - [ ] `templates/bi/conversational_bi/search_discovery_index/detail.html`
   - [ ] `templates/bi/conversational_bi/search_discovery_index/form.html`
+  - [ ] `templates/bi/conversational_bi/search_explorer.html` (Search-Driven Discovery asset explorer & synonym search console)
 
 ### Phase 3.4: Integrate (Single Writer)
 - [ ] Package re-exports in `apps/bi/models/ConversationalBi/__init__.py` and `apps/bi/models/__init__.py`
