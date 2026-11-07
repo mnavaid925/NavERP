@@ -247,7 +247,11 @@ def search_discovery_hub(request):
         results = matched[:24]
 
     categories = list(
-        base_qs.exclude(category="").values_list("category", flat=True).distinct().order_by("category")
+        SearchDiscoveryIndex.objects.filter(tenant=request.tenant)
+        .exclude(category="")
+        .values_list("category", flat=True)
+        .distinct()
+        .order_by("category")
     )
     featured_assets = base_qs.filter(is_featured=True).order_by("-relevance_weight")[:8]
 
