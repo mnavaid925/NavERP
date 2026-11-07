@@ -124,6 +124,7 @@ class SearchDiscoveryIndex(TenantNumbered):
             models.Index(fields=["tenant", "category"], name="idx_bsdi_ten_cat"),
             models.Index(fields=["tenant", "is_featured"], name="idx_bsdi_ten_feat"),
             models.Index(fields=["tenant", "is_verified"], name="idx_bsdi_ten_ver"),
+            models.Index(fields=["tenant", "is_featured", "-relevance_weight"], name="idx_bsdi_ten_feat_rw"),
         ]
 
     def __str__(self):
