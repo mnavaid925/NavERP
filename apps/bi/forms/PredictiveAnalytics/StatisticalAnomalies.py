@@ -95,14 +95,10 @@ class StatisticalAnomalyForm(TenantModelForm):
         except json.JSONDecodeError as exc:
             raise forms.ValidationError(f"Invalid JSON: {exc}") from exc
 
-    def clean_model(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("model"))
-
-    def clean_semantic_model(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("semantic_model"))
-
-    def clean_kpi_definition(self):
-        return reject_foreign(self.tenant, self.cleaned_data.get("kpi_definition"))
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["model", "semantic_model", "kpi_definition"])
+        return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
