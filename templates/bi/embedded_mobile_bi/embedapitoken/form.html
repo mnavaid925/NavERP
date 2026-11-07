@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — API Tokens — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:embed_api_token_list' %}">API Tokens</a>
+            <span class="sep">/</span>
+            <span>{% if token %}Edit {{ token.number }}{% else %}New Token{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Issue cryptographically secure tokens with row-level security and rate limits</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if token %}{% url 'bi:embed_api_token_detail' token.pk %}{% else %}{% url 'bi:embed_api_token_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Identification & Attached Config -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="key" class="w-4 h-4 text-primary-600"></i>
+                    <span>Token Identification & Scope</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Token Name / Client Application *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Token Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.embedded_config.id_for_label }}" class="form-label">Restricted to Embedded Config (Optional)</label>
+                        {{ form.embedded_config }}
+                        <span class="text-xs text-muted">Leave blank for a general-purpose token</span>
+                        {% if form.embedded_config.errors %}<div class="form-error">{{ form.embedded_config.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.scopes_raw.id_for_label }}" class="form-label">
+                            {{ form.scopes_raw.label }}
+                        </label>
+                        {{ form.scopes_raw }}
+                        <span class="text-xs text-muted">{{ form.scopes_raw.help_text }}</span>
+                        {% if form.scopes_raw.errors %}<div class="form-error">{{ form.scopes_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Rate Limiting & Expiry -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="shield" class="w-4 h-4 text-purple-600"></i>
+                    <span>Limits & Network Security</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.rate_limit_rpm.id_for_label }}" class="form-label">Rate Limit (Req / Minute) *</label>
+                        {{ form.rate_limit_rpm }}
+                        {% if form.rate_limit_rpm.errors %}<div class="form-error">{{ form.rate_limit_rpm.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.expires_at.id_for_label }}" class="form-label">Expiration Date (Optional)</label>
+                        {{ form.expires_at }}
+                        <span class="text-xs text-muted">Leave empty for no expiration</span>
+                        {% if form.expires_at.errors %}<div class="form-error">{{ form.expires_at.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.allowed_ip_ranges.id_for_label }}" class="form-label">Allowed IP Ranges (Optional)</label>
+                        {{ form.allowed_ip_ranges }}
+                        <span class="text-xs text-muted">e.g. 192.168.1.0/24 or comma-separated IPs</span>
+                        {% if form.allowed_ip_ranges.errors %}<div class="form-error">{{ form.allowed_ip_ranges.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Injected Row-Level Context -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-4 h-4 text-emerald-600"></i>
+                    <span>Injected Row-Level Security Context (RLS JSON)</span>
+                </h3>
+                <div>
+                    <label for="{{ form.injected_rls_context_raw.id_for_label }}" class="form-label">
+                        {{ form.injected_rls_context_raw.label }}
+                    </label>
+                    {{ form.injected_rls_context_raw }}
+                    <span class="text-xs text-muted">{{ form.injected_rls_context_raw.help_text }}</span>
+                    {% if form.injected_rls_context_raw.errors %}<div class="form-error">{{ form.injected_rls_context_raw.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if token %}{% url 'bi:embed_api_token_detail' token.pk %}{% else %}{% url 'bi:embed_api_token_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if token %}Save Changes{% else %}Generate Key{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
