@@ -3,7 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.shortcuts import redirect, render
+from django.http import Http404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -118,9 +119,11 @@ def bi_chat_workspace(request):
     active_session_id = request.GET.get("session")
     active_session = None
 
-    if active_session_id and active_session_id.isdigit():
-        active_session = sessions.filter(pk=int(active_session_id)).first()
-    if not active_session:
+    if active_session_id:
+        if not active_session_id.isdigit():
+            raise Http404("Invalid conversation session identifier")
+        active_session = get_object_or_404(sessions, pk=int(active_session_id))
+    else:
         active_session = sessions.first()
 
     turns = active_session.queries.select_related("user").order_by("created_at") if active_session else []
