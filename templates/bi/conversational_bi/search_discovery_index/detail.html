@@ -189,7 +189,7 @@
                     </a>
                     {% elif index.glossary_term %}
                     <a href="{% url 'bi:business_glossary_term_detail' index.glossary_term.pk %}" class="text-indigo-600 font-medium hover:underline">
-                        {{ index.glossary_term.term }} (Glossary Term)
+                        {{ index.glossary_term.name }} (Glossary Term)
                     </a>
                     {% else %}
                     <span class="text-muted italic">External or custom route link</span>
