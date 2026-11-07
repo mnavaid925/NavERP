@@ -61,6 +61,10 @@ from apps.bi.models import (
     BiConversationSession,
     NarrativeExplanation,
     SearchDiscoveryIndex,
+    BiAlertRule,
+    ReportSubscription,
+    DistributionBurstRun,
+    BiNotificationItem,
     EmbeddedAnalyticsConfig,
     KioskWallboardDisplay,
     MobileBiConfiguration,
@@ -599,6 +603,42 @@ class SearchDiscoveryIndexAdmin(admin.ModelAdmin):
     list_filter = ('asset_type', 'is_featured', 'is_verified', 'category', 'tenant')
     search_fields = ('number', 'asset_name', 'target_url', 'description', 'search_keywords')
     readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(BiAlertRule)
+class BiAlertRuleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "alert_type", "severity", "condition_operator", "threshold_value", "status", "trigger_count", "tenant")
+    list_select_related = ("tenant", "kpi_definition", "anomaly_detection", "created_by")
+    list_filter = ("alert_type", "severity", "status", "evaluation_cadence", "trigger_frequency", "tenant")
+    search_fields = ("number", "name", "description", "notification_email_list")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_evaluated_at", "last_triggered_at", "trigger_count", "last_trigger_value")
+
+
+@admin.register(ReportSubscription)
+class ReportSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_asset_type", "export_format", "cadence", "burst_mode", "status", "run_count", "tenant")
+    list_select_related = ("tenant", "dashboard", "report", "created_by")
+    list_filter = ("target_asset_type", "export_format", "cadence", "burst_mode", "status", "tenant")
+    search_fields = ("number", "name", "external_recipient_emails")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_run_at", "next_run_at", "run_count")
+
+
+@admin.register(DistributionBurstRun)
+class DistributionBurstRunAdmin(admin.ModelAdmin):
+    list_display = ("number", "run_trigger", "delivery_channel", "status", "recipient_count", "delivered_count", "failed_count", "started_at", "tenant")
+    list_select_related = ("tenant", "subscription", "alert_rule", "executed_by")
+    list_filter = ("run_trigger", "delivery_channel", "status", "tenant")
+    search_fields = ("number", "generated_file_name", "error_summary")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "started_at", "completed_at", "execution_duration_ms")
+
+
+@admin.register(BiNotificationItem)
+class BiNotificationItemAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "recipient", "severity", "category", "status", "escalation_level", "created_at", "tenant")
+    list_select_related = ("tenant", "recipient", "alert_rule", "burst_run", "acknowledged_by", "escalated_to")
+    list_filter = ("severity", "category", "status", "escalation_level", "tenant")
+    search_fields = ("number", "title", "message", "workflow_reference")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "read_at", "acknowledged_at")
 
 
 @admin.register(EmbeddedAnalyticsConfig)
