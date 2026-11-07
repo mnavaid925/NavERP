@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Narrative {{ narrative.number }}{% else %}New Narrative Explanation{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:narrative_explanation_list' %}">Narratives</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ narrative.number }}{% else %}New Narrative{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Narrative Explanation: {{ narrative.number }}{% else %}New Narrative Explanation{% endif %}</h1>
+        <p class="text-muted text-sm">Author or reconfigure automated analytical prose and voice briefing summaries</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:narrative_explanation_detail' narrative.pk %}{% else %}{% url 'bi:narrative_explanation_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-body p-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Title -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Narrative Title <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Headline -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.headline.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Executive Headline <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.headline }}
+                    <p class="text-xs text-muted mt-1">Single-sentence takeaway summarizing the most significant metric variance or trend.</p>
+                    {% if form.headline.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.headline.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Target Artifact Type -->
+                <div>
+                    <label for="{{ form.target_artifact_type.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Target Artifact Type <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.target_artifact_type }}
+                    {% if form.target_artifact_type.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.target_artifact_type.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Narrative Style -->
+                <div>
+                    <label for="{{ form.narrative_style.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Narrative Style <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.narrative_style }}
+                    {% if form.narrative_style.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.narrative_style.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Status -->
+                <div>
+                    <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Status <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Language -->
+                <div>
+                    <label for="{{ form.language.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Language Code
+                    </label>
+                    {{ form.language }}
+                    {% if form.language.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.language.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Linked Artifact Selectors -->
+                <div>
+                    <label for="{{ form.dashboard.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Linked Dashboard (Optional)
+                    </label>
+                    {{ form.dashboard }}
+                    {% if form.dashboard.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.dashboard.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.report.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Linked Report (Optional)
+                    </label>
+                    {{ form.report }}
+                    {% if form.report.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.report.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.kpi.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Linked KPI Definition (Optional)
+                    </label>
+                    {{ form.kpi }}
+                    {% if form.kpi.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.kpi.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.query.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Linked NLQ Query (Optional)
+                    </label>
+                    {{ form.query }}
+                    {% if form.query.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.query.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2">
+                    <label for="{{ form.insight.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Linked Augmented Insight (Optional)
+                    </label>
+                    {{ form.insight }}
+                    {% if form.insight.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.insight.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Drivers -->
+                <div>
+                    <label for="{{ form.top_positive_driver.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Top Positive Driver (Optional)
+                    </label>
+                    {{ form.top_positive_driver }}
+                    {% if form.top_positive_driver.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.top_positive_driver.errors }}</div>{% endif %}
+                </div>
+
+                <div>
+                    <label for="{{ form.top_negative_driver.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Top Negative Driver (Optional)
+                    </label>
+                    {{ form.top_negative_driver }}
+                    {% if form.top_negative_driver.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.top_negative_driver.errors }}</div>{% endif %}
+                </div>
+
+                <!-- Narrative Body -->
+                <div class="md:col-span-2">
+                    <label for="{{ form.narrative_body.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">
+                        Narrative Body Prose <span class="text-rose-500">*</span>
+                    </label>
+                    {{ form.narrative_body }}
+                    <p class="text-xs text-muted mt-1">Multi-paragraph natural language commentary explaining key trends, drivers, and recommended business actions.</p>
+                    {% if form.narrative_body.errors %}<div class="text-xs text-rose-600 mt-1">{{ form.narrative_body.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'bi:narrative_explanation_detail' narrative.pk %}{% else %}{% url 'bi:narrative_explanation_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>{% if is_edit %}Save Changes{% else %}Generate Narrative{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
