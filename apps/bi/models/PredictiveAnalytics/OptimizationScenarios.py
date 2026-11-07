@@ -121,6 +121,7 @@ class OptimizationScenario(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bopt_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bopt_ten_created"),
             models.Index(fields=["tenant", "solver_status"], name="idx_bopt_ten_solv"),
             models.Index(fields=["tenant", "status"], name="idx_bopt_ten_stat"),
             models.Index(fields=["tenant", "owner"], name="idx_bopt_ten_user"),
