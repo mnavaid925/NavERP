@@ -178,9 +178,19 @@
 - [x] Run full unfiltered test suite: `pytest apps/bi/tests/` (179 passed)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.15 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.15 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.15.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.15 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.15 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.15.md`
+
+### Close-Out Summary
+- **Module**: 10 — Business Intelligence (`bi`)
+- **Sub-module**: 10.15 — Natural Language & Conversational BI
+- **Contract**: `.claude/tasks/contract-bi-10.15.md`
+- **Research**: `.claude/tasks/research-bi-10.15.md`
+- **Review Findings**: `.claude/tasks/review-bi-10.15.md` (27 findings: 0C, 16I, 11M — all 27 fixed)
+- **Tests**: 147 dedicated tests (41 model, 55 form, 37 view, 14 security), 179 total tests passing, 100% green
+- **Gaps**: None (see `.agents/tasks/gaps-bi-10.15.md`)
+
 
 ### Later passes / deferred
 - Voice audio streaming WebRTC / MediaStream front-end recording integration (10.17 Embedded & Mobile BI)
