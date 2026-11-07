@@ -109,7 +109,7 @@ class DistributionBurstRun(TenantNumbered):
     def status_badge_class(self):
         mapping = {
             "completed": "badge-green",
-            "processing": "badge-blue",
+            "processing": "badge-info",
             "queued": "badge-amber",
             "partial_failure": "badge-amber",
             "failed": "badge-red",
@@ -119,8 +119,8 @@ class DistributionBurstRun(TenantNumbered):
     @property
     def channel_badge_class(self):
         mapping = {
-            "email": "badge-blue",
-            "sftp": "badge-purple",
+            "email": "badge-info",
+            "sftp": "badge-slate",
             "portal_inbox": "badge-green",
             "webhook": "badge-amber",
         }
