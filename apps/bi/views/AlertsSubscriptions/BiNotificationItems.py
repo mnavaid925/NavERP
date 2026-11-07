@@ -109,11 +109,13 @@ def notification_center(request):
         acknowledged=Count("id", filter=Q(status="acknowledged")),
         snoozed=Count("id", filter=Q(status="snoozed")),
         escalated=Count("id", filter=Q(status="escalated")),
+        critical=Count("id", filter=Q(severity="critical")),
     )
     unread_count = counts["unread"] or 0
     acknowledged_count = counts["acknowledged"] or 0
     snoozed_count = counts["snoozed"] or 0
     escalated_count = counts["escalated"] or 0
+    critical_count = counts["critical"] or 0
 
     active_tab = request.GET.get("tab", "all").strip()
     qs = base_qs
@@ -138,6 +140,7 @@ def notification_center(request):
         "acknowledged_count": acknowledged_count,
         "snoozed_count": snoozed_count,
         "escalated_count": escalated_count,
+        "critical_count": critical_count,
         "active_tab": active_tab,
         "selected_category": selected_category,
         "severity_choices": BiNotificationItem.SEVERITY_CHOICES,
