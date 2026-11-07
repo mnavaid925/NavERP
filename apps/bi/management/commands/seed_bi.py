@@ -1,9 +1,15 @@
+import hashlib
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
+
+from apps.bi.models.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnalyticsConfig
+from apps.bi.models.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplay
+from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
+from apps.bi.models.EmbeddedMobileBi.EmbedApiTokens import EmbedApiToken
 
 from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
 from apps.bi.models.DataIntegration.DataSourceConnectors import DataSourceConnector
@@ -4031,6 +4037,216 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Natural Language & Conversational BI for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Natural Language & Conversational BI already seeded for tenant: {tenant.name}")
+
+            # -------------------------------------------------------------
+            # Sub-module 10.17: Embedded & Mobile BI
+            # -------------------------------------------------------------
+            if not EmbeddedAnalyticsConfig.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    # 1. Embedded Analytics Configs
+                    emb1, _ = EmbeddedAnalyticsConfig.objects.get_or_create(
+                        tenant=tenant,
+                        name="Executive Performance Portal Embed",
+                        defaults={
+                            "slug": f"exec-perf-embed-{tenant.id}",
+                            "description": "White-labeled executive KPI visual canvas embedded into corporate intranet and client leadership portal.",
+                            "target_type": "dashboard",
+                            "dashboard": dash,
+                            "embedding_mode": "iframe",
+                            "auth_mode": "signed_jwt",
+                            "status": "active",
+                            "allowed_origins": "https://portal.nav-erp.internal, https://exec.acme.com",
+                            "theme_mode": "light",
+                            "primary_color": "#1e40af",
+                            "accent_color": "#3b82f6",
+                            "custom_css": ".card { border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }",
+                            "enable_rls_filter": True,
+                            "default_rls_attributes": {"department": "Executive Leadership", "region": "Global"},
+                            "view_count": 142,
+                            "last_accessed_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    emb2, _ = EmbeddedAnalyticsConfig.objects.get_or_create(
+                        tenant=tenant,
+                        name="Operational Sales Report SDK Component",
+                        defaults={
+                            "slug": f"sales-report-sdk-{tenant.id}",
+                            "description": "Web Component embedding operational paginated sales reports inside custom sales CRM views.",
+                            "target_type": "report",
+                            "report": rep,
+                            "embedding_mode": "web_component",
+                            "auth_mode": "public_token",
+                            "status": "active",
+                            "allowed_origins": "*",
+                            "theme_mode": "dark",
+                            "primary_color": "#0f172a",
+                            "accent_color": "#10b981",
+                            "enable_rls_filter": True,
+                            "default_rls_attributes": {"region": "North America"},
+                            "view_count": 68,
+                            "last_accessed_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 2. Kiosk & TV Wallboard Displays
+                    KioskWallboardDisplay.objects.get_or_create(
+                        tenant=tenant,
+                        name="Operations Center Command TV 1",
+                        defaults={
+                            "location_description": "Main Plant Floor Production Monitor 1",
+                            "kiosk_slug": f"ops-command-tv-{tenant.id}",
+                            "access_passcode": "4829",
+                            "is_public_kiosk": True,
+                            "status": "active",
+                            "default_slide_duration_seconds": 30,
+                            "transition_effect": "fade",
+                            "theme": "dark_navy",
+                            "display_schedule": "continuous_24_7",
+                            "auto_refresh_data_interval_seconds": 60,
+                            "playlist_items": [
+                                {
+                                    "type": "dashboard",
+                                    "id": dash.pk if dash else 1,
+                                    "title": "Real-Time Throughput & Production KPIs",
+                                    "duration_seconds": 30,
+                                },
+                                {
+                                    "type": "report",
+                                    "id": rep.pk if rep else 1,
+                                    "title": "Hourly Dispatch & Logistics Matrix",
+                                    "duration_seconds": 45,
+                                },
+                            ],
+                            "operating_hours_json": {"start": "00:00", "end": "23:59", "days": [1, 2, 3, 4, 5, 6, 7]},
+                            "last_heartbeat_at": timezone.now(),
+                            "device_ip_address": "192.168.10.42",
+                            "device_user_agent": "Mozilla/5.0 (SmartTV; Tizen 6.0) AppleWebKit/537.36",
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    KioskWallboardDisplay.objects.get_or_create(
+                        tenant=tenant,
+                        name="Executive War Room Wallboard",
+                        defaults={
+                            "location_description": "Executive Boardroom 4K Wall Display",
+                            "kiosk_slug": f"exec-warroom-tv-{tenant.id}",
+                            "access_passcode": "9102",
+                            "is_public_kiosk": False,
+                            "status": "active",
+                            "default_slide_duration_seconds": 45,
+                            "transition_effect": "zoom",
+                            "theme": "dark_oled",
+                            "display_schedule": "business_hours",
+                            "auto_refresh_data_interval_seconds": 120,
+                            "playlist_items": [
+                                {
+                                    "type": "dashboard",
+                                    "id": dash.pk if dash else 1,
+                                    "title": "Enterprise Strategic Objectives & Revenue",
+                                    "duration_seconds": 45,
+                                }
+                            ],
+                            "operating_hours_json": {"start": "08:00", "end": "19:00", "days": [1, 2, 3, 4, 5]},
+                            "last_heartbeat_at": timezone.now(),
+                            "device_ip_address": "10.0.4.15",
+                            "device_user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (Chromium Kiosk)",
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 3. Mobile BI Configurations
+                    MobileBiConfiguration.objects.get_or_create(
+                        tenant=tenant,
+                        name="Executive Leadership Mobile Workspace",
+                        defaults={
+                            "target_user": admin_user,
+                            "is_default_profile": True,
+                            "status": "active",
+                            "offline_caching_enabled": True,
+                            "cache_max_age_hours": 24,
+                            "max_cache_storage_mb": 150,
+                            "sync_on_wifi_only": False,
+                            "pinned_dashboard_ids": [dash.pk] if dash else [1],
+                            "pinned_report_ids": [rep.pk] if rep else [1],
+                            "touch_layout_preset": "comfortable",
+                            "enable_push_insights": True,
+                            "push_digest_frequency": "daily_morning",
+                            "require_biometric_lock": True,
+                            "inactivity_lock_minutes": 5,
+                            "last_synced_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    MobileBiConfiguration.objects.get_or_create(
+                        tenant=tenant,
+                        name="Field Operations Touch Profile",
+                        defaults={
+                            "target_user": None,
+                            "is_default_profile": False,
+                            "status": "active",
+                            "offline_caching_enabled": True,
+                            "cache_max_age_hours": 12,
+                            "max_cache_storage_mb": 50,
+                            "sync_on_wifi_only": True,
+                            "pinned_dashboard_ids": [],
+                            "pinned_report_ids": [rep.pk] if rep else [1],
+                            "touch_layout_preset": "compact",
+                            "enable_push_insights": True,
+                            "push_digest_frequency": "realtime",
+                            "require_biometric_lock": False,
+                            "inactivity_lock_minutes": 15,
+                            "last_synced_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 4. Embed API Tokens
+                    hash_val_1 = hashlib.sha256(b"eapi_live_acm1_secret_demo_key_2026").hexdigest()
+                    EmbedApiToken.objects.get_or_create(
+                        tenant=tenant,
+                        name="Acme Enterprise Partner Portal Token",
+                        defaults={
+                            "token_prefix": "eapi_live_acm1",
+                            "token_hash": hash_val_1,
+                            "status": "active",
+                            "scopes": ["read:dashboard", "embed:view", "query:data"],
+                            "embedded_config": emb1,
+                            "injected_rls_context": {"tier": "Tier-1 Partner", "market": "Enterprise"},
+                            "allowed_ip_ranges": "10.0.0.0/8, 192.168.1.0/24",
+                            "rate_limit_rpm": 120,
+                            "total_requests_count": 2840,
+                            "last_used_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    hash_val_2 = hashlib.sha256(b"eapi_live_scm2_secret_demo_key_2026").hexdigest()
+                    EmbedApiToken.objects.get_or_create(
+                        tenant=tenant,
+                        name="Supply Chain Operational Headless Client",
+                        defaults={
+                            "token_prefix": "eapi_live_scm2",
+                            "token_hash": hash_val_2,
+                            "status": "active",
+                            "scopes": ["read:report", "query:data"],
+                            "embedded_config": emb2,
+                            "injected_rls_context": {"department": "SCM Operations"},
+                            "allowed_ip_ranges": "*",
+                            "rate_limit_rpm": 60,
+                            "total_requests_count": 412,
+                            "last_used_at": timezone.now(),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Embedded & Mobile BI for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Embedded & Mobile BI already seeded for tenant: {tenant.name}")
 
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
