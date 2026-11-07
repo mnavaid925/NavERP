@@ -22,3 +22,22 @@ Target changeset: `a3d989bc06eda3b74ce2a67a70785992ec94fca0..HEAD`
 - **M2 (code-reviewer)**: `apps/bi/models/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py:126`, `KioskWallboardDisplays.py:123` — Slug generation query excludes `pk=self.pk` when `self.pk` is None. Fix: Guard `if self.pk: qs = qs.exclude(pk=self.pk)`.
 - **M3 (code-reviewer)**: `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/preview.html:8`, `kioskwallboarddisplay/player.html:8` — Public CDN dependencies in standalone templates.
 - **M4 (code-reviewer)**: `apps/bi/views/EmbeddedMobileBi/MobileBiConfigurations.py:88-91` — Default mobile profile uniqueness enforced only in view. Fix: Enforce in `save()` or `clean()`.
+
+---
+
+## Pass 2: Explorer Contract Reviewer Findings
+
+### Critical
+- **C1 (explorer)**: `apps/bi/views/EmbeddedMobileBi/*.py` (13 call sites across all 4 view files) — Inverted `write_audit_log` call signatures. Views pass `(request, instance=..., action=..., description=...)` but `write_audit_log` expects `(user, obj, action, changes=None, tenant=None)`. Triggers `TypeError: write_audit_log() got an unexpected keyword argument 'instance'` on every POST mutation. Fix: Change to `write_audit_log(request.user, obj, action, tenant=request.tenant)`.
+- **C2 (explorer)**: Corroborated C1 from code-reviewer (`kiosk_wallboard_display_heartbeat` unauthenticated IDOR/tampering).
+- **C3 (explorer)**: Corroborated C2 from code-reviewer (stored XSS via unescaped `custom_css`).
+
+### Important
+- **I1 (explorer)**: Corroborated I4 from code-reviewer (missing models and forms subpackage re-exports in `apps/bi/*/EmbeddedMobileBi/__init__.py`).
+- **I2 (explorer)**: Corroborated I1 from code-reviewer (raw `playlist_json|safe` script injection).
+- **I3 (explorer)**: Corroborated I3 from code-reviewer (Lesson L10 `obj.created_by.username` in filter argument).
+- **I4 (explorer)**: Corroborated I2 from code-reviewer (kiosk player superuser/public passcode logic).
+
+### Contract Summary
+- 100% compliance on URLs, routes, context variables, template paths, models, fields, choices, migrations, and navigation.
+
