@@ -17,10 +17,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **I3**: fixed in f423ad77 — Added clean_target_url() validation to AnalyticsRecommendationForm restricting target_url to relative paths starting with /, and added rel="noopener noreferrer" to external links in templates.
 - [x] **I4**: fixed in 572efa4a — Wrapped all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py with @transaction.atomic.
 - [x] **I5**: fixed in b6ed9367 — Aggregated key_drivers count in augmented_insight_list context and displayed key_driver_count in list.html.
-- [ ] **I6**: Create sub-package `__init__.py` files re-exporting entity classes:
-  - `apps/bi/models/AiAugmentedAnalytics/__init__.py`
-  - `apps/bi/forms/AiAugmentedAnalytics/__init__.py`
-  - `apps/bi/views/AiAugmentedAnalytics/__init__.py`
+- [x] **I6**: fixed in c7e989d4 — Created sub-package __init__.py files re-exporting entity classes for models, forms, and views in AiAugmentedAnalytics.
 - [ ] **I7**: Add state transition guards and ownership checks in action views: guard `smart_data_prep_suggestion_action` against modifying suggestions already `applied`, and verify user ownership/admin in `analytics_recommendation_interact`.
 - [ ] **I8**: Add `select_related` to `bi_object` calls in mutating views (`SmartDataPrepSuggestions.py` for `target_table`, `AnalyticsRecommendations.py` for `user`) to prevent secondary lazy `__str__` queries during audit logging.
 - [ ] **I9**: Add `.only("id", "name")` to `WarehouseTable.objects.filter(tenant=request.tenant).order_by("name")` in `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py:30`.
