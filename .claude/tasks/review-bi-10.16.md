@@ -45,3 +45,20 @@ None.
 5. `apps/bi/management/commands/seed_bi.py:98` — The `seed_bi --flush` routine omits all four Sub-module 10.16 models (`BiNotificationItem`, `DistributionBurstRun`, `ReportSubscription`, `BiAlertRule`), risking orphaned records when flushing and re-seeding. Fix: Add deletion statements for the 4 models at the top of the `--flush` atomic block.
 
 ---
+
+## 3. Frontend Reviewer Findings
+
+### Critical
+1. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:198`, `BiNotificationItems.py:130,138,150,151`, `DistributionBurstRuns.py:112,122,123`, `ReportSubscriptions.py:170,171` — Theme badge helper methods return invalid non-existent CSS classes `badge-blue` and `badge-purple`. When rendered in templates (`bi_alert_rule/list.html:182`, `report_subscription/list.html:175`, `distribution_burst_run/list.html:162,174`, `bi_notification_item/list.html:150,155,160`, and `notification_center.html:139,140`), the badges render unstyled without color (Lesson L33). Fix: Replace all occurrences of `badge-blue` with `badge-info` and `badge-purple` with `badge-slate` or `badge-info`.
+
+### Important
+1. `templates/bi/alerts_subscriptions/report_subscription/list.html:75-124`, `distribution_burst_run/list.html:75-115`, `bi_notification_item/list.html:75-115` — Filter forms in all three list templates omit `<select name="status">` dropdown even though the views parse `request.GET.get("status")` and pass `status_choices` and `selected_status` in context, and templates preserve `&status={{ selected_status }}` in pagination links. Fix: Add the missing `<select name="status">` dropdown populated from `status_choices` with `{% if selected_status == val %}selected{% endif %}`.
+2. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Nullable foreign key `subscription.created_by` rendered inside a template filter expression without an `{% if subscription.created_by %}` guard (`{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}`), causing 500 template error when null (Lesson L10). Fix: Guard with `{% if subscription.created_by %}...{% else %}<span class="text-muted">System</span>{% endif %}`.
+
+### Minor
+1. `templates/bi/alerts_subscriptions/report_subscription/list.html:176`, `report_subscription/detail.html:17` — Raw format value `html_inline` rendered directly in uppercase as `HTML_INLINE`. Fix: Render human-readable label using `{{ s.get_export_format_display }}` or `{% if s.export_format == 'html_inline' %}HTML{% else %}{{ s.export_format|upper }}{% endif %}`.
+2. `templates/bi/alerts_subscriptions/bi_alert_rule/list.html:87,97,107`, `report_subscription/list.html:87,97,107`, `distribution_burst_run/list.html:87,97`, `bi_notification_item/list.html:87,97` — Filter `<label>` elements lack `for="filter-<name>"` matching `id="filter-<name>"` on the corresponding `<select>` elements. Fix: Add matching `for` and `id` attributes for accessibility.
+3. `templates/bi/alerts_subscriptions/notification_center.html:50` — Critical Priority stat card renders static text `<div class="text-2xl font-bold text-rose-600">Active</div>` instead of dynamic count. Fix: Compute `critical_count` in `notification_center` view context and render `{{ critical_count }}`.
+4. `templates/bi/alerts_subscriptions/bi_alert_rule/list.html:204,208,211,216`, `report_subscription/list.html:197,201,204,209`, `distribution_burst_run/list.html:185,188,193`, `bi_notification_item/list.html:168,171,176`, `notification_center.html:192,197` — Action buttons and icon links have `title` but lack explicit `aria-label` attributes. Fix: Add `aria-label` matching `title`.
+
+---
