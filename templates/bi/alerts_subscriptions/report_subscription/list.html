@@ -183,7 +183,7 @@
                     </td>
                     <td>
                         <span class="badge {{ s.format_badge_class }}">
-                            {{ s.export_format|upper }}
+                            {% if s.export_format == 'html_inline' %}HTML{% else %}{{ s.export_format|upper }}{% endif %}
                         </span>
                     </td>
                     <td class="text-xs text-slate-700 whitespace-nowrap">
