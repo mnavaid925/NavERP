@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Predictive Models — Predictive & Advanced Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Predictive & Advanced Analytics</span>
+        </div>
+        <h1 class="page-title">Predictive Models & AutoML</h1>
+        <p class="text-muted text-sm">Model registry, AutoML tournaments, time-series algorithms, and feature importance</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:forecast_execution_list' %}" class="btn btn-outline">
+            <i data-lucide="trending-up"></i>
+            <span>Forecasts</span>
+        </a>
+        <a href="{% url 'bi:statistical_anomaly_list' %}" class="btn btn-outline">
+            <i data-lucide="alert-triangle"></i>
+            <span>Anomalies</span>
+        </a>
+        <a href="{% url 'bi:optimization_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="sliders"></i>
+            <span>Optimization</span>
+        </a>
+        <a href="{% url 'bi:predictive_model_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Model</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Models</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Models</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Time-Series</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ forecast_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Anomaly Detectors</div>
+            <div class="text-2xl font-bold text-amber-600">{{ anomaly_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body p-4">
+        <form method="get" class="flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[220px]">
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by name, slug, number, target metric..." aria-label="Search Predictive Models" class="form-input pl-9 w-full">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+                </div>
+            </div>
+            <div class="w-56">
+                <select name="problem_type" class="form-select w-full">
+                    <option value="">All Problem Types</option>
+                    {% for val, label in problem_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.problem_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-40">
+                <select name="status" class="form-select w-full">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="filter"></i>
+                <span>Filter</span>
+            </button>
+            {% if request.GET.q or request.GET.problem_type or request.GET.status %}
+            <a href="{% url 'bi:predictive_model_list' %}" class="btn btn-outline">
+                <i data-lucide="x"></i>
+                <span>Clear</span>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th>Problem Type</th>
+                    <th>Algorithm</th>
+                    <th>Target Metric</th>
+                    <th>Accuracy</th>
+                    <th>Status</th>
+                    <th>Owner</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for model in predictive_models %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:predictive_model_detail' model.pk %}" class="hover:text-blue-600">
+                                {{ model.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted">{{ model.number }} &middot; v{{ model.model_version }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ model.get_problem_type_display }}</span>
+                    </td>
+                    <td class="text-sm text-slate-700">
+                        {{ model.get_algorithm_display }}
+                    </td>
+                    <td class="text-sm font-mono text-slate-600">
+                        {{ model.target_metric }}
+                    </td>
+                    <td>
+                        {% if model.accuracy_metric_value %}
+                        <span class="font-semibold text-slate-800">{{ model.accuracy_metric_name }}:</span>
+                        <span class="text-emerald-600 font-mono">{{ model.accuracy_metric_value }}</span>
+                        {% else %}
+                        <span class="text-muted text-xs">&mdash;</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if model.status == 'active' %}
+                        <span class="badge badge-green">{{ model.get_status_display }}</span>
+                        {% elif model.status == 'training' %}
+                        <span class="badge badge-info">{{ model.get_status_display }}</span>
+                        {% elif model.status == 'under_review' %}
+                        <span class="badge badge-amber">{{ model.get_status_display }}</span>
+                        {% elif model.status == 'retired' %}
+                        <span class="badge badge-muted">{{ model.get_status_display }}</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ model.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {% if model.created_by %}
+                        {{ model.created_by.get_full_name|default:model.created_by.username }}
+                        {% else %}
+                        &mdash;
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'bi:predictive_model_detail' model.pk %}" class="btn btn-icon btn-outline" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:predictive_model_edit' model.pk %}" class="btn btn-icon btn-outline" title="Edit model">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:predictive_model_delete' model.pk %}" onsubmit="return confirm('Are you sure you want to delete model {{ model.name }} ({{ model.number }})?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-danger" title="Delete model">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="cpu" class="empty-icon"></i>
+                            <div class="empty-title">No Predictive Models Found</div>
+                            <div class="empty-description">
+                                {% if request.GET.q or request.GET.problem_type or request.GET.status %}
+                                No predictive models match your active filters. Try resetting search filters.
+                                {% else %}
+                                Get started by registering your first AutoML or time-series predictive model.
+                                {% endif %}
+                            </div>
+                            <div class="empty-actions">
+                                {% if request.GET.q or request.GET.problem_type or request.GET.status %}
+                                <a href="{% url 'bi:predictive_model_list' %}" class="btn btn-outline">Clear Filters</a>
+                                {% else %}
+                                <a href="{% url 'bi:predictive_model_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create Predictive Model</span>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ page_obj.paginator.count }} models
+        </div>
+        <div class="pagination-nav">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.problem_type %}&problem_type={{ request.GET.problem_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-slate-600 px-2">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.problem_type %}&problem_type={{ request.GET.problem_type }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
