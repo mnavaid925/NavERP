@@ -75,5 +75,23 @@ Target changeset: `a3d989bc06eda3b74ce2a67a70785992ec94fca0..HEAD`
 - **M2 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/MobileBiConfigurations.py:123-124` — Unprojected querysets for pinned dashboard/report previews in detail view. Fix: Add `.only('id', 'title', 'number')`.
 - **M3 (performance-reviewer)**: `apps/bi/views/EmbeddedMobileBi/KioskWallboardDisplays.py:232` — Stale timestamp returned in JsonResponse from `kiosk_wallboard_display_heartbeat`. Fix: Pass `now.isoformat()` directly.
 
+---
+
+## Pass 5: QA Smoke Tester Runtime Findings
+
+### Critical
+- **C1 (qa-smoke-tester)**: Corroborated C1 from explorer (`write_audit_log` signature mismatch). Tested runtime: 100% of POST mutations fail with `TypeError` and HTTP 500 due to invalid keyword arguments (`instance`, `description`).
+- **C2 (qa-smoke-tester)**: Corroborated I3 from code-reviewer/explorer/frontend-reviewer. Tested runtime: 100% of detail pages crash with `VariableDoesNotExist` and HTTP 500 when `created_by=None`.
+
+### Important
+- **I1 (qa-smoke-tester)**: Corroborated C1 from code-reviewer/C2 explorer/C1 performance-reviewer. Tested runtime: `kiosk_wallboard_display_heartbeat` returns 200 and modifies telemetry across tenant boundaries with zero auth or passcode validation.
+
+### Smoke Runtime Summary
+- 24/24 GET endpoints 200 OK.
+- 0 comment leaks detected.
+- Cross-tenant GET probes 100% return 404.
+- Filter and junk parameter handling 100% resilient.
+
+
 
 
