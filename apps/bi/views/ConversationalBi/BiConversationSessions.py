@@ -127,12 +127,11 @@ def bi_conversation_session_create(request):
                 form.save_m2m()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="create",
-                    model_name="BiConversationSession",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Created conversational BI chat thread",
+                    changes={"details": "Created conversational BI chat thread"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Conversation session '{instance.number}' started.")
                 return redirect("bi:bi_conversation_session_detail", pk=instance.pk)
@@ -161,12 +160,11 @@ def bi_conversation_session_edit(request, pk):
                 instance = form.save()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="update",
-                    model_name="BiConversationSession",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Updated conversational session details",
+                    changes={"details": "Updated conversational session details"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Conversation session '{instance.number}' updated.")
                 return redirect("bi:bi_conversation_session_detail", pk=instance.pk)
@@ -192,12 +190,11 @@ def bi_conversation_session_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request=request,
+            user=request.user,
+            obj=session,
             action="delete",
-            model_name="BiConversationSession",
-            object_id=session.pk,
-            object_repr=str(session),
-            change_message="Deleted conversational session",
+            changes={"details": f"Deleted conversational session {num}"},
+            tenant=request.tenant,
         )
         session.delete()
 
@@ -209,18 +206,18 @@ def bi_conversation_session_delete(request, pk):
 @require_POST
 def bi_conversation_session_toggle_pin(request, pk):
     session = bi_object(BiConversationSession, request, pk)
-    session.is_pinned = not session.is_pinned
-    session.save(update_fields=["is_pinned", "updated_at"])
+    with transaction.atomic():
+        session.is_pinned = not session.is_pinned
+        session.save(update_fields=["is_pinned", "updated_at"])
 
-    status_str = "pinned" if session.is_pinned else "unpinned"
-    write_audit_log(
-        request=request,
-        action="update",
-        model_name="BiConversationSession",
-        object_id=session.pk,
-        object_repr=str(session),
-        change_message=f"Session {status_str}",
-    )
+        status_str = "pinned" if session.is_pinned else "unpinned"
+        write_audit_log(
+            user=request.user,
+            obj=session,
+            action="pin" if session.is_pinned else "unpin",
+            changes={"details": f"Session {status_str}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Session '{session.number}' {status_str}.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
@@ -233,17 +230,17 @@ def bi_conversation_session_toggle_pin(request, pk):
 @require_POST
 def bi_conversation_session_close(request, pk):
     session = bi_object(BiConversationSession, request, pk)
-    session.session_status = "closed"
-    session.save(update_fields=["session_status", "updated_at"])
+    with transaction.atomic():
+        session.session_status = "closed"
+        session.save(update_fields=["session_status", "updated_at"])
 
-    write_audit_log(
-        request=request,
-        action="update",
-        model_name="BiConversationSession",
-        object_id=session.pk,
-        object_repr=str(session),
-        change_message="Closed conversation session",
-    )
+        write_audit_log(
+            user=request.user,
+            obj=session,
+            action="close",
+            changes={"details": "Closed conversation session"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Session '{session.number}' is now closed.")
     return redirect("bi:bi_conversation_session_detail", pk=session.pk)
 
@@ -296,12 +293,11 @@ def bi_conversation_session_ask(request, pk):
         session.save(update_fields=["message_count", "last_interaction_at", "updated_at"])
 
         write_audit_log(
-            request=request,
+            user=request.user,
+            obj=query,
             action="create",
-            model_name="NaturalLanguageQuery",
-            object_id=query.pk,
-            object_repr=str(query),
-            change_message=f"Added query to conversation {session.number}",
+            changes={"details": f"Added query to conversation {session.number}"},
+            tenant=request.tenant,
         )
 
     messages.success(request, "Answer generated successfully.")
