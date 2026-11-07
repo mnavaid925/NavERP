@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.bi.models import (
+    AnalyticsRecommendation,
+    AugmentedInsight,
     AdHocCalculatedField,
     AdHocQuery,
     BiDashboard,
@@ -49,7 +51,9 @@ from apps.bi.models import (
     ScenarioWritebackCell,
     ScorecardKpiAssignment,
     SemanticModel,
+    SmartDataPrepSuggestion,
     StrategicObjective,
+    TextSentimentAnalysis,
     TransformationStep,
     WarehouseStoragePolicy,
     WarehouseTable,
@@ -1804,13 +1808,12 @@ def predictive_model_a(db, tenant_a, semantic_model_a, admin_user):
         tenant=tenant_a,
         number="BPML-00001",
         name="Acme Demand Forecasting Model",
-        code="acme_demand_forecast",
+        slug="acme-demand-forecasting-model",
         problem_type="time_series_forecast",
         target_metric="sales_units",
         algorithm="auto_arima",
-        cadence="monthly",
         status="active",
-        owner=admin_user,
+        created_by=admin_user,
         features_list=["historical_sales", "promotions", "seasonality"],
         hyperparameters={"p": 1, "d": 1, "q": 1},
         semantic_model=semantic_model_a,
@@ -1823,13 +1826,12 @@ def predictive_model_b(db, tenant_b, semantic_model_b, admin_user_b):
         tenant=tenant_b,
         number="BPML-00002",
         name="Globex Churn Risk Classifier",
-        code="globex_churn_classifier",
+        slug="globex-churn-risk-classifier",
         problem_type="binary_classification",
         target_metric="churned",
         algorithm="random_forest",
-        cadence="daily",
         status="active",
-        owner=admin_user_b,
+        created_by=admin_user_b,
         features_list=["usage_frequency", "support_tickets"],
         hyperparameters={"n_estimators": 100},
         semantic_model=semantic_model_b,
@@ -1996,3 +1998,161 @@ def optimization_scenario_b(db, tenant_b, kpi_definition_b, admin_user_b):
         ],
     )
 
+
+
+# --- Sub-module 10.14: AI & Augmented Analytics Fixtures ---
+
+@pytest.fixture
+def augmented_insight_a(db, tenant_a, semantic_model_a, kpi_definition_a, admin_user):
+    return AugmentedInsight.objects.create(
+        tenant=tenant_a,
+        number="BAIN-00001",
+        title="Q3 Enterprise ARR Surge",
+        insight_type="trend_shift",
+        severity="high",
+        status="new",
+        metric_name="arr_mrr_growth",
+        dimension_name="region",
+        dimension_value="North America",
+        baseline_value=Decimal("1200000.0000"),
+        observed_value=Decimal("1480000.0000"),
+        variance_percentage=Decimal("23.33"),
+        confidence_score=Decimal("94.50"),
+        impact_direction="positive",
+        narrative_summary="Enterprise recurring revenue expanded by 23.33% over baseline in North America.",
+        driver_decomposition=[
+            {"name": "New Enterprise Logos", "weight": 65, "impact": "positive", "explanation": "Expansion in Fortune 500 accounts"}
+        ],
+        semantic_model=semantic_model_a,
+        kpi_definition=kpi_definition_a,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def augmented_insight_b(db, tenant_b, semantic_model_b, kpi_definition_b, admin_user_b):
+    return AugmentedInsight.objects.create(
+        tenant=tenant_b,
+        number="BAIN-00002",
+        title="Globex EMEA Churn Spike",
+        insight_type="anomaly",
+        severity="critical",
+        status="new",
+        metric_name="churn_rate",
+        dimension_name="region",
+        dimension_value="EMEA",
+        baseline_value=Decimal("2.1000"),
+        observed_value=Decimal("5.8000"),
+        variance_percentage=Decimal("176.19"),
+        confidence_score=Decimal("96.20"),
+        impact_direction="negative",
+        narrative_summary="Unexpected spike in churn rate detected across EMEA tier-2 accounts.",
+        driver_decomposition=[
+            {"name": "SaaS Renewal Drop", "weight": 80, "impact": "negative", "explanation": "Competitor pricing pressure"}
+        ],
+        semantic_model=semantic_model_b,
+        kpi_definition=kpi_definition_b,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def smart_data_prep_suggestion_a(db, tenant_a, warehouse_table, admin_user):
+    return SmartDataPrepSuggestion.objects.create(
+        tenant=tenant_a,
+        number="BSDP-00001",
+        target_table=warehouse_table,
+        target_column="order_timestamp",
+        suggestion_type="type_cast",
+        confidence_score=Decimal("95.00"),
+        status="pending",
+        rationale="Column contains ISO-8601 strings and should be cast to TIMESTAMP.",
+        suggested_config={"target_type": "TIMESTAMP", "format": "ISO8601"},
+        suggested_transformation_sql="CAST(order_timestamp AS TIMESTAMP)",
+        reviewed_by=admin_user,
+    )
+
+
+@pytest.fixture
+def smart_data_prep_suggestion_b(db, tenant_b, warehouse_table_b, admin_user_b):
+    return SmartDataPrepSuggestion.objects.create(
+        tenant=tenant_b,
+        number="BSDP-00002",
+        target_table=warehouse_table_b,
+        target_column="customer_zipcode",
+        suggestion_type="null_impute",
+        confidence_score=Decimal("91.50"),
+        status="pending",
+        rationale="12% null values detected in zip code column; impute with regional centroid.",
+        suggested_config={"method": "mode", "default": "00000"},
+        suggested_transformation_sql="COALESCE(customer_zipcode, '00000')",
+        reviewed_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def text_sentiment_analysis_a(db, tenant_a):
+    return TextSentimentAnalysis.objects.create(
+        tenant=tenant_a,
+        number="BSNT-00001",
+        source_type="ticket",
+        source_reference="TKT-88412",
+        text_content="Outstanding onboarding support! The implementation consultant exceeded all our expectations.",
+        polarity_score=Decimal("0.85"),
+        subjectivity_score=Decimal("0.60"),
+        sentiment_category="positive",
+        confidence_score=Decimal("96.00"),
+        extracted_themes=["support", "onboarding", "consulting"],
+    )
+
+
+@pytest.fixture
+def text_sentiment_analysis_b(db, tenant_b):
+    return TextSentimentAnalysis.objects.create(
+        tenant=tenant_b,
+        number="BSNT-00002",
+        source_type="customer_review",
+        source_reference="REV-99104",
+        text_content="System latency is unacceptable during month-end financial reconciliations.",
+        polarity_score=Decimal("-0.75"),
+        subjectivity_score=Decimal("0.70"),
+        sentiment_category="negative",
+        confidence_score=Decimal("92.00"),
+        extracted_themes=["latency", "performance", "month-end"],
+    )
+
+
+@pytest.fixture
+def analytics_recommendation_a(db, tenant_a, admin_user, bi_dashboard_a, semantic_model_a):
+    return AnalyticsRecommendation.objects.create(
+        tenant=tenant_a,
+        number="BARC-00001",
+        user=admin_user,
+        recommendation_type="dashboard",
+        target_title="Executive Revenue Dashboard",
+        target_url="/bi/dashboards/1/",
+        reason="role_based",
+        rationale_text="Recommended because of your CFO role and frequent access to financial KPIs.",
+        affinity_score=Decimal("94.00"),
+        status="active",
+        dashboard=bi_dashboard_a,
+        semantic_model=semantic_model_a,
+    )
+
+
+@pytest.fixture
+def analytics_recommendation_b(db, tenant_b, admin_user_b, bi_dashboard_b, semantic_model_b):
+    return AnalyticsRecommendation.objects.create(
+        tenant=tenant_b,
+        number="BARC-00002",
+        user=admin_user_b,
+        recommendation_type="dashboard",
+        target_title="Globex Operational Logistics Hub",
+        target_url="/bi/dashboards/2/",
+        reason="trending",
+        rationale_text="High engagement among operations managers across Globex EMEA.",
+        affinity_score=Decimal("89.50"),
+        status="active",
+        dashboard=bi_dashboard_b,
+        semantic_model=semantic_model_b,
+    )
