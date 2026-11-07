@@ -84,6 +84,16 @@ class BiNotificationItemForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant
             ).order_by("username")
 
+    def clean_action_url(self):
+        url = (self.cleaned_data.get("action_url") or "").strip()
+        if not url:
+            return ""
+        if url.startswith("/") or url.startswith("http://") or url.startswith("https://"):
+            return url
+        raise forms.ValidationError(
+            "Action URL must be a relative path (starting with '/') or an absolute HTTP/HTTPS URL."
+        )
+
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
