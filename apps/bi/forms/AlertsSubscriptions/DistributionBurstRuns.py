@@ -10,6 +10,13 @@ from apps.core.forms import TenantModelForm
 
 
 class DistributionBurstRunForm(TenantUniqueMixin, TenantModelForm):
+    """
+    Form for DistributionBurstRun instances.
+
+    Note: `burst_slicing_metadata` (JSONField) is intentionally excluded from this standard CRUD form;
+    dynamic burst partition coordinates and recipient slice maps are populated by background dispatch workers.
+    """
+
     class Meta:
         model = DistributionBurstRun
         fields = [
