@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
@@ -27,8 +29,8 @@ class TextSentimentAnalysisForm(TenantUniqueMixin, TenantModelForm):
             "text_content": forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Enter unstructured text to analyze..."}),
             "language": forms.TextInput(attrs={"class": "form-input", "placeholder": "en"}),
             "sentiment_category": forms.Select(attrs={"class": "form-select"}),
-            "polarity_score": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "-1", "max": "1"}),
-            "subjectivity_score": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0", "max": "1"}),
+            "polarity_score": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "-1.00", "max": "1.00"}),
+            "subjectivity_score": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0.00", "max": "1.00"}),
             "linked_party": forms.Select(attrs={"class": "form-select"}),
             "linked_org_unit": forms.Select(attrs={"class": "form-select"}),
         }
@@ -40,6 +42,18 @@ class TextSentimentAnalysisForm(TenantUniqueMixin, TenantModelForm):
             self.fields["linked_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
         self.fields["linked_party"].required = False
         self.fields["linked_org_unit"].required = False
+
+    def clean_polarity_score(self):
+        score = self.cleaned_data.get("polarity_score")
+        if score is not None and (score < Decimal("-1.00") or score > Decimal("1.00")):
+            raise forms.ValidationError("Polarity score must be between -1.00 and 1.00.")
+        return score
+
+    def clean_subjectivity_score(self):
+        score = self.cleaned_data.get("subjectivity_score")
+        if score is not None and (score < Decimal("0.00") or score > Decimal("1.00")):
+            raise forms.ValidationError("Subjectivity score must be between 0.00 and 1.00.")
+        return score
 
     def clean(self):
         cleaned_data = super().clean()
