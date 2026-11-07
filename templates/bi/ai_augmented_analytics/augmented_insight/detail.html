@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}{{ insight.number }} — {{ insight.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:augmented_insight_list' %}">AI & Augmented Analytics</a>
+            <span class="sep">/</span>
+            <span>{{ insight.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ insight.title }}</h1>
+            <span class="badge {{ insight.badge_color }} text-xs">{{ insight.get_severity_display }}</span>
+            <span class="badge {{ insight.impact_badge_color }} text-xs">{{ insight.get_impact_direction_display }}</span>
+            <span class="badge badge-slate text-xs">{{ insight.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm">{{ insight.number }} · {{ insight.get_insight_type_display }} · Metric: <span class="font-semibold text-slate-800">{{ insight.metric_name }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:augmented_insight_feed' %}" class="btn btn-outline">
+            <i data-lucide="sparkles"></i>
+            <span>Smart Feed</span>
+        </a>
+        <a href="{% url 'bi:augmented_insight_edit' insight.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:augmented_insight_delete' insight.pk %}" onsubmit="return confirm('Delete insight {{ insight.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Left Column: Metrics & Narrative & Drivers (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Metric Summary Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Statistical Variance & Baseline</h2>
+                <span class="text-xs text-muted">Confidence: {{ insight.confidence_score }}%</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Baseline Value</div>
+                        <div class="text-2xl font-mono font-bold text-slate-700 mt-1">{{ insight.baseline_value }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Observed Value</div>
+                        <div class="text-2xl font-mono font-bold text-slate-900 mt-1">{{ insight.observed_value }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted font-medium uppercase tracking-wider">Variance</div>
+                        <div class="text-2xl font-bold mt-1 {% if insight.variance_percentage < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+                            {{ insight.variance_percentage }}%
+                        </div>
+                    </div>
+                </div>
+
+                {% if insight.dimension_name %}
+                <div class="mt-4 flex items-center gap-2 text-sm text-slate-600">
+                    <span class="font-medium">Primary Dimension Slice:</span>
+                    <span class="badge badge-info">{{ insight.dimension_name }}: {{ insight.dimension_value }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Narrative Summary (NLG) -->
+        <div class="card">
+            <div class="card-header flex items-center gap-2">
+                <i data-lucide="sparkles" class="w-5 h-5 text-indigo-600"></i>
+                <h2 class="text-base font-semibold">Natural Language Executive Summary</h2>
+            </div>
+            <div class="card-body">
+                <div class="p-4 bg-indigo-50/50 rounded-lg border border-indigo-100 text-slate-800 leading-relaxed text-base">
+                    {{ insight.narrative_summary|linebreaks }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Driver Decomposition -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="git-pull-request" class="w-5 h-5 text-slate-600"></i>
+                    <h2 class="text-base font-semibold">Key Driver Decomposition</h2>
+                </div>
+                <span class="text-xs text-muted">{{ drivers|length }} contributing factors</span>
+            </div>
+            <div class="card-body">
+                {% if drivers %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Driver Factor / Dimension</th>
+                                <th>Direction</th>
+                                <th>Contribution Weight</th>
+                                <th>Impact Analysis</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for factor in drivers %}
+                            <tr>
+                                <td class="font-medium">
+                                    {{ factor.name|default:factor.factor|default:"Unknown Driver" }}
+                                </td>
+                                <td>
+                                    {% if factor.impact == 'positive' or factor.direction == 'positive' or factor.weight > 0 %}
+                                    <span class="badge badge-green text-xs">Positive Contributor</span>
+                                    {% else %}
+                                    <span class="badge badge-red text-xs">Negative Contributor</span>
+                                    {% endif %}
+                                </td>
+                                <td class="font-mono text-sm font-semibold">
+                                    {{ factor.weight|default:factor.contribution|default:"—" }}%
+                                </td>
+                                <td class="text-sm text-slate-600">
+                                    {{ factor.explanation|default:factor.description|default:"—" }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state py-6 text-center text-muted">
+                    <p class="text-sm">No granular driver decomposition factors specified for this insight.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Triage Workflow & Metadata (1 col) -->
+    <div class="space-y-6">
+        <!-- Triage Action Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-muted">Triage & Management Action</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:augmented_insight_triage' insight.pk %}">
+                    {% csrf_token %}
+                    <div class="form-group mb-4">
+                        <label class="form-label text-xs">Update Status</label>
+                        <select name="status" class="form-select text-sm">
+                            <option value="new" {% if insight.status == 'new' %}selected{% endif %}>New Insight</option>
+                            <option value="bookmarked" {% if insight.status == 'bookmarked' %}selected{% endif %}>Bookmarked</option>
+                            <option value="dismissed" {% if insight.status == 'dismissed' %}selected{% endif %}>Dismissed</option>
+                            <option value="actioned" {% if insight.status == 'actioned' %}selected{% endif %}>Action Taken</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-4">
+                        <label class="form-label text-xs">Action Notes / Response Log</label>
+                        <textarea name="action_notes" rows="3" class="form-textarea text-sm" placeholder="Add resolution commentary...">{{ insight.action_notes }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full text-xs">Save Triage Status</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Linked Analytical Entities -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-muted">Governed Lineage & Assets</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-muted block text-xs">Semantic Model:</span>
+                    {% if insight.semantic_model %}
+                    <a href="{% url 'bi:semantic_model_detail' insight.semantic_model.pk %}" class="font-medium text-indigo-600 hover:underline">
+                        {{ insight.semantic_model.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Linked KPI:</span>
+                    {% if insight.kpi_definition %}
+                    <a href="{% url 'bi:kpi_definition_detail' insight.kpi_definition.pk %}" class="font-medium text-indigo-600 hover:underline">
+                        {{ insight.kpi_definition.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Underlying Table:</span>
+                    {% if insight.warehouse_table %}
+                    <a href="{% url 'bi:warehouse_table_detail' insight.warehouse_table.pk %}" class="font-medium text-indigo-600 hover:underline">
+                        {{ insight.warehouse_table.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">—</span>
+                    {% endif %}
+                </div>
+                <hr class="border-slate-100">
+                <div>
+                    <span class="text-muted block text-xs">Created At:</span>
+                    <span class="font-mono text-xs">{{ insight.created_at|date:"Y-m-d H:i" }}</span>
+                </div>
+                <div>
+                    <span class="text-muted block text-xs">Generated By:</span>
+                    <span class="text-xs">{% if insight.created_by %}{{ insight.created_by.get_full_name|default:insight.created_by.username }}{% else %}System AI Engine{% endif %}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
