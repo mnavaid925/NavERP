@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Forecast Run — {{ forecast_obj.name }}{% else %}New Forecast Run{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:forecast_execution_list' %}">Forecast Executions</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Run{% else %}New Run{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Forecast: {{ forecast_obj.name }}{% else %}Execute Time-Series Forecast{% endif %}</h1>
+        <p class="text-muted text-sm">Configure forward-looking horizon, confidence envelope, and baseline dataset</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Run Identity -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Simulation Run Identity</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Forecast Title *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.model.id_for_label }}">Predictive Model</label>
+                            {{ form.model }}
+                            <span class="text-xs text-muted">AutoML or fitted time-series algorithm</span>
+                            {% if form.model.errors %}<div class="form-error">{{ form.model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model Source</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.kpi_definition.id_for_label }}">Target KPI Definition</label>
+                            {{ form.kpi_definition }}
+                            {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.cadence.id_for_label }}">Forecasting Cadence *</label>
+                            {{ form.cadence }}
+                            {% if form.cadence.errors %}<div class="form-error">{{ form.cadence.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parameters -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Horizon & Statistical Parameters</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.horizon_periods.id_for_label }}">Horizon Periods *</label>
+                            {{ form.horizon_periods }}
+                            <span class="text-xs text-muted">Number of future time steps to project</span>
+                            {% if form.horizon_periods.errors %}<div class="form-error">{{ form.horizon_periods.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.confidence_level.id_for_label }}">Confidence Envelope *</label>
+                            {{ form.confidence_level }}
+                            {% if form.confidence_level.errors %}<div class="form-error">{{ form.confidence_level.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.historical_window_periods.id_for_label }}">Historical Lookback</label>
+                            {{ form.historical_window_periods }}
+                            <span class="text-xs text-muted">Historical periods used to calibrate trend</span>
+                            {% if form.historical_window_periods.errors %}<div class="form-error">{{ form.historical_window_periods.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-3 form-group">
+                            <label class="form-label" for="{{ form.notes.id_for_label }}">Methodology & Assumptions Notes</label>
+                            {{ form.notes }}
+                            {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:forecast_execution_detail' forecast_obj.pk %}{% else %}{% url 'bi:forecast_execution_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="play"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Generate Forecast Run{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
