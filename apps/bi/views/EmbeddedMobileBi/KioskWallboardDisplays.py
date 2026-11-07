@@ -175,18 +175,26 @@ def kiosk_wallboard_display_delete(request, pk):
 
 
 def kiosk_wallboard_display_player(request, pk):
-    # Allow authenticated tenant users or public access if configured
-    if request.user.is_authenticated and hasattr(request, "tenant") and request.tenant:
-        display = bi_object(request, KioskWallboardDisplay, pk)
-    else:
-        # Public kiosk mode check
-        passcode = request.GET.get("passcode", "").strip()
-        try:
-            display = KioskWallboardDisplay.objects.get(pk=pk, is_public_kiosk=True)
-            if display.access_passcode and display.access_passcode != passcode:
-                raise Http404("Invalid kiosk passcode.")
-        except KioskWallboardDisplay.DoesNotExist:
-            raise Http404("Kiosk display not found or public access disabled.")
+    # Allow authenticated tenant users, superusers, or public kiosk access with passcode
+    passcode = (request.GET.get("passcode") or request.POST.get("passcode") or "").strip()
+    display = None
+
+    if request.user.is_authenticated:
+        if request.user.is_superuser:
+            display = KioskWallboardDisplay.objects.filter(pk=pk).first()
+        elif getattr(request, "tenant", None):
+            display = KioskWallboardDisplay.objects.filter(pk=pk, tenant=request.tenant).first()
+
+    if display is None:
+        public_display = KioskWallboardDisplay.objects.filter(pk=pk, is_public_kiosk=True).first()
+        if public_display:
+            if not public_display.access_passcode or (
+                passcode and secrets.compare_digest(public_display.access_passcode, passcode)
+            ):
+                display = public_display
+
+    if not display:
+        raise Http404("Kiosk display not found or access denied.")
 
     playlist_items = display.playlist_items if isinstance(display.playlist_items, list) else []
     if not playlist_items:
