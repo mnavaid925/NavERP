@@ -214,6 +214,7 @@ def text_sentiment_analysis_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def text_sentiment_analysis_delete(request, pk):
     analysis = bi_object(request, TextSentimentAnalysis, pk)
