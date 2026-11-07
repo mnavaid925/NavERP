@@ -161,6 +161,7 @@ def smart_data_prep_suggestion_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def smart_data_prep_suggestion_delete(request, pk):
     suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
