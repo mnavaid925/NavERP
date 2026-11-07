@@ -80,7 +80,7 @@ def narrative_explanation_list(request):
 
 @login_required
 def narrative_explanation_detail(request, pk):
-    narrative = bi_object(NarrativeExplanation, request, pk)
+    narrative = bi_object(request, NarrativeExplanation, pk)
     key_takeaways = narrative.key_takeaways if isinstance(narrative.key_takeaways, list) else []
 
     context = {
@@ -150,7 +150,7 @@ def narrative_explanation_create(request):
 
 @login_required
 def narrative_explanation_edit(request, pk):
-    narrative = bi_object(NarrativeExplanation, request, pk)
+    narrative = bi_object(request, NarrativeExplanation, pk)
 
     if request.method == "POST":
         form = NarrativeExplanationForm(request.POST, instance=narrative, tenant=request.tenant)
@@ -185,7 +185,7 @@ def narrative_explanation_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def narrative_explanation_delete(request, pk):
-    narrative = bi_object(NarrativeExplanation, request, pk)
+    narrative = bi_object(request, NarrativeExplanation, pk)
     num = narrative.number
 
     with transaction.atomic():
@@ -206,7 +206,7 @@ def narrative_explanation_delete(request, pk):
 @login_required
 @require_POST
 def narrative_explanation_publish(request, pk):
-    narrative = bi_object(NarrativeExplanation, request, pk)
+    narrative = bi_object(request, NarrativeExplanation, pk)
     narrative.status = "published"
     narrative.save(update_fields=["status", "updated_at"])
 
@@ -229,7 +229,7 @@ def narrative_explanation_publish(request, pk):
 @login_required
 @require_POST
 def narrative_explanation_regenerate(request, pk):
-    narrative = bi_object(NarrativeExplanation, request, pk)
+    narrative = bi_object(request, NarrativeExplanation, pk)
 
     with transaction.atomic():
         narrative.narrative_body = (
