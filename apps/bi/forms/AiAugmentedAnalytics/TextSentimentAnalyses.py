@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from django import forms
@@ -54,6 +55,28 @@ class TextSentimentAnalysisForm(TenantUniqueMixin, TenantModelForm):
         if score is not None and (score < Decimal("0.00") or score > Decimal("1.00")):
             raise forms.ValidationError("Subjectivity score must be between 0.00 and 1.00.")
         return score
+
+    def clean_extracted_themes(self):
+        raw = getattr(self, "cleaned_data", {}).get("extracted_themes")
+        if raw is None and hasattr(self, "data") and "extracted_themes" in self.data:
+            raw = self.data.get("extracted_themes")
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [str(t).strip() for t in raw if str(t).strip()]
+        if isinstance(raw, str):
+            raw = raw.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        return [str(t).strip() for t in parsed if str(t).strip()]
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            return [t.strip() for t in raw.split(",") if t.strip()]
+        return []
 
     def clean(self):
         cleaned_data = super().clean()
