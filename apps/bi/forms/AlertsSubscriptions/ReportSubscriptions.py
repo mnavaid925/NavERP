@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.AlertsSubscriptions.ReportSubscriptions import ReportSubscription
@@ -6,6 +7,8 @@ from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.core.forms import TenantModelForm
 from apps.core.models.OrgUnit import OrgUnit
+
+User = get_user_model()
 
 
 class ReportSubscriptionForm(TenantUniqueMixin, TenantModelForm):
@@ -81,12 +84,15 @@ class ReportSubscriptionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["subscriber_org_units"].queryset = OrgUnit.objects.filter(
                 tenant=self.tenant
             )
+            self.fields["subscriber_users"].queryset = User.objects.filter(
+                tenant=self.tenant
+            ).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
             self,
             cleaned,
-            ["dashboard", "report", "subscriber_org_units"],
+            ["dashboard", "report", "subscriber_org_units", "subscriber_users"],
         )
         return cleaned
