@@ -79,7 +79,12 @@ def search_discovery_index_list(request):
 
 @login_required
 def search_discovery_index_detail(request, pk):
-    index = bi_object(request, SearchDiscoveryIndex, pk)
+    index = bi_object(
+        request,
+        SearchDiscoveryIndex,
+        pk,
+        select_related=("semantic_model", "dashboard", "report", "kpi", "warehouse_table", "glossary_term"),
+    )
     synonyms_list = index.synonyms if isinstance(index.synonyms, list) else []
 
     context = {
