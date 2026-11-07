@@ -15,7 +15,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **I1**: fixed in ef4baf98 — Applied @tenant_admin_required decorator to all 4 delete views in apps/bi/views/AiAugmentedAnalytics/*.py.
 - [x] **I2**: fixed in 82138837 — Validated next redirect parameter using url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}) in action views (augmented_insight_triage, smart_data_prep_suggestion_action, analytics_recommendation_interact).
 - [x] **I3**: fixed in f423ad77 — Added clean_target_url() validation to AnalyticsRecommendationForm restricting target_url to relative paths starting with /, and added rel="noopener noreferrer" to external links in templates.
-- [ ] **I4**: Wrap all 16 mutating views in `apps/bi/views/AiAugmentedAnalytics/*.py` with `@transaction.atomic` (or `with transaction.atomic():`).
+- [x] **I4**: fixed in 572efa4a — Wrapped all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py with @transaction.atomic.
 - [ ] **I5**: In `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py:augmented_insight_list`, aggregate `key_drivers=Count("id", filter=Q(insight_type="key_driver"))` and pass `key_driver_count` to context; update `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` from `{{ insights|length }}` to `{{ key_driver_count }}`.
 - [ ] **I6**: Create sub-package `__init__.py` files re-exporting entity classes:
   - `apps/bi/models/AiAugmentedAnalytics/__init__.py`
