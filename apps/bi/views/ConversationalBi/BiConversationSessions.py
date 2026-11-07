@@ -63,7 +63,7 @@ def bi_conversation_session_list(request):
     page_obj = paginator.get_page(page_number)
 
     semantic_models = SemanticModel.objects.filter(tenant=request.tenant).order_by("name")
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant).order_by("name")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant).order_by("title")
 
     context = {
         "sessions": page_obj,
