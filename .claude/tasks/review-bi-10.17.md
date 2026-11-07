@@ -41,3 +41,21 @@ Target changeset: `a3d989bc06eda3b74ce2a67a70785992ec94fca0..HEAD`
 ### Contract Summary
 - 100% compliance on URLs, routes, context variables, template paths, models, fields, choices, migrations, and navigation.
 
+---
+
+## Pass 3: Frontend Reviewer Findings
+
+### Critical
+- **C1 (frontend-reviewer)**: Corroborated C2 from code-reviewer / C3 from explorer (`preview.html:32` stored XSS via unescaped `custom_css`).
+
+### Important
+- **I1 (frontend-reviewer)**: `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/list.html:175` and `templates/bi/embedded_mobile_bi/mobilebiconfiguration/detail.html:232` — Non-existent `badge-purple` CSS class used (violates `theme.css` + Lesson L33). `badge-purple` does not exist in `theme.css` (only `badge-green/red/amber/info/muted/slate`). Fix: Replace with `badge-info` or `badge-slate`.
+- **I2 (frontend-reviewer)**: Corroborated I3 from code-reviewer / I3 from explorer (Lesson L10 `obj.created_by.username` in filter argument crashes when `created_by=None` in all 4 detail templates).
+- **I3 (frontend-reviewer)**: Corroborated I1 from code-reviewer / I2 from explorer (`player.html:151` raw `playlist_json|safe` script injection). Fix: Use Django `json_script`.
+
+### Minor
+- **M1 (frontend-reviewer)**: Corroborated M3 from code-reviewer / M3 from explorer (CDN dependencies in standalone preview and player templates).
+- **M2 (frontend-reviewer)**: `templates/bi/embedded_mobile_bi/embedapitoken/detail.html:59,89,104` and `embeddedanalyticsconfig/detail.html:90,105,120` — Clipboard copy handlers lack Promise rejection handling. Fix: Use `.then().catch()`.
+- **M3 (frontend-reviewer)**: `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/preview.html:15` — `primary_color` and `accent_color` injected into style/script without regex validation in form. Fix: Add hex regex validator `^#[0-9a-fA-F]{6}$` in form clean.
+
+
