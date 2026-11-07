@@ -27,7 +27,6 @@ class NarrativeExplanationForm(TenantUniqueMixin, TenantModelForm):
             "top_positive_driver",
             "top_negative_driver",
             "language",
-            "status",
         ]
         widgets = {
             "title": forms.TextInput(
@@ -63,7 +62,6 @@ class NarrativeExplanationForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input", "placeholder": "e.g. Freight Surcharges"}
             ),
             "language": forms.TextInput(attrs={"class": "form-input", "placeholder": "en"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
