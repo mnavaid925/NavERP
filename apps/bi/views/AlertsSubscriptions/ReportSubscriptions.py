@@ -220,11 +220,11 @@ def report_subscription_run_now(request, pk):
         ReportSubscription,
         pk=pk,
         select_related=["dashboard", "report"],
-        prefetch_related=["subscriber_users", "subscriber_org_units"],
+        prefetch_related=["subscriber_users"],
     )
 
     now = timezone.now()
-    user_count = subscription.subscriber_users.count()
+    user_count = len(subscription.subscriber_users.all())
     external_count = len(
         [
             e.strip()
