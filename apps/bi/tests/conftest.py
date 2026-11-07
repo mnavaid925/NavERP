@@ -66,6 +66,10 @@ from apps.bi.models import (
     PredictiveModel,
     StatisticalAnomaly,
     WhatIfScenario,
+    EmbeddedAnalyticsConfig,
+    KioskWallboardDisplay,
+    MobileBiConfiguration,
+    EmbedApiToken,
 )
 
 
@@ -2333,3 +2337,163 @@ def search_discovery_index_b(db, tenant_b, bi_dashboard_b, semantic_model_b):
         is_featured=False,
         is_verified=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 10.17: Embedded & Mobile BI fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def embedded_analytics_config_a(db, tenant_a, admin_user, bi_dashboard_a):
+    return EmbeddedAnalyticsConfig.objects.create(
+        tenant=tenant_a,
+        number="EMB-00001",
+        name="Partner Portal Executive Embed",
+        target_type="dashboard",
+        dashboard=bi_dashboard_a,
+        embedding_mode="iframe",
+        theme="light",
+        allowed_domains="https://portal.acme.com,https://app.acme.com",
+        sso_enabled=True,
+        enable_export=True,
+        view_count=12,
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def embedded_analytics_config_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    return EmbeddedAnalyticsConfig.objects.create(
+        tenant=tenant_b,
+        number="EMB-00002",
+        name="Globex Vendor Embed",
+        target_type="dashboard",
+        dashboard=bi_dashboard_b,
+        embedding_mode="iframe",
+        theme="dark",
+        allowed_domains="https://vendor.globex.com",
+        sso_enabled=False,
+        enable_export=False,
+        view_count=5,
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def kiosk_wallboard_display_a(db, tenant_a, admin_user, bi_dashboard_a):
+    return KioskWallboardDisplay.objects.create(
+        tenant=tenant_a,
+        number="WALL-00001",
+        name="HQ Operations Wallboard",
+        theme="dark_oled",
+        display_schedule="always_on",
+        slide_interval_seconds=30,
+        enable_touch_interaction=False,
+        auto_refresh_minutes=5,
+        playlist_items=[{"type": "dashboard", "id": bi_dashboard_a.id, "title": bi_dashboard_a.title, "duration_seconds": 30}],
+        is_public_kiosk=True,
+        access_passcode="WALL1234",
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def kiosk_wallboard_display_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    return KioskWallboardDisplay.objects.create(
+        tenant=tenant_b,
+        number="WALL-00002",
+        name="Frankfurt Depot Kiosk",
+        theme="light",
+        display_schedule="business_hours",
+        slide_interval_seconds=45,
+        enable_touch_interaction=True,
+        auto_refresh_minutes=10,
+        playlist_items=[{"type": "dashboard", "id": bi_dashboard_b.id, "title": bi_dashboard_b.title, "duration_seconds": 45}],
+        is_public_kiosk=False,
+        access_passcode="GLOBEX5678",
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def mobile_bi_config_a(db, tenant_a, admin_user, bi_dashboard_a):
+    return MobileBiConfiguration.objects.create(
+        tenant=tenant_a,
+        number="MOB-00001",
+        name="Executive Mobile Profile",
+        target_user=admin_user,
+        is_default_profile=True,
+        touch_layout_preset="phone_portrait",
+        enable_offline_caching=True,
+        offline_cache_ttl_hours=12,
+        enable_push_insights=True,
+        push_digest_frequency="weekly",
+        pinned_dashboard_ids=[bi_dashboard_a.id],
+        pinned_report_ids=[],
+        biometric_auth_required=True,
+        inactivity_lock_minutes=15,
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def mobile_bi_config_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    return MobileBiConfiguration.objects.create(
+        tenant=tenant_b,
+        number="MOB-00002",
+        name="Globex Field Rep Mobile",
+        target_user=admin_user_b,
+        is_default_profile=True,
+        touch_layout_preset="tablet_landscape",
+        enable_offline_caching=False,
+        offline_cache_ttl_hours=4,
+        enable_push_insights=False,
+        push_digest_frequency="daily",
+        pinned_dashboard_ids=[bi_dashboard_b.id],
+        pinned_report_ids=[],
+        biometric_auth_required=False,
+        inactivity_lock_minutes=30,
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def embed_api_token_a(db, tenant_a, admin_user, embedded_analytics_config_a):
+    return EmbedApiToken.objects.create(
+        tenant=tenant_a,
+        number="EAPI-00001",
+        name="Acme Production SDK Key",
+        embedded_config=embedded_analytics_config_a,
+        token_prefix="eapi_live_a1b2c3d4",
+        token_hash="a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+        scopes=["read:dashboards", "embed:render"],
+        allowed_origins="https://portal.acme.com,https://app.acme.com",
+        rate_limit_per_minute=120,
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def embed_api_token_b(db, tenant_b, admin_user_b, embedded_analytics_config_b):
+    return EmbedApiToken.objects.create(
+        tenant=tenant_b,
+        number="EAPI-00002",
+        name="Globex Read API Token",
+        embedded_config=embedded_analytics_config_b,
+        token_prefix="eapi_live_e5f6a7b8",
+        token_hash="b822f1cd2dce0e4f7ff4eec52851178037b5616021270a302a73ac041ec68cad",
+        scopes=["read:reports"],
+        allowed_origins="https://vendor.globex.com",
+        rate_limit_per_minute=60,
+        status="active",
+        created_by=admin_user_b,
+    )
+
