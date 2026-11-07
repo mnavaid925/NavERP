@@ -108,6 +108,7 @@ class KioskWallboardDisplay(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_wall_ten_stat"),
             models.Index(fields=["tenant", "theme"], name="idx_wall_ten_theme"),
+            models.Index(fields=["tenant", "display_schedule"], name="idx_wall_ten_schedule"),
             models.Index(fields=["tenant", "last_heartbeat_at"], name="idx_wall_ten_heartbeat"),
             models.Index(fields=["tenant", "created_at"], name="idx_wall_ten_created"),
         ]
