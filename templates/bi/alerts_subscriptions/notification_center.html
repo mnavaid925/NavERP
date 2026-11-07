@@ -104,7 +104,7 @@
                 {% endfor %}
             </select>
             {% if selected_category %}
-            <a href="?tab={{ active_tab }}" class="btn btn-outline btn-sm text-xs py-1.5" title="Clear category filter">
+            <a href="?tab={{ active_tab }}" class="btn btn-outline btn-sm text-xs py-1.5" title="Clear category filter" aria-label="Clear category filter">
                 <i data-lucide="x" class="w-3.5 h-3.5"></i>
             </a>
             {% endif %}
@@ -161,7 +161,7 @@
             <!-- Actions Bar -->
             <div class="flex items-center gap-2 self-end md:self-center shrink-0">
                 {% if item.action_url %}
-                <a href="{{ item.action_url }}" class="btn btn-outline btn-sm" title="View Target Asset">
+                <a href="{{ item.action_url }}" class="btn btn-outline btn-sm" title="View Target Asset" aria-label="View Target Asset">
                     <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
                     <span class="text-xs">Inspect</span>
                 </a>
@@ -170,7 +170,7 @@
                 {% if item.status == 'unread' %}
                 <form method="post" action="{% url 'bi:notification_mark_read' item.pk %}">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-outline btn-sm" title="Mark as Read">
+                    <button type="submit" class="btn btn-outline btn-sm" title="Mark as Read" aria-label="Mark as Read">
                         <i data-lucide="eye" class="w-3.5 h-3.5"></i>
                         <span class="text-xs">Read</span>
                     </button>
@@ -180,7 +180,7 @@
                 {% if item.status != 'acknowledged' %}
                 <form method="post" action="{% url 'bi:notification_acknowledge' item.pk %}">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-outline btn-sm text-emerald-700" title="Acknowledge">
+                    <button type="submit" class="btn btn-outline btn-sm text-emerald-700" title="Acknowledge" aria-label="Acknowledge">
                         <i data-lucide="check" class="w-3.5 h-3.5"></i>
                         <span class="text-xs">Ack</span>
                     </button>
@@ -190,12 +190,12 @@
                 <form method="post" action="{% url 'bi:notification_snooze' item.pk %}">
                     {% csrf_token %}
                     <input type="hidden" name="hours" value="4">
-                    <button type="submit" class="btn btn-icon btn-outline" title="Snooze for 4 hours">
+                    <button type="submit" class="btn btn-icon btn-outline" title="Snooze for 4 hours" aria-label="Snooze for 4 hours">
                         <i data-lucide="clock" class="w-3.5 h-3.5"></i>
                     </button>
                 </form>
 
-                <a href="{% url 'bi:bi_notification_item_detail' item.pk %}" class="btn btn-icon btn-outline" title="Full Details">
+                <a href="{% url 'bi:bi_notification_item_detail' item.pk %}" class="btn btn-icon btn-outline" title="Full Details" aria-label="Full Details">
                     <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
                 </a>
             </div>
