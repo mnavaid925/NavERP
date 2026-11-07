@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}{{ notification.number }} — {{ notification.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:notification_center' %}">Notification Center</a>
+            <span class="sep">/</span>
+            <span>{{ notification.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ notification.title }}</h1>
+            <span class="badge {{ notification.severity_badge_class }}">{{ notification.get_severity_display }}</span>
+            <span class="badge {{ notification.status_badge_class }}">{{ notification.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Notice: {{ notification.number }} • Recipient: {{ notification.recipient.username }}</p>
+    </div>
+    <div class="page-actions">
+        {% if notification.action_url %}
+        <a href="{{ notification.action_url }}" class="btn btn-primary">
+            <i data-lucide="external-link"></i>
+            <span>Open Target Asset</span>
+        </a>
+        {% endif %}
+
+        {% if notification.status != 'acknowledged' %}
+        <form method="post" action="{% url 'bi:notification_acknowledge' notification.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-700">
+                <i data-lucide="check-check"></i>
+                <span>Acknowledge</span>
+            </button>
+        </form>
+        {% endif %}
+
+        {% if notification.status != 'escalated' %}
+        <form method="post" action="{% url 'bi:notification_escalate' notification.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-rose-700">
+                <i data-lucide="arrow-up-right"></i>
+                <span>Escalate</span>
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'bi:bi_notification_item_edit' notification.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+
+        <form method="post" action="{% url 'bi:bi_notification_item_delete' notification.pk %}" class="inline" onsubmit="return confirm('Delete notification {{ notification.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Message Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-base font-semibold">Notification Content & Summary</h2>
+                <span class="badge {{ notification.category_badge_class }}">{{ notification.get_category_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="text-base text-slate-800 bg-slate-50 p-4 rounded-lg border border-slate-200 whitespace-pre-line leading-relaxed">
+                    {{ notification.message }}
+                </div>
+
+                {% if notification.acknowledgment_notes %}
+                <div class="mt-6 p-4 rounded bg-emerald-50 border border-emerald-200 text-sm">
+                    <div class="font-semibold text-emerald-800">Acknowledgment Resolution Notes:</div>
+                    <div class="text-emerald-900 mt-1">{{ notification.acknowledgment_notes }}</div>
+                    <div class="text-xs text-emerald-700 mt-2 font-mono">
+                        By {{ notification.acknowledged_by.username|default:"User" }} at {{ notification.acknowledged_at|date:"M d, Y H:i" }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if notification.workflow_converted %}
+                <div class="mt-4 p-3 bg-indigo-50 border border-indigo-200 rounded text-xs text-indigo-900 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-4 h-4 text-indigo-600"></i>
+                    <span>Converted to operational task/approval: <strong>{{ notification.workflow_reference }}</strong></span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Response & Snooze Form -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Incident Resolution & Snooze Controls</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-900 mb-2">Acknowledge & Resolve</h3>
+                        <form method="post" action="{% url 'bi:notification_acknowledge' notification.pk %}" class="space-y-3">
+                            {% csrf_token %}
+                            <textarea name="notes" class="form-textarea" rows="2" placeholder="Document resolution actions taken..."></textarea>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i data-lucide="check"></i>
+                                <span>Save Acknowledgment</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-900 mb-2">Snooze Notification</h3>
+                        <form method="post" action="{% url 'bi:notification_snooze' notification.pk %}" class="space-y-3">
+                            {% csrf_token %}
+                            <select name="hours" class="form-select text-sm">
+                                <option value="1">Snooze for 1 Hour</option>
+                                <option value="4" selected>Snooze for 4 Hours</option>
+                                <option value="24">Snooze for 24 Hours</option>
+                                <option value="72">Snooze for 3 Days</option>
+                            </select>
+                            <button type="submit" class="btn btn-outline btn-sm">
+                                <i data-lucide="clock"></i>
+                                <span>Apply Snooze</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Metadata & Tracing -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Audit & Origin Metadata</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Recipient User</div>
+                    <div class="text-sm font-medium text-slate-900 mt-1">
+                        {{ notification.recipient.get_full_name|default:notification.recipient.username }}
+                        <span class="text-xs text-muted">({{ notification.recipient.email }})</span>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Origin Alert Rule</div>
+                    <div class="text-sm text-slate-900 mt-1">
+                        {% if notification.alert_rule %}
+                        <a href="{% url 'bi:bi_alert_rule_detail' notification.alert_rule.pk %}" class="text-blue-600 hover:underline">
+                            {{ notification.alert_rule.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None (Direct bulletin)</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Origin Burst Run</div>
+                    <div class="text-sm text-slate-900 mt-1">
+                        {% if notification.burst_run %}
+                        <a href="{% url 'bi:distribution_burst_run_detail' notification.burst_run.pk %}" class="text-blue-600 hover:underline">
+                            {{ notification.burst_run.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Escalation State</div>
+                    <div class="text-sm text-slate-900 mt-1">
+                        {% if notification.escalation_level > 0 %}
+                        <span class="font-semibold text-rose-600">Level {{ notification.escalation_level }} Escalation</span>
+                        {% else %}
+                        <span class="text-muted">Standard Tier 0</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Read Timestamp</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if notification.read_at %}
+                        {{ notification.read_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-amber-600 font-semibold">Unread</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Created Timestamp</div>
+                    <div class="text-sm text-slate-700 mt-1">{{ notification.created_at|date:"M d, Y H:i:s" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
