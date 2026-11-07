@@ -5,7 +5,9 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
+from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
+from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.core.forms import TenantModelForm
 
 User = get_user_model()
@@ -89,8 +91,20 @@ class MobileBiConfigurationForm(TenantUniqueMixin, TenantModelForm):
         if raw_dashboards:
             try:
                 parsed_dash = json.loads(raw_dashboards)
-                if not isinstance(parsed_dash, list):
-                    self.add_error("pinned_dashboard_ids_raw", "Must be a JSON array of numeric IDs.")
+                if not isinstance(parsed_dash, list) or not all(isinstance(x, int) for x in parsed_dash):
+                    self.add_error("pinned_dashboard_ids_raw", "Must be a JSON array of numeric integer IDs.")
+                elif self.tenant and parsed_dash:
+                    valid_dash_ids = set(
+                        BiDashboard.objects.filter(tenant=self.tenant, id__in=parsed_dash).values_list("id", flat=True)
+                    )
+                    invalid_dash_ids = set(parsed_dash) - valid_dash_ids
+                    if invalid_dash_ids:
+                        self.add_error(
+                            "pinned_dashboard_ids_raw",
+                            f"The following dashboard IDs do not exist in your tenant: {sorted(invalid_dash_ids)}",
+                        )
+                    else:
+                        self.instance.pinned_dashboard_ids = parsed_dash
                 else:
                     self.instance.pinned_dashboard_ids = parsed_dash
             except json.JSONDecodeError as exc:
@@ -102,8 +116,20 @@ class MobileBiConfigurationForm(TenantUniqueMixin, TenantModelForm):
         if raw_reports:
             try:
                 parsed_rep = json.loads(raw_reports)
-                if not isinstance(parsed_rep, list):
-                    self.add_error("pinned_report_ids_raw", "Must be a JSON array of numeric IDs.")
+                if not isinstance(parsed_rep, list) or not all(isinstance(x, int) for x in parsed_rep):
+                    self.add_error("pinned_report_ids_raw", "Must be a JSON array of numeric integer IDs.")
+                elif self.tenant and parsed_rep:
+                    valid_rep_ids = set(
+                        ReportDefinition.objects.filter(tenant=self.tenant, id__in=parsed_rep).values_list("id", flat=True)
+                    )
+                    invalid_rep_ids = set(parsed_rep) - valid_rep_ids
+                    if invalid_rep_ids:
+                        self.add_error(
+                            "pinned_report_ids_raw",
+                            f"The following report IDs do not exist in your tenant: {sorted(invalid_rep_ids)}",
+                        )
+                    else:
+                        self.instance.pinned_report_ids = parsed_rep
                 else:
                     self.instance.pinned_report_ids = parsed_rep
             except json.JSONDecodeError as exc:
