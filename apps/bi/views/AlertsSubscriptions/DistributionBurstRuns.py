@@ -16,6 +16,7 @@ from apps.bi.models.AlertsSubscriptions.DistributionBurstRuns import (
 )
 from apps.bi.models.AlertsSubscriptions.ReportSubscriptions import ReportSubscription
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -192,6 +193,7 @@ def distribution_burst_run_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def distribution_burst_run_delete(request, pk):
     burst_run = bi_object(request, DistributionBurstRun, pk=pk)
     num = burst_run.number
