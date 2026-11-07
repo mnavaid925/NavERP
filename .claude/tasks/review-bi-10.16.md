@@ -62,3 +62,19 @@ None.
 4. `templates/bi/alerts_subscriptions/bi_alert_rule/list.html:204,208,211,216`, `report_subscription/list.html:197,201,204,209`, `distribution_burst_run/list.html:185,188,193`, `bi_notification_item/list.html:168,171,176`, `notification_center.html:192,197` — Action buttons and icon links have `title` but lack explicit `aria-label` attributes. Fix: Add `aria-label` matching `title`.
 
 ---
+
+## 4. Performance Reviewer Findings
+
+### Critical
+None.
+
+### Important
+1. `apps/bi/views/AlertsSubscriptions/ReportSubscriptions.py:223-227` — `report_subscription_run_now` prefetches `["subscriber_users", "subscriber_org_units"]`, but immediately calls `subscription.subscriber_users.count()`, which bypasses the prefetch cache and executes a duplicate `SELECT COUNT(*)` query. In addition, `subscriber_org_units` is prefetched but never used. Fix: Avoid unused prefetch in action handler and use in-memory `len(subscription.subscriber_users.all())` or remove prefetch and use `.count()`.
+2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:23-32`, `ReportSubscriptions.py:22-31`, `DistributionBurstRuns.py:24-33`, `BiNotificationItems.py:31-40` — In all four list views, `.select_related(...)` is called on `qs` before executing `.aggregate(...)` for stat cards, causing Django ORM to generate unnecessary multi-table `LEFT OUTER JOIN`s during count aggregation. Fix: Run aggregate count query on clean `base_qs` without `select_related`, and apply `select_related` only to the paginated list queryset.
+3. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:181-186`, `ReportSubscriptions.py:143-148` — Both models order by `["-created_at"]` and list queries filter by tenant, but neither model defines a composite index on `["tenant", "-created_at"]` (causing filesort on large datasets). Fix: Add `models.Index(fields=["tenant", "-created_at"], name="idx_balr_ten_created")` and `models.Index(fields=["tenant", "-created_at"], name="idx_bsub_ten_created")` to `Meta.indexes`.
+
+### Minor
+1. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:100-104,137-145`, `ReportSubscriptions.py:140-150` — Dead context querysets (`recent_burst_runs`, `kpi_definitions`, `anomalies`, `dashboards`, `reports`, `org_units`) are constructed and passed to template contexts where they are never rendered. Fix: Clean up unused context variables.
+2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:256`, `ReportSubscriptions.py:271` — State mutations in action handlers invoke `.save()` without `update_fields`, rewriting all fields. Fix: Add explicit `update_fields` list matching the updated fields.
+
+---
