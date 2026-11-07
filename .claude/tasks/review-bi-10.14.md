@@ -18,7 +18,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **I4**: fixed in 572efa4a — Wrapped all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py with @transaction.atomic.
 - [x] **I5**: fixed in b6ed9367 — Aggregated key_drivers count in augmented_insight_list context and displayed key_driver_count in list.html.
 - [x] **I6**: fixed in c7e989d4 — Created sub-package __init__.py files re-exporting entity classes for models, forms, and views in AiAugmentedAnalytics.
-- [ ] **I7**: Add state transition guards and ownership checks in action views: guard `smart_data_prep_suggestion_action` against modifying suggestions already `applied`, and verify user ownership/admin in `analytics_recommendation_interact`.
+- [x] **I7**: fixed in 99cd13a1 — Added state transition guards against modifying applied suggestions in smart_data_prep_suggestion_action and ownership/admin access check in analytics_recommendation_interact.
 - [ ] **I8**: Add `select_related` to `bi_object` calls in mutating views (`SmartDataPrepSuggestions.py` for `target_table`, `AnalyticsRecommendations.py` for `user`) to prevent secondary lazy `__str__` queries during audit logging.
 - [ ] **I9**: Add `.only("id", "name")` to `WarehouseTable.objects.filter(tenant=request.tenant).order_by("name")` in `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py:30`.
 
