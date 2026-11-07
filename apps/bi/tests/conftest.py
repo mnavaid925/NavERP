@@ -67,6 +67,9 @@ from apps.bi.models import (
 
 @pytest.fixture
 def admin_user_b(db, tenant_b):
+    user = User.objects.filter(username="admin_globex").first()
+    if user:
+        return user
     return User.objects.create_user(
         email="admin@globex.com",
         username="admin_globex",
