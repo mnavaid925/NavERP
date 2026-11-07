@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ display.name }} — Wallboard Display</title>
+    <!-- Tailwind CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        wallboard: '{% if display.theme == "dark_oled" %}#000000{% elif display.theme == "dark_navy" %}#0f172a{% else %}#ffffff{% endif %}',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: {% if display.theme == 'dark_oled' %}#000000{% elif display.theme == 'dark_navy' %}#090d16{% else %}#f8fafc{% endif %};
+            color: {% if display.theme == 'light_high_contrast' %}#0f172a{% else %}#f8fafc{% endif %};
+            overflow: hidden;
+            user-select: none;
+        }
+        .slide-fade {
+            transition: opacity 1s ease-in-out;
+        }
+        .progress-bar-inner {
+            transition: width 1s linear;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between p-6">
+    <!-- Top HUD Bar -->
+    <header class="flex justify-between items-center pb-4 border-b {% if display.theme == 'light_high_contrast' %}border-slate-200{% else %}border-slate-800{% endif %}">
+        <div class="flex items-center gap-4">
+            <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 animate-ping"></span>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight flex items-center gap-2">
+                    <span>{{ display.name }}</span>
+                    <span class="text-xs px-2 py-0.5 rounded font-mono font-medium {% if display.theme == 'light_high_contrast' %}bg-slate-200 text-slate-800{% else %}bg-slate-800 text-slate-300{% endif %}">
+                        {{ display.number }}
+                    </span>
+                </h1>
+                <p class="text-xs {% if display.theme == 'light_high_contrast' %}text-slate-500{% else %}text-slate-400{% endif %}">
+                    {{ display.location_description|default:"Operations Wallboard" }} • Dwell: {{ display.default_slide_duration_seconds }}s
+                </p>
+            </div>
+        </div>
+
+        <!-- Center Controls & Slide Counter -->
+        <div class="flex items-center gap-3">
+            <button id="btnPrev" class="p-2 rounded-lg {% if display.theme == 'light_high_contrast' %}bg-slate-100 hover:bg-slate-200 text-slate-700{% else %}bg-slate-900 hover:bg-slate-800 text-slate-200{% endif %}" title="Previous Slide">
+                <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            </button>
+            <div id="slideCounter" class="font-mono text-sm font-semibold px-3 py-1 rounded {% if display.theme == 'light_high_contrast' %}bg-slate-100 text-slate-800{% else %}bg-slate-900 text-slate-100{% endif %}">
+                Slide 1 / 1
+            </div>
+            <button id="btnTogglePlay" class="p-2 rounded-lg {% if display.theme == 'light_high_contrast' %}bg-slate-100 hover:bg-slate-200 text-slate-700{% else %}bg-slate-900 hover:bg-slate-800 text-slate-200{% endif %}" title="Pause/Play">
+                <i data-lucide="pause" id="iconPlayPause" class="w-5 h-5"></i>
+            </button>
+            <button id="btnNext" class="p-2 rounded-lg {% if display.theme == 'light_high_contrast' %}bg-slate-100 hover:bg-slate-200 text-slate-700{% else %}bg-slate-900 hover:bg-slate-800 text-slate-200{% endif %}" title="Next Slide">
+                <i data-lucide="chevron-right" class="w-5 h-5"></i>
+            </button>
+            <button id="btnFullscreen" class="p-2 rounded-lg {% if display.theme == 'light_high_contrast' %}bg-slate-100 hover:bg-slate-200 text-slate-700{% else %}bg-slate-900 hover:bg-slate-800 text-slate-200{% endif %}" title="Toggle Fullscreen">
+                <i data-lucide="maximize" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Right Clock & Heartbeat indicator -->
+        <div class="text-right">
+            <div id="liveClock" class="font-mono text-2xl font-bold tracking-wider">--:--:--</div>
+            <div class="text-xs text-emerald-500 font-medium flex items-center justify-end gap-1 mt-0.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Broadcasting Live</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Slide Countdown Progress Bar -->
+    <div class="w-full h-1 {% if display.theme == 'light_high_contrast' %}bg-slate-200{% else %}bg-slate-800{% endif %} mt-3 rounded-full overflow-hidden">
+        <div id="slideProgressBar" class="h-full bg-blue-500 progress-bar-inner w-0"></div>
+    </div>
+
+    <!-- Active Carousel Slide Stage -->
+    <main id="slideStage" class="flex-1 flex flex-col justify-center items-center my-6 relative slide-fade">
+        <div class="w-full max-w-7xl mx-auto h-full flex flex-col justify-center">
+            <!-- Slide Title Header -->
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <span id="slideTag" class="text-xs font-semibold uppercase tracking-wider text-blue-500">Dashboard View</span>
+                    <h2 id="slideTitle" class="text-3xl font-extrabold tracking-tight mt-1">{{ display.name }}</h2>
+                </div>
+                <div id="slideTimeIndicator" class="text-xs font-mono opacity-60">Cycle Dwell: 30s</div>
+            </div>
+
+            <!-- Visual Stage Content Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div class="p-6 rounded-2xl border {% if display.theme == 'light_high_contrast' %}bg-white border-slate-200 shadow-sm{% else %}bg-slate-900/80 border-slate-800 shadow-xl{% endif %}">
+                    <div class="text-xs font-medium uppercase tracking-wider opacity-60">Throughput Rate</div>
+                    <div id="kpiValue1" class="text-4xl font-extrabold text-blue-500 mt-2">99.4%</div>
+                    <div class="text-xs text-emerald-500 font-semibold mt-1">↑ +2.1% SLA Exceeded</div>
+                </div>
+                <div class="p-6 rounded-2xl border {% if display.theme == 'light_high_contrast' %}bg-white border-slate-200 shadow-sm{% else %}bg-slate-900/80 border-slate-800 shadow-xl{% endif %}">
+                    <div class="text-xs font-medium uppercase tracking-wider opacity-60">Active Production Units</div>
+                    <div id="kpiValue2" class="text-4xl font-extrabold text-emerald-500 mt-2">1,842</div>
+                    <div class="text-xs opacity-70 mt-1">Operating at nominal capacity</div>
+                </div>
+                <div class="p-6 rounded-2xl border {% if display.theme == 'light_high_contrast' %}bg-white border-slate-200 shadow-sm{% else %}bg-slate-900/80 border-slate-800 shadow-xl{% endif %}">
+                    <div class="text-xs font-medium uppercase tracking-wider opacity-60">Incident Rate</div>
+                    <div id="kpiValue3" class="text-4xl font-extrabold text-amber-500 mt-2">0</div>
+                    <div class="text-xs text-emerald-500 font-semibold mt-1">Zero downtime recorded</div>
+                </div>
+                <div class="p-6 rounded-2xl border {% if display.theme == 'light_high_contrast' %}bg-white border-slate-200 shadow-sm{% else %}bg-slate-900/80 border-slate-800 shadow-xl{% endif %}">
+                    <div class="text-xs font-medium uppercase tracking-wider opacity-60">Mean Latency</div>
+                    <div id="kpiValue4" class="text-4xl font-extrabold text-purple-500 mt-2">42 ms</div>
+                    <div class="text-xs opacity-70 mt-1">Telemetry response speed</div>
+                </div>
+            </div>
+
+            <!-- Big Interactive Chart Canvas -->
+            <div class="flex-1 p-6 rounded-2xl border flex flex-col justify-center min-h-[320px] {% if display.theme == 'light_high_contrast' %}bg-white border-slate-200 shadow-sm{% else %}bg-slate-900/80 border-slate-800 shadow-xl{% endif %}">
+                <canvas id="wallboardChart" class="w-full h-full max-h-[340px]"></canvas>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Status Footer -->
+    <footer class="flex justify-between items-center pt-3 border-t text-xs {% if display.theme == 'light_high_contrast' %}border-slate-200 text-slate-500{% else %}border-slate-800 text-slate-500{% endif %}">
+        <div>
+            <span>NavERP Wallboard Engine • Screen Slug: <span class="font-mono">{{ display.kiosk_slug }}</span></span>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="heartbeatStatus">Heartbeat Ping: Active</span>
+            <span>•</span>
+            <span id="nextReload">Data Reload in: {{ display.auto_refresh_data_interval_seconds }}s</span>
+        </div>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+
+        // Playlist data
+        const playlist = {{ playlist_json|safe }};
+        const defaultDwell = {{ display.default_slide_duration_seconds }};
+        const heartbeatUrl = "{% url 'bi:kiosk_wallboard_display_heartbeat' display.pk %}";
+
+        let currentIndex = 0;
+        let isPlaying = true;
+        let slideTimeElapsed = 0;
+        let currentDuration = defaultDwell;
+        let chartInstance = null;
+
+        // Initialize Clock
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Initialize Chart
+        function initChart(dataMultiplier = 1) {
+            const ctx = document.getElementById('wallboardChart').getContext('2d');
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const isDark = {% if display.theme == 'light_high_contrast' %}false{% else %}true{% endif %};
+            const gridColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)';
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Shift 1', 'Shift 2', 'Shift 3', 'Unit A', 'Unit B', 'Unit C', 'Hub North', 'Hub South', 'Hub West'],
+                    datasets: [
+                        {
+                            label: 'Current Output',
+                            data: [120, 190, 160, 210, 240, 200, 180, 220, 260].map(v => Math.round(v * dataMultiplier)),
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1,
+                            borderRadius: 6,
+                        },
+                        {
+                            label: 'Planned Target',
+                            data: [150, 180, 170, 200, 220, 210, 190, 210, 240].map(v => Math.round(v * dataMultiplier)),
+                            type: 'line',
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.3,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: textColor } }
+                    },
+                    scales: {
+                        x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                        y: { grid: { color: gridColor }, ticks: { color: textColor }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+        initChart(1.0);
+
+        // Slide Rendering
+        function renderCurrentSlide() {
+            if (!playlist || playlist.length === 0) return;
+            const slide = playlist[currentIndex];
+            currentDuration = slide.duration_seconds || defaultDwell;
+            slideTimeElapsed = 0;
+
+            document.getElementById('slideCounter').innerText = `Slide ${currentIndex + 1} / ${playlist.length}`;
+            document.getElementById('slideTitle').innerText = slide.title || 'Operational Overview';
+            document.getElementById('slideTag').innerText = (slide.type || 'Dashboard').toUpperCase() + ' STREAM';
+            document.getElementById('slideTimeIndicator').innerText = `Cycle Dwell: ${currentDuration}s`;
+
+            // Animate transition
+            const stage = document.getElementById('slideStage');
+            stage.style.opacity = '0.3';
+            setTimeout(() => {
+                stage.style.opacity = '1.0';
+            }, 150);
+
+            // Vary KPI and chart values slightly per slide
+            const mult = 0.8 + ((currentIndex + 1) * 0.25);
+            document.getElementById('kpiValue1').innerText = (96.5 + (currentIndex * 1.1)).toFixed(1) + '%';
+            document.getElementById('kpiValue2').innerText = Math.round(1500 * mult).toLocaleString();
+            initChart(mult);
+        }
+
+        // Ticker loop
+        setInterval(() => {
+            if (!isPlaying) return;
+            slideTimeElapsed += 1;
+            const pct = Math.min((slideTimeElapsed / currentDuration) * 100, 100);
+            document.getElementById('slideProgressBar').style.width = pct + '%';
+
+            if (slideTimeElapsed >= currentDuration) {
+                currentIndex = (currentIndex + 1) % playlist.length;
+                renderCurrentSlide();
+            }
+        }, 1000);
+
+        // Controls
+        document.getElementById('btnNext').onclick = () => {
+            currentIndex = (currentIndex + 1) % playlist.length;
+            renderCurrentSlide();
+        };
+
+        document.getElementById('btnPrev').onclick = () => {
+            currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+            renderCurrentSlide();
+        };
+
+        document.getElementById('btnTogglePlay').onclick = () => {
+            isPlaying = !isPlaying;
+            document.getElementById('iconPlayPause').setAttribute('data-lucide', isPlaying ? 'pause' : 'play');
+            lucide.createIcons();
+        };
+
+        document.getElementById('btnFullscreen').onclick = () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        };
+
+        // Heartbeat Telemetry Ping
+        function sendHeartbeat() {
+            fetch(heartbeatUrl, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    const el = document.getElementById('heartbeatStatus');
+                    if (el) el.innerText = 'Heartbeat: Connected (' + new Date().toTimeString().split(' ')[0] + ')';
+                })
+                .catch(() => {});
+        }
+        setInterval(sendHeartbeat, 30000);
+        sendHeartbeat();
+
+        // Initial render
+        renderCurrentSlide();
+    </script>
+</body>
+</html>
