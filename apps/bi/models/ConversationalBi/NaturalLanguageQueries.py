@@ -187,6 +187,14 @@ class NaturalLanguageQuery(TenantNumbered):
         return reverse("bi:natural_language_query_detail", kwargs={"pk": self.pk})
 
     @property
+    def is_successful(self):
+        return self.execution_status == "completed"
+
+    @property
+    def is_voice_query(self):
+        return self.input_modality == "voice"
+
+    @property
     def status_badge_color(self):
         if self.execution_status == "completed":
             return "badge-green"
