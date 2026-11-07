@@ -114,23 +114,23 @@
   - [x] `templates/bi/conversational_bi/bi_conversation_session/detail.html` (Interactive chat conversation thread)
   - [x] `templates/bi/conversational_bi/bi_conversation_session/form.html`
   - [x] `templates/bi/conversational_bi/chat_workspace.html` (Interactive Conversational BI Assistant multi-turn chat workspace)
-- [ ] **Entity 3: NarrativeExplanation (`BNLG`)**
-  - [ ] `apps/bi/models/ConversationalBi/NarrativeExplanations.py`
-  - [ ] `apps/bi/forms/ConversationalBi/NarrativeExplanations.py`
-  - [ ] `apps/bi/views/ConversationalBi/NarrativeExplanations.py` (CRUD + `publish` + `regenerate` actions)
-  - [ ] `apps/bi/urls/ConversationalBi/NarrativeExplanations.py`
-  - [ ] `templates/bi/conversational_bi/narrative_explanation/list.html`
-  - [ ] `templates/bi/conversational_bi/narrative_explanation/detail.html` (Narrative view with TTS script preview)
-  - [ ] `templates/bi/conversational_bi/narrative_explanation/form.html`
-- [ ] **Entity 4: SearchDiscoveryIndex (`BSDI`)**
-  - [ ] `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py`
-  - [ ] `apps/bi/forms/ConversationalBi/SearchDiscoveryIndexes.py`
-  - [ ] `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py` (CRUD + `search_explorer` + `reweight` + `search` query endpoint)
-  - [ ] `apps/bi/urls/ConversationalBi/SearchDiscoveryIndexes.py`
-  - [ ] `templates/bi/conversational_bi/search_discovery_index/list.html`
-  - [ ] `templates/bi/conversational_bi/search_discovery_index/detail.html`
-  - [ ] `templates/bi/conversational_bi/search_discovery_index/form.html`
-  - [ ] `templates/bi/conversational_bi/search_explorer.html` (Search-Driven Discovery asset explorer & synonym search console)
+- [x] **Entity 3: NarrativeExplanation (`BNLG`)**
+  - [x] `apps/bi/models/ConversationalBi/NarrativeExplanations.py`
+  - [x] `apps/bi/forms/ConversationalBi/NarrativeExplanations.py`
+  - [x] `apps/bi/views/ConversationalBi/NarrativeExplanations.py` (CRUD + `publish` + `regenerate` actions)
+  - [x] `apps/bi/urls/ConversationalBi/NarrativeExplanations.py`
+  - [x] `templates/bi/conversational_bi/narrative_explanation/list.html`
+  - [x] `templates/bi/conversational_bi/narrative_explanation/detail.html` (Narrative view with TTS script preview)
+  - [x] `templates/bi/conversational_bi/narrative_explanation/form.html`
+- [x] **Entity 4: SearchDiscoveryIndex (`BSDI`)**
+  - [x] `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [x] `apps/bi/forms/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [x] `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py` (CRUD + `search_explorer` + `reweight` + `search` query endpoint)
+  - [x] `apps/bi/urls/ConversationalBi/SearchDiscoveryIndexes.py`
+  - [x] `templates/bi/conversational_bi/search_discovery_index/list.html`
+  - [x] `templates/bi/conversational_bi/search_discovery_index/detail.html`
+  - [x] `templates/bi/conversational_bi/search_discovery_index/form.html`
+  - [x] `templates/bi/conversational_bi/search_explorer.html` (Search-Driven Discovery asset explorer & synonym search console)
 
 ### Phase 3.4: Integrate (Single Writer)
 - [ ] Package re-exports in `apps/bi/models/ConversationalBi/__init__.py` and `apps/bi/models/__init__.py`
