@@ -74,15 +74,15 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div class="lg:col-span-2">
-                <label class="form-label text-xs">Search Insights</label>
+                <label for="filter_q" class="form-label text-xs">Search Insights</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, metric, dimension..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter_q" name="q" value="{{ request.GET.q }}" placeholder="Search title, metric, dimension..." class="form-input text-sm pl-9">
                     <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Insight Type</label>
-                <select name="insight_type" class="form-select text-sm">
+                <label for="filter_insight_type" class="form-label text-xs">Insight Type</label>
+                <select id="filter_insight_type" name="insight_type" class="form-select text-sm">
                     <option value="">All Types</option>
                     {% for code, label in insight_type_choices %}
                     <option value="{{ code }}" {% if request.GET.insight_type == code %}selected{% endif %}>{{ label }}</option>
@@ -90,8 +90,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Impact</label>
-                <select name="impact_direction" class="form-select text-sm">
+                <label for="filter_impact_direction" class="form-label text-xs">Impact</label>
+                <select id="filter_impact_direction" name="impact_direction" class="form-select text-sm">
                     <option value="">All Impacts</option>
                     {% for code, label in impact_choices %}
                     <option value="{{ code }}" {% if request.GET.impact_direction == code %}selected{% endif %}>{{ label }}</option>
@@ -99,8 +99,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Severity</label>
-                <select name="severity" class="form-select text-sm">
+                <label for="filter_severity" class="form-label text-xs">Severity</label>
+                <select id="filter_severity" name="severity" class="form-select text-sm">
                     <option value="">All Severities</option>
                     {% for code, label in severity_choices %}
                     <option value="{{ code }}" {% if request.GET.severity == code %}selected{% endif %}>{{ label }}</option>
@@ -108,8 +108,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="filter_status" class="form-label text-xs">Status</label>
+                <select id="filter_status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
