@@ -3,92 +3,129 @@
 - **Sub-module:** 10.16 Alerts, Subscriptions & Distribution
 - **App:** `apps/bi`
 - **Review range:** `a3d989bc06eda3b74ce2a67a70785992ec94fca0...HEAD`
-- **Date:** 2026-11-07
+- **Date:** 2026-11-08
 - **Reviewers:** `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`
 
 ---
 
-## 1. Code Reviewer Findings
+## Consolidated Deduplicated Findings Register
 
-### Critical
-None.
+### Critical Issues
 
-### Important
-1. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Optional nullable `created_by` foreign key is dereferenced inside filter arguments without an `{% if subscription.created_by %}` guard (`{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}`), causing a 500 template error when `created_by` is None (Lesson L10). Fix: Wrap with `{% if subscription.created_by %}...{% else %}<span class="text-muted">System</span>{% endif %}`.
-2. `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:329` — Hand-parsed integer from `request.POST.get("hours", "4")` without `try/except ValueError` or digit validation will raise an unhandled `ValueError` 500 crash on malformed/non-digit input (Lesson L35). Fix: Guard with `try/except (ValueError, TypeError)` or check `.isdigit()` and default to 4.
-3. `templates/bi/alerts_subscriptions/distribution_burst_run/list.html:75` — Filter bar completely omits the `status` dropdown even though `distribution_burst_run_list` parses `request.GET.get("status")` and passes `status_choices` and `selected_status` in context. Fix: Add `<select name="status">` populated from `status_choices` with `{% if selected_status == val %}selected{% endif %}`.
-4. `templates/bi/alerts_subscriptions/bi_notification_item/list.html:75` — Filter bar completely omits the `status` dropdown even though `bi_notification_item_list` parses `request.GET.get("status")` and passes `status_choices` and `selected_status` in context. Fix: Add `<select name="status">` populated from `status_choices` with `{% if selected_status == val %}selected{% endif %}`.
-5. `apps/bi/management/commands/seed_bi.py:98` — `seed_bi --flush` routine omits all four Sub-module 10.16 models (`BiNotificationItem`, `DistributionBurstRun`, `ReportSubscription`, `BiAlertRule`), leaving orphaned records with severed foreign keys when re-seeding after flush. Fix: Add deletion statements for the 4 models at the top of the `--flush` atomic block.
+- [ ] **[C1] Non-Existent Theme Badge CSS Classes in Models & Templates (Rule L33 Violation)**
+  - **Location:** `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:198`, `BiNotificationItems.py:130,138,150,151`, `DistributionBurstRuns.py:112,122,123`, `ReportSubscriptions.py:170,171`
+  - **Impact:** Model badge properties return invalid classes `badge-blue` and `badge-purple`. When rendered in templates (`bi_alert_rule/list.html`, `report_subscription/list.html`, `distribution_burst_run/list.html`, `bi_notification_item/list.html`, `notification_center.html`), the badges render unstyled without color or theme styling.
+  - **Fix:** Replace all occurrences of `badge-blue` with `badge-info` and `badge-purple` with `badge-slate` or `badge-info`.
 
-### Minor
-1. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:199`, `ReportSubscriptions.py:172`, `DistributionBurstRuns.py:123`, `BiNotificationItems.py:151` — Model badge helper properties specify `badge-blue` and `badge-purple` which do not exist in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist per Lesson L33). Fix: Map to `badge-info` and `badge-slate` / `badge-muted`.
-2. `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:280,319,339,367` — Post-action redirects use unvalidated `request.POST.get("next") or request.META.get("HTTP_REFERER")`. Fix: Validate target URL with `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})` or fallback to `bi:notification_center`.
-3. `apps/bi/forms/AlertsSubscriptions/ReportSubscriptions.py:14` — `filter_overrides` field was specified in the pre-build contract form fields list but excluded from `ReportSubscriptionForm.Meta.fields`. Fix: Document intentional exclusion or add field with a JSON textarea widget.
+- [ ] **[C2] Cross-Tenant User Exposure & Foreign Tenant Attachment (IDOR in Forms)**
+  - **Location:** `apps/bi/forms/AlertsSubscriptions/BiAlertRules.py:80-97`, `BiNotificationItems.py:74-91`, `ReportSubscriptions.py:72-92`
+  - **Impact:** ModelForms query `User.objects.all()` by default for FK and M2M fields (`recipient_users`, `recipient`, `subscriber_users`), rendering cross-tenant users in dropdowns and permitting cross-tenant user assignment via crafted POST payloads.
+  - **Fix:** Filter user querysets by `self.tenant` in form `__init__` and validate with `reject_foreign(self, cleaned, [...])` in `clean()`.
 
----
+- [ ] **[C3] 500 Unhandled Template Crash on Null Foreign Key `subscription.created_by` (Rule L10 Violation)**
+  - **Location:** `templates/bi/alerts_subscriptions/report_subscription/detail.html:201`
+  - **Impact:** Accessing `{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}` crashes with an unhandled 500 `AttributeError` when `created_by` is None.
+  - **Fix:** Wrap with `{% if subscription.created_by %}{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}`.
 
-## 2. Explorer Review Findings
-
-### Critical
-None.
-
-### Important
-1. `templates/bi/alerts_subscriptions/report_subscription/list.html:75-125` — The list filter bar completely omits the `<select name="status">` dropdown even though `report_subscription_list` parses `request.GET.get("status")`, passes `status_choices` and `selected_status` in context, checks `selected_status` in reset logic, and preserves `&status={{ selected_status }}` in pagination links. This matches the same filter omission present in `distribution_burst_run/list.html:75` and `bi_notification_item/list.html:75`. Fix: Add `<select name="status" class="form-select">` populated from `status_choices` with `{% if selected_status == val %}selected{% endif %}`.
-2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:140-145,172-177`, `ReportSubscriptions.py:144-150,184-190`, `BiNotificationItems.py:202-207,240-245` — Pre-build contract sections 4.1, 4.2, and 4.4 specifically pin `users` in the form view context dictionaries (`FK querysets: ... users`). In all three views (`bi_alert_rule_create`/`edit`, `report_subscription_create`/`edit`, `bi_notification_item_create`/`edit`), `users` was omitted from `context`. Fix: Pass tenant-scoped or active user queryset into `context["users"]`.
-3. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Optional nullable foreign key `subscription.created_by` is dereferenced inside a template filter argument without an `{% if subscription.created_by %}` guard (`{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}`), causing a template crash when `created_by` is None (Lesson L10). Fix: Wrap with `{% if subscription.created_by %}...{% else %}<span class="text-muted">System</span>{% endif %}`.
-
-### Minor
-1. `apps/bi/forms/AlertsSubscriptions/DistributionBurstRuns.py:15` — `burst_slicing_metadata` JSONField was listed in the pre-build contract Section 2.3 form fields list but omitted from `DistributionBurstRunForm.Meta.fields`. Fix: Add field with JSON textarea widget or document intentional omission for runtime automated logging.
-2. `apps/bi/forms/AlertsSubscriptions/ReportSubscriptions.py:14` — `filter_overrides` JSONField was listed in the contract Section 2.2 form fields list but omitted from `ReportSubscriptionForm.Meta.fields`. Fix: Add field with JSON textarea widget or document as advanced API-only override.
-3. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:199`, `ReportSubscriptions.py:172`, `DistributionBurstRuns.py:123`, `BiNotificationItems.py:151` — Model badge helper properties (`severity_badge_class`, `format_badge_class`, `channel_badge_class`, `category_badge_class`) map choices to `badge-blue` and `badge-purple`, which do not exist in `static/css/theme.css` (only `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate` exist per Lesson L33). Fix: Replace `badge-blue` with `badge-info` and `badge-purple` with `badge-slate` / `badge-indigo`.
-4. `apps/bi/forms/AlertsSubscriptions/BiAlertRules.py:80`, `ReportSubscriptions.py:72`, `BiNotificationItems.py:74` — In forms, `recipient_users`, `subscriber_users`, and `recipient` are FK/M2M relationships to `settings.AUTH_USER_MODEL`. Filter by tenant in form `__init__`.
-5. `apps/bi/management/commands/seed_bi.py:98` — The `seed_bi --flush` routine omits all four Sub-module 10.16 models (`BiNotificationItem`, `DistributionBurstRun`, `ReportSubscription`, `BiAlertRule`), risking orphaned records when flushing and re-seeding. Fix: Add deletion statements for the 4 models at the top of the `--flush` atomic block.
+- [ ] **[C4] Unhandled `ValueError` / DoS on Hand-Parsed `hours` in `notification_snooze` (Rule L35 Violation)**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:328-334`
+  - **Impact:** Hand-parsed `int(request.POST.get("hours", "4"))` crashes with 500 on non-digit or empty input, and accepts negative or huge integer values that corrupt scheduling state.
+  - **Fix:** Wrap integer conversion in `try/except (ValueError, TypeError, OverflowError)` and validate duration within allowed set `(1, 4, 24, 72)` with fallback to 4.
 
 ---
 
-## 3. Frontend Reviewer Findings
+### Important Issues
 
-### Critical
-1. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:198`, `BiNotificationItems.py:130,138,150,151`, `DistributionBurstRuns.py:112,122,123`, `ReportSubscriptions.py:170,171` — Theme badge helper methods return invalid non-existent CSS classes `badge-blue` and `badge-purple`. When rendered in templates (`bi_alert_rule/list.html:182`, `report_subscription/list.html:175`, `distribution_burst_run/list.html:162,174`, `bi_notification_item/list.html:150,155,160`, and `notification_center.html:139,140`), the badges render unstyled without color (Lesson L33). Fix: Replace all occurrences of `badge-blue` with `badge-info` and `badge-purple` with `badge-slate` or `badge-info`.
+- [ ] **[I1] Missing `<select name="status">` in Three List Filter Bars**
+  - **Location:** `templates/bi/alerts_subscriptions/report_subscription/list.html:75-124`, `distribution_burst_run/list.html:75-115`, `bi_notification_item/list.html:75-115`
+  - **Impact:** Backing views parse `request.GET.get("status")` and pass `status_choices` and `selected_status`, but templates omit the status `<select>` dropdown from their filter bars.
+  - **Fix:** Add `<select name="status" id="filter-status" class="form-select">` with options from `status_choices` and `{% if selected_status == val %}selected{% endif %}`.
 
-### Important
-1. `templates/bi/alerts_subscriptions/report_subscription/list.html:75-124`, `distribution_burst_run/list.html:75-115`, `bi_notification_item/list.html:75-115` — Filter forms in all three list templates omit `<select name="status">` dropdown even though the views parse `request.GET.get("status")` and pass `status_choices` and `selected_status` in context, and templates preserve `&status={{ selected_status }}` in pagination links. Fix: Add the missing `<select name="status">` dropdown populated from `status_choices` with `{% if selected_status == val %}selected{% endif %}`.
-2. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Nullable foreign key `subscription.created_by` rendered inside a template filter expression without an `{% if subscription.created_by %}` guard (`{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}`), causing 500 template error when null (Lesson L10). Fix: Guard with `{% if subscription.created_by %}...{% else %}<span class="text-muted">System</span>{% endif %}`.
+- [ ] **[I2] Unvalidated Open Redirects in Notification Action Handlers**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:280,319,339,367`
+  - **Impact:** Action handlers redirect directly to unvalidated user-controlled `request.POST.get("next")` or `request.META.get("HTTP_REFERER")`, enabling phishing open redirects.
+  - **Fix:** Validate redirect target using `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure())` via a `_safe_redirect` helper.
 
-### Minor
-1. `templates/bi/alerts_subscriptions/report_subscription/list.html:176`, `report_subscription/detail.html:17` — Raw format value `html_inline` rendered directly in uppercase as `HTML_INLINE`. Fix: Render human-readable label using `{{ s.get_export_format_display }}` or `{% if s.export_format == 'html_inline' %}HTML{% else %}{{ s.export_format|upper }}{% endif %}`.
-2. `templates/bi/alerts_subscriptions/bi_alert_rule/list.html:87,97,107`, `report_subscription/list.html:87,97,107`, `distribution_burst_run/list.html:87,97`, `bi_notification_item/list.html:87,97` — Filter `<label>` elements lack `for="filter-<name>"` matching `id="filter-<name>"` on the corresponding `<select>` elements. Fix: Add matching `for` and `id` attributes for accessibility.
-3. `templates/bi/alerts_subscriptions/notification_center.html:50` — Critical Priority stat card renders static text `<div class="text-2xl font-bold text-rose-600">Active</div>` instead of dynamic count. Fix: Compute `critical_count` in `notification_center` view context and render `{{ critical_count }}`.
-4. `templates/bi/alerts_subscriptions/bi_alert_rule/list.html:204,208,211,216`, `report_subscription/list.html:197,201,204,209`, `distribution_burst_run/list.html:185,188,193`, `bi_notification_item/list.html:168,171,176`, `notification_center.html:192,197` — Action buttons and icon links have `title` but lack explicit `aria-label` attributes. Fix: Add `aria-label` matching `title`.
+- [ ] **[I3] Redundant Query & Inefficient M2M Count in `report_subscription_run_now`**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/ReportSubscriptions.py:223-227`
+  - **Impact:** Prefetches `["subscriber_users", "subscriber_org_units"]` but executes `subscription.subscriber_users.count()` which bypasses prefetch cache, and never uses `subscriber_org_units`.
+  - **Fix:** Avoid unneeded `subscriber_org_units` prefetch and evaluate user count from prefetched cache via `len(subscription.subscriber_users.all())` (or omit prefetch and use `.count()`).
+
+- [ ] **[I4] Unnecessary Multi-Table `LEFT OUTER JOIN`s in Stat Card Aggregates**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:23`, `ReportSubscriptions.py:22`, `DistributionBurstRuns.py:24`, `BiNotificationItems.py:31`
+  - **Impact:** `.select_related(...)` is called prior to `.aggregate()`, forcing unnecessary joins on stat count queries.
+  - **Fix:** Execute `.aggregate()` on clean `base_qs` before applying `.select_related(...)` to the paginated list queryset.
+
+- [ ] **[I5] Missing `["tenant", "-created_at"]` Composite Index on Ordered Models**
+  - **Location:** `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:181`, `ReportSubscriptions.py:143`
+  - **Impact:** Models order by `-created_at` in tenant-scoped queries without a composite index, causing database filesort.
+  - **Fix:** Add `models.Index(fields=["tenant", "-created_at"], name="idx_balr_ten_created")` and `models.Index(fields=["tenant", "-created_at"], name="idx_bsub_ten_created")`.
+
+- [ ] **[I6] `seed_bi --flush` Routine Omits Sub-module 10.16 Models**
+  - **Location:** `apps/bi/management/commands/seed_bi.py:98`
+  - **Impact:** Running `manage.py seed_bi --flush` fails to delete `BiNotificationItem`, `DistributionBurstRun`, `ReportSubscription`, and `BiAlertRule`, leaving orphaned rows.
+  - **Fix:** Add deletion calls for all four models at the start of the flush transaction.
+
+- [ ] **[I7] Potential Stored XSS via Pseudo-protocol Schemes in `action_url`**
+  - **Location:** `apps/bi/forms/AlertsSubscriptions/BiNotificationItems.py:29`
+  - **Impact:** `action_url` is rendered in template `href` attributes without scheme validation, allowing `javascript:` URLs.
+  - **Fix:** Add `clean_action_url()` to `BiNotificationItemForm` restricting to relative paths (`/`) or `http://`/`https://` protocols.
+
+- [ ] **[I8] URL Route Aliases for Prompt/Contract Consistency**
+  - **Location:** `apps/bi/urls/AlertsSubscriptions/BiAlertRules.py`, `BiNotificationItems.py`
+  - **Impact:** URL routes are registered as `bi:bi_alert_rule_*` and `bi:bi_notification_item_*`, whereas callers and navigation links may reference short aliases `bi:alert_rule_*` and `bi:notification_item_*`.
+  - **Fix:** Register alias URL patterns in both route files to support both naming styles.
+
+- [ ] **[I9] Contract Alignment: Supply `users` in Form View Context**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:140-145,172-177`, `ReportSubscriptions.py:144-150,184-190`, `BiNotificationItems.py:202-207,240-245`
+  - **Impact:** Pre-build contract specified `users` in the create/edit form context dictionaries.
+  - **Fix:** Add `context["users"] = User.objects.filter(tenant=request.tenant).order_by("username")` in form views.
 
 ---
 
-## 4. Performance Reviewer Findings
+### Minor Issues
 
-### Critical
-None.
+- [ ] **[M1] Missing Audit Trail on Alert Snoozing**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:335`
+  - **Impact:** Snoozing active alerts mutates status without generating an `AuditLog` entry.
+  - **Fix:** Add `write_audit_log` call to `notification_snooze`.
 
-### Important
-1. `apps/bi/views/AlertsSubscriptions/ReportSubscriptions.py:223-227` — `report_subscription_run_now` prefetches `["subscriber_users", "subscriber_org_units"]`, but immediately calls `subscription.subscriber_users.count()`, which bypasses the prefetch cache and executes a duplicate `SELECT COUNT(*)` query. In addition, `subscriber_org_units` is prefetched but never used. Fix: Avoid unused prefetch in action handler and use in-memory `len(subscription.subscriber_users.all())` or remove prefetch and use `.count()`.
-2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:23-32`, `ReportSubscriptions.py:22-31`, `DistributionBurstRuns.py:24-33`, `BiNotificationItems.py:31-40` — In all four list views, `.select_related(...)` is called on `qs` before executing `.aggregate(...)` for stat cards, causing Django ORM to generate unnecessary multi-table `LEFT OUTER JOIN`s during count aggregation. Fix: Run aggregate count query on clean `base_qs` without `select_related`, and apply `select_related` only to the paginated list queryset.
-3. `apps/bi/models/AlertsSubscriptions/BiAlertRules.py:181-186`, `ReportSubscriptions.py:143-148` — Both models order by `["-created_at"]` and list queries filter by tenant, but neither model defines a composite index on `["tenant", "-created_at"]` (causing filesort on large datasets). Fix: Add `models.Index(fields=["tenant", "-created_at"], name="idx_balr_ten_created")` and `models.Index(fields=["tenant", "-created_at"], name="idx_bsub_ten_created")` to `Meta.indexes`.
+- [ ] **[M2] Missing `update_fields` on State Mutations in Action Handlers**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:256`, `ReportSubscriptions.py:271`
+  - **Impact:** Action handlers invoke `.save()` without `update_fields`, rewriting all table columns unnecessarily.
+  - **Fix:** Provide explicit `update_fields` list matching the updated status and timestamp fields.
 
-### Minor
-1. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:100-104,137-145`, `ReportSubscriptions.py:140-150` — Dead context querysets (`recent_burst_runs`, `kpi_definitions`, `anomalies`, `dashboards`, `reports`, `org_units`) are constructed and passed to template contexts where they are never rendered. Fix: Clean up unused context variables.
-2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:256`, `ReportSubscriptions.py:271` — State mutations in action handlers invoke `.save()` without `update_fields`, rewriting all fields. Fix: Add explicit `update_fields` list matching the updated fields.
+- [ ] **[M3] Dead/Unused Querysets in View Context**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:100-104`, `ReportSubscriptions.py:140-150`
+  - **Impact:** Dead context variables (`recent_burst_runs`, etc.) constructed but never referenced in templates.
+  - **Fix:** Clean up unused view context keys.
 
----
+- [ ] **[M4] Raw Format Identifier `HTML_INLINE` Rendered in Report Subscription Templates**
+  - **Location:** `templates/bi/alerts_subscriptions/report_subscription/list.html:176`, `report_subscription/detail.html:17`
+  - **Impact:** Format choice `html_inline` renders directly as `HTML_INLINE` instead of a human-readable label.
+  - **Fix:** Render `{{ s.get_export_format_display }}` or human-readable "HTML".
 
-## 5. QA Smoke Tester Findings
+- [ ] **[M5] Missing Label `for` and Input `id` Attribute Associations in Filter Forms**
+  - **Location:** `templates/bi/alerts_subscriptions/**/*.html` list templates
+  - **Impact:** Filter labels lack `for="filter-<name>"` matching `id="filter-<name>"` on `<select>` elements.
+  - **Fix:** Add matching `for` and `id` attributes across all filter controls.
 
-### Critical
-1. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Accessing a `ReportSubscription` where `created_by=None` raises `AttributeError: 'NoneType' object has no attribute 'username'`, crashing the detail page with HTTP 500 (Lesson L10). Fix: Guard with `{% if subscription.created_by %}{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}`.
-2. `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:329` — `hours = int(request.POST.get("hours", "4"))` without error handling raises `ValueError` 500 server crash when `hours` is malformed or empty string (Lesson L35). Fix: Wrap with `try/except (ValueError, TypeError)` or validate `.isdigit()`.
+- [ ] **[M6] Static Metric on Critical Priority Stat Card in Notification Center**
+  - **Location:** `templates/bi/alerts_subscriptions/notification_center.html:50`
+  - **Impact:** Card renders static text "Active" instead of dynamic count because `critical_count` was omitted from context.
+  - **Fix:** Compute `critical_count` in `notification_center` view and render `{{ critical_count }}` in template.
 
-### Important
-1. URL Name Consistency: URL routes registered in `BiAlertRules.py` and `BiNotificationItems.py` use `bi:bi_alert_rule_*` and `bi:bi_notification_item_*`. If short aliases (`bi:alert_rule_*`, `bi:notification_item_*`) are expected by callers, add alias paths to prevent `NoReverseMatch`.
+- [ ] **[M7] Missing `aria-label` on Icon-Only Action Buttons**
+  - **Location:** `templates/bi/alerts_subscriptions/**/*.html` list and notification center templates
+  - **Impact:** Action buttons include `title` attributes but lack explicit `aria-label` attributes for accessibility.
+  - **Fix:** Add `aria-label` matching `title` on icon-only buttons and links.
 
-### Minor
-None.
+- [ ] **[M8] Document Runtime / Advanced Status for Form-Excluded JSON Fields**
+  - **Location:** `apps/bi/forms/AlertsSubscriptions/ReportSubscriptions.py:14`, `DistributionBurstRuns.py:15`
+  - **Impact:** `filter_overrides` and `burst_slicing_metadata` are managed dynamically by system execution rather than user form inputs.
+  - **Fix:** Add explicit docstrings explaining their intentional omission from standard CRUD forms.
 
----
+- [ ] **[M9] Restrict Destructive Model Deletions to Tenant Admins**
+  - **Location:** `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:181`, `ReportSubscriptions.py:196`, `DistributionBurstRuns.py:191`
+  - **Impact:** Deletion of tenant-level alert rules, subscriptions, and burst runs should require administrative privileges.
+  - **Fix:** Add `@tenant_admin_required` decorator to deletion views.
