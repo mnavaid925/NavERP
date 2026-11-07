@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Auto-Generated Insights — AI & Augmented Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>AI & Augmented Analytics</span>
+        </div>
+        <h1 class="page-title">Auto-Generated Insights</h1>
+        <p class="text-muted text-sm">Automated statistical variance decomposition, key drivers, trend anomalies, and natural language narrative explanations</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:augmented_insight_feed' %}" class="btn btn-outline">
+            <i data-lucide="sparkles"></i>
+            <span>Smart Insight Feed</span>
+        </a>
+        <a href="{% url 'bi:smart_data_prep_suggestion_list' %}" class="btn btn-outline">
+            <i data-lucide="wand-2"></i>
+            <span>Data Prep Suggestions</span>
+        </a>
+        <a href="{% url 'bi:augmented_insight_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Insight</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="brain-circuit"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Insights</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Critical Severity</div>
+            <div class="text-2xl font-bold text-red-600">{{ critical_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="git-commit"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Key Drivers</div>
+            <div class="text-2xl font-bold text-amber-600">{{ insights|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="compass"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Workspace</div>
+            <div class="text-lg font-bold truncate">{{ request.tenant.name }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label class="form-label text-xs">Search Insights</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, metric, dimension..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Insight Type</label>
+                <select name="insight_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for code, label in insight_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.insight_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Impact</label>
+                <select name="impact_direction" class="form-select text-sm">
+                    <option value="">All Impacts</option>
+                    {% for code, label in impact_choices %}
+                    <option value="{{ code }}" {% if request.GET.impact_direction == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Severity</label>
+                <select name="severity" class="form-select text-sm">
+                    <option value="">All Severities</option>
+                    {% for code, label in severity_choices %}
+                    <option value="{{ code }}" {% if request.GET.severity == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-6 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:augmented_insight_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Insights</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Insights Catalog</h2>
+        <span class="text-xs text-muted">{{ insights.paginator.count }} total records</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Insight</th>
+                    <th>Metric & Dimension</th>
+                    <th>Baseline vs Observed</th>
+                    <th>Impact & Severity</th>
+                    <th>Confidence</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for insight in insights %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:augmented_insight_detail' insight.pk %}" class="hover:underline text-indigo-600">
+                                {{ insight.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ insight.number }} · {{ insight.get_insight_type_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ insight.metric_name }}</div>
+                        {% if insight.dimension_name %}
+                        <div class="text-xs text-muted">{{ insight.dimension_name }}: <span class="text-slate-800 font-medium">{{ insight.dimension_value }}</span></div>
+                        {% else %}
+                        <div class="text-xs text-muted">Global Aggregate</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-mono">
+                            Base: {{ insight.baseline_value }} → Obs: {{ insight.observed_value }}
+                        </div>
+                        <div class="text-xs font-semibold mt-0.5 {% if insight.variance_percentage < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+                            Variance: {{ insight.variance_percentage }}%
+                        </div>
+                    </td>
+                    <td>
+                        <div class="flex flex-col gap-1 items-start">
+                            <span class="badge {{ insight.impact_badge_color }} text-xs">
+                                {{ insight.get_impact_direction_display }}
+                            </span>
+                            <span class="badge {{ insight.badge_color }} text-xs">
+                                {{ insight.get_severity_display }}
+                            </span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">{{ insight.confidence_score }}%</div>
+                        <div class="w-16 bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                            <div class="bg-indigo-600 h-1.5 rounded-full" style="width: {{ insight.confidence_score }}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate text-xs">
+                            {{ insight.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex justify-end items-center gap-1">
+                            <a href="{% url 'bi:augmented_insight_detail' insight.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                            </a>
+                            <a href="{% url 'bi:augmented_insight_edit' insight.pk %}" class="btn btn-icon" title="Edit insight">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:augmented_insight_delete' insight.pk %}" onsubmit="return confirm('Delete insight {{ insight.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="sparkles" class="w-10 h-10 text-muted mx-auto mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-800">No Augmented Insights Found</h3>
+                            <p class="text-sm text-muted mb-4">No statistical insights match your current search or filter criteria.</p>
+                            <a href="{% url 'bi:augmented_insight_create' %}" class="btn btn-primary text-xs">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create First Insight
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if insights.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3">
+        <div class="text-xs text-muted">
+            Page {{ insights.number }} of {{ insights.paginator.num_pages }} ({{ insights.paginator.count }} items)
+        </div>
+        <div class="pagination flex gap-1">
+            {% if insights.has_previous %}
+            <a href="?page={{ insights.previous_page_number }}&q={{ request.GET.q }}&insight_type={{ request.GET.insight_type }}&impact_direction={{ request.GET.impact_direction }}&severity={{ request.GET.severity }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if insights.has_next %}
+            <a href="?page={{ insights.next_page_number }}&q={{ request.GET.q }}&insight_type={{ request.GET.insight_type }}&impact_direction={{ request.GET.impact_direction }}&severity={{ request.GET.severity }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
