@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Notification Center — Business Intelligence — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Alerts & Subscriptions</span>
+        </div>
+        <h1 class="page-title">Notification Center & Alert Inbox</h1>
+        <p class="text-muted text-sm">Actionable operational inbox with alert acknowledgment, snooze controls, and escalation workflows</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_notification_item_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Audit Log</span>
+        </a>
+        <a href="{% url 'bi:bi_alert_rule_list' %}" class="btn btn-outline">
+            <i data-lucide="shield-alert"></i>
+            <span>Alert Rules</span>
+        </a>
+        <a href="{% url 'bi:report_subscription_list' %}" class="btn btn-outline">
+            <i data-lucide="calendar"></i>
+            <span>Subscriptions</span>
+        </a>
+    </div>
+</div>
+
+<!-- Quick Stat / Filter Tabs -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <a href="?tab=unread{% if selected_category %}&category={{ selected_category }}{% endif %}" class="stat-card hover:border-blue-400 transition cursor-pointer {% if active_tab == 'unread' %}ring-2 ring-blue-500{% endif %}">
+        <div class="stat-icon blue">
+            <i data-lucide="mail"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Unread Alerts</div>
+            <div class="text-2xl font-bold text-blue-600">{{ unread_count }}</div>
+        </div>
+    </a>
+
+    <a href="?tab=critical{% if selected_category %}&category={{ selected_category }}{% endif %}" class="stat-card hover:border-rose-400 transition cursor-pointer {% if active_tab == 'critical' %}ring-2 ring-rose-500{% endif %}">
+        <div class="stat-icon orange">
+            <i data-lucide="flame"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Critical Priority</div>
+            <div class="text-2xl font-bold text-rose-600">Active</div>
+        </div>
+    </a>
+
+    <a href="?tab=snoozed{% if selected_category %}&category={{ selected_category }}{% endif %}" class="stat-card hover:border-amber-400 transition cursor-pointer {% if active_tab == 'snoozed' %}ring-2 ring-amber-500{% endif %}">
+        <div class="stat-icon purple">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Snoozed Alerts</div>
+            <div class="text-2xl font-bold text-amber-600">{{ snoozed_count }}</div>
+        </div>
+    </a>
+
+    <a href="?tab=escalated{% if selected_category %}&category={{ selected_category }}{% endif %}" class="stat-card hover:border-purple-400 transition cursor-pointer {% if active_tab == 'escalated' %}ring-2 ring-purple-500{% endif %}">
+        <div class="stat-icon green">
+            <i data-lucide="arrow-up-right"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Escalated Tier</div>
+            <div class="text-2xl font-bold text-purple-600">{{ escalated_count }}</div>
+        </div>
+    </a>
+</div>
+
+<!-- Inbox Workspace -->
+<div class="card">
+    <!-- Tab Bar -->
+    <div class="card-header flex flex-wrap items-center justify-between gap-3 border-b border-slate-200">
+        <div class="flex gap-2">
+            <a href="?tab=all{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-sm {% if active_tab == 'all' %}btn-primary{% else %}btn-outline{% endif %}">
+                All Items
+            </a>
+            <a href="?tab=unread{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-sm {% if active_tab == 'unread' %}btn-primary{% else %}btn-outline{% endif %}">
+                Unread ({% if unread_count %}{{ unread_count }}{% else %}0{% endif %})
+            </a>
+            <a href="?tab=critical{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-sm {% if active_tab == 'critical' %}btn-primary{% else %}btn-outline{% endif %}">
+                Critical
+            </a>
+            <a href="?tab=snoozed{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-sm {% if active_tab == 'snoozed' %}btn-primary{% else %}btn-outline{% endif %}">
+                Snoozed ({{ snoozed_count }})
+            </a>
+            <a href="?tab=escalated{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-sm {% if active_tab == 'escalated' %}btn-primary{% else %}btn-outline{% endif %}">
+                Escalated ({{ escalated_count }})
+            </a>
+        </div>
+
+        <form method="get" class="flex items-center gap-2">
+            <input type="hidden" name="tab" value="{{ active_tab }}">
+            <select name="category" class="form-select text-xs py-1.5" onchange="this.form.submit()">
+                <option value="">All Categories</option>
+                {% for val, label in category_choices %}
+                <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            {% if selected_category %}
+            <a href="?tab={{ active_tab }}" class="btn btn-outline btn-sm text-xs py-1.5" title="Clear category filter">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Items List -->
+    <div class="divide-y divide-slate-100">
+        {% for item in inbox_items %}
+        <div class="p-4 hover:bg-slate-50 transition flex flex-col md:flex-row md:items-center justify-between gap-4 {% if item.status == 'unread' %}bg-blue-50/30{% endif %}">
+            <div class="flex items-start gap-3 min-w-0">
+                <div class="pt-1">
+                    {% if item.severity == 'critical' %}
+                    <span class="inline-flex p-1.5 rounded-full bg-rose-100 text-rose-600">
+                        <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                    </span>
+                    {% elif item.severity == 'warning' %}
+                    <span class="inline-flex p-1.5 rounded-full bg-amber-100 text-amber-600">
+                        <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                    </span>
+                    {% else %}
+                    <span class="inline-flex p-1.5 rounded-full bg-blue-100 text-blue-600">
+                        <i data-lucide="info" class="w-4 h-4"></i>
+                    </span>
+                    {% endif %}
+                </div>
+
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <a href="{% url 'bi:bi_notification_item_detail' item.pk %}" class="font-semibold text-slate-900 hover:text-blue-600 hover:underline">
+                            {{ item.title }}
+                        </a>
+                        <span class="badge {{ item.category_badge_class }} text-xs">{{ item.get_category_display }}</span>
+                        <span class="badge {{ item.status_badge_class }} text-xs">{{ item.get_status_display }}</span>
+                        {% if item.escalation_level > 0 %}
+                        <span class="badge badge-red text-xs">Escalation L{{ item.escalation_level }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-sm text-slate-600 mt-1 line-clamp-2">
+                        {{ item.message }}
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-muted mt-2 font-mono">
+                        <span>{{ item.number }}</span>
+                        <span>•</span>
+                        <span>{{ item.created_at|date:"M d, H:i" }}</span>
+                        {% if item.snoozed_until and item.status == 'snoozed' %}
+                        <span>•</span>
+                        <span class="text-amber-600">Snoozed until {{ item.snoozed_until|date:"M d, H:i" }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Bar -->
+            <div class="flex items-center gap-2 self-end md:self-center shrink-0">
+                {% if item.action_url %}
+                <a href="{{ item.action_url }}" class="btn btn-outline btn-sm" title="View Target Asset">
+                    <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                    <span class="text-xs">Inspect</span>
+                </a>
+                {% endif %}
+
+                {% if item.status == 'unread' %}
+                <form method="post" action="{% url 'bi:notification_mark_read' item.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline btn-sm" title="Mark as Read">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                        <span class="text-xs">Read</span>
+                    </button>
+                </form>
+                {% endif %}
+
+                {% if item.status != 'acknowledged' %}
+                <form method="post" action="{% url 'bi:notification_acknowledge' item.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline btn-sm text-emerald-700" title="Acknowledge">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                        <span class="text-xs">Ack</span>
+                    </button>
+                </form>
+                {% endif %}
+
+                <form method="post" action="{% url 'bi:notification_snooze' item.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="hours" value="4">
+                    <button type="submit" class="btn btn-icon btn-outline" title="Snooze for 4 hours">
+                        <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                    </button>
+                </form>
+
+                <a href="{% url 'bi:bi_notification_item_detail' item.pk %}" class="btn btn-icon btn-outline" title="Full Details">
+                    <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="empty-state text-center py-16">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-slate-100 text-slate-500 mb-3">
+                <i data-lucide="inbox" class="w-6 h-6"></i>
+            </div>
+            <h3 class="text-base font-semibold text-slate-900">Your inbox is clear</h3>
+            <p class="text-sm text-muted mt-1 max-w-sm mx-auto">
+                No active notifications found under the current tab criteria. All systems operating within normal parameters.
+            </p>
+            <div class="mt-4 flex justify-center gap-3">
+                <a href="{% url 'bi:bi_alert_rule_list' %}" class="btn btn-outline btn-sm">
+                    <i data-lucide="shield-alert"></i>
+                    <span>Configure Alert Rules</span>
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
