@@ -116,7 +116,7 @@
             <div class="flex gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
                 {% if q or selected_alert_type or selected_severity or selected_status %}
-                <a href="{% url 'bi:bi_alert_rule_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'bi:bi_alert_rule_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -201,19 +201,19 @@
                     <td class="table-actions text-right whitespace-nowrap">
                         <form method="post" action="{% url 'bi:bi_alert_rule_test_evaluate' r.pk %}" class="inline">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-outline text-amber-600" title="Evaluate Condition Now">
+                            <button type="submit" class="btn btn-icon btn-outline text-amber-600" title="Evaluate Condition Now" aria-label="Evaluate Condition Now">
                                 <i data-lucide="play" class="w-4 h-4"></i>
                             </button>
                         </form>
-                        <a href="{% url 'bi:bi_alert_rule_detail' r.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                        <a href="{% url 'bi:bi_alert_rule_detail' r.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'bi:bi_alert_rule_edit' r.pk %}" class="btn btn-icon btn-outline" title="Edit Rule">
+                        <a href="{% url 'bi:bi_alert_rule_edit' r.pk %}" class="btn btn-icon btn-outline" title="Edit Rule" aria-label="Edit Rule">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'bi:bi_alert_rule_delete' r.pk %}" class="inline" onsubmit="return confirm('Delete alert rule {{ r.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Rule">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Rule" aria-label="Delete Rule">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
