@@ -19,7 +19,7 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.9 Data Quality & Governance**: Validation rules, anomaly detection, threshold alerting, quarantine workflows.
 - **10.10 Real-time Streaming Analytics**: Micro-batch processing, stream windows, live telemetry feeds.
 - **10.11 Operational Reporting**: Paginated tabular reports, print-ready PDFs, report schedules, bursting distributions.
-- **10.12 Executive Dashboards & Data Visualization**: Interactive widgets, drag-and-drop dashboards, chart libraries, real-time KPI tiles.
+- **10.12 OLAP & Multidimensional Analysis**: Pre-aggregated cubes, hierarchies, pivot matrix analysis, what-if planning scenarios, writeback adjustments.
 - **10.13 Geospatial Analytics & Mapping**: Choropleth maps, territory heatmaps, spatial clustering.
 - **10.14 Financial Analytics & Planning**: Variance analysis, budget vs. actuals, financial ratio scorecards.
 - **10.15 Supply Chain & Operations Analytics**: Inventory turns, vendor delivery reliability, demand forecasts.
@@ -825,5 +825,92 @@ Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
 - **Slug De-duplication on Clone**: View cloning generates a unique tenant-scoped slug in a loop (`copy-of-...-<counter>`) avoiding database unique constraint collisions.
 - **CSV Formula Injection Mitigation**: All exported columns and cells are sanitized via `csv_safe(...)`.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.10"]`.
+
+---
+
+## Sub-module 10.12: OLAP & Multidimensional Analysis
+
+### Models
+1. **`OlapCube`** (`apps/bi/models/OlapAnalysis/OlapCubes.py`):
+   - Table: `bi_olap_cube`, Prefix: `BOCB` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `storage_mode` (`rolap`, `molap`, `holap`), `semantic_model` (FK `SemanticModel`), `warehouse_table` (FK `WarehouseTable`), `default_hierarchy` (FK `DrillHierarchy`), `dimensions_config` (JSON list of dimension objects), `measures_config` (JSON list of measure definitions with aggregations), `aggregations_config` (JSON pre-aggregation rules), `status` (`draft`, `active`, `processing`, `archived`), `is_realtime_enabled`, `cache_ttl_minutes`, `last_refreshed_at`, `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, status)`, `(tenant, storage_mode)`, `(tenant, created_by)`, `(tenant, created_at)`.
+   - Methods: `refresh_cube()` (stamps `last_refreshed_at` and records audit log).
+   - Badge Properties: `badge_storage_mode` (`badge-info`, `badge-slate`), `badge_status`.
+
+2. **`PivotAnalysisView`** (`apps/bi/models/OlapAnalysis/PivotViews.py`):
+   - Table: `bi_pivot_analysis_view`, Prefix: `BPIV` (`TenantNumbered`).
+   - Fields: `cube` (FK `OlapCube`), `name`, `slug`, `description`, `row_dimensions` (JSON list), `column_dimensions` (JSON list), `measures_selection` (JSON list), `filter_slice_json`, `conditional_formatting` (JSON formatting rules), `total_position` (`bottom_right`, `top_left`, `none`), `show_subtotals`, `drill_through_enabled`, `drill_through_target` (validated URL route name), `status` (`active`, `draft`, `archived`), `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, cube)`, `(tenant, status)`, `(tenant, created_by)`, `(tenant, created_at)`.
+   - Badge Properties: `badge_status`.
+
+3. **`WhatIfScenario`** (`apps/bi/models/OlapAnalysis/WhatIfScenarios.py`):
+   - Table: `bi_what_if_scenario`, Prefix: `BWIF` (`TenantNumbered`).
+   - Fields: `cube` (FK `OlapCube`), `name`, `slug`, `description`, `fiscal_period` (FK `accounting.FiscalPeriod`), `baseline_budget` (FK `accounting.Budget`), `status` (`draft`, `simulated`, `committed`, `archived`), `total_baseline_amount`, `total_adjusted_amount`, `total_variance_amount` (auto-calculated on save), `default_disaggregation` (`proportional`, `equal`, `custom_weights`), `driver_parameters` (JSON dict), `is_committed`, `committed_at`, `committed_by` (FK `User`), `created_by` (FK `User`).
+   - Indexes: composite on `(tenant, cube)` (`idx_bwif_ten_cube`), `(tenant, status)`, `(tenant, fiscal_period)`, `(tenant, created_by)`, `(tenant, created_at)`.
+   - Badge Properties: `badge_status` (`badge-slate`, `badge-info`, `badge-green`, `badge-muted`).
+
+4. **`ScenarioWritebackCell`** (`apps/bi/models/OlapAnalysis/WritebackCells.py`):
+   - Table: `bi_scenario_writeback_cell`, Prefix: `BWBC` (`TenantNumbered`).
+   - Fields: `scenario` (FK `WhatIfScenario`), `coordinate_keys_json` (JSON dict of coordinate key-value pairs), `baseline_amount`, `adjustment_delta` (auto-calculated), `simulated_amount`, `adjustment_method` (`absolute`, `percentage_delta`, `formula_spread`), `is_committed`, `committed_at`, `committed_budget_line` (FK `accounting.BudgetLine`), `created_by` (FK `User`).
+   - `__str__`: `f"{self.number}"` (simplified to avoid N+1 queries during audit logging).
+   - Indexes: composite on `(tenant, scenario)`, `(tenant, is_committed)`, `(tenant, created_by)`, `(tenant, created_at)`.
+   - Badge Properties: `badge_status` (`badge-green` for committed, `badge-slate` for draft).
+
+### URLs & Routes
+- OLAP Cubes:
+  - `bi:olap_cube_list` (`/bi/cubes/`)
+  - `bi:olap_cube_create` (`/bi/cubes/create/`)
+  - `bi:olap_cube_detail` (`/bi/cubes/<int:pk>/`)
+  - `bi:olap_cube_edit` (`/bi/cubes/<int:pk>/edit/`)
+  - `bi:olap_cube_delete` (`/bi/cubes/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:olap_cube_refresh` (`/bi/cubes/<int:pk>/refresh/` - `@require_POST`)
+- Pivot Views:
+  - `bi:pivot_view_list` (`/bi/pivots/`)
+  - `bi:pivot_view_create` (`/bi/pivots/create/`)
+  - `bi:pivot_view_detail` (`/bi/pivots/<int:pk>/`)
+  - `bi:pivot_view_edit` (`/bi/pivots/<int:pk>/edit/`)
+  - `bi:pivot_view_delete` (`/bi/pivots/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:pivot_view_matrix` (`/bi/pivots/<int:pk>/matrix/` - Interactive pivot matrix workspace)
+- What-If Scenarios:
+  - `bi:what_if_scenario_list` (`/bi/scenarios/`)
+  - `bi:what_if_scenario_create` (`/bi/scenarios/create/`)
+  - `bi:what_if_scenario_detail` (`/bi/scenarios/<int:pk>/`)
+  - `bi:what_if_scenario_edit` (`/bi/scenarios/<int:pk>/edit/` - guarded against committed status)
+  - `bi:what_if_scenario_delete` (`/bi/scenarios/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`, guarded against committed status)
+  - `bi:what_if_scenario_simulate` (`/bi/scenarios/<int:pk>/simulate/` - Simulation workbench)
+  - `bi:what_if_scenario_commit` (`/bi/scenarios/<int:pk>/commit/` - `@tenant_admin_required`, `@require_POST`)
+- Writeback Cells:
+  - `bi:writeback_cell_list` (`/bi/writeback-cells/`)
+  - `bi:writeback_cell_create` (`/bi/writeback-cells/create/` - guarded against committed scenario)
+  - `bi:writeback_cell_detail` (`/bi/writeback-cells/<int:pk>/`)
+  - `bi:writeback_cell_edit` (`/bi/writeback-cells/<int:pk>/edit/` - guarded against committed status)
+  - `bi:writeback_cell_delete` (`/bi/writeback-cells/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`, guarded against committed status)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/olap_analysis/`:
+  - `olap_cube/` (`list.html`, `detail.html`, `form.html`).
+  - `pivot_view/` (`list.html`, `detail.html`, `form.html`, `matrix.html`).
+  - `what_if_scenario/` (`list.html`, `detail.html`, `form.html`, `simulate.html`).
+  - `writeback_cell/` (`list.html`, `detail.html`, `form.html`).
+- Design System: Colour-named badge modifiers only (`badge-info`, `badge-green`, `badge-slate`, `badge-amber`, `badge-muted`), card components, stat-cards, table wrappers, and interactive modal/matrix layouts.
+- Nullable User FK Guards: All templates use explicit `{% if obj.created_by %}` and `{% if scenario.committed_by %}` checks, avoiding Lesson L10 crashes.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant OLAP & Multidimensional records:
+  - Demo OLAP Cubes: Enterprise Financial Performance Cube (MOLAP, 4 dimensions, 3 measures, pre-aggregations).
+  - Pivot Views: Departmental Expense Breakdown Matrix, Quarterly Revenue Matrix with subtotal calculations.
+  - What-If Scenarios: FY2026 Optimistic Budgeting Scenario, Baseline Disaggregation Model.
+  - Writeback Cells: Multi-coordinate leaf adjustments across departments, expense accounts, and fiscal quarters with calculated variances.
+- 100% idempotent with `--flush` support.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Financial Ledger & State Immutability**: Committed scenarios (`status="committed"`) and committed writeback cells are locked against modification or deletion across both UI and backend views.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on commit (`what_if_scenario_commit`) and all delete views (`olap_cube_delete`, `pivot_view_delete`, `what_if_scenario_delete`, `writeback_cell_delete`).
+- **Audit Logging**: `write_audit_log(request.user, obj, action, changes=..., tenant=request.tenant)` correctly implemented across all 14 mutation endpoints.
+- **Route Validation**: `drill_through_target` dynamically validated in form via `django.urls.reverse` to prevent `NoReverseMatch` 500 crashes.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.12"]`.
+
 
 
