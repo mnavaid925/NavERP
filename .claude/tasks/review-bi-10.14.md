@@ -12,7 +12,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **C1**: fixed in e46f3add — Corrected write_audit_log(request.user, obj, action, changes={...}, tenant=request.tenant) call signature and ensured action <= 10 chars across all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py.
 
 ### Important Priority
-- [ ] **I1**: Apply `@tenant_admin_required` decorator to all 4 delete views in `apps/bi/views/AiAugmentedAnalytics/*.py` (`augmented_insight_delete`, `smart_data_prep_suggestion_delete`, `text_sentiment_analysis_delete`, `analytics_recommendation_delete`).
+- [x] **I1**: fixed in ef4baf98 — Applied @tenant_admin_required decorator to all 4 delete views in apps/bi/views/AiAugmentedAnalytics/*.py.
 - [ ] **I2**: Validate `next` redirect parameter using `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()})` in action views (`augmented_insight_triage`, `smart_data_prep_suggestion_action`, `analytics_recommendation_interact`).
 - [ ] **I3**: Add `clean_target_url()` validation to `AnalyticsRecommendationForm` restricting `target_url` to relative paths starting with `/` (rejecting `//` and `javascript:`), and add `rel="noopener noreferrer"` to external links in templates.
 - [ ] **I4**: Wrap all 16 mutating views in `apps/bi/views/AiAugmentedAnalytics/*.py` with `@transaction.atomic` (or `with transaction.atomic():`).
