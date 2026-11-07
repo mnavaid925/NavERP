@@ -120,6 +120,7 @@ class PredictiveModel(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="bi_bpml_tenant_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "-created_at"], name="idx_bpml_ten_created"),
             models.Index(fields=["tenant", "problem_type"], name="idx_bpml_ten_prob"),
             models.Index(fields=["tenant", "status"], name="idx_bpml_ten_stat"),
             models.Index(fields=["tenant", "created_by"], name="idx_bpml_ten_user"),
