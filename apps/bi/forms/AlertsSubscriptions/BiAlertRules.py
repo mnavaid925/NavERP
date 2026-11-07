@@ -1,10 +1,13 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.AlertsSubscriptions.BiAlertRules import BiAlertRule
 from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
 from apps.bi.models.PredictiveAnalytics.StatisticalAnomalies import StatisticalAnomaly
 from apps.core.forms import TenantModelForm
+
+User = get_user_model()
 
 
 class BiAlertRuleForm(TenantUniqueMixin, TenantModelForm):
@@ -86,12 +89,15 @@ class BiAlertRuleForm(TenantUniqueMixin, TenantModelForm):
             self.fields["anomaly_detection"].queryset = (
                 StatisticalAnomaly.objects.filter(tenant=self.tenant)
             )
+            self.fields["recipient_users"].queryset = User.objects.filter(
+                tenant=self.tenant
+            ).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
         reject_foreign(
             self,
             cleaned,
-            ["kpi_definition", "anomaly_detection"],
+            ["kpi_definition", "anomaly_detection", "recipient_users"],
         )
         return cleaned
