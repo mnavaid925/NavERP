@@ -3087,6 +3087,18 @@ LIVE_LINKS = {
         "Chat Assistant Workspace": "bi:bi_chat_workspace",
         "Discovery Hub": "bi:search_discovery_hub",
     },
+    "10.17": {
+        "Embedded Analytics": "bi:embedded_analytics_config_list",
+        "Mobile BI App": "bi:mobile_bi_config_list",
+        "Developer APIs & SDKs": "bi:embed_api_token_list",
+        "Portal, Kiosk & Wallboard": "bi:kiosk_wallboard_display_list",
+        "SSO & Row-Level Context": "bi:embed_api_token_list",
+        # Plural and convenience aliases
+        "Embedded Analytics Configurations": "bi:embedded_analytics_config_list",
+        "Mobile BI Configurations": "bi:mobile_bi_config_list",
+        "TV Wallboards & Kiosks": "bi:kiosk_wallboard_display_list",
+        "Embed API Tokens": "bi:embed_api_token_list",
+    },
 
 
 
