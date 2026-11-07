@@ -132,3 +132,12 @@ class MobileBiConfiguration(TenantNumbered):
         else:
             user_label = ""
         return f"{self.number} - {self.name}{user_label}"
+
+    def save(self, *args, **kwargs):
+        if self.is_default_profile and self.tenant:
+            qs = MobileBiConfiguration.objects.filter(tenant=self.tenant, is_default_profile=True)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            qs.update(is_default_profile=False)
+        super().save(*args, **kwargs)
+
