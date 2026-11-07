@@ -161,13 +161,11 @@ def text_sentiment_analysis_create(request):
 
             analysis.save()
             write_audit_log(
+                request.user,
+                analysis,
+                "create",
+                changes={"details": f"Created sentiment record {analysis.number} for {analysis.source_reference}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="TextSentimentAnalysis",
-                object_id=str(analysis.pk),
-                object_repr=str(analysis),
-                details=f"Created sentiment record {analysis.number} for {analysis.source_reference}",
             )
             messages.success(request, f"Sentiment analysis {analysis.number} created successfully.")
             return redirect("bi:text_sentiment_analysis_detail", pk=analysis.pk)
@@ -193,13 +191,11 @@ def text_sentiment_analysis_edit(request, pk):
         if form.is_valid():
             analysis = form.save()
             write_audit_log(
+                request.user,
+                analysis,
+                "update",
+                changes={"details": f"Updated sentiment record {analysis.number}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="TextSentimentAnalysis",
-                object_id=str(analysis.pk),
-                object_repr=str(analysis),
-                details=f"Updated sentiment record {analysis.number}",
             )
             messages.success(request, f"Sentiment analysis {analysis.number} updated successfully.")
             return redirect("bi:text_sentiment_analysis_detail", pk=analysis.pk)
@@ -222,16 +218,14 @@ def text_sentiment_analysis_edit(request, pk):
 def text_sentiment_analysis_delete(request, pk):
     analysis = bi_object(request, TextSentimentAnalysis, pk)
     number = analysis.number
-    analysis.delete()
     write_audit_log(
+        request.user,
+        analysis,
+        "delete",
+        changes={"number": number, "details": f"Deleted sentiment record {number}"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="TextSentimentAnalysis",
-        object_id=str(pk),
-        object_repr=number,
-        details=f"Deleted sentiment record {number}",
     )
+    analysis.delete()
     messages.success(request, f"Sentiment record {number} was deleted.")
     return redirect("bi:text_sentiment_analysis_list")
 
@@ -248,13 +242,11 @@ def text_sentiment_analysis_recalculate(request, pk):
     analysis.save()
 
     write_audit_log(
+        request.user,
+        analysis,
+        "recalc",
+        changes={"polarity": str(pol), "category": cat, "details": f"Recalculated sentiment for {analysis.number}: polarity={pol}, category={cat}"},
         tenant=request.tenant,
-        user=request.user,
-        action="recalculate",
-        model_name="TextSentimentAnalysis",
-        object_id=str(analysis.pk),
-        object_repr=str(analysis),
-        details=f"Recalculated sentiment for {analysis.number}: polarity={pol}, category={cat}",
     )
     messages.success(request, f"Recalculated sentiment: {analysis.get_sentiment_category_display()} (Polarity: {pol}).")
     return redirect("bi:text_sentiment_analysis_detail", pk=analysis.pk)
