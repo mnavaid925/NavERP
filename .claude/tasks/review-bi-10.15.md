@@ -31,3 +31,17 @@
 3. `templates/bi/conversational_bi/search_explorer.html` — Orphan Template File: Committed file not mapped to route. Fix: Remove orphan template.
 4. `contract-bi-10.15.md` Section 3 & 4 — Unpinned Convenience Route & Context: `bi_chat_workspace` not explicitly in Section 3/4 table. Fix: Update contract to document workspace route.
 
+## 3. Frontend Reviewer
+**Verdict**: High quality interactive chat interface, but requires alignment with theme.css design system standards (table-wrap, stat-icon color names, badge classes, and property naming).
+
+### Important
+1. `templates/bi/conversational_bi/natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — Invalid Theme Badge Classes (L33): `badge-purple` and `badge-indigo` do not exist in `theme.css`. Fix: Replace with `badge-info` or `badge-slate`.
+2. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` & `hub.html:83, 154` — Model Property Drift: `type_badge_color` queried, but model defines `asset_type_badge_color`. Fix: Use `asset_type_badge_color` (and alias property on model).
+3. `templates/bi/conversational_bi/narrative_explanation/list.html:123` & `search_discovery_index/list.html:111` — Non-existent CSS Class `.table-responsive`: NavERP standardizes table containers on `.table-wrap`. Fix: Replace `table-responsive` with `table-wrap`.
+4. `templates/bi/conversational_bi/narrative_explanation/list.html:33` & `search_discovery_index/list.html:33` — Design System Palette Bypass on Stat Cards & Undefined `.stats-grid`: Replace `.stats-grid` with standard grid classes, and use theme.css stat-icon variants (`stat-icon blue/green/purple/orange`).
+5. `templates/bi/conversational_bi/narrative_explanation/list.html:201` & `search_discovery_index/list.html:195` — Missing `.empty-state` container wrapper in `{% empty %}` table row.
+
+### Minor
+1. `templates/bi/conversational_bi/bi_conversation_session/detail.html:163`, `chat_workspace.html:188`, `hub.html:44` — Accessibility: Missing `<label>` / `aria-label` on search/chat inputs.
+
+
