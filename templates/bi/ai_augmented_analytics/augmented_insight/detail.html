@@ -114,20 +114,20 @@
                             {% for factor in drivers %}
                             <tr>
                                 <td class="font-medium">
-                                    {{ factor.name|default:factor.factor|default:"Unknown Driver" }}
+                                    {{ factor.name }}
                                 </td>
                                 <td>
-                                    {% if factor.impact == 'positive' or factor.direction == 'positive' or factor.weight > 0 %}
+                                    {% if factor.impact == 'positive' or factor.weight > 0 %}
                                     <span class="badge badge-green text-xs">Positive Contributor</span>
                                     {% else %}
                                     <span class="badge badge-red text-xs">Negative Contributor</span>
                                     {% endif %}
                                 </td>
                                 <td class="font-mono text-sm font-semibold">
-                                    {{ factor.weight|default:factor.contribution|default:"—" }}%
+                                    {{ factor.weight }}%
                                 </td>
                                 <td class="text-sm text-slate-600">
-                                    {{ factor.explanation|default:factor.description|default:"—" }}
+                                    {{ factor.explanation }}
                                 </td>
                             </tr>
                             {% endfor %}
