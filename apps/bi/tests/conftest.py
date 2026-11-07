@@ -1853,8 +1853,6 @@ def forecast_execution_a(
         horizon_periods=6,
         confidence_level="95",
         status="completed",
-        baseline_value=Decimal("10000.0000"),
-        projected_value=Decimal("11500.0000"),
         mape_score=Decimal("4.25"),
         executed_by=admin_user,
         forecast_output_data=[
@@ -1879,8 +1877,6 @@ def forecast_execution_b(
         horizon_periods=3,
         confidence_level="90",
         status="completed",
-        baseline_value=Decimal("5000.0000"),
-        projected_value=Decimal("5300.0000"),
         mape_score=Decimal("5.10"),
         executed_by=admin_user_b,
         forecast_output_data=[
@@ -2018,7 +2014,7 @@ def augmented_insight_a(db, tenant_a, semantic_model_a, kpi_definition_a, admin_
         observed_value=Decimal("1480000.0000"),
         variance_percentage=Decimal("23.33"),
         confidence_score=Decimal("94.50"),
-        impact_direction="positive",
+        impact_direction="favorable",
         narrative_summary="Enterprise recurring revenue expanded by 23.33% over baseline in North America.",
         driver_decomposition=[
             {"name": "New Enterprise Logos", "weight": 65, "impact": "positive", "explanation": "Expansion in Fortune 500 accounts"}
@@ -2045,7 +2041,7 @@ def augmented_insight_b(db, tenant_b, semantic_model_b, kpi_definition_b, admin_
         observed_value=Decimal("5.8000"),
         variance_percentage=Decimal("176.19"),
         confidence_score=Decimal("96.20"),
-        impact_direction="negative",
+        impact_direction="unfavorable",
         narrative_summary="Unexpected spike in churn rate detected across EMEA tier-2 accounts.",
         driver_decomposition=[
             {"name": "SaaS Renewal Drop", "weight": 80, "impact": "negative", "explanation": "Competitor pricing pressure"}
@@ -2068,7 +2064,6 @@ def smart_data_prep_suggestion_a(db, tenant_a, warehouse_table, admin_user):
         status="pending",
         rationale="Column contains ISO-8601 strings and should be cast to TIMESTAMP.",
         suggested_config={"target_type": "TIMESTAMP", "format": "ISO8601"},
-        suggested_transformation_sql="CAST(order_timestamp AS TIMESTAMP)",
         reviewed_by=admin_user,
     )
 
@@ -2080,12 +2075,11 @@ def smart_data_prep_suggestion_b(db, tenant_b, warehouse_table_b, admin_user_b):
         number="BSDP-00002",
         target_table=warehouse_table_b,
         target_column="customer_zipcode",
-        suggestion_type="null_impute",
+        suggestion_type="impute_missing",
         confidence_score=Decimal("91.50"),
         status="pending",
         rationale="12% null values detected in zip code column; impute with regional centroid.",
         suggested_config={"method": "mode", "default": "00000"},
-        suggested_transformation_sql="COALESCE(customer_zipcode, '00000')",
         reviewed_by=admin_user_b,
     )
 
@@ -2095,14 +2089,13 @@ def text_sentiment_analysis_a(db, tenant_a):
     return TextSentimentAnalysis.objects.create(
         tenant=tenant_a,
         number="BSNT-00001",
-        source_type="ticket",
+        source_type="support_ticket",
         source_reference="TKT-88412",
         text_content="Outstanding onboarding support! The implementation consultant exceeded all our expectations.",
         polarity_score=Decimal("0.85"),
         subjectivity_score=Decimal("0.60"),
         sentiment_category="positive",
-        confidence_score=Decimal("96.00"),
-        extracted_themes=["support", "onboarding", "consulting"],
+        thematic_tags=["support", "onboarding", "consulting"],
     )
 
 
@@ -2117,8 +2110,7 @@ def text_sentiment_analysis_b(db, tenant_b):
         polarity_score=Decimal("-0.75"),
         subjectivity_score=Decimal("0.70"),
         sentiment_category="negative",
-        confidence_score=Decimal("92.00"),
-        extracted_themes=["latency", "performance", "month-end"],
+        thematic_tags=["latency", "performance", "month-end"],
     )
 
 
@@ -2131,7 +2123,7 @@ def analytics_recommendation_a(db, tenant_a, admin_user, bi_dashboard_a, semanti
         recommendation_type="dashboard",
         target_title="Executive Revenue Dashboard",
         target_url="/bi/dashboards/1/",
-        reason="role_based",
+        reason="role_relevance",
         rationale_text="Recommended because of your CFO role and frequent access to financial KPIs.",
         affinity_score=Decimal("94.00"),
         status="active",
@@ -2149,7 +2141,7 @@ def analytics_recommendation_b(db, tenant_b, admin_user_b, bi_dashboard_b, seman
         recommendation_type="dashboard",
         target_title="Globex Operational Logistics Hub",
         target_url="/bi/dashboards/2/",
-        reason="trending",
+        reason="trending_metric",
         rationale_text="High engagement among operations managers across Globex EMEA.",
         affinity_score=Decimal("89.50"),
         status="active",
