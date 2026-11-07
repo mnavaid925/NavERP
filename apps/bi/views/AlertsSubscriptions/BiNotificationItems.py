@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.bi.forms.AlertsSubscriptions.BiNotificationItems import (
@@ -267,6 +268,17 @@ def bi_notification_item_delete(request, pk):
     return redirect("bi:bi_notification_item_list")
 
 
+def _safe_redirect(request, fallback_url_name="bi:notification_center"):
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect(fallback_url_name)
+
+
 @login_required
 @require_POST
 def notification_mark_read(request, pk):
@@ -277,10 +289,7 @@ def notification_mark_read(request, pk):
     notification.save(update_fields=["status", "read_at", "updated_at"])
 
     messages.success(request, f"Notification {notification.number} marked as read.")
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
-        return redirect(next_url)
-    return redirect("bi:notification_center")
+    return _safe_redirect(request, "bi:notification_center")
 
 
 @login_required
@@ -316,10 +325,7 @@ def notification_acknowledge(request, pk):
     messages.success(
         request, f"Notification {notification.number} acknowledged successfully."
     )
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
-        return redirect(next_url)
-    return redirect("bi:notification_center")
+    return _safe_redirect(request, "bi:notification_center")
 
 
 @login_required
@@ -341,10 +347,7 @@ def notification_snooze(request, pk):
     messages.info(
         request, f"Notification {notification.number} snoozed for {hours} hours."
     )
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
-        return redirect(next_url)
-    return redirect("bi:notification_center")
+    return _safe_redirect(request, "bi:notification_center")
 
 
 @login_required
@@ -369,7 +372,4 @@ def notification_escalate(request, pk):
         request,
         f"Notification {notification.number} escalated to Level {notification.escalation_level}.",
     )
-    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
-        return redirect(next_url)
-    return redirect("bi:notification_center")
+    return _safe_redirect(request, "bi:notification_center")
