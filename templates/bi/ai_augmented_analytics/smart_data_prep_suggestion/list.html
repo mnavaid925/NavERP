@@ -70,15 +70,15 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
             <div class="lg:col-span-2">
-                <label class="form-label text-xs">Search Prep Suggestions</label>
+                <label for="filter_prep_q" class="form-label text-xs">Search Prep Suggestions</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search column, table, rationale..." class="form-input text-sm pl-9">
+                    <input type="text" id="filter_prep_q" name="q" value="{{ request.GET.q }}" placeholder="Search column, table, rationale..." class="form-input text-sm pl-9">
                     <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Suggestion Type</label>
-                <select name="suggestion_type" class="form-select text-sm">
+                <label for="filter_suggestion_type" class="form-label text-xs">Suggestion Type</label>
+                <select id="filter_suggestion_type" name="suggestion_type" class="form-select text-sm">
                     <option value="">All Types</option>
                     {% for code, label in suggestion_type_choices %}
                     <option value="{{ code }}" {% if request.GET.suggestion_type == code %}selected{% endif %}>{{ label }}</option>
@@ -86,8 +86,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Target Table</label>
-                <select name="target_table" class="form-select text-sm">
+                <label for="filter_target_table" class="form-label text-xs">Target Table</label>
+                <select id="filter_target_table" name="target_table" class="form-select text-sm">
                     <option value="">All Tables</option>
                     {% for t in tables %}
                     <option value="{{ t.pk }}" {% if request.GET.target_table == t.pk|stringformat:"d" %}selected{% endif %}>{{ t.name }}</option>
@@ -95,8 +95,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="filter_prep_status" class="form-label text-xs">Status</label>
+                <select id="filter_prep_status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
