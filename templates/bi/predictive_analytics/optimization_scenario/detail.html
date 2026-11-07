@@ -99,6 +99,48 @@
     </div>
 </div>
 
+<!-- Scenario Metadata Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-blue-500"></i>
+            Scenario Specification & Ownership
+        </h3>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="md:col-span-2">
+                <div class="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-1">Description</div>
+                <p class="text-sm text-slate-700 whitespace-pre-line">{{ scenario_obj.description|default:"No description provided." }}</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <div class="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-1">Linked Target KPI</div>
+                    {% if scenario_obj.kpi_definition %}
+                    <a href="{% url 'bi:kpi_definition_detail' scenario_obj.kpi_definition.pk %}" class="text-sm font-medium text-blue-600 hover:underline flex items-center gap-1.5">
+                        <i data-lucide="target" class="w-4 h-4"></i>
+                        {{ scenario_obj.kpi_definition.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-sm text-muted">None specified</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs uppercase tracking-wider font-semibold text-slate-500 mb-1">Owner / Creator</div>
+                    {% if scenario_obj.owner %}
+                    <div class="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                        <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
+                        {{ scenario_obj.owner.get_full_name|default:scenario_obj.owner.username }}
+                    </div>
+                    {% else %}
+                    <span class="text-sm text-muted">Unassigned</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Recommended Prescriptive Actions Card -->
 <div class="card mb-6">
     <div class="card-header">
