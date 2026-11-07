@@ -229,7 +229,7 @@
                     <div class="text-xs text-muted uppercase tracking-wider">Biometric / PIN Screen Lock</div>
                     <div class="font-medium text-slate-800 mt-0.5">
                         {% if config.require_biometric_lock %}
-                            <span class="badge badge-purple">Enforced ({{ config.inactivity_lock_minutes }}m Timeout)</span>
+                            <span class="badge badge-info">Enforced ({{ config.inactivity_lock_minutes }}m Timeout)</span>
                         {% else %}
                             <span class="text-slate-500">Standard Device Lock</span>
                         {% endif %}
