@@ -63,6 +63,10 @@ from apps.bi.forms.ConversationalBi.BiConversationSessions import BiConversation
 from apps.bi.forms.ConversationalBi.NarrativeExplanations import NarrativeExplanationForm
 from apps.bi.forms.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQueryForm
 from apps.bi.forms.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndexForm
+from apps.bi.forms.AlertsSubscriptions.BiAlertRules import BiAlertRuleForm
+from apps.bi.forms.AlertsSubscriptions.ReportSubscriptions import ReportSubscriptionForm
+from apps.bi.forms.AlertsSubscriptions.DistributionBurstRuns import DistributionBurstRunForm
+from apps.bi.forms.AlertsSubscriptions.BiNotificationItems import BiNotificationItemForm
 from apps.bi.forms.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnalyticsConfigForm
 from apps.bi.forms.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplayForm
 from apps.bi.forms.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfigurationForm
@@ -185,6 +189,10 @@ __all__ = [
     "BiConversationSessionForm",
     "NarrativeExplanationForm",
     "SearchDiscoveryIndexForm",
+    "BiAlertRuleForm",
+    "ReportSubscriptionForm",
+    "DistributionBurstRunForm",
+    "BiNotificationItemForm",
     "EmbeddedAnalyticsConfigForm",
     "KioskWallboardDisplayForm",
     "MobileBiConfigurationForm",
