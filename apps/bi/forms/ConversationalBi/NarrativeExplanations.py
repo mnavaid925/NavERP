@@ -30,8 +30,18 @@ class NarrativeExplanationForm(TenantUniqueMixin, TenantModelForm):
             "status",
         ]
         widgets = {
-            "title": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Q4 Executive Financial Narrative"}),
-            "headline": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Gross Margin rose 3.4% driven by Cloud expansion"}),
+            "title": forms.TextInput(
+                attrs={
+                    "class": "form-input",
+                    "placeholder": "e.g. Q4 Executive Financial Performance Briefing",
+                }
+            ),
+            "headline": forms.TextInput(
+                attrs={
+                    "class": "form-input",
+                    "placeholder": "e.g. Gross Margin improved +3.4% driven by European direct sales expansion",
+                }
+            ),
             "target_artifact_type": forms.Select(attrs={"class": "form-select"}),
             "dashboard": forms.Select(attrs={"class": "form-select"}),
             "report": forms.Select(attrs={"class": "form-select"}),
@@ -39,9 +49,19 @@ class NarrativeExplanationForm(TenantUniqueMixin, TenantModelForm):
             "query": forms.Select(attrs={"class": "form-select"}),
             "insight": forms.Select(attrs={"class": "form-select"}),
             "narrative_style": forms.Select(attrs={"class": "form-select"}),
-            "narrative_body": forms.Textarea(attrs={"class": "form-textarea", "rows": 5, "placeholder": "Detailed executive prose explaining variances..."}),
-            "top_positive_driver": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Direct enterprise sales acceleration (+18%)"}),
-            "top_negative_driver": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. APAC shipping freight inflation (-4.2%)"}),
+            "narrative_body": forms.Textarea(
+                attrs={
+                    "class": "form-textarea",
+                    "rows": 5,
+                    "placeholder": "Auto-generated natural language commentary or analyst notes...",
+                }
+            ),
+            "top_positive_driver": forms.TextInput(
+                attrs={"class": "form-input", "placeholder": "e.g. European Direct Sales Volume"}
+            ),
+            "top_negative_driver": forms.TextInput(
+                attrs={"class": "form-input", "placeholder": "e.g. Freight Surcharges"}
+            ),
             "language": forms.TextInput(attrs={"class": "form-input", "placeholder": "en"}),
             "status": forms.Select(attrs={"class": "form-select"}),
         }
@@ -54,6 +74,7 @@ class NarrativeExplanationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["kpi"].queryset = KpiDefinition.objects.filter(tenant=self.tenant)
             self.fields["query"].queryset = NaturalLanguageQuery.objects.filter(tenant=self.tenant)
             self.fields["insight"].queryset = AugmentedInsight.objects.filter(tenant=self.tenant)
+
         self.fields["dashboard"].required = False
         self.fields["report"].required = False
         self.fields["kpi"].required = False
