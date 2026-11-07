@@ -3049,6 +3049,18 @@ LIVE_LINKS = {
         "What-If Scenarios": "bi:what_if_scenario_list",
         "Writeback Cells": "bi:writeback_cell_list",
     },
+    "10.13": {
+        "Forecasting & Trend Analysis": "bi:forecast_execution_list",
+        "Predictive & Propensity Models": "bi:predictive_model_list",
+        "Prescriptive & Optimization": "bi:optimization_scenario_list",
+        "Anomaly & Outlier Detection": "bi:statistical_anomaly_list",
+        "AutoML & Model Lifecycle": "bi:predictive_model_list",
+        # Extra live leaves
+        "Predictive Models": "bi:predictive_model_list",
+        "Forecast Executions": "bi:forecast_execution_list",
+        "Statistical Anomalies": "bi:statistical_anomaly_list",
+        "Optimization Scenarios": "bi:optimization_scenario_list",
+    },
     "10.14": {
         "Auto-Generated Insights": "bi:augmented_insight_list",
         "Smart Insight Feed": "bi:augmented_insight_feed",
