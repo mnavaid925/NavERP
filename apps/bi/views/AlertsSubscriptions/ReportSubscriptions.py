@@ -125,11 +125,10 @@ def report_subscription_create(request):
                 form.save_m2m()
 
                 write_audit_log(
-                    request,
-                    action="create",
-                    model_name="ReportSubscription",
-                    object_id=sub.pk,
-                    object_repr=str(sub),
+                    request.user,
+                    sub,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Report subscription {sub.number} scheduled successfully."
@@ -166,11 +165,10 @@ def report_subscription_edit(request, pk):
             with transaction.atomic():
                 sub = form.save()
                 write_audit_log(
-                    request,
-                    action="update",
-                    model_name="ReportSubscription",
-                    object_id=sub.pk,
-                    object_repr=str(sub),
+                    request.user,
+                    sub,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Report subscription {sub.number} updated successfully."
@@ -203,11 +201,10 @@ def report_subscription_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="delete",
-            model_name="ReportSubscription",
-            object_id=subscription.pk,
-            object_repr=str(subscription),
+            request.user,
+            subscription,
+            "delete",
+            tenant=request.tenant,
         )
         subscription.delete()
 
@@ -274,11 +271,11 @@ def report_subscription_run_now(request, pk):
         subscription.save()
 
         write_audit_log(
-            request,
-            action="create",
-            model_name="DistributionBurstRun",
-            object_id=burst_run.pk,
-            object_repr=f"Manual Run for {subscription.number} -> {burst_run.number}",
+            request.user,
+            burst_run,
+            "create",
+            changes={"details": f"Manual Run for {subscription.number} -> {burst_run.number}"},
+            tenant=request.tenant,
         )
 
     messages.success(
