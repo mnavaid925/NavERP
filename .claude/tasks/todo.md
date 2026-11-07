@@ -167,7 +167,7 @@
 - [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.15.md` (27 findings: 0C, 16I, 11M)
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (27/27 fixed: 0C, 16I, 11M)
 
 ### Phase 6: Tests (Strictly Serial)
 - [ ] Add shared 10.15 fixtures to `conftest.py`
