@@ -116,7 +116,7 @@
             <div class="flex gap-2">
                 <button type="submit" class="btn btn-primary w-full">Filter</button>
                 {% if q or selected_trigger or selected_channel or selected_status %}
-                <a href="{% url 'bi:distribution_burst_run_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'bi:distribution_burst_run_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
@@ -192,15 +192,15 @@
                         {{ b.started_at|date:"M d, H:i" }}
                     </td>
                     <td class="table-actions text-right whitespace-nowrap">
-                        <a href="{% url 'bi:distribution_burst_run_detail' b.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                        <a href="{% url 'bi:distribution_burst_run_detail' b.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'bi:distribution_burst_run_edit' b.pk %}" class="btn btn-icon btn-outline" title="Edit Run">
+                        <a href="{% url 'bi:distribution_burst_run_edit' b.pk %}" class="btn btn-icon btn-outline" title="Edit Run" aria-label="Edit Run">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'bi:distribution_burst_run_delete' b.pk %}" class="inline" onsubmit="return confirm('Delete burst run {{ b.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Run">
+                            <button type="submit" class="btn btn-icon btn-danger" title="Delete Run" aria-label="Delete Run">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
