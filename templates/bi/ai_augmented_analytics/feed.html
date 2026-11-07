@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Smart Insight Feed — AI & Augmented Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:augmented_insight_list' %}">AI & Augmented Analytics</a>
+            <span class="sep">/</span>
+            <span>Smart Insight Feed</span>
+        </div>
+        <h1 class="page-title flex items-center gap-2">
+            <i data-lucide="sparkles" class="w-6 h-6 text-indigo-600"></i>
+            <span>Smart Insight Feed</span>
+        </h1>
+        <p class="text-muted text-sm">Proactive, automated streaming digest of statistical anomalies, driver breakdowns, and metric volatility</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:augmented_insight_list' %}" class="btn btn-outline">
+            <i data-lucide="list"></i>
+            <span>Insights Catalog</span>
+        </a>
+        <a href="{% url 'bi:augmented_insight_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Insight</span>
+        </a>
+    </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="flex items-center gap-2 border-b border-slate-200 mb-6 pb-2 text-sm">
+    <a href="?tab=all" class="px-3 py-1.5 rounded-md font-medium transition-colors {% if active_tab == 'all' %}bg-indigo-50 text-indigo-700 font-semibold{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        All Signals
+    </a>
+    <a href="?tab=critical" class="px-3 py-1.5 rounded-md font-medium transition-colors {% if active_tab == 'critical' %}bg-red-50 text-red-700 font-semibold{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        Critical Anomalies
+    </a>
+    <a href="?tab=high" class="px-3 py-1.5 rounded-md font-medium transition-colors {% if active_tab == 'high' %}bg-amber-50 text-amber-700 font-semibold{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        High Severity
+    </a>
+    <a href="?tab=unfavorable" class="px-3 py-1.5 rounded-md font-medium transition-colors {% if active_tab == 'unfavorable' %}bg-rose-50 text-rose-700 font-semibold{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        Unfavorable Shifts
+    </a>
+    <a href="?tab=bookmarked" class="px-3 py-1.5 rounded-md font-medium transition-colors {% if active_tab == 'bookmarked' %}bg-blue-50 text-blue-700 font-semibold{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        Bookmarked
+    </a>
+</div>
+
+<!-- Feed Stream List -->
+<div class="max-w-4xl space-y-4">
+    {% for item in feed_items %}
+    <div class="card hover:shadow-md transition-shadow border-l-4 {% if item.severity == 'critical' %}border-l-red-500{% elif item.severity == 'high' %}border-l-amber-500{% elif item.impact_direction == 'favorable' %}border-l-emerald-500{% else %}border-l-indigo-500{% endif %}">
+        <div class="card-body">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="badge {{ item.badge_color }} text-xs">{{ item.get_severity_display }}</span>
+                    <span class="badge {{ item.impact_badge_color }} text-xs">{{ item.get_impact_direction_display }}</span>
+                    <span class="badge badge-slate text-xs">{{ item.get_insight_type_display }}</span>
+                    <span class="text-xs text-muted font-mono">{{ item.number }}</span>
+                </div>
+                <div class="text-xs text-muted flex items-center gap-1">
+                    <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+                    <span>{{ item.created_at|timesince }} ago</span>
+                </div>
+            </div>
+
+            <h3 class="text-base font-semibold text-slate-900 mb-1">
+                <a href="{% url 'bi:augmented_insight_detail' item.pk %}" class="hover:text-indigo-600 transition-colors">
+                    {{ item.title }}
+                </a>
+            </h3>
+
+            <div class="flex items-center gap-4 text-xs text-slate-600 mb-3">
+                <div>Metric: <span class="font-semibold text-slate-800">{{ item.metric_name }}</span></div>
+                {% if item.dimension_name %}
+                <div>Slice: <span class="font-medium text-slate-800">{{ item.dimension_name }} = {{ item.dimension_value }}</span></div>
+                {% endif %}
+                <div>
+                    Variance: 
+                    <span class="font-bold {% if item.variance_percentage < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+                        {{ item.variance_percentage }}%
+                    </span>
+                </div>
+                <div>Confidence: <span class="font-medium text-slate-700">{{ item.confidence_score }}%</span></div>
+            </div>
+
+            <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded-md border border-slate-100 mb-4 leading-relaxed">
+                {{ item.narrative_summary|truncatewords:45 }}
+            </p>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                <div class="flex items-center gap-2">
+                    <form method="post" action="{% url 'bi:augmented_insight_triage' item.pk %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="bookmarked">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-outline text-xs py-1 px-2.5 flex items-center gap-1 {% if item.status == 'bookmarked' %}text-indigo-600 font-semibold{% endif %}" title="Bookmark this insight">
+                            <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+                            <span>{% if item.status == 'bookmarked' %}Bookmarked{% else %}Bookmark{% endif %}</span>
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'bi:augmented_insight_triage' item.pk %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="dismissed">
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-outline text-xs py-1 px-2.5 flex items-center gap-1 text-slate-500 hover:text-red-600" title="Dismiss from active feed">
+                            <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                            <span>Dismiss</span>
+                        </button>
+                    </form>
+                </div>
+                <a href="{% url 'bi:augmented_insight_detail' item.pk %}" class="btn btn-outline text-xs py-1 px-3 flex items-center gap-1">
+                    <span>Explore Drivers</span>
+                    <i data-lucide="arrow-right" class="w-3.5 h-3.5"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card p-12 text-center">
+        <i data-lucide="sparkles" class="w-10 h-10 text-muted mx-auto mb-2"></i>
+        <h3 class="text-base font-medium text-slate-800">Smart Insight Feed is Quiet</h3>
+        <p class="text-sm text-muted mb-4">No proactive insights found matching the selected filter criteria.</p>
+        <a href="{% url 'bi:augmented_insight_create' %}" class="btn btn-primary text-xs">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Trigger New Analysis
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if feed_items.has_other_pages %}
+<div class="max-w-4xl flex justify-between items-center py-4 mt-4">
+    <div class="text-xs text-muted">
+        Page {{ feed_items.number }} of {{ feed_items.paginator.num_pages }}
+    </div>
+    <div class="pagination flex gap-1">
+        {% if feed_items.has_previous %}
+        <a href="?page={{ feed_items.previous_page_number }}&tab={{ active_tab }}" class="btn btn-outline text-xs">Previous</a>
+        {% else %}
+        <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+        {% endif %}
+
+        {% if feed_items.has_next %}
+        <a href="?page={{ feed_items.next_page_number }}&tab={{ active_tab }}" class="btn btn-outline text-xs">Next</a>
+        {% else %}
+        <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
