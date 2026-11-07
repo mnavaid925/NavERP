@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{{ forecast_obj.name }} — Forecast Execution — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:forecast_execution_list' %}">Forecast Executions</a>
+            <span class="sep">/</span>
+            <span>{{ forecast_obj.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ forecast_obj.name }}</h1>
+            {% if forecast_obj.status == 'completed' %}
+            <span class="badge badge-green">Completed</span>
+            {% elif forecast_obj.status == 'running' %}
+            <span class="badge badge-info">Running</span>
+            {% else %}
+            <span class="badge badge-slate">{{ forecast_obj.get_status_display }}</span>
+            {% endif %}
+
+            <span class="badge badge-info">{{ forecast_obj.get_cadence_display }}</span>
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ forecast_obj.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>Confidence: {{ forecast_obj.confidence_level }}%</span>
+            <span class="text-slate-300">•</span>
+            <span>Horizon: {{ forecast_obj.horizon_periods }} periods</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:forecast_execution_edit' forecast_obj.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Run Parameters</span>
+        </a>
+        <form method="post" action="{% url 'bi:forecast_execution_delete' forecast_obj.pk %}" onsubmit="return confirm('Delete forecast execution {{ forecast_obj.name }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-icon" title="Delete Forecast">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="calendar"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Forecast Horizon</div>
+            <div class="text-2xl font-bold font-mono text-blue-600">{{ forecast_obj.horizon_periods }} {{ forecast_obj.get_cadence_display }}s</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Trend Direction</div>
+            <div class="text-xl font-bold text-emerald-700 capitalize flex items-center gap-1">
+                {% if forecast_obj.trend_direction == 'upward' %}
+                <i data-lucide="trending-up" class="w-5 h-5 text-emerald-500"></i>
+                {% elif forecast_obj.trend_direction == 'downward' %}
+                <i data-lucide="trending-down" class="w-5 h-5 text-amber-500"></i>
+                {% else %}
+                <i data-lucide="minus" class="w-5 h-5 text-slate-500"></i>
+                {% endif %}
+                {{ forecast_obj.get_trend_direction_display }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">MAPE Accuracy</div>
+            <div class="text-2xl font-bold font-mono text-indigo-600">
+                {% if forecast_obj.mape_score %}{{ forecast_obj.mape_score }}%{% else %}N/A{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="repeat"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Seasonality Cycle</div>
+            <div class="text-2xl font-bold text-amber-600 font-mono">
+                {% if forecast_obj.seasonality_detected %}{{ forecast_obj.seasonal_cycle_length }} Lag{% else %}None{% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Projection Visualizer Card -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="line-chart" class="w-4 h-4 text-blue-500"></i>
+            Projected Trajectory with {{ forecast_obj.confidence_level }}% Confidence Envelope
+        </h3>
+        <span class="text-xs text-muted">Generated at {{ forecast_obj.executed_at|date:"M d, Y H:i" }}</span>
+    </div>
+    <div class="card-body">
+        <div class="relative w-full h-72">
+            <canvas id="forecastChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Point-by-Point Data Schedule -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="table" class="w-4 h-4 text-emerald-500"></i>
+            Forward Projection Schedule Table
+        </h3>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th class="text-right">Lower Bound ({{ forecast_obj.confidence_level }}%)</th>
+                    <th class="text-right font-bold text-blue-700">Projected Value</th>
+                    <th class="text-right">Upper Bound ({{ forecast_obj.confidence_level }}%)</th>
+                    <th class="text-right">Uncertainty Spread</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pt in forecast_obj.forecast_output_data %}
+                <tr>
+                    <td class="font-medium text-slate-800">{{ pt.label }}</td>
+                    <td class="text-right font-mono text-slate-500">{{ pt.lower_bound }}</td>
+                    <td class="text-right font-mono font-bold text-blue-600">{{ pt.predicted }}</td>
+                    <td class="text-right font-mono text-slate-500">{{ pt.upper_bound }}</td>
+                    <td class="text-right font-mono text-xs text-slate-400">
+                        &plusmn;{{ pt.upper_bound|add:pt.lower_bound }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-6 text-muted">
+                        No projection points available.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const rawData = {{ forecast_obj.forecast_output_data|safe }};
+    if (!rawData || rawData.length === 0) return;
+
+    const labels = rawData.map(d => d.label);
+    const predicted = rawData.map(d => d.predicted);
+    const lower = rawData.map(d => d.lower_bound);
+    const upper = rawData.map(d => d.upper_bound);
+
+    const ctx = document.getElementById("forecastChart").getContext("2d");
+    new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "Upper Bound ({{ forecast_obj.confidence_level }}%)",
+                    data: upper,
+                    borderColor: "rgba(147, 197, 253, 0.5)",
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                },
+                {
+                    label: "Projected Estimate",
+                    data: predicted,
+                    borderColor: "rgb(37, 99, 235)",
+                    backgroundColor: "rgba(37, 99, 235, 0.1)",
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 4
+                },
+                {
+                    label: "Lower Bound ({{ forecast_obj.confidence_level }}%)",
+                    data: lower,
+                    borderColor: "rgba(147, 197, 253, 0.5)",
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: "top" }
+            },
+            scales: {
+                y: { grid: { color: "rgba(226, 232, 240, 0.6)" } },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
