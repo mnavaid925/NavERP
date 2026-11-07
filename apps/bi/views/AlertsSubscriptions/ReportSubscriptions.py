@@ -14,6 +14,7 @@ from apps.bi.models.AlertsSubscriptions.ReportSubscriptions import ReportSubscri
 from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.views._common import bi_object, bi_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
 
@@ -204,6 +205,7 @@ def report_subscription_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def report_subscription_delete(request, pk):
     subscription = bi_object(request, ReportSubscription, pk=pk)
     num = subscription.number
