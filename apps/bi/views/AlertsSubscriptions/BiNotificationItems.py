@@ -184,11 +184,10 @@ def bi_notification_item_create(request):
                 item.save()
 
                 write_audit_log(
-                    request,
-                    action="create",
-                    model_name="BiNotificationItem",
-                    object_id=item.pk,
-                    object_repr=str(item),
+                    request.user,
+                    item,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Notification {item.number} created successfully."
@@ -223,11 +222,10 @@ def bi_notification_item_edit(request, pk):
             with transaction.atomic():
                 item = form.save()
                 write_audit_log(
-                    request,
-                    action="update",
-                    model_name="BiNotificationItem",
-                    object_id=item.pk,
-                    object_repr=str(item),
+                    request.user,
+                    item,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Notification {item.number} updated successfully."
@@ -258,11 +256,10 @@ def bi_notification_item_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="delete",
-            model_name="BiNotificationItem",
-            object_id=notification.pk,
-            object_repr=str(notification),
+            request.user,
+            notification,
+            "delete",
+            tenant=request.tenant,
         )
         notification.delete()
 
@@ -309,11 +306,11 @@ def notification_acknowledge(request, pk):
     )
 
     write_audit_log(
-        request,
-        action="update",
-        model_name="BiNotificationItem",
-        object_id=notification.pk,
-        object_repr=f"Acknowledged {notification.number}",
+        request.user,
+        notification,
+        "update",
+        changes={"details": f"Acknowledged {notification.number}"},
+        tenant=request.tenant,
     )
 
     messages.success(
@@ -356,11 +353,11 @@ def notification_escalate(request, pk):
     )
 
     write_audit_log(
-        request,
-        action="update",
-        model_name="BiNotificationItem",
-        object_id=notification.pk,
-        object_repr=f"Escalated {notification.number} (level {notification.escalation_level})",
+        request.user,
+        notification,
+        "update",
+        changes={"details": f"Escalated {notification.number} (level {notification.escalation_level})"},
+        tenant=request.tenant,
     )
 
     messages.warning(
