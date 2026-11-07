@@ -43,6 +43,10 @@ from apps.bi.models.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsig
 from apps.bi.models.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestion
 from apps.bi.models.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysis
 from apps.bi.models.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendation
+from apps.bi.models.ConversationalBi.BiConversationSessions import BiConversationSession
+from apps.bi.models.ConversationalBi.NarrativeExplanations import NarrativeExplanation
+from apps.bi.models.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQuery
+from apps.bi.models.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndex
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -119,4 +123,8 @@ __all__ = [
     "SmartDataPrepSuggestion",
     "TextSentimentAnalysis",
     "AnalyticsRecommendation",
+    "NaturalLanguageQuery",
+    "BiConversationSession",
+    "NarrativeExplanation",
+    "SearchDiscoveryIndex",
 ]
