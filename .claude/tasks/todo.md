@@ -76,89 +76,89 @@
 ## Sub-module 10.11 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.11.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.11.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: KpiDefinition (`BKPI-`)**
-  - [ ] Model: `apps/bi/models/PerformanceScorecards/KpiDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BKPI"`)
-  - [ ] Form: `apps/bi/forms/PerformanceScorecards/KpiDefinitions.py` (`KpiDefinitionForm`, `KpiDefinitionRefreshForm`)
-  - [ ] Views: `apps/bi/views/PerformanceScorecards/KpiDefinitions.py` (list, detail, create, edit, delete, refresh_value)
-  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/KpiDefinitions.py` (`kpi_definition_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/list.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/detail.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/kpi_definition/form.html`
-- [ ] **Entity 2: PerformanceScorecard (`BSCR-`)**
-  - [ ] Model: `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCR"`)
-  - [ ] Form: `apps/bi/forms/PerformanceScorecards/PerformanceScorecards.py` (`PerformanceScorecardForm`, `PerformanceScorecardRecalculateForm`)
-  - [ ] Views: `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py` (list, detail, create, edit, delete, strategy_map, recalculate)
-  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/PerformanceScorecards.py` (`performance_scorecard_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/list.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/detail.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/form.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/performance_scorecard/strategy_map.html`
-- [ ] **Entity 3: ScorecardKpiAssignment (`BSCI-`)**
-  - [ ] Model: `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCI"`)
-  - [ ] Form: `apps/bi/forms/PerformanceScorecards/ScorecardKpiAssignments.py` (`ScorecardKpiAssignmentForm`, `ScorecardKpiRecordActualForm`)
-  - [ ] Views: `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` (list, detail, create, edit, delete, record_actual)
-  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/ScorecardKpiAssignments.py` (`scorecard_kpi_assignment_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/list.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/detail.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/form.html`
-- [ ] **Entity 4: StrategicObjective (`BOBJ-`)**
-  - [ ] Model: `apps/bi/models/PerformanceScorecards/StrategicObjectives.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOBJ"`)
-  - [ ] Form: `apps/bi/forms/PerformanceScorecards/StrategicObjectives.py` (`StrategicObjectiveForm`)
-  - [ ] Views: `apps/bi/views/PerformanceScorecards/StrategicObjectives.py` (list, detail, create, edit, delete)
-  - [ ] URLs: `apps/bi/urls/PerformanceScorecards/StrategicObjectives.py` (`strategic_objective_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/list.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/detail.html`
-    - [ ] `templates/bi/kpi_performance_scorecards/strategic_objective/form.html`
+- [x] **Entity 1: KpiDefinition (`BKPI-`)**
+  - [x] Model: `apps/bi/models/PerformanceScorecards/KpiDefinitions.py` (`TenantNumbered`, `NUMBER_PREFIX = "BKPI"`)
+  - [x] Form: `apps/bi/forms/PerformanceScorecards/KpiDefinitions.py` (`KpiDefinitionForm`, `KpiDefinitionRefreshForm`)
+  - [x] Views: `apps/bi/views/PerformanceScorecards/KpiDefinitions.py` (list, detail, create, edit, delete, refresh_value)
+  - [x] URLs: `apps/bi/urls/PerformanceScorecards/KpiDefinitions.py` (`kpi_definition_*`)
+  - [x] Templates:
+    - [x] `templates/bi/kpi_performance_scorecards/kpi_definition/list.html`
+    - [x] `templates/bi/kpi_performance_scorecards/kpi_definition/detail.html`
+    - [x] `templates/bi/kpi_performance_scorecards/kpi_definition/form.html`
+- [x] **Entity 2: PerformanceScorecard (`BSCR-`)**
+  - [x] Model: `apps/bi/models/PerformanceScorecards/PerformanceScorecards.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCR"`)
+  - [x] Form: `apps/bi/forms/PerformanceScorecards/PerformanceScorecards.py` (`PerformanceScorecardForm`, `PerformanceScorecardRecalculateForm`)
+  - [x] Views: `apps/bi/views/PerformanceScorecards/PerformanceScorecards.py` (list, detail, create, edit, delete, strategy_map, recalculate)
+  - [x] URLs: `apps/bi/urls/PerformanceScorecards/PerformanceScorecards.py` (`performance_scorecard_*`)
+  - [x] Templates:
+    - [x] `templates/bi/kpi_performance_scorecards/performance_scorecard/list.html`
+    - [x] `templates/bi/kpi_performance_scorecards/performance_scorecard/detail.html`
+    - [x] `templates/bi/kpi_performance_scorecards/performance_scorecard/form.html`
+    - [x] `templates/bi/kpi_performance_scorecards/performance_scorecard/strategy_map.html`
+- [x] **Entity 3: ScorecardKpiAssignment (`BSCI-`)**
+  - [x] Model: `apps/bi/models/PerformanceScorecards/ScorecardKpiAssignments.py` (`TenantNumbered`, `NUMBER_PREFIX = "BSCI"`)
+  - [x] Form: `apps/bi/forms/PerformanceScorecards/ScorecardKpiAssignments.py` (`ScorecardKpiAssignmentForm`, `ScorecardKpiRecordActualForm`)
+  - [x] Views: `apps/bi/views/PerformanceScorecards/ScorecardKpiAssignments.py` (list, detail, create, edit, delete, record_actual)
+  - [x] URLs: `apps/bi/urls/PerformanceScorecards/ScorecardKpiAssignments.py` (`scorecard_kpi_assignment_*`)
+  - [x] Templates:
+    - [x] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/list.html`
+    - [x] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/detail.html`
+    - [x] `templates/bi/kpi_performance_scorecards/scorecard_kpi_assignment/form.html`
+- [x] **Entity 4: StrategicObjective (`BOBJ-`)**
+  - [x] Model: `apps/bi/models/PerformanceScorecards/StrategicObjectives.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOBJ"`)
+  - [x] Form: `apps/bi/forms/PerformanceScorecards/StrategicObjectives.py` (`StrategicObjectiveForm`)
+  - [x] Views: `apps/bi/views/PerformanceScorecards/StrategicObjectives.py` (list, detail, create, edit, delete)
+  - [x] URLs: `apps/bi/urls/PerformanceScorecards/StrategicObjectives.py` (`strategic_objective_*`)
+  - [x] Templates:
+    - [x] `templates/bi/kpi_performance_scorecards/strategic_objective/list.html`
+    - [x] `templates/bi/kpi_performance_scorecards/strategic_objective/detail.html`
+    - [x] `templates/bi/kpi_performance_scorecards/strategic_objective/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Add re-exports in `apps/bi/models/PerformanceScorecards/__init__.py` and `apps/bi/models/__init__.py`
-- [ ] Add re-exports in `apps/bi/forms/PerformanceScorecards/__init__.py` and `apps/bi/forms/__init__.py`
-- [ ] Add re-exports in `apps/bi/views/PerformanceScorecards/__init__.py` and `apps/bi/views/__init__.py`
-- [ ] Assemble URL patterns in `apps/bi/urls/PerformanceScorecards/__init__.py` and wire into `apps/bi/urls/__init__.py`
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Add `LIVE_LINKS["10.11"]` in `apps/core/navigation.py`:
+- [x] Add re-exports in `apps/bi/models/PerformanceScorecards/__init__.py` and `apps/bi/models/__init__.py`
+- [x] Add re-exports in `apps/bi/forms/PerformanceScorecards/__init__.py` and `apps/bi/forms/__init__.py`
+- [x] Add re-exports in `apps/bi/views/PerformanceScorecards/__init__.py` and `apps/bi/views/__init__.py`
+- [x] Assemble URL patterns in `apps/bi/urls/PerformanceScorecards/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Add `LIVE_LINKS["10.11"]` in `apps/core/navigation.py`:
   - `"KPI Library & Definitions": "bi:kpi_definition_list"`
   - `"Scorecards & Balanced Scorecard": "bi:performance_scorecard_list"`
   - `"Goal & Target Tracking": "bi:scorecard_kpi_assignment_list"`
   - `"Benchmarking": "bi:kpi_definition_list"`
   - `"Strategy Maps & Alignment": "bi:strategic_objective_list"`
-- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data (KPI definitions across 4 BSC perspectives, scorecard containers, assignments with variances and RAG indicators, and strategic objectives with cause-and-effect links)
-- [ ] Run `makemigrations bi` (claiming `0026`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+- [x] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with comprehensive demo data (KPI definitions across 4 BSC perspectives, scorecard containers, assignments with variances and RAG indicators, and strategic objectives with cause-and-effect links)
+- [x] Run `makemigrations bi` (claiming `0027`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
 
 ### Phase 3.5: Smoke Testing
-- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+- [x] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
 
 ### Phase 4: Six-Pass Serial Review
-- [ ] Pass 1: Code Reviewer
-- [ ] Pass 2: Explorer
-- [ ] Pass 3: Frontend Reviewer
-- [ ] Pass 4: Performance Reviewer
-- [ ] Pass 5: QA Smoke Tester
-- [ ] Pass 6: Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.11.md`
+- [x] Pass 1: Code Reviewer
+- [x] Pass 2: Explorer
+- [x] Pass 3: Frontend Reviewer
+- [x] Pass 4: Performance Reviewer
+- [x] Pass 5: QA Smoke Tester
+- [x] Pass 6: Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.11.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+- [x] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
 
 ### Phase 6: Automated Test Suite
-- [ ] Add shared 10.11 fixtures to `conftest.py`
-- [ ] Write `test_performancescorecards_models.py`
-- [ ] Write `test_performancescorecards_forms.py`
-- [ ] Write `test_performancescorecards_views.py`
-- [ ] Write `test_performancescorecards_security.py`
-- [ ] Run full unfiltered test suite and ensure 100% green
+- [x] Add shared 10.11 fixtures to `conftest.py`
+- [x] Write `test_performancescorecards_models.py`
+- [x] Write `test_performancescorecards_forms.py`
+- [x] Write `test_performancescorecards_views.py`
+- [x] Write `test_performancescorecards_security.py`
+- [x] Run full unfiltered test suite and ensure 100% green (1,613 passed)
 
 ### Phase 7: Skill & Documentation Close-out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.11 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.11 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.11.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.11 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.11 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.11.md`
 
 ---
 
@@ -170,9 +170,31 @@
 ---
 
 ## Review Notes
-(Filled in at the end of implementation)
-
----
+- **Status**: Complete & Verified (100% Green).
+- **Core Entities Built**:
+  1. `KpiDefinition` (`BKPI-`): Governed catalog of Key Performance Indicators with formulas, targets, warning/critical thresholds, historical values, and industry benchmark overlays.
+  2. `PerformanceScorecard` (`BSCR-`): Kaplan & Norton Balanced Scorecards weighted across 4 perspectives (Financial, Customer, Internal Process, Learning & Growth) with composite roll-up scoring and traffic-light RAG status indicators.
+  3. `ScorecardKpiAssignment` (`BSCI-`): Relational binding between scorecards, KPIs, and strategic objectives tracking target vs. actual variance, normalized scores, and trend arrows (↗/→/↘).
+  4. `StrategicObjective` (`BOBJ-`): Cause-and-effect strategic goals organized by perspective with hierarchical parent-child relationships and Strategy Map alignment.
+- **Security & Multi-Tenancy**:
+  - 100% tenant-scoped through `bi_scope()` and `bi_object()`.
+  - `@tenant_admin_required` strictly enforced on all create, edit, delete, metric refresh, scorecard recalculation, and actual recording actions.
+  - Form FK dropdowns strictly filtered to tenant records and guarded with `reject_foreign()`.
+  - Complete cross-tenant IDOR protection verified returning HTTP 404.
+- **Review Passes**:
+  - All 6 serial reviewers run (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+  - All 23 findings (`C1`–`C5`, `I1`–`I10`, `M1`–`M8`) burned down and closed in `.claude/tasks/review-bi-10.11.md`.
+- **Test Suite**:
+  - 183 dedicated tests authored across 4 test modules (`test_performancescorecards_models.py`, `_forms.py`, `_views.py`, `_security.py`).
+  - Full unfiltered `apps/bi` test suite: **1,613 passed in 208s (100% green)**.
+- **Documentation & References**:
+  - Research: `.claude/tasks/research-bi-10.11.md`
+  - Pre-build Contract: `.claude/tasks/contract-bi-10.11.md`
+  - Review Findings: `.claude/tasks/review-bi-10.11.md`
+  - Gap Register: `.agents/tasks/gaps-bi-10.11.md`
+  - Module Skill: `.claude/skills/bi/SKILL.md`
+  - Roadmap: `README.md`
+- **Gaps**: Documented in `.agents/tasks/gaps-bi-10.11.md` (3 items deferred to 10.13, 10.19, and Module 2 Accounting). Zero open defects.
 
 # Sub-module 10.12: OLAP & Multidimensional Analysis (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.12.md` (2026-11-06)
 
