@@ -53,3 +53,29 @@ Request Changes (2 Important findings).
 - Navigation `LIVE_LINKS["10.13"]` registered with 5 valid routes.
 - Admin registrations verified in `apps/bi/admin.py`.
 
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Verdict
+Request Changes.
+
+### Critical
+1. `templates/bi/predictive_analytics/forecast_execution/detail.html:160-163` — Duplicate Chart.js CDN import and unescaped raw JSON interpolation in `<script>`. `templates/base.html` already loads Chart.js globally, and injecting raw `{{ forecast_obj.forecast_output_data|safe }}` risks XSS and JS syntax errors. Fix: Remove redundant CDN `<script>` and use Django's `json_script` tag with `JSON.parse()`.
+
+### Important
+1. `templates/bi/predictive_analytics/statistical_anomaly/list.html:55` & `detail.html:62` — Disallowed `stat-icon red` used. The design system only permits `stat-icon blue|green|orange|purple|slate`. Fix: Change `stat-icon red` to `stat-icon orange` (or `stat-icon slate`).
+2. `templates/bi/predictive_analytics/statistical_anomaly/form.html:61-71` — `semantic_model` field declared in ModelForm but omitted from `form.html`. Fix: Add form group for `form.semantic_model` in `form.html`.
+
+### Minor
+1. `templates/bi/predictive_analytics/forecast_execution/detail.html:145` — Uncertainty spread calculation uses `add` filter which calculates `2 * predicted` rather than spread. Fix: Render `[{{ pt.lower_bound }}, {{ pt.upper_bound }}]`.
+2. Missing `scope="col"` on table header `<th>` cells across list and detail templates. Fix: Add `scope="col"` to `<th>` elements.
+
+### Done Well
+- Zero multi-line comment leaks across all 12 templates.
+- Strict badge compliance with color-named system (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`).
+- Proper pagination guards using `has_previous` / `has_next` and preserved GET filters.
+- All tables enclosed in `.table-wrap`.
+- All mutation forms include CSRF tokens and confirm dialogs.
+
+
