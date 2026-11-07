@@ -63,7 +63,7 @@
             <div class="rounded-xl border p-6 shadow-sm {% if config.theme_mode == 'dark' %}bg-slate-900 border-slate-800{% else %}bg-white border-slate-200{% endif %}">
                 <div class="flex justify-between items-center mb-6">
                     <div>
-                        <h2 class="text-lg font-semibold">{{ config.dashboard.name }}</h2>
+                        <h2 class="text-lg font-semibold">{{ config.dashboard.title }}</h2>
                         <p class="text-xs {% if config.theme_mode == 'dark' %}text-slate-400{% else %}text-slate-500{% endif %}">{{ config.dashboard.description|default:"Interactive visual analytics canvas" }}</p>
                     </div>
                     <span class="text-xs px-2.5 py-1 rounded font-mono font-medium bg-slate-100 text-slate-700">{{ config.dashboard.number }}</span>
