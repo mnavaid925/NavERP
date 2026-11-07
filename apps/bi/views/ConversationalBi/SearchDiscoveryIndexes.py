@@ -190,6 +190,8 @@ def search_discovery_index_reweight(request, pk):
         if weight_val:
             try:
                 new_weight = Decimal(weight_val)
+                if not new_weight.is_finite():
+                    raise InvalidOperation("Non-finite Decimal rejected")
                 index.relevance_weight = max(Decimal("0.10"), min(Decimal("99.99"), new_weight))
             except (InvalidOperation, ValueError):
                 index.relevance_weight = min(Decimal("99.99"), index.relevance_weight + Decimal("0.50"))
