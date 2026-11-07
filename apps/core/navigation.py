@@ -3087,6 +3087,20 @@ LIVE_LINKS = {
         "Chat Assistant Workspace": "bi:bi_chat_workspace",
         "Discovery Hub": "bi:search_discovery_hub",
     },
+    "10.16": {
+        "Threshold & Anomaly Alerts": "bi:bi_alert_rule_list",
+        "Report Subscriptions": "bi:report_subscription_list",
+        "Distribution & Bursting": "bi:distribution_burst_run_list",
+        "Notification Center": "bi:bi_notification_item_list",
+        "Trigger-Based Workflows": "bi:bi_alert_rule_list",
+        # Plural and workspace aliases
+        "Alert Rules": "bi:bi_alert_rule_list",
+        "Report & Dashboard Subscriptions": "bi:report_subscription_list",
+        "Distribution Burst Runs": "bi:distribution_burst_run_list",
+        "Notification Items": "bi:bi_notification_item_list",
+        "Notification Inbox": "bi:notification_center",
+        "Notification Workspace": "bi:notification_center",
+    },
     "10.17": {
         "Embedded Analytics": "bi:embedded_analytics_config_list",
         "Mobile BI App": "bi:mobile_bi_config_list",
