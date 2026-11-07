@@ -27095,42 +27095,42 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
 # Sub-module 10.17 — Embedded & Mobile BI (Module 10: Business Intelligence, `bi`) — plan from research-bi-10.17.md (2026-11-07)
 
 ## Models (from research — 4 models)
-- [ ] `EmbeddedAnalyticsConfig` [`EMB-#####`] — fields: `tenant` (FK), `config_number` (auto `EMB-#####`), `name`, `target_type` (CHOICES: `DASHBOARD`, `REPORT`, `SEMANTIC_MODEL`), `dashboard` (FK `bi.BiDashboard` nullable), `report` (FK `bi.ReportDefinition` nullable), `semantic_model` (FK `bi.SemanticModel` nullable), `embedding_mode` (CHOICES: `IFRAME`, `WEB_COMPONENT`, `HEADLESS_API`), `auth_mode` (CHOICES: `PUBLIC_TOKEN`, `SIGNED_JWT`, `SSO_PASSTHROUGH`), `allowed_origins` (text/multiline domains), `theme_mode` (CHOICES: `LIGHT`, `DARK`, `AUTO`, `CUSTOM`), `primary_color`, `accent_color`, `custom_css`, `enable_rls_filter`, `default_rls_attributes` (JSON), `is_active`, `view_count`, `last_accessed_at`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `config_number`, `view_count`, `last_accessed_at`, `created_by`, `created_at`, `updated_at`.
-- [ ] `KioskWallboardDisplay` [`WALL-#####`] — fields: `tenant` (FK), `display_number` (auto `WALL-#####`), `name`, `location_description`, `kiosk_slug` (char, unique per tenant), `access_passcode`, `is_public_kiosk` (bool), `playlist_items` (JSON list of items with id, title, duration), `default_slide_duration_seconds` (integer, default 30), `transition_effect` (CHOICES: `FADE`, `SLIDE`, `NONE`), `theme` (CHOICES: `DARK_OLED`, `DARK_NAVY`, `LIGHT_CLEAN`), `display_schedule` (CHOICES: `CONTINUOUS_24_7`, `BUSINESS_HOURS`, `SHIFT_WORK`), `operating_hours_json` (JSON), `auto_refresh_data_interval_seconds` (integer, default 60), `is_active`, `last_heartbeat_at`, `device_ip_address`, `device_user_agent`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `display_number`, `last_heartbeat_at`, `device_ip_address`, `device_user_agent`, `created_by`, `created_at`, `updated_at`.
-- [ ] `MobileBiConfiguration` [`MOB-#####`] — fields: `tenant` (FK), `config_number` (auto `MOB-#####`), `name`, `target_user` (FK `accounts.User` nullable), `is_default_profile` (bool), `offline_caching_enabled` (bool), `cache_max_age_hours` (integer, default 24), `max_cache_storage_mb` (integer, default 100), `sync_on_wifi_only` (bool), `pinned_dashboard_ids` (JSON), `pinned_report_ids` (JSON), `touch_layout_preset` (CHOICES: `COMPACT`, `COMFORTABLE`, `LARGE_CARDS`), `enable_push_insights` (bool), `push_digest_frequency` (CHOICES: `REALTIME`, `HOURLY`, `DAILY_MORNING`, `WEEKLY`), `require_biometric_lock` (bool), `inactivity_lock_minutes` (integer, default 5), `is_active`, `last_synced_at`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `config_number`, `last_synced_at`, `created_by`, `created_at`, `updated_at`.
-- [ ] `EmbedApiToken` [`EAPI-#####`] — fields: `tenant` (FK), `token_number` (auto `EAPI-#####`), `name`, `token_prefix` (char, e.g. `eapi_live_`), `token_hash` (char, SHA-256), `scopes` (JSON array or char), `embedded_config` (FK `EmbeddedAnalyticsConfig` nullable), `injected_rls_context` (JSON), `allowed_ip_ranges` (text), `rate_limit_rpm` (integer, default 120), `expires_at` (datetime nullable), `is_active` (bool), `total_requests_count` (integer, default 0), `last_used_at` (datetime nullable), `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `token_number`, `token_hash`, `total_requests_count`, `last_used_at`, `created_by`, `created_at`, `updated_at`. Note: on create, generates plaintext key (displayed once with warning banner) and stores only prefix + SHA-256 hash.
+- [x] `EmbeddedAnalyticsConfig` [`EMB-#####`] — fields: `tenant` (FK), `config_number` (auto `EMB-#####`), `name`, `target_type` (CHOICES: `DASHBOARD`, `REPORT`, `SEMANTIC_MODEL`), `dashboard` (FK `bi.BiDashboard` nullable), `report` (FK `bi.ReportDefinition` nullable), `semantic_model` (FK `bi.SemanticModel` nullable), `embedding_mode` (CHOICES: `IFRAME`, `WEB_COMPONENT`, `HEADLESS_API`), `auth_mode` (CHOICES: `PUBLIC_TOKEN`, `SIGNED_JWT`, `SSO_PASSTHROUGH`), `allowed_origins` (text/multiline domains), `theme_mode` (CHOICES: `LIGHT`, `DARK`, `AUTO`, `CUSTOM`), `primary_color`, `accent_color`, `custom_css`, `enable_rls_filter`, `default_rls_attributes` (JSON), `is_active`, `view_count`, `last_accessed_at`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `config_number`, `view_count`, `last_accessed_at`, `created_by`, `created_at`, `updated_at`.
+- [x] `KioskWallboardDisplay` [`WALL-#####`] — fields: `tenant` (FK), `display_number` (auto `WALL-#####`), `name`, `location_description`, `kiosk_slug` (char, unique per tenant), `access_passcode`, `is_public_kiosk` (bool), `playlist_items` (JSON list of items with id, title, duration), `default_slide_duration_seconds` (integer, default 30), `transition_effect` (CHOICES: `FADE`, `SLIDE`, `NONE`), `theme` (CHOICES: `DARK_OLED`, `DARK_NAVY`, `LIGHT_CLEAN`), `display_schedule` (CHOICES: `CONTINUOUS_24_7`, `BUSINESS_HOURS`, `SHIFT_WORK`), `operating_hours_json` (JSON), `auto_refresh_data_interval_seconds` (integer, default 60), `is_active`, `last_heartbeat_at`, `device_ip_address`, `device_user_agent`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `display_number`, `last_heartbeat_at`, `device_ip_address`, `device_user_agent`, `created_by`, `created_at`, `updated_at`.
+- [x] `MobileBiConfiguration` [`MOB-#####`] — fields: `tenant` (FK), `config_number` (auto `MOB-#####`), `name`, `target_user` (FK `accounts.User` nullable), `is_default_profile` (bool), `offline_caching_enabled` (bool), `cache_max_age_hours` (integer, default 24), `max_cache_storage_mb` (integer, default 100), `sync_on_wifi_only` (bool), `pinned_dashboard_ids` (JSON), `pinned_report_ids` (JSON), `touch_layout_preset` (CHOICES: `COMPACT`, `COMFORTABLE`, `LARGE_CARDS`), `enable_push_insights` (bool), `push_digest_frequency` (CHOICES: `REALTIME`, `HOURLY`, `DAILY_MORNING`, `WEEKLY`), `require_biometric_lock` (bool), `inactivity_lock_minutes` (integer, default 5), `is_active`, `last_synced_at`, `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `config_number`, `last_synced_at`, `created_by`, `created_at`, `updated_at`.
+- [x] `EmbedApiToken` [`EAPI-#####`] — fields: `tenant` (FK), `token_number` (auto `EAPI-#####`), `name`, `token_prefix` (char, e.g. `eapi_live_`), `token_hash` (char, SHA-256), `scopes` (JSON array or char), `embedded_config` (FK `EmbeddedAnalyticsConfig` nullable), `injected_rls_context` (JSON), `allowed_ip_ranges` (text), `rate_limit_rpm` (integer, default 120), `expires_at` (datetime nullable), `is_active` (bool), `total_requests_count` (integer, default 0), `last_used_at` (datetime nullable), `created_by` (FK `accounts.User` nullable). Form excludes: `tenant`, `token_number`, `token_hash`, `total_requests_count`, `last_used_at`, `created_by`, `created_at`, `updated_at`. Note: on create, generates plaintext key (displayed once with warning banner) and stores only prefix + SHA-256 hash.
 
 ## Backend (apps/bi/{models,forms,views,urls}/EmbeddedMobileBi/)
-- [ ] `apps/bi/models/EmbeddedMobileBi/__init__.py`
-- [ ] `apps/bi/models/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
-- [ ] `apps/bi/models/EmbeddedMobileBi/KioskWallboardDisplays.py`
-- [ ] `apps/bi/models/EmbeddedMobileBi/MobileBiConfigurations.py`
-- [ ] `apps/bi/models/EmbeddedMobileBi/EmbedApiTokens.py`
-- [ ] Re-export block in `apps/bi/models/__init__.py`
-- [ ] `apps/bi/forms/EmbeddedMobileBi/__init__.py`
-- [ ] `apps/bi/forms/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
-- [ ] `apps/bi/forms/EmbeddedMobileBi/KioskWallboardDisplays.py`
-- [ ] `apps/bi/forms/EmbeddedMobileBi/MobileBiConfigurations.py`
-- [ ] `apps/bi/forms/EmbeddedMobileBi/EmbedApiTokens.py`
-- [ ] Re-export block in `apps/bi/forms/__init__.py`
-- [ ] `apps/bi/views/EmbeddedMobileBi/__init__.py`
-- [ ] `apps/bi/views/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
-- [ ] `apps/bi/views/EmbeddedMobileBi/KioskWallboardDisplays.py`
-- [ ] `apps/bi/views/EmbeddedMobileBi/MobileBiConfigurations.py`
-- [ ] `apps/bi/views/EmbeddedMobileBi/EmbedApiTokens.py`
-- [ ] Re-export block in `apps/bi/views/__init__.py`
-- [ ] `apps/bi/urls/EmbeddedMobileBi/__init__.py`
-- [ ] `apps/bi/urls/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
-- [ ] `apps/bi/urls/EmbeddedMobileBi/KioskWallboardDisplays.py`
-- [ ] `apps/bi/urls/EmbeddedMobileBi/MobileBiConfigurations.py`
-- [ ] `apps/bi/urls/EmbeddedMobileBi/EmbedApiTokens.py`
-- [ ] Wire sub-module into `apps/bi/urls/__init__.py`
-- [ ] Register new models in `apps/bi/admin.py`
-- [ ] Generate incremental migration: `makemigrations bi`
-- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo records
+- [x] `apps/bi/models/EmbeddedMobileBi/__init__.py`
+- [x] `apps/bi/models/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
+- [x] `apps/bi/models/EmbeddedMobileBi/KioskWallboardDisplays.py`
+- [x] `apps/bi/models/EmbeddedMobileBi/MobileBiConfigurations.py`
+- [x] `apps/bi/models/EmbeddedMobileBi/EmbedApiTokens.py`
+- [x] Re-export block in `apps/bi/models/__init__.py`
+- [x] `apps/bi/forms/EmbeddedMobileBi/__init__.py`
+- [x] `apps/bi/forms/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
+- [x] `apps/bi/forms/EmbeddedMobileBi/KioskWallboardDisplays.py`
+- [x] `apps/bi/forms/EmbeddedMobileBi/MobileBiConfigurations.py`
+- [x] `apps/bi/forms/EmbeddedMobileBi/EmbedApiTokens.py`
+- [x] Re-export block in `apps/bi/forms/__init__.py`
+- [x] `apps/bi/views/EmbeddedMobileBi/__init__.py`
+- [x] `apps/bi/views/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
+- [x] `apps/bi/views/EmbeddedMobileBi/KioskWallboardDisplays.py`
+- [x] `apps/bi/views/EmbeddedMobileBi/MobileBiConfigurations.py`
+- [x] `apps/bi/views/EmbeddedMobileBi/EmbedApiTokens.py`
+- [x] Re-export block in `apps/bi/views/__init__.py`
+- [x] `apps/bi/urls/EmbeddedMobileBi/__init__.py`
+- [x] `apps/bi/urls/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`
+- [x] `apps/bi/urls/EmbeddedMobileBi/KioskWallboardDisplays.py`
+- [x] `apps/bi/urls/EmbeddedMobileBi/MobileBiConfigurations.py`
+- [x] `apps/bi/urls/EmbeddedMobileBi/EmbedApiTokens.py`
+- [x] Wire sub-module into `apps/bi/urls/__init__.py`
+- [x] Register new models in `apps/bi/admin.py`
+- [x] Generate incremental migration: `makemigrations bi`
+- [x] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo records
 
 ## Wire-up
-- [ ] Navigation `apps/core/navigation.py`: add `LIVE_LINKS["10.17"]` mapping NavERP.md feature bullets:
+- [x] Navigation `apps/core/navigation.py`: add `LIVE_LINKS["10.17"]` mapping NavERP.md feature bullets:
   - "Embedded Analytics": "bi:embedded_analytics_config_list"
   - "Mobile BI App": "bi:mobile_bi_config_list"
   - "Developer APIs & SDKs": "bi:embed_api_token_list"
@@ -27138,27 +27138,27 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
   - "SSO & Row-Level Context": "bi:embed_api_token_list"
 
 ## Templates (templates/bi/embedded_mobile_bi/)
-- [ ] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/list.html`
-- [ ] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/detail.html`
-- [ ] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/form.html`
-- [ ] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/list.html`
-- [ ] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/detail.html`
-- [ ] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/form.html`
-- [ ] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/player.html`
-- [ ] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/list.html`
-- [ ] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/detail.html`
-- [ ] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/form.html`
-- [ ] `templates/bi/embedded_mobile_bi/embedapitoken/list.html`
-- [ ] `templates/bi/embedded_mobile_bi/embedapitoken/detail.html`
-- [ ] `templates/bi/embedded_mobile_bi/embedapitoken/form.html`
+- [x] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/list.html`
+- [x] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/detail.html`
+- [x] `templates/bi/embedded_mobile_bi/embeddedanalyticsconfig/form.html`
+- [x] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/list.html`
+- [x] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/detail.html`
+- [x] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/form.html`
+- [x] `templates/bi/embedded_mobile_bi/kioskwallboarddisplay/player.html`
+- [x] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/list.html`
+- [x] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/detail.html`
+- [x] `templates/bi/embedded_mobile_bi/mobilebiconfiguration/form.html`
+- [x] `templates/bi/embedded_mobile_bi/embedapitoken/list.html`
+- [x] `templates/bi/embedded_mobile_bi/embedapitoken/detail.html`
+- [x] `templates/bi/embedded_mobile_bi/embedapitoken/form.html`
 
 ## Verify
-- [ ] Run `makemigrations bi` -> incremental migration generated.
-- [ ] Run `migrate`.
-- [ ] Run `seed_bi` run 1.
-- [ ] Run `seed_bi` run 2 (verify idempotency).
-- [ ] Run `manage.py check` (0 issues).
-- [ ] Temp smoke test script in `temp/smoke_bi_10_17.py`:
+- [x] Run `makemigrations bi` -> incremental migration generated.
+- [x] Run `migrate`.
+- [x] Run `seed_bi` run 1.
+- [x] Run `seed_bi` run 2 (verify idempotency).
+- [x] Run `manage.py check` (0 issues).
+- [x] Temp smoke test script in `temp/smoke_bi_10_17.py`:
   - Login as `admin_acme` / `password`.
   - GET all new 10.17 URLs (list, create, detail, edit, player) -> 200/302.
   - Assert HTML content, titles, no leaked `{#` tags.
@@ -27167,20 +27167,30 @@ Color-named badge tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info
   - Verify `apps/core/navigation.py` `LIVE_LINKS["10.17"]` resolves without `NoReverseMatch`.
 
 ## Close-Out Steps
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
-- [ ] Append findings to `.claude/tasks/review-bi-10.17.md`.
-- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [x] Append findings to `.claude/tasks/review-bi-10.17.md`.
+- [x] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [x] Run Phase 6 automated test suite:
   - Update `conftest.py` with 10.17 fixtures.
-  - Author `test_embedded_mobile_bi_models.py`
-  - Author `test_embedded_mobile_bi_forms.py`
-  - Author `test_embedded_mobile_bi_views.py`
-  - Author `test_embedded_mobile_bi_security.py`
-  - Run full unfiltered test suite: `pytest apps/bi/tests/`
-- [ ] Phase 7 documentation:
+  - Author `test_embeddedmobilebi_models.py`
+  - Author `test_embeddedmobilebi_forms.py`
+  - Author `test_embeddedmobilebi_views.py`
+  - Author `test_embeddedmobilebi_security.py`
+  - Run full unfiltered test suite: `pytest apps/bi/tests/` (2,354 passed, 100% green)
+- [x] Phase 7 documentation:
   - Update `.claude/skills/bi/SKILL.md` with 10.17 models, views, and routes.
   - Update `README.md`.
   - Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.17.md`.
+
+## Review & Close-Out Summary (10.17 Embedded & Mobile BI)
+- **Status**: Completed (100% green, 0 regressions)
+- **Migrations**: `0036` and `0037` applied cleanly
+- **Review Findings**: 20 findings (`C1`–`C4`, `I1`–`I7`, `M1`–`M9`) identified across 6 review passes and 100% fixed by `code-fixer` in `2eab9124`
+- **Unit / View / Security Tests**: 235 dedicated tests passed; 2,354 total BI suite tests passed (100% green)
+- **Gaps**: None. Recorded in `.claude/tasks/gaps-bi-10.17.md`
+- **Skill**: Updated `.claude/skills/bi/SKILL.md`
+- **README**: Updated `README.md`
+
 
 ## Later Passes / Deferred
 - Native mobile binary distribution (iOS IPA, Android APK).
