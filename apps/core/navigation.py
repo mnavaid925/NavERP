@@ -3073,6 +3073,20 @@ LIVE_LINKS = {
         "Sentiment Analyses": "bi:text_sentiment_analysis_list",
         "Recommendations": "bi:analytics_recommendation_list",
     },
+    "10.15": {
+        "Natural Language Query (NLQ)": "bi:natural_language_query_list",
+        "Conversational BI Assistant": "bi:bi_conversation_session_list",
+        "Natural Language Generation (NLG)": "bi:narrative_explanation_list",
+        "Voice-Enabled Analytics": "bi:narrative_explanation_list",
+        "Search-Driven Discovery": "bi:search_discovery_index_list",
+        # Plural and convenience aliases
+        "Natural Language Queries": "bi:natural_language_query_list",
+        "Conversational BI Sessions": "bi:bi_conversation_session_list",
+        "Narrative Explanations": "bi:narrative_explanation_list",
+        "Search Discovery Indexes": "bi:search_discovery_index_list",
+        "Chat Assistant Workspace": "bi:bi_chat_workspace",
+        "Discovery Hub": "bi:search_discovery_hub",
+    },
 
 
 
