@@ -40,7 +40,7 @@ def test_predictiveanalytics_model_creation_and_autonumber(predictive_model_a):
     assert predictive_model_a.get_absolute_url() == f"/bi/predictive-models/{predictive_model_a.pk}/"
     assert predictive_model_a.status == "active"
     assert predictive_model_a.problem_type == "time_series_forecast"
-    assert predictive_model_a.algorithm == "auto_arima"
+    assert predictive_model_a.algorithm == "arima"
 
 
 @pytest.mark.django_db
