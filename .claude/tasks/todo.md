@@ -7,11 +7,173 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 10.13: Predictive & Advanced Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.13.md` (2026-11-07)
+
+> **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.12.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0029_alter_scorecardkpiassignment_options_and_more.py`, so **10.13 claims `0030`** (see L43).
+> Plan written from `.claude/tasks/research-bi-10.13.md` (Phase 1).
+> Package folder name: `apps/bi/{models,forms,views,urls}/PredictiveAnalytics/`
+> Template folder name: `templates/bi/predictive_analytics/{predictive_model,forecast_execution,statistical_anomaly,optimization_scenario}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Predictive & Advanced Analytics Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/bi/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Collision-free 4-character uppercase prefixes starting with `B`:
+    - `PredictiveModel` -> `NUMBER_PREFIX = "BPML"` (format: `BPML-YYYYMM-XXXX`)
+    - `ForecastExecution` -> `NUMBER_PREFIX = "BFOR"` (format: `BFOR-YYYYMM-XXXX`)
+    - `StatisticalAnomaly` -> `NUMBER_PREFIX = "BANM"` (format: `BANM-YYYYMM-XXXX`)
+    - `OptimizationScenario` -> `NUMBER_PREFIX = "BOPT"` (format: `BOPT-YYYYMM-XXXX`)
+  - Analytical & Predictive Scope:
+    - `PredictiveModel` [BPML-]:
+      - Governed ML and statistical model catalog, algorithm registry, and model versioning/lifecycle manager.
+      - Problem types: `classification` (Binary/Multiclass Classification), `regression` (Continuous Target Regression), `time_series` (Time-Series Forecasting), `anomaly_detection` (Outlier & Anomaly Detection), `clustering` (Customer/Entity Segmentation).
+      - Algorithm types: `auto_ml` (Automated Machine Learning Tournament), `linear_regression` (Linear / Ridge Regression), `logistic_regression` (Logistic Regression), `random_forest` (Random Forest Ensemble), `gradient_boosting` (Gradient Boosted Trees / LightGBM), `exponential_smoothing` (Holt-Winters Exponential Smoothing), `arima` (AutoRegressive Integrated Moving Average), `prophet` (Additive Decomposable Time Series), `isolation_forest` (Isolation Forest Ensembles), `z_score_statistical` (Parametric Gaussian Statistical Z-Score).
+      - Training datasets: FK to `bi.SemanticModel` (curated feature sets) or `bi.WarehouseTable` (star/snowflake historical tables).
+      - Target, date, and entity identifier columns: `target_column` (CharField 100), `date_column` (CharField 100, blank=True), `entity_identifier_column` (CharField 100, blank=True).
+      - Hyperparameters & selected features: `feature_columns` (JSONField list), `hyperparameters` (JSONField dict).
+      - Evaluation metrics: `evaluation_metrics` (JSONField dict storing R², RMSE, MAE, ROC-AUC, F1, Precision, Recall, SMAPE, KI, KR) and `primary_metric_value` (DecimalField 10,4).
+      - Feature attribution & explainability: `feature_importance` (JSONField dict storing global SHAP-style weights).
+      - Versioning & lifecycle: `version` (CharField 20, default "1.0"), `status` (`draft`, `training`, `trained`, `active`, `retired`, `failed`), `trained_at` (DateTimeField), `trained_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `trained_at`, `trained_by`, `evaluation_metrics`, `primary_metric_value`, `feature_importance`.
+    - `ForecastExecution` [BFOR-]:
+      - Forward-looking time-series projection engine with automated trend and seasonality detection.
+      - Forecaster link: FK to `bi.PredictiveModel` (PROTECT, `related_name="forecast_executions"`).
+      - Dimensional scoping: optional FKs to `bi.SemanticModel`, `bi.WarehouseTable`, `accounting.FiscalPeriod`, `core.OrgUnit`.
+      - Target metric & horizon: `target_metric` (CharField 100), `frequency` (`daily`, `weekly`, `monthly`, `quarterly`, `yearly`, default="monthly"), `horizon_periods` (PositiveIntegerField, default=12), `historical_periods_used` (PositiveIntegerField, default=36).
+      - Trend & Seasonality: `seasonality_detected` (BooleanField, default=False), `seasonality_cycle` (CharField 50, blank=True), `trend_direction` (`upward`, `downward`, `flat`, `volatile`, default="flat").
+      - Evaluation & Backtesting: `fit_metrics` (JSONField dict: MAPE, SMAPE, RMSE).
+      - Point estimates & probabilistic confidence bands: `forecast_points` (JSONField list of objects with `period`, `point`, `lower_bound`, `upper_bound`, `p10`, `p90`).
+      - Execution metadata: `status` (`pending`, `running`, `completed`, `failed`), `executed_at` (DateTimeField, auto_now_add=True), `executed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `executed_at`, `executed_by`, `status`, `seasonality_detected`, `seasonality_cycle`, `trend_direction`, `fit_metrics`, `forecast_points`.
+    - `StatisticalAnomaly` [BANM-]:
+      - Automated spike, dip, outlier, and pattern break register with multi-method statistical detection and root-cause dimension attribution.
+      - Scoped entity and metric: `metric_name` (CharField 100), `entity_reference` (CharField 100, blank=True), optional FKs to `bi.PredictiveModel`, `bi.SemanticModel`, `bi.WarehouseTable`, `bi.KpiDefinition`, or `bi.OlapCube`.
+      - Anomaly classification: `anomaly_type` (`spike`, `dip`, `outlier`, `pattern_break`, `step_change`, default="spike").
+      - Detection method: `detection_method` (`z_score`, `iqr`, `isolation_forest`, `confidence_band`, `moving_average_residual`, default="z_score").
+      - Deviation & bounds: `detected_timestamp` (DateTimeField), `actual_value` (DecimalField 18,4), `expected_value` (DecimalField 18,4), `lower_bound` (DecimalField 18,4, null=True), `upper_bound` (DecimalField 18,4, null=True), `deviation_score` (DecimalField 10,4).
+      - Severity & Attribution: `severity` (`low`, `medium`, `high`, `critical`, default="medium"), `root_cause_factors` (JSONField list ranking top contributing dimensions/factors).
+      - Investigation lifecycle: `status` (`detected`, `acknowledged`, `investigating`, `confirmed_true_positive`, `false_positive`, `resolved`, default="detected"), `resolved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL), `resolved_at` (DateTimeField), `resolution_notes` (TextField, blank=True).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `resolved_by`, `resolved_at`.
+    - `OptimizationScenario` [BOPT-]:
+      - Prescriptive scenario modeling, goal-seeking target inversion, and operational constraint solving generating prioritized next-best-action guidance.
+      - Scenario definition: `objective_type` (`maximize_revenue`, `minimize_cost`, `maximize_profit_margin`, `balance_workload`, `goal_seeking`, `next_best_action`, default="maximize_profit_margin"), `target_metric` (CharField 100), `target_value` (DecimalField 18,4, null=True, blank=True).
+      - Baseline anchors: optional FKs to `bi.PredictiveModel` (response curves) and `accounting.Budget` (financial baseline/limits).
+      - Variables & constraints: `decision_variables` (JSONField list specifying controllable levers, min, max, baseline, step), `constraints` (JSONField list specifying capacity, financial caps, and business floors).
+      - Solution & Prescriptions: `status` (`draft`, `solving`, `optimal`, `feasible`, `infeasible`, `applied`, default="draft"), `baseline_objective_value` (DecimalField 18,4, null=True), `optimized_objective_value` (DecimalField 18,4, null=True), `improvement_percentage` (DecimalField 8,2, null=True), `solution_summary` (JSONField dict of optimal variable values), `recommended_actions` (JSONField list of ranked prescriptive steps).
+      - Application lifecycle: `applied_at` (DateTimeField), `applied_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `created_by`, `applied_at`, `applied_by`, `baseline_objective_value`, `optimized_objective_value`, `improvement_percentage`, `solution_summary`, `recommended_actions`.
+  - Sibling Hand-offs & Boundaries:
+    - 10.3 (`DataWarehouse`): `WarehouseTable` provides historical fact/dim datasets for model training and forecast writeback.
+    - 10.4 (`SemanticLayer`): `SemanticModel` supplies curated metrics and feature dimensions for model engineering.
+    - 10.11 (`PerformanceScorecards`): `KpiDefinition` metrics serve as monitored streams for statistical anomaly detection.
+    - 10.12 (`OlapAnalysis`): `OlapCube` multidimensional cubes provide aggregated baseline metrics for forecasting and optimization.
+    - 10.14 (`AiAugmentedAnalytics` - DOWNSTREAM): Generative narrative summaries and smart insight feeds consume 10.13 models and forecasts.
+    - 10.15 (`NaturalLanguageConversationalBI` - DOWNSTREAM): NLQ chat queries query 10.13 model predictions and forecast trajectories.
+    - 10.16 (`AlertsAndSubscriptions` - DOWNSTREAM): Automated push alerts dispatch high/critical `StatisticalAnomaly` notifications.
+  - Audit logging: Administrative actions, model training/activation, anomaly resolution, and scenario optimization approvals write immutable records to `core.AuditLog` via `apps.core.utils.write_audit_log` / `apps.core.crud`.
+- **Prefix Collision Sweep**: `BPML` (PredictiveModel), `BFOR` (ForecastExecution), `BANM` (StatisticalAnomaly), `BOPT` (OptimizationScenario) verified 100% collision-free repository-wide.
+
+---
+
+## 10.13-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO external heavy cloud ML API or proprietary network dependencies (e.g. AWS SageMaker / Azure ML API calls)** — Algorithms (AutoML heuristics, regression, tree ensembles, exponential smoothing, moving averages, Z-score, IQR, linear optimization solvers) run locally, deterministically, and offline in Python/Django.
+- [ ] **NO opaque black-box external billing or metering dependencies** — All compute is tenant-owned, self-contained, and audited.
+- [ ] **NO LLM chat prompts or conversational chat windows** — Natural language search and generative narrative summaries belong strictly to 10.14 and 10.15.
+- [ ] **NO automated schema mutation or unapproved database DDL execution** — Models train and score against existing tables; no automated alterations of production schema.
+- [ ] **NO distributed GPU clusters or heavy deep neural network training frameworks** (Ray, Spark MLlib, PyTorch/TensorFlow distributed) — Focused on governed enterprise tabular ML, time-series forecasting, and operational optimization.
+- [ ] **NO duplicate customer/vendor or accounting ledger tables** — Reuses verified core spine `core.Party`, `core.OrgUnit`, `accounting.FiscalPeriod`, `accounting.GLAccount`, `accounting.Budget`, and `core.AuditLog`.
+
+---
+
+## Sub-module 10.13 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-bi-10.13.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: PredictiveModel (`BPML`)**
+  - [ ] `apps/bi/models/PredictiveAnalytics/PredictiveModels.py`
+  - [ ] `apps/bi/forms/PredictiveAnalytics/PredictiveModels.py`
+  - [ ] `apps/bi/views/PredictiveAnalytics/PredictiveModels.py` (CRUD + `train` action + `status_toggle` activation/retirement)
+  - [ ] `apps/bi/urls/PredictiveAnalytics/PredictiveModels.py`
+  - [ ] `templates/bi/predictive_analytics/predictive_model/list.html`
+  - [ ] `templates/bi/predictive_analytics/predictive_model/detail.html`
+  - [ ] `templates/bi/predictive_analytics/predictive_model/form.html`
+- [ ] **Entity 2: ForecastExecution (`BFOR`)**
+  - [ ] `apps/bi/models/PredictiveAnalytics/ForecastExecutions.py`
+  - [ ] `apps/bi/forms/PredictiveAnalytics/ForecastExecutions.py`
+  - [ ] `apps/bi/views/PredictiveAnalytics/ForecastExecutions.py` (CRUD + `run_forecast` action + `export` view)
+  - [ ] `apps/bi/urls/PredictiveAnalytics/ForecastExecutions.py`
+  - [ ] `templates/bi/predictive_analytics/forecast_execution/list.html`
+  - [ ] `templates/bi/predictive_analytics/forecast_execution/detail.html`
+  - [ ] `templates/bi/predictive_analytics/forecast_execution/form.html`
+- [ ] **Entity 3: StatisticalAnomaly (`BANM`)**
+  - [ ] `apps/bi/models/PredictiveAnalytics/StatisticalAnomalies.py`
+  - [ ] `apps/bi/forms/PredictiveAnalytics/StatisticalAnomalies.py`
+  - [ ] `apps/bi/views/PredictiveAnalytics/StatisticalAnomalies.py` (CRUD + `triage` workflow transition + `resolve` action)
+  - [ ] `apps/bi/urls/PredictiveAnalytics/StatisticalAnomalies.py`
+  - [ ] `templates/bi/predictive_analytics/statistical_anomaly/list.html`
+  - [ ] `templates/bi/predictive_analytics/statistical_anomaly/detail.html`
+  - [ ] `templates/bi/predictive_analytics/statistical_anomaly/form.html`
+- [ ] **Entity 4: OptimizationScenario (`BOPT`)**
+  - [ ] `apps/bi/models/PredictiveAnalytics/OptimizationScenarios.py`
+  - [ ] `apps/bi/forms/PredictiveAnalytics/OptimizationScenarios.py`
+  - [ ] `apps/bi/views/PredictiveAnalytics/OptimizationScenarios.py` (CRUD + `solve` solver simulation + `apply` prescription action)
+  - [ ] `apps/bi/urls/PredictiveAnalytics/OptimizationScenarios.py`
+  - [ ] `templates/bi/predictive_analytics/optimization_scenario/list.html`
+  - [ ] `templates/bi/predictive_analytics/optimization_scenario/detail.html`
+  - [ ] `templates/bi/predictive_analytics/optimization_scenario/form.html`
+
+### Phase 3.4: Integrate
+- [ ] Create `apps/bi/models/PredictiveAnalytics/__init__.py` and update `apps/bi/models/__init__.py` re-export block
+- [ ] Create `apps/bi/forms/PredictiveAnalytics/__init__.py` and update `apps/bi/forms/__init__.py` re-export block
+- [ ] Create `apps/bi/views/PredictiveAnalytics/__init__.py` and update `apps/bi/views/__init__.py` re-export block
+- [ ] Create `apps/bi/urls/PredictiveAnalytics/__init__.py` and update `apps/bi/urls/__init__.py` re-export block & concatenate urlpatterns
+- [ ] Register all 4 models in `apps/bi/admin.py`
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.13 (models, forecasts, anomalies, scenarios)
+- [ ] Add `LIVE_LINKS["10.13"]` in `apps/core/navigation.py`:
+  - `"Forecasting & Trend Analysis"`: `bi:forecast_execution_list`
+  - `"Predictive & Propensity Models"`: `bi:predictive_model_list`
+  - `"Prescriptive & Optimization"`: `bi:optimization_scenario_list`
+  - `"Anomaly & Outlier Detection"`: `bi:statistical_anomaly_list`
+  - `"AutoML & Model Lifecycle"`: `bi:predictive_model_list`
+- [ ] Run `makemigrations bi` (claiming `0030`) & `migrate`
+- [ ] Run `seed_bi` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_10_13.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.13.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests
+- [ ] `apps/bi/tests/test_predictive_analytics_models.py`
+- [ ] `apps/bi/tests/test_predictive_analytics_forms.py`
+- [ ] `apps/bi/tests/test_predictive_analytics_views.py`
+- [ ] `apps/bi/tests/test_predictive_analytics_security.py`
+- [ ] Run full unfiltered `pytest apps/bi`
+
+### Phase 7: Skill & README
+- [ ] Update `.claude/skills/bi/SKILL.md` with 10.13 models, routes, templates, and patterns
+- [ ] Mark 10.13 complete in `README.md`
+
+---
 # Sub-module 10.14: AI & Augmented Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.14.md` (2026-11-07)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.12.
 > **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
-> Migration is **incremental**: previous leaf is `0029_alter_scorecardkpiassignment_options_and_more.py`, so **10.14 claims `0030`** (see L43).
+> Migration is **incremental**: previous leaf will be `0030` (from 10.13), so **10.14 claims `0031`** (see L43).
 > Plan written from `.claude/tasks/research-bi-10.14.md` (Phase 1).
 > Package folder name: `apps/bi/{models,forms,views,urls}/AiAugmentedAnalytics/`
 > Template folder name: `templates/bi/ai_augmented_analytics/{augmented_insight,smart_data_prep_suggestion,text_sentiment_analysis,analytics_recommendation}/` + `feed.html`
