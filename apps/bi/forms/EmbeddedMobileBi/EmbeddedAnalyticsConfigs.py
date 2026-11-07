@@ -1,4 +1,5 @@
 import json
+import re
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -74,6 +75,18 @@ class EmbeddedAnalyticsConfigForm(TenantUniqueMixin, TenantModelForm):
                 self.fields["default_rls_attributes_raw"].initial = "{}"
         else:
             self.fields["default_rls_attributes_raw"].initial = "{}"
+
+    def clean_primary_color(self):
+        val = self.cleaned_data.get("primary_color", "").strip()
+        if val and not re.match(r"^#[0-9a-fA-F]{6}$", val):
+            raise forms.ValidationError("Primary color must be a valid 6-character hex code (e.g. #1e40af).")
+        return val
+
+    def clean_accent_color(self):
+        val = self.cleaned_data.get("accent_color", "").strip()
+        if val and not re.match(r"^#[0-9a-fA-F]{6}$", val):
+            raise forms.ValidationError("Accent color must be a valid 6-character hex code (e.g. #3b82f6).")
+        return val
 
     def clean_custom_css(self):
         css = self.cleaned_data.get("custom_css", "") or ""
