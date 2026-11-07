@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Natural Language Queries — Conversational BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Conversational BI</span>
+        </div>
+        <h1 class="page-title">Natural Language Queries (NLQ)</h1>
+        <p class="text-muted text-sm">Ask questions in plain language, explore auto-generated SQL aggregates and dynamic Chart.js visualizations</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_conversation_session_list' %}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>Conversations</span>
+        </a>
+        <a href="{% url 'bi:search_discovery_hub' %}" class="btn btn-outline">
+            <i data-lucide="compass"></i>
+            <span>Discovery Hub</span>
+        </a>
+        <a href="{% url 'bi:natural_language_query_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Ask Question</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="search"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Queries</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Completed</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="mic"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Voice Queries</div>
+            <div class="text-2xl font-bold text-purple-600">{{ voice_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="thumbs-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Helpful Ratings</div>
+            <div class="text-2xl font-bold text-amber-600">{{ helpful_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label for="filter_q" class="form-label text-xs">Search Queries</label>
+                <div class="relative">
+                    <input type="text" id="filter_q" name="q" value="{{ request.GET.q }}" placeholder="Search query text, SQL, notes..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label for="filter_status" class="form-label text-xs">Status</label>
+                <select id="filter_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_modality" class="form-label text-xs">Modality</label>
+                <select id="filter_modality" name="modality" class="form-select text-sm">
+                    <option value="">All Modalities</option>
+                    {% for code, label in modality_choices %}
+                    <option value="{{ code }}" {% if request.GET.modality == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_intent" class="form-label text-xs">Intent Type</label>
+                <select id="filter_intent" name="intent" class="form-select text-sm">
+                    <option value="">All Intents</option>
+                    {% for code, label in intent_choices %}
+                    <option value="{{ code }}" {% if request.GET.intent == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_semantic_model" class="form-label text-xs">Semantic Model</label>
+                <select id="filter_semantic_model" name="semantic_model" class="form-select text-sm">
+                    <option value="">All Models</option>
+                    {% for sm in semantic_models %}
+                    <option value="{{ sm.pk }}" {% if request.GET.semantic_model == sm.pk|stringformat:"d" %}selected{% endif %}>{{ sm.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-6 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:natural_language_query_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Queries</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Queries Catalog</h2>
+        <span class="text-xs text-muted">{{ queries.paginator.count }} total queries</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Query</th>
+                    <th>Modality & Intent</th>
+                    <th>Dataset Anchor</th>
+                    <th>Visual Format</th>
+                    <th>Execution Status</th>
+                    <th>Rating</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for qry in queries %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:natural_language_query_detail' qry.pk %}" class="hover:underline text-indigo-600">
+                                {{ qry.query_text }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ qry.number }} · {{ qry.created_at|date:"M d, Y H:i" }}</div>
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-1.5">
+                            <span class="badge {{ qry.modality_badge_color }} text-xs">
+                                {% if qry.input_modality == 'voice' %}<i data-lucide="mic" class="w-3 h-3 inline mr-1"></i>{% endif %}
+                                {{ qry.get_input_modality_display }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-muted mt-1">{{ qry.get_intent_type_display }}</div>
+                    </td>
+                    <td>
+                        {% if qry.semantic_model %}
+                        <div class="text-sm font-medium text-slate-800">{{ qry.semantic_model.name }}</div>
+                        <div class="text-xs text-muted">Semantic Model</div>
+                        {% elif qry.warehouse_table %}
+                        <div class="text-sm font-medium text-slate-800">{{ qry.warehouse_table.name }}</div>
+                        <div class="text-xs text-muted">Warehouse Fact/Dim</div>
+                        {% elif qry.kpi_definition %}
+                        <div class="text-sm font-medium text-slate-800">{{ qry.kpi_definition.name }}</div>
+                        <div class="text-xs text-muted">KPI Definition</div>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Global Search</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ qry.get_chart_type_display }}</div>
+                        <div class="text-xs text-muted font-mono mt-0.5">Conf: {{ qry.confidence_score }}%</div>
+                    </td>
+                    <td>
+                        <div class="flex flex-col gap-1 items-start">
+                            <span class="badge {{ qry.status_badge_color }} text-xs">
+                                {{ qry.get_execution_status_display }}
+                            </span>
+                            {% if qry.execution_duration_ms > 0 %}
+                            <span class="text-xs text-muted font-mono">{{ qry.execution_duration_ms }} ms</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ qry.rating_badge_color }} text-xs">
+                            {{ qry.get_user_rating_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'bi:natural_language_query_detail' qry.pk %}" class="btn btn-icon" title="View Query">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:natural_language_query_edit' qry.pk %}" class="btn btn-icon" title="Edit Query">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:natural_language_query_delete' qry.pk %}" class="inline" onsubmit="return confirm('Delete query {{ qry.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Query">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <div class="inline-flex p-3 rounded-full bg-slate-100 text-slate-400 mb-3">
+                                <i data-lucide="message-square" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-800">No natural language queries found</h3>
+                            <p class="text-sm text-muted mt-1 max-w-sm mx-auto">Ask questions about metrics, revenue breakdowns, or regional performance in natural English.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:natural_language_query_create' %}" class="btn btn-primary text-xs">
+                                    <i data-lucide="plus"></i>
+                                    <span>Ask Your First Question</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if queries.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3">
+        <div class="text-xs text-muted">
+            Page {{ queries.number }} of {{ queries.paginator.num_pages }} ({{ queries.paginator.count }} items)
+        </div>
+        <div class="pagination flex gap-1">
+            {% if queries.has_previous %}
+            <a href="?page={{ queries.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&modality={{ request.GET.modality }}&intent={{ request.GET.intent }}&semantic_model={{ request.GET.semantic_model }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if queries.has_next %}
+            <a href="?page={{ queries.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&modality={{ request.GET.modality }}&intent={{ request.GET.intent }}&semantic_model={{ request.GET.semantic_model }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
