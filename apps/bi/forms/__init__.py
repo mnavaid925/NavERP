@@ -49,6 +49,12 @@ from apps.bi.forms.OlapAnalysis import (
     ScenarioWritebackCellForm,
     WhatIfScenarioForm,
 )
+from apps.bi.forms.PredictiveAnalytics import (
+    ForecastExecutionForm,
+    OptimizationScenarioForm,
+    PredictiveModelForm,
+    StatisticalAnomalyForm,
+)
 from apps.bi.forms.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsightForm
 from apps.bi.forms.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestionForm
 from apps.bi.forms.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysisForm
@@ -159,6 +165,10 @@ __all__ = [
     "PivotAnalysisViewForm",
     "WhatIfScenarioForm",
     "ScenarioWritebackCellForm",
+    "PredictiveModelForm",
+    "ForecastExecutionForm",
+    "StatisticalAnomalyForm",
+    "OptimizationScenarioForm",
     "AugmentedInsightForm",
     "SmartDataPrepSuggestionForm",
     "TextSentimentAnalysisForm",
