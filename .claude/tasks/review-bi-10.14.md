@@ -27,7 +27,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **M2**: fixed in 93589335 — Added next input to table quick action forms in smart_data_prep_suggestion/list.html and text_sentiment_analysis/list.html and handled in view.
 - [x] **M3**: fixed in 4a6382a9 — Added matching id and for attributes on search and filter inputs across all 4 list templates.
 - [x] **M4**: fixed in 8f8fb989 — Added dark mode contrast utilities for active filter pills and card callouts in feed.html (dark:bg-slate-800, dark:text-indigo-300).
-- [ ] **M5**: Add composite index `models.Index(fields=["tenant", "-created_at"], name="idx_bsdp_ten_created")` to `SmartDataPrepSuggestion.Meta.indexes`.
+- [x] **M5**: fixed in ceec8bab — Added composite index models.Index(fields=["tenant", "-created_at"], name="idx_bsdp_ten_created") to SmartDataPrepSuggestion.Meta.indexes and applied migration 0033.
 - [ ] **M6**: Add explicit decimal step `step="0.01"` and bounds for polarity and subjectivity score widgets in `TextSentimentAnalysisForm`.
 
 ---
