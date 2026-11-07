@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ query.number }}{% else %}Ask Natural Language Question{% endif %} — Conversational BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:natural_language_query_list' %}">Natural Language Queries</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ query.number }}{% else %}New Query{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Query {{ query.number }}{% else %}Ask a Natural Language Question{% endif %}</h1>
+        <p class="text-muted text-sm">Enter an analytical question in plain language to generate automated aggregates, SQL, and visualizations</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'bi:natural_language_query_detail' query.pk %}{% else %}{% url 'bi:natural_language_query_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">{% if is_edit %}Query Parameters{% else %}Question & Context Parameters{% endif %}</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Question Text -->
+                <div class="form-group">
+                    <label for="{{ form.query_text.id_for_label }}" class="form-label">Analytical Question / Query Text <span class="text-red-500">*</span></label>
+                    {{ form.query_text }}
+                    {% if form.query_text.errors %}<div class="form-error">{{ form.query_text.errors }}</div>{% endif %}
+                    <p class="text-xs text-muted mt-1">Example: "Show quarterly revenue by product line for FY2026" or "Top 5 suppliers by on-time delivery rate"</p>
+                </div>
+
+                <!-- Modality & Intent -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.input_modality.id_for_label }}" class="form-label">Input Modality</label>
+                        {{ form.input_modality }}
+                        {% if form.input_modality.errors %}<div class="form-error">{{ form.input_modality.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.intent_type.id_for_label }}" class="form-label">Intent Classification</label>
+                        {{ form.intent_type }}
+                        {% if form.intent_type.errors %}<div class="form-error">{{ form.intent_type.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.chart_type.id_for_label }}" class="form-label">Preferred Visualization</label>
+                        {{ form.chart_type }}
+                        {% if form.chart_type.errors %}<div class="form-error">{{ form.chart_type.errors }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Bound Analytical Objects -->
+                <div class="border-t border-slate-200 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-3">Analytical Context Anchors (Optional)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label for="{{ form.semantic_model.id_for_label }}" class="form-label">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.warehouse_table.id_for_label }}" class="form-label">Warehouse Fact / Dimension Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.kpi_definition.id_for_label }}" class="form-label">KPI Definition Target</label>
+                            {{ form.kpi_definition }}
+                            {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.conversation_session.id_for_label }}" class="form-label">Conversational Chat Thread</label>
+                            {{ form.conversation_session }}
+                            {% if form.conversation_session.errors %}<div class="form-error">{{ form.conversation_session.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feedback & Notes -->
+                <div class="border-t border-slate-200 pt-4">
+                    <h3 class="text-sm font-semibold text-slate-800 mb-3">Accuracy Feedback (Optional)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group md:col-span-1">
+                            <label for="{{ form.user_rating.id_for_label }}" class="form-label">Accuracy Rating</label>
+                            {{ form.user_rating }}
+                            {% if form.user_rating.errors %}<div class="form-error">{{ form.user_rating.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label for="{{ form.user_feedback_notes.id_for_label }}" class="form-label">User Feedback Notes</label>
+                            {{ form.user_feedback_notes }}
+                            {% if form.user_feedback_notes.errors %}<div class="form-error">{{ form.user_feedback_notes.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'bi:natural_language_query_detail' query.pk %}{% else %}{% url 'bi:natural_language_query_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="sparkles"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Submit Question{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
