@@ -1,6 +1,7 @@
 from decimal import Decimal
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -16,6 +17,8 @@ from apps.bi.models.PredictiveAnalytics.StatisticalAnomalies import StatisticalA
 from apps.bi.views._common import bi_object, bi_scope
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
+
+User = get_user_model()
 
 
 @login_required
@@ -138,12 +141,14 @@ def bi_alert_rule_create(request):
 
     kpi_definitions = KpiDefinition.objects.filter(tenant=request.tenant)
     anomalies = StatisticalAnomaly.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
         "rule": None,
         "kpi_definitions": kpi_definitions,
         "anomalies": anomalies,
+        "users": users,
     }
     return render(request, "bi/alerts_subscriptions/bi_alert_rule/form.html", context)
 
@@ -170,12 +175,14 @@ def bi_alert_rule_edit(request, pk):
 
     kpi_definitions = KpiDefinition.objects.filter(tenant=request.tenant)
     anomalies = StatisticalAnomaly.objects.filter(tenant=request.tenant)
+    users = User.objects.filter(tenant=request.tenant).order_by("username")
 
     context = {
         "form": form,
         "rule": rule,
         "kpi_definitions": kpi_definitions,
         "anomalies": anomalies,
+        "users": users,
     }
     return render(request, "bi/alerts_subscriptions/bi_alert_rule/form.html", context)
 
