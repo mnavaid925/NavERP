@@ -1,121 +1,120 @@
-# Review Findings: Sub-module 10.15 Natural Language & Conversational BI
+# Consolidated Review Findings: Sub-module 10.15 Natural Language & Conversational BI
 
-## 1. Code Reviewer
-**Verdict**: Commit after fixing Important findings. Sub-module 10.15 has robust multi-tenancy, clean package structures, and thorough audit logging, but carries a numeric input guard defect (L35), a filter GET parameter mismatch, missing model attributes in templates, and an incomplete `--flush` seeder implementation.
+**Scope**: Changeset `BASE (ff2b961f0e086fc09a9b9f15d9bb168ae8976b9d) ... HEAD`  
+**Reviewers Executed**: 6 of 6 (Code Reviewer, Explorer, Frontend Reviewer, Performance Reviewer, QA Smoke Tester, Security Reviewer)  
+**Status**: Deduplicated, prioritized, and ready for Phase 5 (`code-fixer`)
 
-### Important
-1. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:192` — `search_discovery_index_reweight` parses numeric input with `Decimal(weight_val)` without an `is_finite()` guard, allowing `"NaN"` input to parse and crash database persistence during comparison/write (Lesson L35). Fix: Add `if not new_weight.is_finite(): raise InvalidOperation` immediately following `new_weight = Decimal(weight_val)` in the `try` block.
-2. `templates/bi/conversational_bi/narrative_explanation/list.html:102` — Filter parameter mismatch: template dropdown submits `name="artifact"` (and pagination propagates `&artifact=...`), but `narrative_explanation_list` view (`apps/bi/views/ConversationalBi/NarrativeExplanations.py:55`) reads `request.GET.get("artifact_type")`, silently ignoring artifact filtering. Fix: Read `request.GET.get("artifact_type") or request.GET.get("artifact", "")` in `narrative_explanation_list` or align template `name` to `"artifact_type"`.
-3. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — Referenced model attribute does not exist: `index.report.title` is rendered for `ReportDefinition`, but `ReportDefinition` has `name` (not `title`), causing the linked report title to render silently blank. Fix: Replace `{{ index.report.title }}` with `{{ index.report.name }}`.
-4. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — Referenced model attribute does not exist: `index.glossary_term.term` is rendered for `BusinessGlossaryTerm`, but `BusinessGlossaryTerm` has `name` (not `term`), causing the linked glossary term to render silently blank. Fix: Replace `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
-5. `apps/bi/management/commands/seed_bi.py:88` — The `if flush:` block fails to delete any of the four 10.15 models (`NarrativeExplanation`, `SearchDiscoveryIndex`, `NaturalLanguageQuery`, `BiConversationSession`), leaving orphaned records with nullified foreign keys after a flush and preventing proper re-seeding due to the existence check on line 3757. Fix: Add `.delete()` calls for all four 10.15 models inside the `with transaction.atomic():` flush block before their referenced parent models.
-6. `apps/bi/views/ConversationalBi/BiConversationSessions.py:336` — In `bi_conversation_session_ask`, the view unconditionally redirects to `bi:bi_conversation_session_detail` without inspecting `next` / HTTP_REFERER, which kicks users out of `chat_workspace.html` into the thread detail page whenever they ask a question from the workspace assistant. Fix: Check `next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")` validated with `url_has_allowed_host_and_scheme` before falling back to `bi_conversation_session_detail`, and add a hidden `next` input to `chat_workspace.html:186`.
+---
 
-### Minor
-1. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` — Model property mismatch: `detail.html:48` and `hub.html:83, 154` query `type_badge_color`, but `SearchDiscoveryIndex` defines `asset_type_badge_color`, causing the asset type badge class to evaluate to empty and render uncolored. Fix: Update templates to use `asset_type_badge_color` or alias `type_badge_color` on `SearchDiscoveryIndex`.
-2. `templates/bi/conversational_bi/natural_language_query/detail.html:149` — Non-standard theme classes `badge-purple` (`natural_language_query/detail.html:149`, `NaturalLanguageQueries.py:206`) and `badge-indigo` (`search_discovery_index/detail.html:101`) are used, which are absent from `theme.css:286-291` and render unstyled (Lesson L33). Fix: Standardize on supported palette classes (`badge-info`, `badge-slate`, `badge-muted`).
-3. `templates/bi/conversational_bi/search_explorer.html:1` — Orphan template file committed in changeset that is neither mapped in `urls/` nor rendered by any view in `apps/bi/`. Fix: Remove the unused file or wire it to an explicit view.
+## Summary of Findings
 
-## 2. Explorer (Contract Compliance)
-**Verdict**: Commit after fixing Important findings. High adherence to frozen contract across all 4 models, 4 forms, 23 URL routes, and pinned view context keys.
+| Severity | Total | Status |
+|----------|-------|--------|
+| Critical | 0     | 0 open |
+| Important| 16    | 16 open|
+| Minor    | 11    | 11 open|
+| **Total**| **27**| **27 open** |
 
-### Important
-1. `templates/bi/conversational_bi/narrative_explanation/list.html:102` — Filter Parameter Contract Mismatch: Section 4.3 pins `artifact_choices`. Template dropdown submits `name="artifact"` but view reads `request.GET.get("artifact_type")`. Fix: Change `list.html:102` to `name="artifact_type"` (and `request.GET.artifact_type == val`) or update view to inspect both.
-2. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — Non-Existent Attribute Access: `index.report.title` rendered for `ReportDefinition`, but model has `name`. Fix: Replace `{{ index.report.title }}` with `{{ index.report.name }}`.
-3. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — Non-Existent Attribute Access: `index.glossary_term.term` rendered for `BusinessGlossaryTerm`, but model has `name`. Fix: Replace `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
-4. `apps/bi/models/ConversationalBi/*.py` — Omission of Explicit `db_table` Pinned in Contract: Models omitted explicit `db_table` declarations (`bi_natural_language_query`, `bi_conversation_session`, etc.), defaulting to Django's standard auto-naming. Fix: Note/accept standard Django names or add explicit `db_table`.
+---
 
-### Minor
-1. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `hub.html:83, 154` — Model Property Name Mismatch: `type_badge_color` queried vs `asset_type_badge_color` defined. Fix: Alias `type_badge_color` on `SearchDiscoveryIndex`.
-2. `templates/bi/conversational_bi/natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — Non-Standard Palette Badge Classes: `badge-purple` and `badge-indigo` not in `theme.css`. Fix: Replace with `badge-info` / `badge-slate`.
-3. `templates/bi/conversational_bi/search_explorer.html` — Orphan Template File: Committed file not mapped to route. Fix: Remove orphan template.
-4. `contract-bi-10.15.md` Section 3 & 4 — Unpinned Convenience Route & Context: `bi_chat_workspace` not explicitly in Section 3/4 table. Fix: Update contract to document workspace route.
+## Critical Findings
+*None.* (Zero 500 server crashes, zero unhandled 404s on valid tenant data, and 100% tenant boundary isolation verified).
 
-## 3. Frontend Reviewer
-**Verdict**: Commit after fixing Important findings. The templates exhibit exceptional craftsmanship in conversational streaming UX and query exploration, but have several design system discrepancies (invented `table-responsive` and `btn-ghost` classes, ad-hoc stat-icon styles), model property/attribute mismatches rendering blank badges/text, a filter GET parameter mismatch, and an orphan unrouted template.
+---
 
-### Important
-1. `templates/bi/conversational_bi/narrative_explanation/list.html:102, 114, 226, 229` — **Filter parameter name mismatch breaks filtering**: The artifact dropdown submits `name="artifact"` and pagination propagates `&artifact=...`, but the view `narrative_explanation_list` reads `request.GET.get("artifact_type")`. Artifact filtering is silently ignored. Fix: Change `name="artifact"` to `name="artifact_type"` at line 102, and align lines 114, 226, and 229 to inspect and preserve `artifact_type`.
-2. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `templates/bi/conversational_bi/search_discovery_index/hub.html:83, 154` — **Model property mismatch renders unstyled badges**: `detail.html:48` and `hub.html:83, 154` query `type_badge_color`, but `SearchDiscoveryIndex` defines `asset_type_badge_color`. Because `type_badge_color` does not exist on the model, `{{ item.type_badge_color }}` renders blank (`class="badge  text-xs"`), leaving badges unstyled. Fix: Update the templates to use `{{ index.asset_type_badge_color }}` (and `item.asset_type_badge_color` / `feat.asset_type_badge_color`) and alias `type_badge_color` on model.
-3. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — **Non-existent model attribute renders blank report link**: `detail.html:180` renders `{{ index.report.title }}` for `ReportDefinition`, but `ReportDefinition` uses `name` (not `title`), causing the linked report title to render silently blank as `(Report)`. Fix: Replace `{{ index.report.title }}` with `{{ index.report.name }}`.
-4. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — **Non-existent model attribute renders blank glossary term link**: `detail.html:192` renders `{{ index.glossary_term.term }}` for `BusinessGlossaryTerm`, but `BusinessGlossaryTerm` uses `name` (not `term`), causing the linked term to render silently blank as `(Glossary Term)`. Fix: Replace `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
-5. `templates/bi/conversational_bi/narrative_explanation/list.html:123` and `templates/bi/conversational_bi/search_discovery_index/list.html:111` — **Non-existent `table-responsive` class breaks mobile horizontal scrolling**: `theme.css` defines `.table-wrap { overflow-x: auto; border-radius: var(--radius); }`. The class `.table-responsive` does not exist in `theme.css` and will not trigger mobile overflow containment. Fix: Replace `<div class="table-responsive">` with `<div class="table-wrap">`.
-6. `templates/bi/conversational_bi/narrative_explanation/list.html:35, 44, 53, 62` and `templates/bi/conversational_bi/search_discovery_index/list.html:35, 44, 53` — **Stat-icon classes bypass theme.css color system**: `narrative_explanation/list.html` and `search_discovery_index/list.html` use raw Tailwind classes on `.stat-icon` (`bg-indigo-50 text-indigo-600`, `bg-emerald-50 text-emerald-600`, etc.) and non-standard `.stats-grid` container, ignoring `theme.css` fixed classes (`.stat-icon blue`, `.stat-icon green`, `.stat-icon orange`, `.stat-icon purple`, `.stat-icon slate`) and breaking dark-mode theming. Fix: Standardize stat cards to use `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">` and color-named stat-icon classes (blue, green, orange, purple).
-7. `templates/bi/conversational_bi/narrative_explanation/list.html:184-194` and `templates/bi/conversational_bi/search_discovery_index/list.html:174-188` — **Invented `btn-ghost` class on table action buttons**: Action buttons use `btn btn-ghost btn-sm`, but `btn-ghost` is not defined in `theme.css`. Fix: Replace `btn btn-ghost btn-sm ...` with `btn btn-icon`.
+## Important Findings
 
-### Minor
-1. `templates/bi/conversational_bi/natural_language_query/detail.html:149` — **Non-standard palette class `badge-purple` (Lesson L33)**: Line 149 uses `<span class="badge badge-purple text-xs">{{ d }}</span>`. `badge-purple` is absent from `theme.css` and renders unstyled. Fix: Replace `badge-purple` with `badge-info` or `badge-slate`.
-2. `templates/bi/conversational_bi/search_discovery_index/detail.html:101` — **Non-standard palette class `badge-indigo` (Lesson L33)**: Line 101 uses `<span class="badge badge-indigo text-xs py-1 px-2.5 font-medium">{{ syn }}</span>`. `badge-indigo` does not exist in `theme.css`. Fix: Replace `badge-indigo` with `badge-info` or `badge-slate`.
-3. `templates/bi/conversational_bi/search_explorer.html:1` — **Orphan unrouted flat template file**: `templates/bi/conversational_bi/search_explorer.html` sits directly under the submodule folder as a flat template, is not routed in `urls/`, and is not rendered by any view in `apps/bi/`. It has been superseded by `search_discovery_index/hub.html`. Fix: Delete `templates/bi/conversational_bi/search_explorer.html`.
-4. `templates/bi/conversational_bi/chat_workspace.html:33` — **Unresponsive fixed container height on mobile**: Line 33 uses fixed `h-[780px]`. On mobile devices (`< lg`), the 2 stacked columns inside `grid-cols-1` both have `h-full`, which forces layout squashing or awkward vertical overflow within 780px. Fix: Use `min-h-[600px] lg:h-[780px]`.
-5. `templates/bi/conversational_bi/chat_workspace.html:186` — **Missing `next` redirect target**: The query form submits to `{% url 'bi:bi_conversation_session_ask' active_session.pk %}` without a `next` parameter, which causes the user to be redirected out of the workspace into the session detail page upon submitting a question. Fix: Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` inside the form.
-6. `templates/bi/conversational_bi/chat_workspace.html:188`, `templates/bi/conversational_bi/bi_conversation_session/detail.html:163`, `templates/bi/conversational_bi/search_discovery_index/hub.html:44` — **Accessibility: missing input label or aria-label**: Text inputs lack matching `<label>` or `aria-label`. Fix: Add `aria-label="Ask a question"` / `aria-label="Search analytical assets"` to the input tags.
+- [ ] **I1** — `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:192` — **Decimal NaN/Infinity Input Guard (Lesson L35)**: `search_discovery_index_reweight` parses numeric input with `Decimal(weight_val)` without an `is_finite()` guard. Non-finite values (`"NaN"`, `"Infinity"`) crash DB persistence or comparison.  
+  *Fix*: Immediately following `new_weight = Decimal(weight_val)`, add:
+  ```python
+  if not new_weight.is_finite():
+      raise InvalidOperation("Non-finite Decimal rejected")
+  ```
 
-## 4. Performance Reviewer
-**Verdict**: Commit after fixing Important findings. Sub-module 10.15 demonstrates exemplary query design on its list views (leveraging single `aggregate()` calls for stat cards, eager `select_related` on catalog tables, and pre-pagination filtering). However, there are N+1 query loops inside the conversational chat stream rendering (`turn.user` inside `turns` iteration), missing `select_related` on all four detail views, unbounded queryset evaluation in the Search Discovery Hub, and missing database composite indexes for hot filter/ordering paths.
+- [ ] **I2** — `templates/bi/conversational_bi/narrative_explanation/list.html:102, 114, 226, 229` & `apps/bi/views/ConversationalBi/NarrativeExplanations.py:55` — **Filter Parameter Mismatch**: The template dropdown submits `name="artifact"` and pagination links propagate `&artifact=...`, but `narrative_explanation_list` view reads `request.GET.get("artifact_type")`. Artifact filtering is silently ignored.  
+  *Fix*: Align template dropdown to `name="artifact_type"` (and `request.GET.artifact_type`), and update view to accept both `request.GET.get("artifact_type") or request.GET.get("artifact", "")`.
 
-### Important
-1. `apps/bi/views/ConversationalBi/BiConversationSessions.py:122` & `templates/bi/conversational_bi/chat_workspace.html:120` — **N+1 query loop on `turn.user` in assistant chat workspace**: In `bi_chat_workspace`, `turns = active_session.queries.all().order_by("created_at")` is fetched without `select_related("user")`. In `chat_workspace.html:120`, `{{ turn.user.username|... }}` accesses the related `User` model on every user message bubble. For an active session with 20 turns, this fires 1 initial query + 20 individual queries (`1 + N`) to `auth_user`. Additionally, `active_session.user` and `active_session.primary_semantic_model` trigger un-eager queries. Fix: Eager-load `user` on `turns` and related anchors on `sessions`.
-2. `apps/bi/views/ConversationalBi/BiConversationSessions.py:87-88` & `templates/bi/conversational_bi/bi_conversation_session/detail.html:99, 189, 199, 208` — **N+1 query loop on `turn.user` and missing `select_related` on session detail**: In `bi_conversation_session_detail`, `turns = session.queries.all().order_by("created_at")` lacks `select_related("user")`. In `detail.html:99`, `{{ turn.user.username|... }}` triggers 1 separate query per turn (`1 + N`). Furthermore, `session = bi_object(request, BiConversationSession, pk)` does not select related FKs (`primary_semantic_model`, `primary_dashboard`, `user`). Fix: Pass `select_related` to `bi_object` and select `user` on `turns`.
-3. `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py:95` & `templates/bi/conversational_bi/natural_language_query/detail.html:45, 179, 189, 199` — **Missing `select_related` on query detail view**: `query = bi_object(request, NaturalLanguageQuery, pk)` fetches only the base table. The detail template renders `query.user`, `query.semantic_model`, `query.warehouse_table`, and `query.conversation_session`, causing 4 additional queries. Fix: Pass `select_related=("user", "semantic_model", "warehouse_table", "conversation_session")` to `bi_object`.
-4. `apps/bi/views/ConversationalBi/NarrativeExplanations.py:83` & `templates/bi/conversational_bi/narrative_explanation/detail.html:189, 199, 209, 219, 229, 237` — **Missing `select_related` on narrative explanation detail view**: `narrative = bi_object(request, NarrativeExplanation, pk)` fetches only the base table. The template inspects and renders bound relations (`dashboard`, `report`, `kpi`, `query`, `insight`, `created_by`), causing up to 6 individual follow-up SQL queries. Fix: Pass `select_related=("dashboard", "report", "kpi", "query", "insight", "created_by")` to `bi_object`.
-5. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:82` & `templates/bi/conversational_bi/search_discovery_index/detail.html:171, 175, 179, 183, 187, 191` — **Missing `select_related` on search discovery index detail view**: `index = bi_object(request, SearchDiscoveryIndex, pk)` loads only the primary row. The template checks and renders whatever anchor is bound (`semantic_model`, `dashboard`, `report`, `kpi`, `warehouse_table`, `glossary_term`). Fix: Eager-load the related entities via `select_related` in `bi_object`.
-6. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:226-243` & `templates/bi/conversational_bi/search_discovery_index/hub.html:74` — **Unbounded queryset evaluation and redundant query in Search Discovery Hub**: In `search_discovery_hub`, `results = matched` is passed as an unpaginated, unbounded QuerySet. In `hub.html:74`, `{{ results|length }} assets matched` invokes Python `len(results)` on the QuerySet, materializing all matching records into memory. Fix: Slice results to a sensible limit (e.g. top 50), evaluate `matched_count = matched.count()` via SQL, and pass `matched_count` to context.
+- [ ] **I3** — `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — **Referenced Model Attribute Access on ReportDefinition**: Template renders `{{ index.report.title }}`, but `ReportDefinition` model defines `name` (not `title`), rendering the report link silently blank.  
+  *Fix*: Replace `{{ index.report.title }}` with `{{ index.report.name }}`.
 
-### Minor
-1. `apps/bi/models/ConversationalBi/NaturalLanguageQueries.py:175-180` — **Missing composite index on `(tenant, user_rating)`**: Add `models.Index(fields=["tenant", "user_rating"], name="idx_bnlq_ten_rate")`.
-2. `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py:122-127` — **Missing composite index for featured assets ordering**: Add `models.Index(fields=["tenant", "is_featured", "-relevance_weight"], name="idx_bsdi_ten_feat_rel")`.
-3. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:43, 232` & `BiConversationSessions.py:41` — **Full table scan from `__icontains` on `JSONField` columns**: Restrict search filters to string/text columns (`title`, `number`, `search_keywords`).
-4. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:238-241` — **Unscoped telemetry update**: Explicitly filter `tenant=request.tenant` on telemetry update and remove redundant `transaction.atomic` on GET.
-5. `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Unbounded conversation drawer in chat assistant workspace**: Limit sessions drawer query, e.g. `sessions[:50]`.
+- [ ] **I4** — `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — **Referenced Model Attribute Access on BusinessGlossaryTerm**: Template renders `{{ index.glossary_term.term }}`, but `BusinessGlossaryTerm` model defines `name` (not `term`), rendering the glossary link silently blank.  
+  *Fix*: Replace `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
 
-## 5. QA Smoke Tester
-**Verdict**: Commit after fixing Important findings. All 29 Sub-module 10.15 URL endpoints successfully render with HTTP 200/302, zero comment leaks, real seeded data content verified, robust junk parameter resilience, and clean 404 IDOR isolation on all model object endpoints. Four functional/runtime defects require fixes.
+- [ ] **I5** — `apps/bi/management/commands/seed_bi.py:88` — **Incomplete Seeder `--flush` Cleanup**: The `if flush:` block fails to delete the four 10.15 models (`NarrativeExplanation`, `SearchDiscoveryIndex`, `NaturalLanguageQuery`, `BiConversationSession`), leaving orphaned records after flush and blocking idempotent re-seed.  
+  *Fix*: Add `.delete()` calls for all 4 models inside the atomic flush block before referenced parent models.
 
-### Important
-1. `templates/bi/conversational_bi/narrative_explanation/list.html:102` — **Filter GET parameter mismatch**: Dropdown submits `name="artifact"`, but view `narrative_explanation_list` (`apps/bi/views/ConversationalBi/NarrativeExplanations.py:55`) reads `request.GET.get("artifact_type")`. Filtering by target artifact in the UI is silently ignored. Fix: Update template dropdown to `name="artifact_type"` (and align lines 114, 226, 229), or update view to inspect `request.GET.get("artifact_type") or request.GET.get("artifact")`.
-2. `templates/bi/conversational_bi/search_discovery_index/detail.html:180, 192` — **Silent blank attribute rendering for related objects**: `{{ index.report.title }}` and `{{ index.glossary_term.term }}` are referenced. Because `ReportDefinition` and `BusinessGlossaryTerm` use `name` instead of `title`/`term`, linked assets render silently blank text as ` (Report)` and ` (Glossary Term)`. Fix: Replace `{{ index.report.title }}` with `{{ index.report.name }}` and `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
-3. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:192` — **Missing `is_finite()` guard on Decimal parsing causes database crash on special float inputs (Lesson L35)**: In `search_discovery_index_reweight`, `Decimal(weight_val)` parses `"Infinity"` without raising `InvalidOperation` or `ValueError`. When the view attempts to persist `Decimal('Infinity')` to MySQL/MariaDB, Django raises an uncaught `ValidationError: ['‘Infinity’ value must be a decimal number.']`. Fix: Add `if not new_weight.is_finite(): raise InvalidOperation` immediately following `new_weight = Decimal(weight_val)` in the `try` block.
-4. `apps/bi/views/ConversationalBi/BiConversationSessions.py:118-120` — **Cross-tenant IDOR fallback instead of 404 in chat workspace**: In `bi_chat_workspace`, when an explicit `session` parameter is supplied in `request.GET` that belongs to another tenant (`?session=<globex_pk>`), `sessions.filter(pk=...).first()` returns `None` and the view falls back to `sessions.first()`, returning HTTP 200 with Acme's first session. While this prevents tenant data leakage, URL requests specifying foreign entity IDs should return HTTP 404 under strict multi-tenant isolation. Fix: Use `active_session = get_object_or_404(sessions, pk=int(active_session_id))` when `active_session_id` is present in `request.GET`.
+- [ ] **I6** — `apps/bi/views/ConversationalBi/BiConversationSessions.py:336` & `templates/bi/conversational_bi/chat_workspace.html:186` — **Assistant Workspace Ask Redirect & Open Redirect Guard**: `bi_conversation_session_ask` unconditionally redirects to `bi:bi_conversation_session_detail` without inspecting `next`, forcefully ejecting users from the chat assistant workspace.  
+  *Fix*: Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` in `chat_workspace.html` form, and in `bi_conversation_session_ask` validate `next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")` with `url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()})`.
 
-### Minor
-1. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `templates/bi/conversational_bi/search_discovery_index/hub.html:83, 154` — **Model property mismatch renders uncolored badges**: Templates access `type_badge_color`, but `SearchDiscoveryIndex` defines `asset_type_badge_color`. The badge class evaluates to empty (`class="badge  text-xs"`). Fix: Update templates to use `asset_type_badge_color` or add `@property def type_badge_color(self): return self.asset_type_badge_color` to `SearchDiscoveryIndex`.
-2. `templates/bi/conversational_bi/natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — **Non-standard palette badge classes (Lesson L33)**: `badge-purple` and `badge-indigo` are used in detail badges, but do not exist in `theme.css`. Fix: Replace with supported theme badge classes (`badge-info` / `badge-slate`).
+- [ ] **I7** — `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `templates/bi/conversational_bi/search_discovery_index/hub.html:83, 154` — **Model Property Drift on Asset Type Badge**: Templates query `type_badge_color`, but `SearchDiscoveryIndex` model defines `asset_type_badge_color`, leaving badges unstyled.  
+  *Fix*: Update templates to use `asset_type_badge_color` AND add `@property def type_badge_color(self): return self.asset_type_badge_color` to `SearchDiscoveryIndex`.
 
+- [ ] **I8** — `templates/bi/conversational_bi/natural_language_query/detail.html:149` & `templates/bi/conversational_bi/search_discovery_index/detail.html:101` — **Invalid Theme Badge Classes (Lesson L33)**: `badge-purple` and `badge-indigo` are not defined in `theme.css:286-291` and render unstyled.  
+  *Fix*: Replace with valid palette classes (`badge-info` / `badge-slate`).
 
+- [ ] **I9** — `templates/bi/conversational_bi/narrative_explanation/list.html:123` & `templates/bi/conversational_bi/search_discovery_index/list.html:111` — **Design System Table Container Class**: `.table-responsive` does not exist in `theme.css`.  
+  *Fix*: Replace `<div class="table-responsive">` with `<div class="table-wrap">`.
 
-## 4. Performance Reviewer
-**Verdict**: Solid performance baseline with SQL aggregate stat cards and pre-Paginator filters. Requires fixes for N+1 query loops on conversation turns, missing eager loading in chat workspace, unbounded search evaluation in discovery hub, and transaction wrapping in publish action.
+- [ ] **I10** — `templates/bi/conversational_bi/narrative_explanation/list.html:33` & `templates/bi/conversational_bi/search_discovery_index/list.html:33` — **Design System Stat Cards & Grid Classes**: Replace non-standard `.stats-grid` with standard grid classes `grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6`, and standardize stat-icon classes (`stat-icon blue/green/purple/orange`).
 
-### Important
-1. `apps/bi/views/ConversationalBi/BiConversationSessions.py:88, 122` — **N+1 Queries on `turn.user` in Thread Detail and Chat Workspace**: `turns` evaluated without `.select_related("user")`, firing 1+N queries when rendering user initials in conversation streams. Fix: Add `.select_related("user")` to `session.queries` and `active_session.queries`.
-2. `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Missing `select_related` on Active Session in `bi_chat_workspace`**: Header accesses `active_session.user` and `active_session.primary_semantic_model`. Fix: Add `.select_related("user", "primary_semantic_model")` to `sessions` query.
-3. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:226, 242` — **Unbounded QuerySet Evaluation in `search_discovery_hub`**: `results` evaluated via `len(results)` in template without slice/limit. Fix: Slice `results = matched[:24]`, pass `result_count = matched.count()`, and use `{{ result_count }}` in `hub.html:74`.
-4. `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Unbounded Conversation Session Drawer**: `sessions` loads all threads without limit. Fix: Limit drawer query to `sessions[:50]`.
-5. `apps/bi/views/ConversationalBi/NarrativeExplanations.py:207-217` — **Missing `transaction.atomic()` in `narrative_explanation_publish`**: `save` and `write_audit_log` execute without atomic transaction. Fix: Wrap in `with transaction.atomic():`.
+- [ ] **I11** — `apps/bi/views/ConversationalBi/BiConversationSessions.py:88, 122` — **N+1 Queries on `turn.user` in Thread Detail and Chat Workspace**: `turns` evaluated without `.select_related("user")`, causing 1+N queries when rendering user initials in conversation streams.  
+  *Fix*: Add `.select_related("user")` to `session.queries` and `active_session.queries`.
 
-### Minor
-1. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:244-246` — Redundant table joins on category extraction query. Fix: Use clean tenant-filtered queryset on `SearchDiscoveryIndex.objects.filter(tenant=request.tenant).exclude(category="").values_list("category", flat=True).distinct()`.
-2. `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py:95` & `SearchDiscoveryIndexes.py:82` — Detail views perform lazy lookups on frequently displayed FKs. Fix: Pass `select_related(...)` to `bi_object`.
-3. `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py:122-127` — Missing composite index for curated discovery ranking `(tenant, is_featured, -relevance_weight)`. Fix: Add composite index to `Meta.indexes`.
+- [ ] **I12** — `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Missing Eager Loading on Active Session**: `sessions` loaded without `.select_related("user", "primary_semantic_model")` in `bi_chat_workspace`.  
+  *Fix*: Add `.select_related("user", "primary_semantic_model")` to `sessions` query in `bi_chat_workspace`.
 
-## 5. QA Smoke Tester
-**Verdict**: 100% green on 23 endpoints with zero 500 crashes and complete cross-tenant IDOR protection (Acme vs Globex 404 confirmed). Confirmed runtime functional issues on artifact filter mismatch, unstyled badge property lookup, blank linked report/glossary text, workspace ask redirect, and Decimal NaN guard.
+- [ ] **I13** — `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:226, 242` — **Unbounded QuerySet Evaluation in Discovery Hub**: `results = matched` evaluated via `len(results)` in template without slice.  
+  *Fix*: Slice `results = matched[:24]`, pass `result_count = matched.count()`, and use `{{ result_count }}` in `hub.html:74`.
 
-### Important
-1. `templates/bi/conversational_bi/narrative_explanation/list.html:102` & `apps/bi/views/ConversationalBi/NarrativeExplanations.py:55` — Filter Parameter Mismatch breaks artifact filtering. Template submits `artifact` but view checks `artifact_type`.
-2. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `hub.html:83, 154` — `type_badge_color` renders unstyled badges because model defines `asset_type_badge_color`.
-3. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — `index.report.title` renders blank report link because `ReportDefinition` has `name`.
-4. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — `index.glossary_term.term` renders blank glossary link because `BusinessGlossaryTerm` has `name`.
-5. `apps/bi/views/ConversationalBi/BiConversationSessions.py:336` & `chat_workspace.html:186` — Unconditional redirect in `bi_conversation_session_ask` forces user out of workspace to thread detail page.
-6. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:190-198` — `search_discovery_index_reweight` missing explicit `is_finite()` guard (Lesson L35).
+- [ ] **I14** — `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Unbounded Conversation Session Drawer**: `sessions` loads all threads without limit in `bi_chat_workspace`.  
+  *Fix*: Limit drawer query to `sessions[:50]`.
 
-### Minor
-1. `templates/bi/conversational_bi/search_explorer.html:1` — Orphan unrouted template file. Fix: Delete.
-2. `apps/bi/views/ConversationalBi/BiConversationSessions.py:118-120` — Workspace fallback on foreign tenant session param falls back to first session instead of 404.
-3. `natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — Non-standard palette classes `badge-purple` and `badge-indigo` (L33).
+- [ ] **I15** — `apps/bi/views/ConversationalBi/NarrativeExplanations.py:207-217` — **Missing `transaction.atomic()` in Publish Action**: `save` and `write_audit_log` execute without atomic transaction.  
+  *Fix*: Wrap in `with transaction.atomic():`.
 
+- [ ] **I16** — `apps/bi/views/ConversationalBi/BiConversationSessions.py:118-120` — **Multi-Tenant IDOR Fallback on Explicit Session Param**: When passing `?session=<foreign_tenant_id>`, falling back to `sessions.first()` returns HTTP 200 with another session rather than failing closed.  
+  *Fix*: Use `get_object_or_404(sessions, pk=int(active_session_id))` when `active_session_id` is supplied, so unauthorized foreign access raises 404.
 
+---
 
+## Minor Findings
 
+- [ ] **M1** — `templates/bi/conversational_bi/search_explorer.html` — **Orphan Template Cleanup**: File is unrouted and superseded by `search_discovery_index/hub.html`.  
+  *Fix*: Delete `templates/bi/conversational_bi/search_explorer.html`.
 
+- [ ] **M2** — `templates/bi/conversational_bi/narrative_explanation/list.html:201` & `templates/bi/conversational_bi/search_discovery_index/list.html:195` — **Empty State Container in Table Row**: Missing `.empty-state` wrapper in `{% empty %}` table row.  
+  *Fix*: Wrap content in `<div class="empty-state text-center py-12">`.
+
+- [ ] **M3** — `templates/bi/conversational_bi/narrative_explanation/list.html:184-194` & `templates/bi/conversational_bi/search_discovery_index/list.html:174-188` — **Table Action Buttons Styling**: Invented `btn-ghost` class used.  
+  *Fix*: Replace with standard `btn btn-icon`.
+
+- [ ] **M4** — `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:244-246` — **Category Extraction Query Joins**: Redundant table joins on category extraction query.  
+  *Fix*: Use clean tenant-filtered queryset:
+  ```python
+  categories = list(
+      SearchDiscoveryIndex.objects.filter(tenant=request.tenant)
+      .exclude(category="")
+      .values_list("category", flat=True)
+      .distinct()
+      .order_by("category")
+  )
+  ```
+
+- [ ] **M5** — `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py:95` & `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:82` — **Detail View Lazy Lookups**: Detail views perform lazy lookups on frequently displayed FKs.  
+  *Fix*: Pass `select_related(...)` to `bi_object`.
+
+- [ ] **M6** — `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py:122-127` — **Composite Index for Curated Discovery Ranking**: Missing composite index `(tenant, is_featured, -relevance_weight)`.  
+  *Fix*: Add composite index to `Meta.indexes`.
+
+- [ ] **M7** — `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:239-241` — **Tenant Scope Defense-in-Depth on Telemetry Query**: Query omits `tenant=request.tenant`.  
+  *Fix*: Include `tenant=request.tenant` in update query.
+
+- [ ] **M8** — `apps/bi/forms/ConversationalBi/SearchDiscoveryIndexes.py:75-77` — **Protocol-Relative URL Validation**: `clean_target_url` allows `//malicious-url`.  
+  *Fix*: Disallow URLs starting with `//`.
+
+- [ ] **M9** — `apps/bi/forms/ConversationalBi/NarrativeExplanations.py:16, 30` — **Mass Assignment on Status in NarrativeForm**: Exclude `status` from `Meta.fields` to enforce dedicated publish action.
+
+- [ ] **M10** — `chat_workspace.html:188`, `detail.html:163`, `hub.html:44` — **Accessibility Form Labels / aria-labels**: Standalone inputs lack matching label or `aria-label`.  
+  *Fix*: Add `aria-label="Ask a question"` / `aria-label="Search analytical assets"`.
+
+- [ ] **M11** — `.claude/tasks/contract-bi-10.15.md` Section 3 & 4 — **Contract Documentation for Chat Workspace**: Document `bi_chat_workspace` route and context keys in contract.
