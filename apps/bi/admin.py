@@ -61,6 +61,10 @@ from apps.bi.models import (
     BiConversationSession,
     NarrativeExplanation,
     SearchDiscoveryIndex,
+    EmbeddedAnalyticsConfig,
+    KioskWallboardDisplay,
+    MobileBiConfiguration,
+    EmbedApiToken,
 )
 
 
@@ -595,3 +599,40 @@ class SearchDiscoveryIndexAdmin(admin.ModelAdmin):
     list_filter = ('asset_type', 'is_featured', 'is_verified', 'category', 'tenant')
     search_fields = ('number', 'asset_name', 'target_url', 'description', 'search_keywords')
     readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(EmbeddedAnalyticsConfig)
+class EmbeddedAnalyticsConfigAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_type", "embedding_mode", "auth_mode", "status", "view_count", "tenant")
+    list_select_related = ("tenant", "dashboard", "report", "semantic_model", "created_by")
+    list_filter = ("target_type", "embedding_mode", "auth_mode", "status", "theme_mode", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_accessed_at", "view_count")
+
+
+@admin.register(KioskWallboardDisplay)
+class KioskWallboardDisplayAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "kiosk_slug", "theme", "display_schedule", "status", "last_heartbeat_at", "tenant")
+    list_select_related = ("tenant", "created_by")
+    list_filter = ("status", "theme", "display_schedule", "is_public_kiosk", "tenant")
+    search_fields = ("number", "name", "kiosk_slug", "location_description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_heartbeat_at")
+
+
+@admin.register(MobileBiConfiguration)
+class MobileBiConfigurationAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_user", "is_default_profile", "touch_layout_preset", "status", "tenant")
+    list_select_related = ("tenant", "target_user", "created_by")
+    list_filter = ("status", "is_default_profile", "touch_layout_preset", "offline_caching_enabled", "tenant")
+    search_fields = ("number", "name", "target_user__username")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_synced_at")
+
+
+@admin.register(EmbedApiToken)
+class EmbedApiTokenAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "token_prefix", "status", "rate_limit_rpm", "total_requests_count", "last_used_at", "tenant")
+    list_select_related = ("tenant", "embedded_config", "created_by")
+    list_filter = ("status", "tenant")
+    search_fields = ("number", "name", "token_prefix")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "token_hash", "last_used_at", "total_requests_count")
+
