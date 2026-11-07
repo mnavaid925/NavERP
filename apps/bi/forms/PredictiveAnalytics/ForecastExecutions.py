@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models import Q
 
 from apps.bi.forms._common import reject_foreign
 from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
@@ -37,9 +38,16 @@ class ForecastExecutionForm(TenantModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.tenant is not None:
-            self.fields["model"].queryset = PredictiveModel.objects.filter(tenant=self.tenant, is_active=True)
+            model_q = Q(is_active=True)
+            kpi_q = Q(is_active=True)
+            if self.instance and self.instance.pk:
+                if self.instance.model_id:
+                    model_q |= Q(pk=self.instance.model_id)
+                if self.instance.kpi_definition_id:
+                    kpi_q |= Q(pk=self.instance.kpi_definition_id)
+            self.fields["model"].queryset = PredictiveModel.objects.filter(Q(tenant=self.tenant) & model_q)
             self.fields["semantic_model"].queryset = SemanticModel.objects.filter(tenant=self.tenant)
-            self.fields["kpi_definition"].queryset = KpiDefinition.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["kpi_definition"].queryset = KpiDefinition.objects.filter(Q(tenant=self.tenant) & kpi_q)
 
     def clean(self):
         cleaned_data = super().clean()
