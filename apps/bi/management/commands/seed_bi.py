@@ -49,8 +49,12 @@ from apps.bi.models.OlapAnalysis.OlapCubes import OlapCube
 from apps.bi.models.OlapAnalysis.PivotViews import PivotAnalysisView
 from apps.bi.models.OlapAnalysis.WhatIfScenarios import WhatIfScenario
 from apps.bi.models.OlapAnalysis.WritebackCells import ScenarioWritebackCell
+from apps.bi.models.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsight
+from apps.bi.models.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestion
+from apps.bi.models.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysis
+from apps.bi.models.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendation
 from apps.accounting.models import Budget, FiscalPeriod, GLAccount
-from apps.core.models import OrgUnit
+from apps.core.models import OrgUnit, Party
 from apps.bi.models.SemanticLayer.BusinessGlossaryTerms import BusinessGlossaryTerm
 from apps.bi.models.SemanticLayer.CalculatedMeasures import CalculatedMeasure
 from apps.bi.models.SemanticLayer.DrillHierarchies import DrillHierarchy
@@ -3393,5 +3397,174 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded OLAP & Multidimensional Analysis for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  OLAP & Multidimensional Analysis already seeded for tenant: {tenant.name}")
+
+            # --- 10.14 AI & Augmented Analytics Seeding ---
+            if not AugmentedInsight.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    wt_cust = WarehouseTable.objects.filter(tenant=tenant).first()
+                    smod = SemanticModel.objects.filter(tenant=tenant).first()
+                    kpi = KpiDefinition.objects.filter(tenant=tenant).first()
+                    dash = BiDashboard.objects.filter(tenant=tenant).first()
+                    rpt = ReportDefinition.objects.filter(tenant=tenant).first()
+                    party = Party.objects.filter(tenant=tenant).first()
+                    org = OrgUnit.objects.filter(tenant=tenant).first()
+
+                    # 1. Augmented Insights (Key drivers & anomalies)
+                    AugmentedInsight.objects.get_or_create(
+                        tenant=tenant,
+                        title="Q4 EMEA Gross Margin Compression Driver",
+                        defaults={
+                            "insight_type": "key_driver",
+                            "metric_name": "Gross Margin %",
+                            "baseline_value": Decimal("42.5000"),
+                            "observed_value": Decimal("36.8000"),
+                            "variance_percentage": Decimal("-13.41"),
+                            "impact_direction": "unfavorable",
+                            "severity": "critical",
+                            "confidence_score": Decimal("94.50"),
+                            "narrative_summary": "Gross Margin contracted by 5.7 percentage points (-13.41% variance) across EMEA operations. Automated decomposition identifies expedited air freight surcharges in Central Europe (+4.2% cost inflation) and unbudgeted volume discounts for Tier-1 distributors as primary root-cause contributors.",
+                            "dimension_name": "Region",
+                            "dimension_value": "EMEA",
+                            "driver_decomposition": [
+                                {"name": "Expedited Air Freight Surcharges", "weight": -58.0, "impact": "negative", "explanation": "Urgent component sourcing increased freight costs per unit by $14.20."},
+                                {"name": "Tier-1 Volume Price Concessions", "weight": -32.5, "impact": "negative", "explanation": "Strategic contract renewals included temporary 4% margin discount."},
+                                {"name": "High-Yield Product Mix in UK", "weight": 9.5, "impact": "positive", "explanation": "Offsetting margin gains from Enterprise tier software licenses."},
+                            ],
+                            "status": "new",
+                            "semantic_model": smod,
+                            "kpi_definition": kpi,
+                            "warehouse_table": wt_cust,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    AugmentedInsight.objects.get_or_create(
+                        tenant=tenant,
+                        title="North America Direct Channel Conversion Surge",
+                        defaults={
+                            "insight_type": "trend_shift",
+                            "metric_name": "E-Commerce Conversion Rate",
+                            "baseline_value": Decimal("2.8000"),
+                            "observed_value": Decimal("4.1500"),
+                            "variance_percentage": Decimal("48.21"),
+                            "impact_direction": "favorable",
+                            "severity": "high",
+                            "confidence_score": Decimal("91.20"),
+                            "narrative_summary": "Direct-to-consumer digital portal recorded a sharp acceleration in conversion velocity over the last 14 business days (+48.2% vs 90-day moving average). Automated cohort analysis links the lift to the recently launched streamlined single-page checkout flow.",
+                            "dimension_name": "Sales Channel",
+                            "dimension_value": "Direct Digital",
+                            "driver_decomposition": [
+                                {"name": "Single-Page Checkout Redesign", "weight": 64.0, "impact": "positive", "explanation": "Cart abandonment decreased from 68% to 49%."},
+                                {"name": "Targeted Retargeting Campaign", "weight": 26.0, "impact": "positive", "explanation": "High click-through from engaged email subscriber list."},
+                            ],
+                            "status": "bookmarked",
+                            "semantic_model": smod,
+                            "kpi_definition": kpi,
+                            "warehouse_table": wt_cust,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 2. Smart Data Prep Suggestions
+                    if wt_cust:
+                        SmartDataPrepSuggestion.objects.get_or_create(
+                            tenant=tenant,
+                            target_table=wt_cust,
+                            target_column="customer_id",
+                            suggestion_type="join_relationship",
+                            defaults={
+                                "related_table": wt_cust,
+                                "related_column": "id",
+                                "confidence_score": Decimal("96.00"),
+                                "rationale": "High schema name similarity and 99.4% value overlap detected between source customer identifier and dim_customer primary key. Recommending foreign key relationship join.",
+                                "suggested_config": {"join_type": "LEFT OUTER JOIN", "cardinality": "MANY_TO_ONE", "index_recommended": True},
+                                "status": "pending",
+                                "reviewed_by": tenant_admin,
+                            },
+                        )
+
+                        SmartDataPrepSuggestion.objects.get_or_create(
+                            tenant=tenant,
+                            target_table=wt_cust,
+                            target_column="transaction_timestamp",
+                            suggestion_type="type_cast",
+                            defaults={
+                                "confidence_score": Decimal("98.50"),
+                                "rationale": "Column contains ISO 8601 string timestamps (YYYY-MM-DDTHH:MM:SSZ). Recommending automatic casting to TimestampWithTimeZone to enable time intelligence and dimensional partitioning.",
+                                "suggested_config": {"target_data_type": "TIMESTAMP", "time_zone": "UTC", "extract_date_hierarchy": True},
+                                "status": "accepted",
+                                "reviewed_by": tenant_admin,
+                                "reviewed_at": timezone.now(),
+                                "review_notes": "Approved for upcoming ETL pipeline batch refresh.",
+                            },
+                        )
+
+                    # 3. Text & Sentiment Analytics
+                    TextSentimentAnalysis.objects.get_or_create(
+                        tenant=tenant,
+                        source_reference="REV-2026-0841",
+                        defaults={
+                            "source_type": "customer_review",
+                            "text_content": "The new enterprise analytics dashboard is fantastic! Fast query responses and very clean charts. Love the drill-down capabilities.",
+                            "language": "en",
+                            "sentiment_category": "very_positive",
+                            "polarity_score": Decimal("0.85"),
+                            "subjectivity_score": Decimal("0.75"),
+                            "thematic_tags": ["dashboard", "speed", "performance", "charts", "drill-down"],
+                            "linked_party": party,
+                            "linked_org_unit": org,
+                        },
+                    )
+
+                    TextSentimentAnalysis.objects.get_or_create(
+                        tenant=tenant,
+                        source_reference="TKT-2026-9042",
+                        defaults={
+                            "source_type": "support_ticket",
+                            "text_content": "Experiencing frustrating delays during warehouse export. The CSV export times out with error 504 and customer service was unhelpful.",
+                            "language": "en",
+                            "sentiment_category": "very_negative",
+                            "polarity_score": Decimal("-0.78"),
+                            "subjectivity_score": Decimal("0.80"),
+                            "thematic_tags": ["delay", "timeout", "export", "support", "unhelpful"],
+                            "linked_party": party,
+                            "linked_org_unit": org,
+                        },
+                    )
+
+                    # 4. Analytics Recommendations
+                    AnalyticsRecommendation.objects.get_or_create(
+                        tenant=tenant,
+                        user=tenant_admin,
+                        target_title="Executive Revenue & Margin Dashboard",
+                        defaults={
+                            "recommendation_type": "dashboard",
+                            "target_url": f"/bi/dashboards/{dash.pk}/" if dash else "/bi/dashboards/",
+                            "reason": "role_relevance",
+                            "rationale_text": "Frequently consumed by peer executive administrators to track weekly revenue pace against fiscal targets.",
+                            "affinity_score": Decimal("92.00"),
+                            "status": "active",
+                            "dashboard": dash,
+                        },
+                    )
+
+                    AnalyticsRecommendation.objects.get_or_create(
+                        tenant=tenant,
+                        user=tenant_admin,
+                        target_title="Monthly Operational Margin Variance Report",
+                        defaults={
+                            "recommendation_type": "report",
+                            "target_url": f"/bi/reports/{rpt.pk}/" if rpt else "/bi/reports/",
+                            "reason": "anomaly_in_domain",
+                            "rationale_text": "Suggested following recent gross margin statistical anomaly detected in EMEA regional operations.",
+                            "affinity_score": Decimal("88.50"),
+                            "status": "saved",
+                            "report": rpt,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded AI & Augmented Analytics for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  AI & Augmented Analytics already seeded for tenant: {tenant.name}")
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
