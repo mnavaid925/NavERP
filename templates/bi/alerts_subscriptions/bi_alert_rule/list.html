@@ -72,7 +72,7 @@
 <!-- Filters -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
             <div class="form-group mb-0 lg:col-span-2">
                 <label class="form-label" for="search-input">Search Rules</label>
                 <div class="relative">
@@ -84,8 +84,8 @@
             </div>
 
             <div class="form-group mb-0">
-                <label class="form-label">Alert Type</label>
-                <select name="alert_type" class="form-select">
+                <label class="form-label" for="filter-alert-type">Alert Type</label>
+                <select name="alert_type" id="filter-alert-type" class="form-select">
                     <option value="">All Types</option>
                     {% for val, label in alert_type_choices %}
                     <option value="{{ val }}" {% if selected_alert_type == val %}selected{% endif %}>{{ label }}</option>
@@ -94,8 +94,8 @@
             </div>
 
             <div class="form-group mb-0">
-                <label class="form-label">Severity</label>
-                <select name="severity" class="form-select">
+                <label class="form-label" for="filter-severity">Severity</label>
+                <select name="severity" id="filter-severity" class="form-select">
                     <option value="">All Severities</option>
                     {% for val, label in severity_choices %}
                     <option value="{{ val }}" {% if selected_severity == val %}selected{% endif %}>{{ label }}</option>
@@ -104,8 +104,8 @@
             </div>
 
             <div class="form-group mb-0">
-                <label class="form-label">Status</label>
-                <select name="status" class="form-select">
+                <label class="form-label" for="filter-status">Status</label>
+                <select name="status" id="filter-status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
