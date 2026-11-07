@@ -128,14 +128,14 @@ class BiNotificationItem(TenantNumbered):
         mapping = {
             "critical": "badge-red",
             "warning": "badge-amber",
-            "info": "badge-blue",
+            "info": "badge-info",
         }
         return mapping.get(self.severity, "badge-slate")
 
     @property
     def status_badge_class(self):
         mapping = {
-            "unread": "badge-blue",
+            "unread": "badge-info",
             "read": "badge-slate",
             "acknowledged": "badge-green",
             "snoozed": "badge-amber",
@@ -148,8 +148,8 @@ class BiNotificationItem(TenantNumbered):
     def category_badge_class(self):
         mapping = {
             "kpi_alert": "badge-amber",
-            "anomaly_alert": "badge-purple",
-            "subscription_digest": "badge-blue",
+            "anomaly_alert": "badge-slate",
+            "subscription_digest": "badge-info",
             "workflow_task": "badge-green",
             "system_bulletin": "badge-slate",
         }
