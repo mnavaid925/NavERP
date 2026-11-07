@@ -132,7 +132,7 @@ def bi_chat_workspace(request):
     ]
 
     context = {
-        "sessions": sessions,
+        "sessions": sessions[:50],
         "active_session": active_session,
         "turns": turns,
         "suggested_prompts": suggested_prompts,
