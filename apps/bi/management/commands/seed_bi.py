@@ -78,6 +78,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                AnalyticsRecommendation.objects.all().delete()
+                TextSentimentAnalysis.objects.all().delete()
+                SmartDataPrepSuggestion.objects.all().delete()
+                AugmentedInsight.objects.all().delete()
                 ScorecardKpiAssignment.objects.all().delete()
                 PerformanceScorecard.objects.all().delete()
                 StrategicObjective.objects.all().delete()
@@ -1551,7 +1555,6 @@ class Command(BaseCommand):
             if not MdmGoldenRecord.objects.filter(tenant=tenant).exists():
                 self.stdout.write(f"  Seeding BI Master Data Management for tenant: {tenant.name}...")
                 with transaction.atomic():
-                    from apps.core.models import Party, OrgUnit
                     from apps.scm.models.InventoryManagement.Items import Item, ItemCategory
                     from apps.scm.models.AssetManagement.Assets import Asset
 
