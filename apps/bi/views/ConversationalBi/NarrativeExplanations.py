@@ -52,7 +52,7 @@ def narrative_explanation_list(request):
     if style:
         qs = qs.filter(narrative_style=style)
 
-    artifact_type = request.GET.get("artifact_type", "").strip()
+    artifact_type = (request.GET.get("artifact_type") or request.GET.get("artifact", "")).strip()
     if artifact_type:
         qs = qs.filter(target_artifact_type=artifact_type)
 
