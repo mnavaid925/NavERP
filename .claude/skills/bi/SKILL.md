@@ -21,8 +21,8 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.11 KPI & Performance Scorecards**: KPI library, Balanced Scorecards (4 Kaplan & Norton perspectives: Financial, Customer, Internal Process, Learning & Growth), plan-vs-actual variance, trend arrows, industry benchmarks, and strategy maps.
 - **10.12 OLAP & Multidimensional Analysis**: Pre-aggregated cubes, hierarchies, pivot matrix analysis, what-if planning scenarios, writeback adjustments.
 - **10.13 Predictive & Advanced Analytics**: Time-series forecasting, predictive & propensity modeling, prescriptive scenario optimization, automated statistical anomaly detection, and AutoML model lifecycle management.
-- **10.14 Financial Analytics & Planning**: Variance analysis, budget vs. actuals, financial ratio scorecards.
-- **10.15 Supply Chain & Operations Analytics**: Inventory turns, vendor delivery reliability, demand forecasts.
+- **10.14 AI & Augmented Analytics**: Auto-generated insights (key-driver analysis, variance decomposition, narrative summaries), proactive Smart Insight Feed, automated data preparation suggestions (joins, casts, null imputation), text & sentiment analytics, and personalized recommendation engine.
+- **10.15 Natural Language & Conversational BI**: Natural language query (NLQ), conversational BI assistant, natural language generation (NLG), voice-enabled analytics, search-driven discovery.
 - **10.16 Sales & Marketing Analytics**: Pipeline velocity, CAC, LTV, conversion attribution.
 - **10.17 HR & Workforce Analytics**: Headcount trends, turnover predictors, compensation distribution.
 - **10.18 Embedded Analytics & White-labeling**: Multi-tenant customer portals, tokenized dashboard embeds, vanity branding.
@@ -1078,6 +1078,93 @@ Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
 - **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all delete views.
 - **Audit Logging**: `write_audit_log` records all model fittings, triage changes, optimizations, and CRUD mutations.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.13"]`.
+
+---
+
+## Sub-module 10.14: AI & Augmented Analytics
+
+### Models
+1. **`AugmentedInsight`** (`apps/bi/models/AiAugmentedAnalytics/AugmentedInsights.py`):
+   - Table: `bi_augmentedinsight`, Prefix: `BAIN` (`TenantNumbered`).
+   - Fields: `title`, `insight_type` (`key_driver`, `anomaly`, `trend_shift`, `threshold_cross`, `correlation`, `cohort_drift`), `impact_direction` (`positive`, `negative`, `neutral`), `severity` (`info`, `low`, `medium`, `high`, `critical`), `status` (`new`, `acknowledged`, `actioned`, `dismissed`, `bookmarked`), `metric_name`, `dimension_name`, `dimension_value`, `baseline_value`, `observed_value`, `variance_percentage`, `confidence_score`, `narrative_summary` (NLG text), `driver_decomposition` (JSON list of factor dicts), `semantic_model` (FK `SemanticModel`), `kpi_definition` (FK `KpiDefinition`), `warehouse_table` (FK `WarehouseTable`), `action_notes`, `created_by` (FK `User`), `actioned_by` (FK `User`), `actioned_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -created_at)`, `(tenant, insight_type)`, `(tenant, severity)`, `(tenant, status)`.
+   - Methods: `badge_color`, `impact_badge_color` (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`).
+
+2. **`SmartDataPrepSuggestion`** (`apps/bi/models/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`):
+   - Table: `bi_smartdataprepsuggestion`, Prefix: `BSDP` (`TenantNumbered`).
+   - Fields: `target_table` (FK `WarehouseTable`), `target_column`, `suggestion_type` (`join_inference`, `type_cast`, `null_impute`, `outlier_clip`, `column_split`, `standardize_format`, `dimension_extract`), `confidence_score`, `status` (`pending`, `accepted`, `rejected`, `applied`), `rationale`, `suggested_config` (JSON dict), `suggested_transformation_sql`, `related_table` (FK `WarehouseTable`), `rejection_reason`, `reviewed_by` (FK `User`), `reviewed_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -created_at)`, `(tenant, suggestion_type)`, `(tenant, status)`, `(tenant, target_table)`.
+   - Methods: `badge_color`, `suggestion_type_badge`.
+
+3. **`TextSentimentAnalysis`** (`apps/bi/models/AiAugmentedAnalytics/TextSentimentAnalyses.py`):
+   - Table: `bi_textsentimentanalysis`, Prefix: `BSNT` (`TenantNumbered`).
+   - Fields: `source_type` (`customer_review`, `support_ticket`, `survey_response`, `product_feedback`, `social_mention`, `internal_note`), `source_reference`, `text_content`, `polarity_score` (-1.00 to 1.00), `subjectivity_score` (0.00 to 1.00), `sentiment_category` (`positive`, `neutral`, `negative`, `mixed`), `confidence_score`, `extracted_themes` (JSON list), `linked_party` (FK `core.Party`), `linked_org_unit` (FK `core.OrgUnit`), `analyzed_by` (FK `User`), `analyzed_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -created_at)`, `(tenant, source_type)`, `(tenant, sentiment_category)`.
+   - Methods: `badge_color`, `compute_sentiment_from_text()` for lightweight NLP polarity, subjectivity, and sentiment category auto-scoring.
+
+4. **`AnalyticsRecommendation`** (`apps/bi/models/AiAugmentedAnalytics/AnalyticsRecommendations.py`):
+   - Table: `bi_analyticsrecommendation`, Prefix: `BARC` (`TenantNumbered`).
+   - Fields: `user` (FK `auth.User`), `recommendation_type` (`dashboard`, `report`, `kpi`, `semantic_model`, `dataset`), `target_title`, `target_url`, `reason` (`trending`, `role_based`, `collaborative`, `recently_added`, `usage_pattern`), `rationale_text`, `affinity_score`, `status` (`active`, `clicked`, `dismissed`, `saved`), `dashboard` (FK `BiDashboard`), `report` (FK `ReportDefinition`), `kpi` (FK `KpiDefinition`), `semantic_model` (FK `SemanticModel`), `last_interacted_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -created_at)`, `(tenant, user)`, `(tenant, recommendation_type)`, `(tenant, status)`.
+   - Methods: `badge_color`, `reason_badge`.
+
+### URLs & Routes
+- Auto-Generated Insights & Feed:
+  - `bi:augmented_insight_list` (`/bi/augmented-insights/`)
+  - `bi:augmented_insight_create` (`/bi/augmented-insights/new/`)
+  - `bi:augmented_insight_feed` (`/bi/augmented-insights/feed/` - Smart streaming insight stream with severity filters)
+  - `bi:augmented_insight_detail` (`/bi/augmented-insights/<int:pk>/`)
+  - `bi:augmented_insight_edit` (`/bi/augmented-insights/<int:pk>/edit/`)
+  - `bi:augmented_insight_delete` (`/bi/augmented-insights/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:augmented_insight_triage` (`/bi/augmented-insights/<int:pk>/triage/` - `@require_POST`)
+- Automated Data Preparation Suggestions:
+  - `bi:smart_data_prep_suggestion_list` (`/bi/data-prep-suggestions/`)
+  - `bi:smart_data_prep_suggestion_create` (`/bi/data-prep-suggestions/new/`)
+  - `bi:smart_data_prep_suggestion_detail` (`/bi/data-prep-suggestions/<int:pk>/`)
+  - `bi:smart_data_prep_suggestion_edit` (`/bi/data-prep-suggestions/<int:pk>/edit/`)
+  - `bi:smart_data_prep_suggestion_delete` (`/bi/data-prep-suggestions/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:smart_data_prep_suggestion_action` (`/bi/data-prep-suggestions/<int:pk>/action/` - `@require_POST`, accepts `accept`, `reject`, `apply`)
+- Text & Sentiment Analytics:
+  - `bi:text_sentiment_analysis_list` (`/bi/sentiment-analyses/`)
+  - `bi:text_sentiment_analysis_create` (`/bi/sentiment-analyses/new/`)
+  - `bi:text_sentiment_analysis_detail` (`/bi/sentiment-analyses/<int:pk>/`)
+  - `bi:text_sentiment_analysis_edit` (`/bi/sentiment-analyses/<int:pk>/edit/`)
+  - `bi:text_sentiment_analysis_delete` (`/bi/sentiment-analyses/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:text_sentiment_analysis_recalculate` (`/bi/sentiment-analyses/<int:pk>/recalculate/` - `@require_POST`)
+- Recommendation Engine:
+  - `bi:analytics_recommendation_list` (`/bi/recommendations/`)
+  - `bi:analytics_recommendation_create` (`/bi/recommendations/new/`)
+  - `bi:analytics_recommendation_detail` (`/bi/recommendations/<int:pk>/`)
+  - `bi:analytics_recommendation_edit` (`/bi/recommendations/<int:pk>/edit/`)
+  - `bi:analytics_recommendation_delete` (`/bi/recommendations/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:analytics_recommendation_interact` (`/bi/recommendations/<int:pk>/interact/` - `@require_POST`, owner/admin gated)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/ai_augmented_analytics/`:
+  - `augmented_insight/` (`list.html`, `detail.html`, `form.html`).
+  - `feed.html` (Smart Insight Feed card stream with severity left-border accents and inline triage).
+  - `smart_data_prep_suggestion/` (`list.html`, `detail.html`, `form.html`).
+  - `text_sentiment_analysis/` (`list.html`, `detail.html`, `form.html`).
+  - `analytics_recommendation/` (`list.html`, `detail.html`, `form.html`).
+- Design System: Colour-named badge modifiers only (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat-card icons (`blue`, `green`, `orange`, `purple`, `slate`), accessible `<table class="table">` in `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds comprehensive multi-tenant AI & Augmented Analytics records:
+  - Augmented Insights: Key-driver revenue analysis, SaaS customer churn statistical anomaly, checkout conversion surge with structured driver decomposition factors.
+  - Data Prep Suggestions: Automatic timestamp casting, customer zip code null imputation with modal centroids, and customer ID foreign key join inference.
+  - Text & Sentiment Analyses: Support tickets and customer feedback reviews auto-scored for polarity, subjectivity, and extracted themes.
+  - Analytics Recommendations: Role-based and trending executive dashboard and report recommendations with affinity match scores.
+- 100% idempotent with `--flush` cleanup across all four 10.14 tables.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all delete views (`augmented_insight_delete`, `smart_data_prep_suggestion_delete`, `text_sentiment_analysis_delete`, `analytics_recommendation_delete`).
+- **Open Redirect Protection**: `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()})` enforced on all redirect parameters.
+- **XSS & Protocol Injection Defense**: `target_url` validated to ensure only relative paths starting with a single `/` are accepted, rejecting `javascript:` and protocol-relative `//` URLs.
+- **State Transition & Ownership Guards**: Suggestions already marked `applied` cannot be overwritten via quick action. Recommendation interactions are strictly gated to the assigned recipient user or tenant admin.
+- **Transactional Consistency**: All 16 mutating views wrapped in `transaction.atomic()`, ensuring consistent state between entity mutations and `write_audit_log` records.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.14"]`.
+
 
 
 
