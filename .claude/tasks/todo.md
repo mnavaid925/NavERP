@@ -258,99 +258,99 @@
 ---
 
 ## 10.12-0 — Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO heavy external XMLA/Mondrian XML-RPC server or external Java/C++ OLAP daemon** — Native relational OLAP (ROLAP) query generation and database summary rollups provide sub-second responses without external daemons.
-- [ ] **NO writeback adjustments into closed or locked fiscal periods** — Writeback commits strictly validate that `accounting.FiscalPeriod.is_open` is True, preventing financial calendar tampering.
-- [ ] **NO machine-learning forecast regressors or neural network time-series prediction** — Belongs downstream in Sub-module 10.13 Predictive & Advanced Analytics.
+- [x] **NO heavy external XMLA/Mondrian XML-RPC server or external Java/C++ OLAP daemon** — Native relational OLAP (ROLAP) query generation and database summary rollups provide sub-second responses without external daemons.
+- [x] **NO writeback adjustments into closed or locked fiscal periods** — Writeback commits strictly validate that `accounting.FiscalPeriod.is_open` is True, preventing financial calendar tampering.
+- [x] **NO machine-learning forecast regressors or neural network time-series prediction** — Belongs downstream in Sub-module 10.13 Predictive & Advanced Analytics.
 
 ---
 
 ## Sub-module 10.12 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.12.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.12.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: OlapCube (`BOCB-`)**
-  - [ ] Model: `apps/bi/models/OlapAnalysis/OlapCubes.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOCB"`)
-  - [ ] Form: `apps/bi/forms/OlapAnalysis/OlapCubes.py` (`OlapCubeForm`, `OlapCubeRebuildForm`)
-  - [ ] Views: `apps/bi/views/OlapAnalysis/OlapCubes.py` (list, detail, create, edit, delete, rebuild)
-  - [ ] URLs: `apps/bi/urls/OlapAnalysis/OlapCubes.py` (`olap_cube_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/olap_analysis/olap_cube/list.html`
-    - [ ] `templates/bi/olap_analysis/olap_cube/detail.html`
-    - [ ] `templates/bi/olap_analysis/olap_cube/form.html`
-- [ ] **Entity 2: PivotAnalysisView (`BPIV-`)**
-  - [ ] Model: `apps/bi/models/OlapAnalysis/PivotViews.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPIV"`)
-  - [ ] Form: `apps/bi/forms/OlapAnalysis/PivotViews.py` (`PivotAnalysisViewForm`)
-  - [ ] Views: `apps/bi/views/OlapAnalysis/PivotViews.py` (list, detail, create, edit, delete, matrix, drill_through)
-  - [ ] URLs: `apps/bi/urls/OlapAnalysis/PivotViews.py` (`pivot_view_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/olap_analysis/pivot_view/list.html`
-    - [ ] `templates/bi/olap_analysis/pivot_view/detail.html`
-    - [ ] `templates/bi/olap_analysis/pivot_view/form.html`
-    - [ ] `templates/bi/olap_analysis/pivot_view/matrix.html`
-- [ ] **Entity 3: WhatIfScenario (`BWIF-`)**
-  - [ ] Model: `apps/bi/models/OlapAnalysis/WhatIfScenarios.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWIF"`)
-  - [ ] Form: `apps/bi/forms/OlapAnalysis/WhatIfScenarios.py` (`WhatIfScenarioForm`, `WhatIfScenarioSimulateForm`, `WhatIfScenarioCommitForm`)
-  - [ ] Views: `apps/bi/views/OlapAnalysis/WhatIfScenarios.py` (list, detail, create, edit, delete, simulate, commit)
-  - [ ] URLs: `apps/bi/urls/OlapAnalysis/WhatIfScenarios.py` (`what_if_scenario_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/olap_analysis/what_if_scenario/list.html`
-    - [ ] `templates/bi/olap_analysis/what_if_scenario/detail.html`
-    - [ ] `templates/bi/olap_analysis/what_if_scenario/form.html`
-    - [ ] `templates/bi/olap_analysis/what_if_scenario/simulate.html`
-- [ ] **Entity 4: ScenarioWritebackCell (`BWBC-`)**
-  - [ ] Model: `apps/bi/models/OlapAnalysis/WritebackCells.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWBC"`)
-  - [ ] Form: `apps/bi/forms/OlapAnalysis/WritebackCells.py` (`ScenarioWritebackCellForm`, `ScenarioWritebackSplashForm`)
-  - [ ] Views: `apps/bi/views/OlapAnalysis/WritebackCells.py` (list, detail, create, edit, delete, splash)
-  - [ ] URLs: `apps/bi/urls/OlapAnalysis/WritebackCells.py` (`writeback_cell_*`)
-  - [ ] Templates:
-    - [ ] `templates/bi/olap_analysis/writeback_cell/list.html`
-    - [ ] `templates/bi/olap_analysis/writeback_cell/detail.html`
-    - [ ] `templates/bi/olap_analysis/writeback_cell/form.html`
+- [x] **Entity 1: OlapCube (`BOCB-`)**
+  - [x] Model: `apps/bi/models/OlapAnalysis/OlapCubes.py` (`TenantNumbered`, `NUMBER_PREFIX = "BOCB"`)
+  - [x] Form: `apps/bi/forms/OlapAnalysis/OlapCubes.py` (`OlapCubeForm`, `OlapCubeRebuildForm`)
+  - [x] Views: `apps/bi/views/OlapAnalysis/OlapCubes.py` (list, detail, create, edit, delete, rebuild)
+  - [x] URLs: `apps/bi/urls/OlapAnalysis/OlapCubes.py` (`olap_cube_*`)
+  - [x] Templates:
+    - [x] `templates/bi/olap_analysis/olap_cube/list.html`
+    - [x] `templates/bi/olap_analysis/olap_cube/detail.html`
+    - [x] `templates/bi/olap_analysis/olap_cube/form.html`
+- [x] **Entity 2: PivotAnalysisView (`BPIV-`)**
+  - [x] Model: `apps/bi/models/OlapAnalysis/PivotViews.py` (`TenantNumbered`, `NUMBER_PREFIX = "BPIV"`)
+  - [x] Form: `apps/bi/forms/OlapAnalysis/PivotViews.py` (`PivotAnalysisViewForm`)
+  - [x] Views: `apps/bi/views/OlapAnalysis/PivotViews.py` (list, detail, create, edit, delete, matrix, drill_through)
+  - [x] URLs: `apps/bi/urls/OlapAnalysis/PivotViews.py` (`pivot_view_*`)
+  - [x] Templates:
+    - [x] `templates/bi/olap_analysis/pivot_view/list.html`
+    - [x] `templates/bi/olap_analysis/pivot_view/detail.html`
+    - [x] `templates/bi/olap_analysis/pivot_view/form.html`
+    - [x] `templates/bi/olap_analysis/pivot_view/matrix.html`
+- [x] **Entity 3: WhatIfScenario (`BWIF-`)**
+  - [x] Model: `apps/bi/models/OlapAnalysis/WhatIfScenarios.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWIF"`)
+  - [x] Form: `apps/bi/forms/OlapAnalysis/WhatIfScenarios.py` (`WhatIfScenarioForm`, `WhatIfScenarioSimulateForm`, `WhatIfScenarioCommitForm`)
+  - [x] Views: `apps/bi/views/OlapAnalysis/WhatIfScenarios.py` (list, detail, create, edit, delete, simulate, commit)
+  - [x] URLs: `apps/bi/urls/OlapAnalysis/WhatIfScenarios.py` (`what_if_scenario_*`)
+  - [x] Templates:
+    - [x] `templates/bi/olap_analysis/what_if_scenario/list.html`
+    - [x] `templates/bi/olap_analysis/what_if_scenario/detail.html`
+    - [x] `templates/bi/olap_analysis/what_if_scenario/form.html`
+    - [x] `templates/bi/olap_analysis/what_if_scenario/simulate.html`
+- [x] **Entity 4: ScenarioWritebackCell (`BWBC-`)**
+  - [x] Model: `apps/bi/models/OlapAnalysis/WritebackCells.py` (`TenantNumbered`, `NUMBER_PREFIX = "BWBC"`)
+  - [x] Form: `apps/bi/forms/OlapAnalysis/WritebackCells.py` (`ScenarioWritebackCellForm`, `ScenarioWritebackSplashForm`)
+  - [x] Views: `apps/bi/views/OlapAnalysis/WritebackCells.py` (list, detail, create, edit, delete, splash)
+  - [x] URLs: `apps/bi/urls/OlapAnalysis/WritebackCells.py` (`writeback_cell_*`)
+  - [x] Templates:
+    - [x] `templates/bi/olap_analysis/writeback_cell/list.html`
+    - [x] `templates/bi/olap_analysis/writeback_cell/detail.html`
+    - [x] `templates/bi/olap_analysis/writeback_cell/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Add re-exports in `apps/bi/models/OlapAnalysis/__init__.py` and `apps/bi/models/__init__.py`
-- [ ] Add re-exports in `apps/bi/forms/OlapAnalysis/__init__.py` and `apps/bi/forms/__init__.py`
-- [ ] Add re-exports in `apps/bi/views/OlapAnalysis/__init__.py` and `apps/bi/views/__init__.py`
-- [ ] Assemble URL patterns in `apps/bi/urls/OlapAnalysis/__init__.py` and wire into `apps/bi/urls/__init__.py`
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Add `LIVE_LINKS["10.12"]` in `apps/core/navigation.py`:
+- [x] Add re-exports in `apps/bi/models/OlapAnalysis/__init__.py` and `apps/bi/models/__init__.py`
+- [x] Add re-exports in `apps/bi/forms/OlapAnalysis/__init__.py` and `apps/bi/forms/__init__.py`
+- [x] Add re-exports in `apps/bi/views/OlapAnalysis/__init__.py` and `apps/bi/views/__init__.py`
+- [x] Assemble URL patterns in `apps/bi/urls/OlapAnalysis/__init__.py` and wire into `apps/bi/urls/__init__.py`
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Add `LIVE_LINKS["10.12"]` in `apps/core/navigation.py`:
   - `"OLAP Cubes & Aggregations"`: `bi:olap_cube_list`
   - `"Pivot & Cross-Tab Analysis"`: `bi:pivot_view_list`
   - `"Drill-Down, Up & Through"`: `bi:pivot_view_list`
   - `"Time Intelligence"`: `bi:olap_cube_list`
   - `"What-If & Writeback"`: `bi:what_if_scenario_list`
-- [ ] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with idempotent demo cubes, pivot matrices, what-if scenarios, and writeback cells
-- [ ] Run `makemigrations bi` (claiming `0026`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
+- [x] Extend `seed_bi` in `apps/bi/management/commands/seed_bi.py` with idempotent demo cubes, pivot matrices, what-if scenarios, and writeback cells
+- [x] Run `makemigrations bi` (claiming `0026`), `migrate`, `seed_bi` twice (idempotence verification), and `manage.py check`
 
 ### Phase 3.5: Smoke Testing
-- [ ] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
+- [x] Execute smoke test verifying all new URLs respond 200/302, assert page content, and verify cross-tenant IDOR returns 404
 
 ### Phase 4: Six-Pass Serial Review
-- [ ] Pass 1: Code Reviewer
-- [ ] Pass 2: Explorer
-- [ ] Pass 3: Frontend Reviewer
-- [ ] Pass 4: Performance Reviewer
-- [ ] Pass 5: QA Smoke Tester
-- [ ] Pass 6: Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.12.md`
+- [x] Pass 1: Code Reviewer
+- [x] Pass 2: Explorer
+- [x] Pass 3: Frontend Reviewer
+- [x] Pass 4: Performance Reviewer
+- [x] Pass 5: QA Smoke Tester
+- [x] Pass 6: Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.12.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
+- [x] Fix all review findings in order (Critical -> Important -> Minor) and commit per-file
 
 ### Phase 6: Automated Test Suite
-- [ ] Add shared 10.12 fixtures to `conftest.py`
-- [ ] Write `test_olapanalysis_models.py`
-- [ ] Write `test_olapanalysis_forms.py`
-- [ ] Write `test_olapanalysis_views.py`
-- [ ] Write `test_olapanalysis_security.py`
-- [ ] Run full unfiltered test suite and ensure 100% green
+- [x] Add shared 10.12 fixtures to `conftest.py`
+- [x] Write `test_olapanalysis_models.py`
+- [x] Write `test_olapanalysis_forms.py`
+- [x] Write `test_olapanalysis_views.py`
+- [x] Write `test_olapanalysis_security.py`
+- [x] Run full unfiltered test suite and ensure 100% green
 
 ### Phase 7: Skill & Documentation Close-out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.12 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.12 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.12.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.12 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.12 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.12.md`
 
 ## Later passes / deferred
 - **External XMLA Protocol Endpoint Listener**: Emulating an SSAS XMLA endpoint for direct Excel / Power BI Desktop external tool connectivity requires a dedicated daemon; deferred in favor of native web pivot grids and XLSX/CSV exports.
@@ -358,7 +358,14 @@
 - **Automated Genetic Pre-Aggregation Index Synthesis**: Autonomous query pattern machine learning for automatic aggregate index creation deferred to a future optimization pass.
 
 ## Review notes
-(to be filled in at close-out)
+Sub-module 10.12: OLAP & Multidimensional Analysis completed end-to-end on 2026-11-07.
+- **Models**: `OlapCube` [BOCB-], `PivotAnalysisView` [BPIV-], `WhatIfScenario` [BWIF-], `ScenarioWritebackCell` [BWBC-] with strict multi-tenancy and audit logging.
+- **Routes & Views**: 20 complete routes covering full CRUD, interactive pivot matrix workspace (`/bi/pivots/<pk>/matrix/`), what-if simulation workbench (`/bi/scenarios/<pk>/simulate/`), and financial budget writeback commit (`/bi/scenarios/<pk>/commit/`).
+- **Templates**: 11 Tailwind/HTMX templates with safe user FK lookups and color-named badges (`badge-info`, `badge-green`, `badge-slate`, `badge-amber`, `badge-muted`).
+- **Review & Fixes**: All 18 review findings across 6 serial passes (C1, C2, I1–I10, M1–M6) resolved and verified by `code-fixer`.
+- **Tests**: 115 dedicated tests across 4 modules (`test_olapanalysis_models.py`, `_forms.py`, `_views.py`, `_security.py`) all passing; full unfiltered `apps/bi` test suite is 100% green.
+- **Gaps**: None. Recorded in `.agents/tasks/gaps-bi-10.12.md`.
+
 
 ---
 # Sub-module 10.10: Self-Service & Ad-Hoc Analytics (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.10.md` (2026-11-06)
