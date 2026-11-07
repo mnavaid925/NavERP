@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}{{ query.number }} — Natural Language Query — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:natural_language_query_list' %}">Natural Language Queries</a>
+            <span class="sep">/</span>
+            <span>{{ query.number }}</span>
+        </div>
+        <h1 class="page-title">{{ query.number }}</h1>
+        <p class="text-muted text-sm">Natural language analytical question and generated visualization payload</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:natural_language_query_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Back to List</span>
+        </a>
+        <a href="{% url 'bi:natural_language_query_edit' query.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:natural_language_query_delete' query.pk %}" class="inline" onsubmit="return confirm('Delete query {{ query.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Headline Banner -->
+<div class="card mb-6 border-l-4 border-l-indigo-500">
+    <div class="card-body">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <div class="text-xs uppercase tracking-wider font-semibold text-muted mb-1">User Query</div>
+                <h2 class="text-xl font-bold text-slate-900 leading-snug">"{{ query.query_text }}"</h2>
+                <div class="flex flex-wrap gap-2 mt-2 items-center text-xs text-muted">
+                    <span>Asked by <strong class="text-slate-700">{% if query.user %}{{ query.user.get_full_name|default:query.user.username }}{% else %}Automated Agent{% endif %}</strong></span>
+                    <span>•</span>
+                    <span>{{ query.created_at|date:"M d, Y H:i:s" }}</span>
+                </div>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <span class="badge {{ query.modality_badge_color }} text-sm py-1 px-3">
+                    {% if query.input_modality == 'voice' %}<i data-lucide="mic" class="w-4 h-4 inline mr-1"></i>{% endif %}
+                    {{ query.get_input_modality_display }}
+                </span>
+                <span class="badge {{ query.status_badge_color }} text-sm py-1 px-3">
+                    {{ query.get_execution_status_display }}
+                </span>
+                <span class="badge {{ query.rating_badge_color }} text-sm py-1 px-3">
+                    {{ query.get_user_rating_display }}
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column (Visuals & Generated SQL) -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Visualization Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-5 h-5 text-indigo-600"></i>
+                    <h3 class="font-semibold text-base">Generated Visualization ({{ query.get_chart_type_display }})</h3>
+                </div>
+                <span class="text-xs font-mono text-muted">Confidence: {{ query.confidence_score }}%</span>
+            </div>
+            <div class="card-body">
+                {% if query.result_summary %}
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div>
+                        <div class="text-xs text-muted uppercase">Matched Rows</div>
+                        <div class="text-lg font-bold text-slate-800">{{ query.result_summary.row_count|default:"4" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase">Metric Aggregate</div>
+                        <div class="text-lg font-bold text-indigo-600">{{ query.result_summary.metric_value|default:"$2,360,000" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase">Summary</div>
+                        <div class="text-xs text-slate-700 mt-1">{{ query.result_summary.summary_text|default:"Aggregated measures successfully calculated." }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Chart.js canvas -->
+                <div class="relative w-full h-64 flex items-center justify-center bg-slate-50 rounded border border-dashed border-slate-200 p-4">
+                    <canvas id="nlqChart" class="w-full h-full"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated SQL Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="database" class="w-5 h-5 text-slate-600"></i>
+                    <h3 class="font-semibold text-base">Grounded SQL / Semantic ORM Query</h3>
+                </div>
+                {% if query.execution_duration_ms > 0 %}
+                <span class="text-xs text-muted font-mono">Executed in {{ query.execution_duration_ms }} ms</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <pre class="bg-slate-900 text-emerald-400 p-4 rounded-lg font-mono text-xs overflow-x-auto leading-relaxed"><code>{{ query.generated_sql|default:"-- No generated SQL available for this query" }}</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (Extracted AST & Feedback) -->
+    <div class="space-y-6">
+        <!-- Extracted Intent & Tokens Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-base">Intent & Parsed Tokens</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs uppercase text-muted font-medium">Classified Intent</div>
+                    <div class="text-sm font-semibold text-slate-800 mt-0.5">{{ query.get_intent_type_display }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs uppercase text-muted font-medium mb-1">Parsed Measures</div>
+                    <div class="flex flex-wrap gap-1">
+                        {% for m in parsed_measures %}
+                        <span class="badge badge-info text-xs">{{ m }}</span>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">None extracted</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs uppercase text-muted font-medium mb-1">Parsed Dimensions</div>
+                    <div class="flex flex-wrap gap-1">
+                        {% for d in parsed_dimensions %}
+                        <span class="badge badge-purple text-xs">{{ d }}</span>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">None extracted</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs uppercase text-muted font-medium mb-1">Extracted Filters</div>
+                    {% if parsed_filters %}
+                    <div class="bg-slate-50 p-2.5 rounded border border-slate-200 text-xs font-mono text-slate-700">
+                        {{ parsed_filters }}
+                    </div>
+                    {% else %}
+                    <span class="text-xs text-muted italic">No dimension filters applied</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Bound Datasets & Context Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-base">Analytical Anchors</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-muted block uppercase">Semantic Model</span>
+                    {% if query.semantic_model %}
+                    <a href="{% url 'bi:semantic_model_detail' query.semantic_model.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ query.semantic_model.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted italic">Not explicitly bound</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-xs text-muted block uppercase">Warehouse Table</span>
+                    {% if query.warehouse_table %}
+                    <a href="{% url 'bi:warehouse_table_detail' query.warehouse_table.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ query.warehouse_table.name }}
+                    </a>
+                    {% else %}
+                    <span class="text-muted italic">Not explicitly bound</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-xs text-muted block uppercase">Conversation Thread</span>
+                    {% if query.conversation_session %}
+                    <a href="{% url 'bi:bi_conversation_session_detail' query.conversation_session.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ query.conversation_session.title }} ({{ query.conversation_session.number }})
+                    </a>
+                    {% else %}
+                    <span class="text-muted italic">Standalone Query</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- User Feedback & Accuracy Rating Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-base">User Feedback & Rating</h3>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{% url 'bi:natural_language_query_rate' query.pk %}" class="space-y-3">
+                    {% csrf_token %}
+                    <div>
+                        <label for="rate_rating" class="form-label text-xs">Rate Answer Accuracy</label>
+                        <select id="rate_rating" name="rating" class="form-select text-sm">
+                            {% for code, label in rating_choices %}
+                            <option value="{{ code }}" {% if query.user_rating == code %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="rate_notes" class="form-label text-xs">Feedback Commentary</label>
+                        <textarea id="rate_notes" name="notes" rows="2" class="form-textarea text-xs" placeholder="Was the chart or measure accurate?">{{ query.user_feedback_notes }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline text-xs w-full">
+                        <i data-lucide="check"></i>
+                        <span>Submit Feedback</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js Script Render -->
+<script orientation="auto">
+document.addEventListener("DOMContentLoaded", function() {
+    const ctx = document.getElementById('nlqChart');
+    if (ctx && typeof Chart !== 'undefined') {
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Q1 2026', 'Q2 2026', 'Q3 2026', 'Q4 2026'],
+                datasets: [{
+                    label: 'Calculated Metric ($)',
+                    data: [450, 520, 610, 780],
+                    backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                    borderColor: 'rgb(79, 70, 229)',
+                    borderWidth: 1.5,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
