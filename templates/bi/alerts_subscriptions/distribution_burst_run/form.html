@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}{% if burst_run %}Edit {{ burst_run.number }}{% else %}Log Distribution Burst Run{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:distribution_burst_run_list' %}">Burst Runs</a>
+            <span class="sep">/</span>
+            <span>{% if burst_run %}Edit {{ burst_run.number }}{% else %}Log Run{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if burst_run %}Edit Burst Run: {{ burst_run.number }}{% else %}Record Distribution Burst Run{% endif %}</h1>
+        <p class="text-muted text-sm">Register delivery run details, batch targets, and execution status</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if burst_run %}{% url 'bi:distribution_burst_run_detail' burst_run.pk %}{% else %}{% url 'bi:distribution_burst_run_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Burst Run Information</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 rounded bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.subscription.id_for_label }}">Origin Subscription</label>
+                        {{ form.subscription }}
+                        {% if form.subscription.errors %}<div class="form-error">{{ form.subscription.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.alert_rule.id_for_label }}">Origin Alert Rule</label>
+                        {{ form.alert_rule }}
+                        {% if form.alert_rule.errors %}<div class="form-error">{{ form.alert_rule.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.run_trigger.id_for_label }}">Run Trigger</label>
+                        {{ form.run_trigger }}
+                        {% if form.run_trigger.errors %}<div class="form-error">{{ form.run_trigger.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.delivery_channel.id_for_label }}">Delivery Channel</label>
+                        {{ form.delivery_channel }}
+                        {% if form.delivery_channel.errors %}<div class="form-error">{{ form.delivery_channel.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.recipient_count.id_for_label }}">Recipient Count</label>
+                        {{ form.recipient_count }}
+                        {% if form.recipient_count.errors %}<div class="form-error">{{ form.recipient_count.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.generated_file_name.id_for_label }}">Generated File Name</label>
+                        {{ form.generated_file_name }}
+                        {% if form.generated_file_name.errors %}<div class="form-error">{{ form.generated_file_name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.file_size_bytes.id_for_label }}">File Size (Bytes)</label>
+                        {{ form.file_size_bytes }}
+                        {% if form.file_size_bytes.errors %}<div class="form-error">{{ form.file_size_bytes.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.error_summary.id_for_label }}">Diagnostics / Error Summary</label>
+                        {{ form.error_summary }}
+                        {% if form.error_summary.errors %}<div class="form-error">{{ form.error_summary.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if burst_run %}{% url 'bi:distribution_burst_run_detail' burst_run.pk %}{% else %}{% url 'bi:distribution_burst_run_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if burst_run %}Save Changes{% else %}Record Run{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
