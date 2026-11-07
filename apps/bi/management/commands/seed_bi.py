@@ -3758,6 +3758,13 @@ class Command(BaseCommand):
                 self.stdout.write(f"  Seeding Natural Language & Conversational BI for tenant: {tenant.name}...")
 
                 with transaction.atomic():
+                    tenant_admin = get_user_model().objects.filter(tenant=tenant).first()
+                    dash = BiDashboard.objects.filter(tenant=tenant).first()
+                    rpt = ReportDefinition.objects.filter(tenant=tenant).first()
+                    kpi = KpiDefinition.objects.filter(tenant=tenant).first()
+                    sem_model = SemanticModel.objects.filter(tenant=tenant).first()
+                    tbl_sales = WarehouseTable.objects.filter(tenant=tenant).first()
+
                     # 1. Conversational BI Sessions
                     sess_revenue, _ = BiConversationSession.objects.get_or_create(
                         tenant=tenant,
