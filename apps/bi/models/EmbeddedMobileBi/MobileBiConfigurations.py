@@ -117,6 +117,8 @@ class MobileBiConfiguration(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_mob_ten_stat"),
             models.Index(fields=["tenant", "target_user"], name="idx_mob_ten_usr"),
             models.Index(fields=["tenant", "is_default_profile"], name="idx_mob_ten_default"),
+            models.Index(fields=["tenant", "touch_layout_preset"], name="idx_mob_ten_layout"),
+            models.Index(fields=["tenant", "push_digest_frequency"], name="idx_mob_ten_digest"),
             models.Index(fields=["tenant", "created_at"], name="idx_mob_ten_created"),
         ]
 
