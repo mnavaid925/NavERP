@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -215,7 +215,7 @@ def embedded_analytics_config_preview(request, pk):
 
     # Telemetry increment
     EmbeddedAnalyticsConfig.objects.filter(pk=config.pk).update(
-        view_count=config.view_count + 1,
+        view_count=F("view_count") + 1,
         last_accessed_at=timezone.now(),
     )
 
