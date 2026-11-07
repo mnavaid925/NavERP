@@ -249,87 +249,95 @@
 ## Sub-module 10.14 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-bi-10.14.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-bi-10.14.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AugmentedInsight (`BAIN`)**
-  - [ ] `apps/bi/models/AiAugmentedAnalytics/AugmentedInsights.py`
-  - [ ] `apps/bi/forms/AiAugmentedAnalytics/AugmentedInsights.py`
-  - [ ] `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py` (CRUD + `feed` interactive feed view + `triage` action)
-  - [ ] `apps/bi/urls/AiAugmentedAnalytics/AugmentedInsights.py`
-  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/list.html`
-  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/detail.html`
-  - [ ] `templates/bi/ai_augmented_analytics/augmented_insight/form.html`
-  - [ ] `templates/bi/ai_augmented_analytics/feed.html` (Smart Insight Feed interactive stream)
-- [ ] **Entity 2: SmartDataPrepSuggestion (`BSDP`)**
-  - [ ] `apps/bi/models/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
-  - [ ] `apps/bi/forms/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
-  - [ ] `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py` (CRUD + `accept` / `reject` actions)
-  - [ ] `apps/bi/urls/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
-  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/list.html`
-  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/detail.html`
-  - [ ] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/form.html`
-- [ ] **Entity 3: TextSentimentAnalysis (`BSNT`)**
-  - [ ] `apps/bi/models/AiAugmentedAnalytics/TextSentimentAnalyses.py`
-  - [ ] `apps/bi/forms/AiAugmentedAnalytics/TextSentimentAnalyses.py`
-  - [ ] `apps/bi/views/AiAugmentedAnalytics/TextSentimentAnalyses.py` (CRUD + sentiment score recalculation)
-  - [ ] `apps/bi/urls/AiAugmentedAnalytics/TextSentimentAnalyses.py`
-  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/list.html`
-  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/detail.html`
-  - [ ] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/form.html`
-- [ ] **Entity 4: AnalyticsRecommendation (`BARC`)**
-  - [ ] `apps/bi/models/AiAugmentedAnalytics/AnalyticsRecommendations.py`
-  - [ ] `apps/bi/forms/AiAugmentedAnalytics/AnalyticsRecommendations.py`
-  - [ ] `apps/bi/views/AiAugmentedAnalytics/AnalyticsRecommendations.py` (CRUD + `interact` action for click/dismiss)
-  - [ ] `apps/bi/urls/AiAugmentedAnalytics/AnalyticsRecommendations.py`
-  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/list.html`
-  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/detail.html`
-  - [ ] `templates/bi/ai_augmented_analytics/analytics_recommendation/form.html`
+- [x] **Entity 1: AugmentedInsight (`BAIN`)**
+  - [x] `apps/bi/models/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [x] `apps/bi/forms/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [x] `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py` (CRUD + `feed` interactive feed view + `triage` action)
+  - [x] `apps/bi/urls/AiAugmentedAnalytics/AugmentedInsights.py`
+  - [x] `templates/bi/ai_augmented_analytics/augmented_insight/list.html`
+  - [x] `templates/bi/ai_augmented_analytics/augmented_insight/detail.html`
+  - [x] `templates/bi/ai_augmented_analytics/augmented_insight/form.html`
+  - [x] `templates/bi/ai_augmented_analytics/feed.html` (Smart Insight Feed interactive stream)
+- [x] **Entity 2: SmartDataPrepSuggestion (`BSDP`)**
+  - [x] `apps/bi/models/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [x] `apps/bi/forms/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [x] `apps/bi/views/AiAugmentedAnalytics/SmartDataPrepSuggestions.py` (CRUD + `accept` / `reject` actions)
+  - [x] `apps/bi/urls/AiAugmentedAnalytics/SmartDataPrepSuggestions.py`
+  - [x] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/list.html`
+  - [x] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/detail.html`
+  - [x] `templates/bi/ai_augmented_analytics/smart_data_prep_suggestion/form.html`
+- [x] **Entity 3: TextSentimentAnalysis (`BSNT`)**
+  - [x] `apps/bi/models/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [x] `apps/bi/forms/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [x] `apps/bi/views/AiAugmentedAnalytics/TextSentimentAnalyses.py` (CRUD + sentiment score recalculation)
+  - [x] `apps/bi/urls/AiAugmentedAnalytics/TextSentimentAnalyses.py`
+  - [x] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/list.html`
+  - [x] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/detail.html`
+  - [x] `templates/bi/ai_augmented_analytics/text_sentiment_analysis/form.html`
+- [x] **Entity 4: AnalyticsRecommendation (`BARC`)**
+  - [x] `apps/bi/models/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [x] `apps/bi/forms/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [x] `apps/bi/views/AiAugmentedAnalytics/AnalyticsRecommendations.py` (CRUD + `interact` action for click/dismiss)
+  - [x] `apps/bi/urls/AiAugmentedAnalytics/AnalyticsRecommendations.py`
+  - [x] `templates/bi/ai_augmented_analytics/analytics_recommendation/list.html`
+  - [x] `templates/bi/ai_augmented_analytics/analytics_recommendation/detail.html`
+  - [x] `templates/bi/ai_augmented_analytics/analytics_recommendation/form.html`
 
 ### Phase 3.4: Integrate
-- [ ] Update `apps/bi/models/__init__.py` re-export block
-- [ ] Update `apps/bi/forms/__init__.py` re-export block
-- [ ] Update `apps/bi/views/__init__.py` re-export block
-- [ ] Update `apps/bi/urls/__init__.py` re-export block & concatenate urlpatterns
-- [ ] Register all 4 models in `apps/bi/admin.py`
-- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.14
-- [ ] Add `LIVE_LINKS["10.14"]` in `apps/core/navigation.py`:
+- [x] Update `apps/bi/models/__init__.py` re-export block
+- [x] Update `apps/bi/forms/__init__.py` re-export block
+- [x] Update `apps/bi/views/__init__.py` re-export block
+- [x] Update `apps/bi/urls/__init__.py` re-export block & concatenate urlpatterns
+- [x] Register all 4 models in `apps/bi/admin.py`
+- [x] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo data for 10.14
+- [x] Add `LIVE_LINKS["10.14"]` in `apps/core/navigation.py`:
   - `"Auto-Generated Insights"`: `bi:augmented_insight_list`
   - `"Smart Insight Feed"`: `bi:augmented_insight_feed`
   - `"Automated Data Preparation"`: `bi:smart_data_prep_suggestion_list`
   - `"Text & Sentiment Analytics"`: `bi:text_sentiment_analysis_list`
   - `"Recommendation Engine"`: `bi:analytics_recommendation_list`
-- [ ] Run `makemigrations bi` (claiming `0030`) & `migrate`
-- [ ] Run `seed_bi` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations bi` (claiming `0030`) & `migrate`
+- [x] Run `seed_bi` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_10_14.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+- [x] Create `temp/smoke_10_14.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.14.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.14.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (16/16 fixed)
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Add shared 10.14 fixtures to `conftest.py`
-- [ ] Write `test_aiaugmentedanalytics_models.py`
-- [ ] Write `test_aiaugmentedanalytics_forms.py`
-- [ ] Write `test_aiaugmentedanalytics_views.py`
-- [ ] Write `test_aiaugmentedanalytics_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/bi/tests/`
+- [x] Add shared 10.14 fixtures to `conftest.py`
+- [x] Write `test_aiaugmentedanalytics_models.py` (31 tests passing)
+- [x] Write `test_aiaugmentedanalytics_forms.py` (60 tests passing)
+- [x] Write `test_aiaugmentedanalytics_views.py` (44 tests passing)
+- [x] Write `test_aiaugmentedanalytics_security.py` (23 tests passing)
+- [x] Run full unfiltered test suite: `pytest apps/bi/tests/` (1,820 passed in 3m41s)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update `.claude/skills/bi/SKILL.md` with 10.14 models, routes, templates, and conventions
-- [ ] Update `README.md` marking 10.14 complete
-- [ ] Document results and verify gaps in `.agents/tasks/gaps-bi-10.14.md`
+- [x] Update `.claude/skills/bi/SKILL.md` with 10.14 models, routes, templates, and conventions
+- [x] Update `README.md` marking 10.14 complete
+- [x] Document results and verify gaps in `.agents/tasks/gaps-bi-10.14.md`
+
+### Sub-module 10.14 Review & Verification Summary
+- **Status**: Complete & Verified (100% Green)
+- **Review Register**: `.claude/tasks/review-bi-10.14.md` (All 16 findings fixed)
+- **Gap Register**: `.agents/tasks/gaps-bi-10.14.md`
+- **Gaps**: None
+- **Test Suite**: 158 dedicated 10.14 tests passed, 1,820 total `apps/bi` tests passing without filters.
+
 
 ---
 
