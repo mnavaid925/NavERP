@@ -102,16 +102,9 @@ def bi_alert_rule_detail(request, pk):
     else:
         recent_notifications = []
 
-    recent_burst_runs = getattr(rule, "burst_runs", None)
-    if recent_burst_runs is not None:
-        recent_burst_runs = recent_burst_runs.filter(tenant=request.tenant)[:10]
-    else:
-        recent_burst_runs = []
-
     context = {
         "rule": rule,
         "recent_notifications": recent_notifications,
-        "recent_burst_runs": recent_burst_runs,
     }
     return render(request, "bi/alerts_subscriptions/bi_alert_rule/detail.html", context)
 
