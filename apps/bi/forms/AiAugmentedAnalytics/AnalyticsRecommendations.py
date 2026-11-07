@@ -57,6 +57,14 @@ class AnalyticsRecommendationForm(TenantUniqueMixin, TenantModelForm):
         self.fields["kpi"].required = False
         self.fields["semantic_model"].required = False
 
+    def clean_target_url(self):
+        url = self.cleaned_data.get("target_url", "").strip()
+        if not url:
+            return url
+        if not url.startswith("/") or url.startswith("//") or url.lower().startswith("/\\"):
+            raise forms.ValidationError("Target URL must be a valid relative path starting with a single '/' (e.g. /bi/dashboards/1/).")
+        return url
+
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(self, cleaned_data, ["user", "dashboard", "report", "kpi", "semantic_model"])
