@@ -3,6 +3,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -88,6 +89,7 @@ def analytics_recommendation_detail(request, pk):
 
 
 @login_required
+@transaction.atomic
 def analytics_recommendation_create(request):
     if request.method == "POST":
         form = AnalyticsRecommendationForm(request.POST, tenant=request.tenant)
@@ -119,6 +121,7 @@ def analytics_recommendation_create(request):
 
 
 @login_required
+@transaction.atomic
 def analytics_recommendation_edit(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
     if request.method == "POST":
@@ -151,6 +154,7 @@ def analytics_recommendation_edit(request, pk):
 @login_required
 @tenant_admin_required
 @require_POST
+@transaction.atomic
 def analytics_recommendation_delete(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
     number = recommendation.number
@@ -168,6 +172,7 @@ def analytics_recommendation_delete(request, pk):
 
 @login_required
 @require_POST
+@transaction.atomic
 def analytics_recommendation_interact(request, pk):
     recommendation = bi_object(request, AnalyticsRecommendation, pk)
     interaction_type = request.POST.get("interaction_type", "").strip()
