@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendation Engine — AI & Augmented Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>AI & Augmented Analytics</span>
+        </div>
+        <h1 class="page-title">Personalized Recommendation Engine</h1>
+        <p class="text-muted text-sm">Role-aware suggestions of dashboards, operational reports, KPI definitions, and semantic datasets</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:augmented_insight_list' %}" class="btn btn-outline">
+            <i data-lucide="sparkles"></i>
+            <span>Insights Catalog</span>
+        </a>
+        <a href="{% url 'bi:analytics_recommendation_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Recommendation</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="compass"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Suggestions</div>
+            <div class="text-2xl font-bold">{{ recommendations.paginator.count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="zap"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Recommendations</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="users"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Workspace Users</div>
+            <div class="text-sm font-semibold truncate">{{ request.user.username }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Tenancy</div>
+            <div class="text-sm font-bold truncate">{{ request.tenant.name }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label class="form-label text-xs">Search Recommendations</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, URL, rationale, user..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Asset Type</label>
+                <select name="recommendation_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for code, label in recommendation_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.recommendation_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Reason Rationale</label>
+                <select name="reason" class="form-select text-sm">
+                    <option value="">All Reasons</option>
+                    {% for code, label in reason_choices %}
+                    <option value="{{ code }}" {% if request.GET.reason == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-5 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:analytics_recommendation_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Recommendations</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Analytical Recommendations Queue</h2>
+        <span class="text-xs text-muted">{{ recommendations.paginator.count }} items</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Recommended Asset</th>
+                    <th>Recipient User</th>
+                    <th>Reason & Rationale</th>
+                    <th>Match Affinity</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in recommendations %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:analytics_recommendation_detail' item.pk %}" class="hover:underline text-indigo-600">
+                                {{ item.target_title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted mt-0.5">{{ item.get_recommendation_type_display }} · {{ item.number }}</div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium text-slate-800">
+                            {{ item.user.get_full_name|default:item.user.username }}
+                        </div>
+                        <div class="text-[10px] text-muted font-mono">@{{ item.user.username }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info text-xs">{{ item.get_reason_display }}</span>
+                        {% if item.rationale_text %}
+                        <div class="text-xs text-slate-600 mt-1 max-w-xs truncate" title="{{ item.rationale_text }}">
+                            {{ item.rationale_text }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold">{{ item.affinity_score }}%</div>
+                        <div class="w-16 bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                            <div class="bg-indigo-600 h-1.5 rounded-full" style="width: {{ item.affinity_score }}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.badge_color }} text-xs">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex justify-end items-center gap-1">
+                            {% if item.target_url %}
+                            <a href="{{ item.target_url }}" class="btn btn-icon text-indigo-600" title="Open recommended asset">
+                                <i data-lucide="external-link" class="w-4 h-4"></i>
+                            </a>
+                            {% endif %}
+                            <a href="{% url 'bi:analytics_recommendation_detail' item.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                            </a>
+                            <a href="{% url 'bi:analytics_recommendation_edit' item.pk %}" class="btn btn-icon" title="Edit recommendation">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:analytics_recommendation_delete' item.pk %}" onsubmit="return confirm('Delete recommendation {{ item.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="compass" class="w-10 h-10 text-muted mx-auto mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-800">No Recommendations Available</h3>
+                            <p class="text-sm text-muted mb-4">No recommendations match your current search and filters.</p>
+                            <a href="{% url 'bi:analytics_recommendation_create' %}" class="btn btn-primary text-xs">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Recommendation
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if recommendations.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3">
+        <div class="text-xs text-muted">
+            Page {{ recommendations.number }} of {{ recommendations.paginator.num_pages }} ({{ recommendations.paginator.count }} items)
+        </div>
+        <div class="pagination flex gap-1">
+            {% if recommendations.has_previous %}
+            <a href="?page={{ recommendations.previous_page_number }}&q={{ request.GET.q }}&recommendation_type={{ request.GET.recommendation_type }}&reason={{ request.GET.reason }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if recommendations.has_next %}
+            <a href="?page={{ recommendations.next_page_number }}&q={{ request.GET.q }}&recommendation_type={{ request.GET.recommendation_type }}&reason={{ request.GET.reason }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
