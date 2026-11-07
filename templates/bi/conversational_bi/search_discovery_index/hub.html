@@ -80,7 +80,7 @@
             <div class="card-body p-5 flex flex-col justify-between h-full">
                 <div>
                     <div class="flex justify-between items-start gap-2 mb-2">
-                        <span class="badge {{ item.type_badge_color }} text-xs">{{ item.get_asset_type_display }}</span>
+                        <span class="badge {{ item.asset_type_badge_color }} text-xs">{{ item.get_asset_type_display }}</span>
                         <div class="flex items-center gap-1">
                             {% if item.is_verified %}
                             <span class="text-emerald-600" title="Verified Asset"><i data-lucide="check-circle" class="w-4 h-4"></i></span>
@@ -151,7 +151,7 @@
             <div class="card-body p-4 flex flex-col justify-between h-full">
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <span class="badge {{ feat.type_badge_color }} text-[10px]">{{ feat.get_asset_type_display }}</span>
+                        <span class="badge {{ feat.asset_type_badge_color }} text-[10px]">{{ feat.get_asset_type_display }}</span>
                         <i data-lucide="star" class="w-3.5 h-3.5 text-amber-500 fill-amber-500"></i>
                     </div>
                     <h4 class="text-sm font-bold text-slate-900 line-clamp-1 mb-1">{{ feat.asset_name }}</h4>
