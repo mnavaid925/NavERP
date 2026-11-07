@@ -91,10 +91,10 @@ def mobile_bi_config_create(request):
                     ).update(is_default_profile=False)
                 config.save()
                 write_audit_log(
-                    request,
-                    action="CREATE",
-                    instance=config,
-                    description=f"Created mobile BI config {config.number} ({config.name})",
+                    request.user,
+                    config,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Mobile profile '{config.name}' created successfully.")
             return redirect("bi:mobile_bi_config_detail", pk=config.pk)
@@ -150,10 +150,10 @@ def mobile_bi_config_edit(request, pk):
                     ).exclude(pk=config.pk).update(is_default_profile=False)
                 config = form.save()
                 write_audit_log(
-                    request,
-                    action="UPDATE",
-                    instance=config,
-                    description=f"Updated mobile BI config {config.number}",
+                    request.user,
+                    config,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Mobile profile '{config.name}' updated successfully.")
             return redirect("bi:mobile_bi_config_detail", pk=config.pk)
@@ -174,10 +174,10 @@ def mobile_bi_config_delete(request, pk):
     config = bi_object(request, MobileBiConfiguration, pk)
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="DELETE",
-            instance=config,
-            description=f"Deleted mobile BI config {config.number}",
+            request.user,
+            config,
+            "delete",
+            tenant=request.tenant,
         )
         config.delete()
     messages.success(request, "Mobile profile removed.")
