@@ -49,6 +49,10 @@ from apps.bi.models.OlapAnalysis.OlapCubes import OlapCube
 from apps.bi.models.OlapAnalysis.PivotViews import PivotAnalysisView
 from apps.bi.models.OlapAnalysis.WhatIfScenarios import WhatIfScenario
 from apps.bi.models.OlapAnalysis.WritebackCells import ScenarioWritebackCell
+from apps.bi.models.PredictiveAnalytics.PredictiveModels import PredictiveModel
+from apps.bi.models.PredictiveAnalytics.ForecastExecutions import ForecastExecution
+from apps.bi.models.PredictiveAnalytics.StatisticalAnomalies import StatisticalAnomaly
+from apps.bi.models.PredictiveAnalytics.OptimizationScenarios import OptimizationScenario
 from apps.bi.models.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsight
 from apps.bi.models.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestion
 from apps.bi.models.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysis
@@ -3400,6 +3404,174 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded OLAP & Multidimensional Analysis for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  OLAP & Multidimensional Analysis already seeded for tenant: {tenant.name}")
+
+            # --- 10.13 Predictive & Advanced Analytics Seeding ---
+            if not PredictiveModel.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    tenant_admin = get_user_model().objects.filter(tenant=tenant).order_by("pk").first()
+                    smod = SemanticModel.objects.filter(tenant=tenant).order_by("pk").first()
+                    kpi = KpiDefinition.objects.filter(tenant=tenant).order_by("pk").first()
+                    wt = WarehouseTable.objects.filter(tenant=tenant).order_by("pk").first()
+
+                    # 1. Predictive Models
+                    model_forecast, _ = PredictiveModel.objects.get_or_create(
+                        tenant=tenant,
+                        slug="monthly-revenue-arima",
+                        defaults={
+                            "name": "Enterprise Monthly Revenue Forecast (Auto-ARIMA)",
+                            "description": "Multi-period forward demand and revenue projection using Holt-Winters / ARIMA seasonal decomposition.",
+                            "problem_type": "time_series_forecast",
+                            "algorithm": "arima",
+                            "semantic_model": smod,
+                            "warehouse_table": wt,
+                            "target_metric": "net_revenue",
+                            "features_list": ["historical_monthly_revenue", "order_count", "seasonal_factor", "promotional_index"],
+                            "hyperparameters": {"seasonal": True, "m": 12, "stepwise": True, "max_order": 5},
+                            "model_version": "1.2.0",
+                            "status": "active",
+                            "accuracy_metric_name": "MAPE",
+                            "accuracy_metric_value": Decimal("5.85"),
+                            "feature_importance": {"historical_revenue": 0.45, "seasonal_factor": 0.30, "order_count": 0.15, "promotional_index": 0.10},
+                            "drift_threshold": Decimal("12.50"),
+                            "is_active": True,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    model_churn, _ = PredictiveModel.objects.get_or_create(
+                        tenant=tenant,
+                        slug="customer-churn-propensity",
+                        defaults={
+                            "name": "Customer Churn Risk and Propensity Classifier",
+                            "description": "Gradient boosted tree predicting high-risk enterprise account churn probability based on engagement frequency.",
+                            "problem_type": "binary_classification",
+                            "algorithm": "gradient_boosting",
+                            "semantic_model": smod,
+                            "warehouse_table": wt,
+                            "target_metric": "churn_risk_flag",
+                            "features_list": ["days_since_last_order", "support_tickets_30d", "nps_score", "invoice_overdue_days"],
+                            "hyperparameters": {"n_estimators": 150, "learning_rate": 0.08, "max_depth": 4},
+                            "model_version": "2.0.1",
+                            "status": "active",
+                            "accuracy_metric_name": "AUC",
+                            "accuracy_metric_value": Decimal("0.9120"),
+                            "feature_importance": {"days_since_last_order": 0.42, "invoice_overdue_days": 0.28, "support_tickets_30d": 0.18, "nps_score": 0.12},
+                            "drift_threshold": Decimal("10.00"),
+                            "is_active": True,
+                            "created_by": tenant_admin,
+                        },
+                    )
+
+                    # 2. Forecast Executions
+                    exec_1, _ = ForecastExecution.objects.get_or_create(
+                        tenant=tenant,
+                        name="FY2026-FY2027 Rolling Revenue Projection",
+                        defaults={
+                            "model": model_forecast,
+                            "semantic_model": smod,
+                            "kpi_definition": kpi,
+                            "cadence": "monthly",
+                            "horizon_periods": 12,
+                            "confidence_level": "95",
+                            "historical_window_periods": 36,
+                            "seasonality_detected": True,
+                            "seasonal_cycle_length": 12,
+                            "trend_direction": "upward",
+                            "mape_score": Decimal("5.85"),
+                            "status": "completed",
+                            "execution_duration_ms": 340,
+                            "notes": "Calibrated against 36 months of settled GL income records with Q4 peak adjustment.",
+                            "executed_by": tenant_admin,
+                        },
+                    )
+                    exec_1.generate_forecast_points(base_value=250000.0, trend_rate=0.025)
+
+                    # 3. Statistical Anomalies
+                    StatisticalAnomaly.objects.get_or_create(
+                        tenant=tenant,
+                        title="Unusual Logistics Surcharge Surge in Western Distribution Hub",
+                        defaults={
+                            "model": None,
+                            "semantic_model": smod,
+                            "kpi_definition": kpi,
+                            "metric_name": "freight_cost_per_unit",
+                            "anomaly_type": "spike",
+                            "detection_method": "z_score",
+                            "severity": "critical",
+                            "observed_value": Decimal("18.4500"),
+                            "expected_value": Decimal("11.2000"),
+                            "deviation_percentage": Decimal("64.73"),
+                            "anomaly_timestamp": timezone.now() - timezone.timedelta(days=2),
+                            "root_cause_factors": [
+                                {"dimension": "Carrier", "segment": "Express Expedited", "contribution_percentage": 58.0},
+                                {"dimension": "Warehouse", "segment": "Western Hub", "contribution_percentage": 32.0},
+                            ],
+                            "triage_status": "investigating",
+                            "resolution_notes": "Operations auditing spot-market carrier freight contracts.",
+                            "assigned_to": tenant_admin,
+                        },
+                    )
+
+                    StatisticalAnomaly.objects.get_or_create(
+                        tenant=tenant,
+                        title="Mid-Quarter Subscription Renewal Dip",
+                        defaults={
+                            "model": model_churn,
+                            "semantic_model": smod,
+                            "kpi_definition": kpi,
+                            "metric_name": "mrr_retention_rate",
+                            "anomaly_type": "dip",
+                            "detection_method": "isolation_forest",
+                            "severity": "warning",
+                            "observed_value": Decimal("84.2000"),
+                            "expected_value": Decimal("94.5000"),
+                            "deviation_percentage": Decimal("-10.90"),
+                            "anomaly_timestamp": timezone.now() - timezone.timedelta(days=5),
+                            "root_cause_factors": [
+                                {"dimension": "AccountTier", "segment": "Mid-Market", "contribution_percentage": 74.0},
+                            ],
+                            "triage_status": "open",
+                            "resolution_notes": "",
+                            "assigned_to": tenant_admin,
+                        },
+                    )
+
+                    # 4. Optimization Scenarios
+                    scenario_opt, _ = OptimizationScenario.objects.get_or_create(
+                        tenant=tenant,
+                        slug="logistics-cost-and-margin-optimization",
+                        defaults={
+                            "name": "Q4 Freight and Inventory Holding Cost Minimization",
+                            "description": "Multi-variable prescriptive solver minimizing freight surcharges subject to on-time fulfillment SLAs.",
+                            "objective_type": "minimize",
+                            "target_metric_name": "freight_and_carrying_cost",
+                            "kpi_definition": kpi,
+                            "baseline_value": Decimal("185000.00"),
+                            "target_value": Decimal("150000.00"),
+                            "optimal_value": Decimal("158400.00"),
+                            "projected_lift_percentage": Decimal("-14.38"),
+                            "solver_algorithm": "linear_programming",
+                            "solver_status": "optimal",
+                            "decision_variables": [
+                                {"name": "air_freight_ratio", "min": 0.05, "max": 0.25, "step": 0.01},
+                                {"name": "regional_stock_buffer_days", "min": 7, "max": 21, "step": 1},
+                            ],
+                            "constraint_rules": [
+                                {"name": "sla_ontime_min", "expression": "ontime_delivery_rate >= 0.96"},
+                                {"name": "budget_cap", "expression": "total_logistics_spend <= 200000"},
+                            ],
+                            "recommended_actions": [
+                                {"rank": 1, "action": "Shift non-urgent SKU replenishment to intermodal rail transport", "expected_delta": "-$16,800 cost", "confidence": "High"},
+                                {"rank": 2, "action": "Consolidate regional drop-ship purchase orders into bi-weekly cadence", "expected_delta": "-$9,800 surcharges", "confidence": "High"},
+                            ],
+                            "status": "active",
+                            "owner": tenant_admin,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Predictive & Advanced Analytics for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Predictive & Advanced Analytics already seeded for tenant: {tenant.name}")
 
             # --- 10.14 AI & Augmented Analytics Seeding ---
             if not AugmentedInsight.objects.filter(tenant=tenant).exists():
