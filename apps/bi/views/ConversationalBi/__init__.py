@@ -1,4 +1,5 @@
 from apps.bi.views.ConversationalBi.BiConversationSessions import (
+    bi_chat_workspace,
     bi_conversation_session_ask,
     bi_conversation_session_close,
     bi_conversation_session_create,
@@ -50,6 +51,7 @@ __all__ = [
     "bi_conversation_session_toggle_pin",
     "bi_conversation_session_close",
     "bi_conversation_session_ask",
+    "bi_chat_workspace",
     "narrative_explanation_list",
     "narrative_explanation_detail",
     "narrative_explanation_create",
