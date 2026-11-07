@@ -92,7 +92,12 @@ def natural_language_query_list(request):
 
 @login_required
 def natural_language_query_detail(request, pk):
-    query = bi_object(request, NaturalLanguageQuery, pk)
+    query = bi_object(
+        request,
+        NaturalLanguageQuery,
+        pk,
+        select_related=("user", "semantic_model", "warehouse_table", "conversation_session"),
+    )
 
     parsed_measures = query.parsed_measures if isinstance(query.parsed_measures, list) else []
     parsed_dimensions = query.parsed_dimensions if isinstance(query.parsed_dimensions, list) else []
