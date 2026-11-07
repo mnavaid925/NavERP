@@ -204,16 +204,17 @@ def narrative_explanation_delete(request, pk):
 @require_POST
 def narrative_explanation_publish(request, pk):
     narrative = bi_object(request, NarrativeExplanation, pk)
-    narrative.status = "published"
-    narrative.save(update_fields=["status", "updated_at"])
+    with transaction.atomic():
+        narrative.status = "published"
+        narrative.save(update_fields=["status", "updated_at"])
 
-    write_audit_log(
-        user=request.user,
-        obj=narrative,
-        action="update",
-        changes={"details": "Published narrative explanation"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            user=request.user,
+            obj=narrative,
+            action="update",
+            changes={"details": "Published narrative explanation"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Narrative '{narrative.number}' is now published and distributed.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
