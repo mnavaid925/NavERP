@@ -30,3 +30,26 @@ Commit after fixing Critical+Important findings.
 - Excellent architecture: all 4 models inherit from `TenantNumbered` with reliable sequence generation, complete database indices, tenant uniqueness constraints, and explicit reverse URLs.
 - Robust security & permissions: all list views apply `bi_scope(..., owner_field=...)`, all mutations/deletions use `bi_object(..., pk=...)` with POST requirements and tenant admin gates, and actions write comprehensive audit logs.
 - Design system compliance: full adherence to `theme.css` colour-named badges and stat-card icons (`green`, `amber`, `red`, `info`, `slate`), responsive tables, and zero inline CSS regressions.
+
+---
+
+## Pass 2: Codebase Explorer (`explorer`)
+
+### Verdict
+Request Changes (2 Important findings).
+
+### Important
+1. `apps/bi/management/commands/seed_bi.py:85-136` — The `--flush` handler omits the four 10.13 models (`OptimizationScenario`, `StatisticalAnomaly`, `ForecastExecution`, `PredictiveModel`), leaving stale data or orphaned references when upstream `SemanticModel` or `KpiDefinition` records are flushed. Fix: Add `.delete()` calls for all four models at the beginning of the flush block.
+2. `apps/bi/forms/PredictiveAnalytics/StatisticalAnomalies.py:37,70-74` — Cross-tenant user leakage on `assigned_to`. `StatisticalAnomalyForm` exposes `assigned_to` without scoping the queryset to `self.tenant` in `__init__`, allowing users from other tenants to appear in the select list. Fix: Scope `self.fields["assigned_to"].queryset = get_user_model().objects.filter(tenant=self.tenant)` when `self.tenant` is present, and reject cross-tenant assignments in `clean()`.
+
+### Minor / Observations
+1. Migration 0031 cleanly applied as leaf on top of 0030 with `manage.py check` passing cleanly.
+2. All 4 list views correctly use `Paginator(qs, 15)` and compute pre-pagination aggregate stats cleanly.
+
+### Adherence & Contract Confirmation
+- Models, forms, views, URLs, and templates all match `contract-bi-10.13.md` package layout and naming.
+- Sequence prefixes `BPML`, `BFOR`, `BANM`, `BOPT` match contract exactly.
+- View context keys (`predictive_models`, `model_obj`, `forecast_executions`, `forecast_obj`, `statistical_anomalies`, `anomaly_obj`, `optimization_scenarios`, `scenario_obj`, choices, and stat variables) match contract.
+- Navigation `LIVE_LINKS["10.13"]` registered with 5 valid routes.
+- Admin registrations verified in `apps/bi/admin.py`.
+
