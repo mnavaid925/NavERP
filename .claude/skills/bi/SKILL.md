@@ -23,11 +23,11 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.13 Predictive & Advanced Analytics**: Time-series forecasting, predictive & propensity modeling, prescriptive scenario optimization, automated statistical anomaly detection, and AutoML model lifecycle management.
 - **10.14 AI & Augmented Analytics**: Auto-generated insights (key-driver analysis, variance decomposition, narrative summaries), proactive Smart Insight Feed, automated data preparation suggestions (joins, casts, null imputation), text & sentiment analytics, and personalized recommendation engine.
 - **10.15 Natural Language & Conversational BI**: Natural language query (NLQ), conversational BI assistant, natural language generation (NLG), voice-enabled analytics, search-driven discovery.
-- **10.16 Sales & Marketing Analytics**: Pipeline velocity, CAC, LTV, conversion attribution.
-- **10.17 HR & Workforce Analytics**: Headcount trends, turnover predictors, compensation distribution.
-- **10.18 Embedded Analytics & White-labeling**: Multi-tenant customer portals, tokenized dashboard embeds, vanity branding.
-- **10.19 Integration & API Ecosystem**: Reverse-ETL sync, external BI drivers (Snowflake, BigQuery, Tableau, Looker syndication).
-- **10.20 Administration, Security & Compliance**: Row/column-level security policies, data masking, GDPR compliance exports, license quotas.
+- **10.16 Alerts, Subscriptions & Distribution**: Threshold & anomaly alerts, report subscriptions, distribution & bursting, notification center, trigger-based workflows.
+- **10.17 Embedded & Mobile BI**: Embedded analytics, mobile BI app (PWA/touch-optimized/offline caching), developer APIs & SDKs, portal/kiosk/wallboard display modes, SSO & row-level security context passthrough.
+- **10.18 Collaboration & Data Storytelling**: Data stories & presentations, comments & discussions, shared workspaces, annotations & decision logging, export & embed to Office.
+- **10.19 Integration & API Hub**: ERP & application connectors, external BI & warehouse sync, open APIs & webhooks, streaming & message queues, marketplace & extensions.
+- **10.20 Administration, Governance & Security**: Enterprise security, audit & access logging, data masking & privacy, tenant provisioning, license & usage tracking.
 
 ---
 
@@ -1262,3 +1262,92 @@ Natural Language & Conversational BI brings search-first and conversation-first 
 - **Protocol-Relative URL Defense (M8)**: `clean_target_url` disallows `//evil.com` protocol-relative paths.
 - **Mass Assignment Defense (M9)**: `status` excluded from `NarrativeExplanationForm` to require dedicated atomic publish view.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.15"]`.
+
+---
+
+## Sub-module 10.17: Embedded & Mobile BI
+
+Comprehensive embedded analytics, mobile business intelligence (PWA / offline-ready / touch-optimized), developer APIs & SDKs, kiosk/wallboard display modes, and SSO row-level context passthrough.
+
+### Models
+1. **`EmbeddedAnalyticsConfig`** (`apps/bi/models/EmbeddedMobileBi/EmbeddedAnalyticsConfigs.py`)
+   - Table: `bi_embedded_analytics_config`, Prefix: `EMB` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `target_type` (`dashboard`, `report`, `semantic_model`), `dashboard` (FK `BiDashboard`), `report` (FK `ReportDefinition`), `semantic_model` (FK `SemanticModel`), `embedding_mode` (`iframe`, `web_component`, `sdk_react`, `headless_api`), `auth_mode` (`signed_jwt`, `sso_saml_oidc`, `anonymous_public`, `api_key`), `allowed_origins` (CharField comma-separated domains/origins), `theme_mode` (`light`, `dark`, `auto_system`, `custom`), `primary_color` (hex regex validated), `accent_color` (hex regex validated), `custom_css` (sanitized against XSS), `enable_rls_filter` (bool), `default_rls_attributes` (JSON dict), `view_count` (PositiveIntegerField), `last_accessed_at` (DateTimeField), `status` (`active`, `draft`, `disabled`, `deprecated`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, indexes on `(tenant, status)`, `(tenant, target_type)`.
+   - Properties: `target_name`, `status_badge_color`, `mode_badge_color`, `auth_mode_badge_color`.
+
+2. **`KioskWallboardDisplay`** (`apps/bi/models/EmbeddedMobileBi/KioskWallboardDisplays.py`)
+   - Table: `bi_kiosk_wallboard_display`, Prefix: `WALL` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `location_description`, `playlist_items` (JSON list of slides), `default_slide_duration_seconds` (integer), `transition_effect` (`fade`, `slide_horizontal`, `slide_vertical`, `instant`, `zoom`), `theme` (`dark_navy`, `dark_oled`, `light`, `high_contrast`), `display_schedule` (`continuous_24_7`, `business_hours`, `weekdays_only`, `custom`), `operating_hours_json` (JSON dict), `auto_refresh_data_interval_seconds` (integer), `is_public_kiosk` (bool), `access_passcode` (CharField), `last_heartbeat_at` (DateTimeField), `device_ip_address` (GenericIPAddressField), `device_user_agent` (CharField), `status` (`active`, `standby`, `maintenance`, `offline`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, indexes on `(tenant, status)`, composite index `idx_wall_ten_schedule` on `(tenant, display_schedule)`.
+   - Methods: `verify_passcode(passcode)` using `secrets.compare_digest`, `record_heartbeat(ip, user_agent)`.
+
+3. **`MobileBiConfiguration`** (`apps/bi/models/EmbeddedMobileBi/MobileBiConfigurations.py`)
+   - Table: `bi_mobile_bi_configuration`, Prefix: `MOB` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `target_user` (FK `auth.User`, null=True), `is_default_profile` (bool, enforced single default per tenant in `save()`), `touch_layout_preset` (`comfortable`, `compact`, `dense_grid`, `card_deck`), `push_digest_frequency` (`daily_morning`, `daily_evening`, `weekly_monday`, `disabled`), `offline_caching_enabled` (bool), `cache_max_age_hours` (integer), `max_cache_storage_mb` (integer), `pinned_dashboard_ids` (JSON list of IDs, validated in form clean), `pinned_report_ids` (JSON list of IDs, validated in form clean), `require_biometric_lock` (bool), `inactivity_lock_minutes` (integer), `last_synced_at` (DateTimeField), `status` (`active`, `draft`, `disabled`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes `idx_mob_ten_preset` on `(tenant, touch_layout_preset)` and `idx_mob_ten_digest` on `(tenant, push_digest_frequency)`.
+   - Invariant: `__str__` inspects `_state.fields_cache` before dereferencing `target_user` to avoid N+1 queries (Lesson L18).
+
+4. **`EmbedApiToken`** (`apps/bi/models/EmbeddedMobileBi/EmbedApiTokens.py`)
+   - Table: `bi_embed_api_token`, Prefix: `EAPI` (`TenantNumbered`).
+   - Fields: `name`, `embedded_config` (FK `EmbeddedAnalyticsConfig`), `token_prefix` (e.g. `eapi_live_`), `token_hash` (SHA-256 hex string, secret never stored in plaintext), `scopes` (JSON list), `allowed_ip_ranges` (TextField), `rate_limit_rpm` (PositiveIntegerField), `expires_at` (DateTimeField, nullable), `total_requests_count` (PositiveIntegerField), `last_used_at` (DateTimeField), `injected_rls_context` (JSON dict), `status` (`active`, `revoked`, `expired`).
+   - Constraints & Indexes: unique on `(tenant, number)`.
+   - Methods: `verify_token(raw_token)` constant-time comparison, `revoke(revoked_by=None)`.
+   - Lifecycle: Generated via `generate_secret()`, revealed exactly once on create via session pop (`request.session.pop('_new_token_key')`), excluded from ModelForm.
+
+### URLs & Routes
+All routes under `bi:` namespace:
+- **Embedded Analytics Configurations**:
+  - `bi:embedded_analytics_config_list` (`/bi/embedded-configs/`)
+  - `bi:embedded_analytics_config_create` (`/bi/embedded-configs/create/` - `@tenant_admin_required`)
+  - `bi:embedded_analytics_config_detail` (`/bi/embedded-configs/<int:pk>/`)
+  - `bi:embedded_analytics_config_edit` (`/bi/embedded-configs/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:embedded_analytics_config_delete` (`/bi/embedded-configs/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:embedded_analytics_config_preview` (`/bi/embedded-configs/<int:pk>/preview/` - Atomic `F("view_count") + 1` increment)
+- **Kiosk & Wallboard Displays**:
+  - `bi:kiosk_wallboard_display_list` (`/bi/kiosk-displays/`)
+  - `bi:kiosk_wallboard_display_create` (`/bi/kiosk-displays/create/` - `@tenant_admin_required`)
+  - `bi:kiosk_wallboard_display_detail` (`/bi/kiosk-displays/<int:pk>/`)
+  - `bi:kiosk_wallboard_display_edit` (`/bi/kiosk-displays/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:kiosk_wallboard_display_delete` (`/bi/kiosk-displays/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:kiosk_wallboard_display_player` (`/bi/kiosk-displays/<int:pk>/player/` - Standalone kiosk player, constant-time passcode check, superuser support)
+  - `bi:kiosk_wallboard_display_heartbeat` (`/bi/kiosk-displays/<int:pk>/heartbeat/` - `@require_POST`, atomic update, returns fresh timestamp)
+- **Mobile BI App Configurations**:
+  - `bi:mobile_bi_config_list` (`/bi/mobile-configs/`)
+  - `bi:mobile_bi_config_create` (`/bi/mobile-configs/create/` - `@tenant_admin_required`)
+  - `bi:mobile_bi_config_detail` (`/bi/mobile-configs/<int:pk>/`)
+  - `bi:mobile_bi_config_edit` (`/bi/mobile-configs/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:mobile_bi_config_delete` (`/bi/mobile-configs/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+- **Developer APIs & Embed Tokens**:
+  - `bi:embed_api_token_list` (`/bi/api-tokens/`)
+  - `bi:embed_api_token_create` (`/bi/api-tokens/create/` - `@tenant_admin_required`, session pop secret reveal)
+  - `bi:embed_api_token_detail` (`/bi/api-tokens/<int:pk>/` - Snippets and masked token display)
+  - `bi:embed_api_token_edit` (`/bi/api-tokens/<int:pk>/edit/` - `@tenant_admin_required`)
+  - `bi:embed_api_token_delete` (`/bi/api-tokens/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:embed_api_token_revoke` (`/bi/api-tokens/<int:pk>/revoke/` - `@tenant_admin_required`, `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/embedded_mobile_bi/`:
+  - `embeddedanalyticsconfig/` (`list.html`, `detail.html`, `form.html`, `preview.html` with sandboxed custom CSS).
+  - `kioskwallboarddisplay/` (`list.html`, `detail.html`, `form.html`, `player.html` with safe `json_script` playlist and auto-rotation).
+  - `mobilebiconfiguration/` (`list.html`, `detail.html`, `form.html`).
+  - `embedapitoken/` (`list.html`, `detail.html`, `form.html` with one-time copy banner).
+- Design system: Colour-named badge modifiers (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat-card icons (`blue`, `green`, `orange`, `purple`), accessible `<table class="table">` in `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Embedded & Mobile BI demo records:
+  - Embedded Analytics Configs: Executive Revenue Embed (iframe), Vendor Logistics Portal (web component).
+  - Kiosk Wallboard Displays: HQ Operations Wallboard (dark OLED), Frankfurt Depot Kiosk (light).
+  - Mobile BI Configurations: Executive Mobile Profile, Globex Field Rep Mobile with touch presets and pinned assets.
+  - Embed API Tokens: Production SDK Key, Globex Read Token with SHA-256 hashing.
+- Idempotent and safe to run repeatedly.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all create, edit, delete, and revoke views.
+- **Lesson L10 Guarding**: All detail templates guard author badge with `{% if obj.created_by %}{{ obj.created_by.get_full_name|default:obj.created_by.username }}{% else %}System{% endif %}`.
+- **Lesson L20 & L25 Secret Handling**: Tokens generated with 192-bit cryptographic entropy, SHA-256 hashed in DB, excluded from ModelForm, and popped once from session.
+- **Constant-Time Passcode Verification**: Wallboard player and heartbeat verify passcodes via `secrets.compare_digest`.
+- **Stored XSS Prevention**: `custom_css` stripped/rejected of `<style>` and `<script>`, playlist JSON interpolated safely via `json_script`.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.17"]`.
+
