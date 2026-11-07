@@ -150,7 +150,7 @@
                     <td>
                         <span class="badge badge-slate text-xs">{{ n.get_target_artifact_type_display }}</span>
                         {% if n.dashboard %}
-                        <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.dashboard.name }}</div>
+                        <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.dashboard.title }}</div>
                         {% elif n.report %}
                         <div class="text-xs text-muted truncate max-w-[140px] mt-0.5">{{ n.report.name }}</div>
                         {% elif n.kpi %}
