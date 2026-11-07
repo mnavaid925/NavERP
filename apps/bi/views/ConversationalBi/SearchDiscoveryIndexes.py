@@ -246,7 +246,7 @@ def search_discovery_hub(request):
         top_ids = list(matched[:10].values_list("id", flat=True))
         if top_ids:
             with transaction.atomic():
-                SearchDiscoveryIndex.objects.filter(id__in=top_ids).update(
+                SearchDiscoveryIndex.objects.filter(tenant=request.tenant, id__in=top_ids).update(
                     search_hit_count=F("search_hit_count") + 1
                 )
         results = matched[:24]
