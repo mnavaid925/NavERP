@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 from decimal import Decimal
 
@@ -6,6 +7,10 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 
+from apps.bi.models.AlertsSubscriptions.BiAlertRules import BiAlertRule
+from apps.bi.models.AlertsSubscriptions.BiNotificationItems import BiNotificationItem
+from apps.bi.models.AlertsSubscriptions.DistributionBurstRuns import DistributionBurstRun
+from apps.bi.models.AlertsSubscriptions.ReportSubscriptions import ReportSubscription
 from apps.bi.models.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnalyticsConfig
 from apps.bi.models.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplay
 from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
@@ -4037,6 +4042,213 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Natural Language & Conversational BI for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Natural Language & Conversational BI already seeded for tenant: {tenant.name}")
+
+            # -------------------------------------------------------------
+            # Sub-module 10.16: Alerts, Subscriptions & Distribution
+            # -------------------------------------------------------------
+            if not BiAlertRule.objects.filter(tenant=tenant).exists():
+                self.stdout.write(f"  Seeding Alerts, Subscriptions & Distribution for tenant: {tenant.name}...")
+
+                with transaction.atomic():
+                    tenant_admin = (
+                        get_user_model().objects.filter(tenant=tenant).order_by("pk").first()
+                    )
+                    kpi_margin = KpiDefinition.objects.filter(tenant=tenant).first()
+                    anomaly_item = StatisticalAnomaly.objects.filter(tenant=tenant).first()
+                    dash = BiDashboard.objects.filter(tenant=tenant).first()
+                    rpt = ReportDefinition.objects.filter(tenant=tenant).first()
+
+                    # 1. BiAlertRules
+                    rule1, _ = BiAlertRule.objects.get_or_create(
+                        tenant=tenant,
+                        name="Gross Margin Floor Breach",
+                        defaults={
+                            "description": "Triggered when gross operating margin drops below 28.5% threshold.",
+                            "alert_type": "kpi_threshold",
+                            "kpi_definition": kpi_margin,
+                            "condition_operator": "lt",
+                            "threshold_value": Decimal("28.5000"),
+                            "severity": "critical",
+                            "evaluation_cadence": "hourly",
+                            "trigger_frequency": "once_until_resolved",
+                            "delivery_channel": "multi_channel",
+                            "notification_email_list": f"alerts@{tenant.slug}.example.com",
+                            "webhook_url": "https://hooks.slack.com/services/T00/B00/nav-bi-alerts",
+                            "downstream_workflow": "create_task",
+                            "status": "active",
+                            "created_by": tenant_admin,
+                            "last_evaluated_at": timezone.now(),
+                            "trigger_count": 0,
+                        },
+                    )
+                    if tenant_admin:
+                        rule1.recipient_users.add(tenant_admin)
+
+                    rule2, _ = BiAlertRule.objects.get_or_create(
+                        tenant=tenant,
+                        name="Statistical Sales Anomaly Spike",
+                        defaults={
+                            "description": "Triggered on statistical outlier deviations in regional revenue.",
+                            "alert_type": "anomaly_detection",
+                            "anomaly_detection": anomaly_item,
+                            "condition_operator": "anomaly_flagged",
+                            "threshold_value": Decimal("3.0000"),
+                            "severity": "warning",
+                            "evaluation_cadence": "on_data_refresh",
+                            "trigger_frequency": "every_time",
+                            "delivery_channel": "in_app_email",
+                            "downstream_workflow": "none",
+                            "status": "tripped",
+                            "created_by": tenant_admin,
+                            "last_evaluated_at": timezone.now(),
+                            "last_triggered_at": timezone.now(),
+                            "trigger_count": 3,
+                            "last_trigger_value": Decimal("4.2500"),
+                        },
+                    )
+                    if tenant_admin:
+                        rule2.recipient_users.add(tenant_admin)
+
+                    # 2. ReportSubscriptions
+                    sub1, _ = ReportSubscription.objects.get_or_create(
+                        tenant=tenant,
+                        name="Weekly Executive Leadership Digest",
+                        defaults={
+                            "target_asset_type": "dashboard",
+                            "dashboard": dash,
+                            "export_format": "pdf",
+                            "cadence": "weekly",
+                            "scheduled_time": datetime.time(8, 0),
+                            "burst_mode": "broadcast",
+                            "external_recipient_emails": f"leadership@{tenant.slug}.example.com",
+                            "include_cover_page": True,
+                            "skip_if_empty": False,
+                            "status": "active",
+                            "created_by": tenant_admin,
+                            "last_run_at": timezone.now(),
+                            "run_count": 4,
+                        },
+                    )
+                    if tenant_admin:
+                        sub1.subscriber_users.add(tenant_admin)
+
+                    sub2, _ = ReportSubscription.objects.get_or_create(
+                        tenant=tenant,
+                        name="Monthly Departmental Performance Burst",
+                        defaults={
+                            "target_asset_type": "report",
+                            "report": rpt,
+                            "export_format": "xlsx",
+                            "cadence": "monthly",
+                            "scheduled_time": datetime.time(9, 0),
+                            "burst_mode": "slice_by_org_unit",
+                            "external_recipient_emails": f"department-heads@{tenant.slug}.example.com",
+                            "include_cover_page": True,
+                            "skip_if_empty": True,
+                            "status": "active",
+                            "created_by": tenant_admin,
+                            "last_run_at": timezone.now(),
+                            "run_count": 2,
+                        },
+                    )
+                    if tenant_admin:
+                        sub2.subscriber_users.add(tenant_admin)
+
+                    # 3. DistributionBurstRuns
+                    run1, _ = DistributionBurstRun.objects.get_or_create(
+                        tenant=tenant,
+                        subscription=sub1,
+                        run_trigger="scheduled_subscription",
+                        delivery_channel="email",
+                        defaults={
+                            "status": "completed",
+                            "recipient_count": 5,
+                            "delivered_count": 5,
+                            "failed_count": 0,
+                            "execution_duration_ms": 620,
+                            "generated_file_name": "Executive_Leadership_Digest_20261107.pdf",
+                            "file_size_bytes": 1024 * 450,
+                            "burst_slicing_metadata": {"format": "pdf", "slices": 1, "recipients": 5},
+                            "executed_by": tenant_admin,
+                            "started_at": timezone.now(),
+                            "completed_at": timezone.now(),
+                        },
+                    )
+
+                    run2, _ = DistributionBurstRun.objects.get_or_create(
+                        tenant=tenant,
+                        alert_rule=rule2,
+                        run_trigger="alert_triggered",
+                        delivery_channel="portal_inbox",
+                        defaults={
+                            "status": "completed",
+                            "recipient_count": 2,
+                            "delivered_count": 2,
+                            "failed_count": 0,
+                            "execution_duration_ms": 180,
+                            "generated_file_name": "SalesAnomaly_Snapshot_20261107.pdf",
+                            "file_size_bytes": 1024 * 120,
+                            "burst_slicing_metadata": {"trigger": "anomaly", "metric": "revenue"},
+                            "executed_by": tenant_admin,
+                            "started_at": timezone.now(),
+                            "completed_at": timezone.now(),
+                        },
+                    )
+
+                    # 4. BiNotificationItems
+                    if tenant_admin:
+                        BiNotificationItem.objects.get_or_create(
+                            tenant=tenant,
+                            recipient=tenant_admin,
+                            title="Critical Alert: Gross Margin Floor Breach",
+                            defaults={
+                                "message": "Operating margin dropped below the configured floor of 28.5%. Please review supply chain transportation surcharges.",
+                                "severity": "critical",
+                                "category": "kpi_alert",
+                                "status": "unread",
+                                "alert_rule": rule1,
+                                "burst_run": None,
+                                "action_url": f"/bi/kpis/{kpi_margin.pk}/" if kpi_margin else "/bi/kpis/",
+                                "escalation_level": 0,
+                            },
+                        )
+
+                        BiNotificationItem.objects.get_or_create(
+                            tenant=tenant,
+                            recipient=tenant_admin,
+                            title="Weekly Executive Digest Delivered",
+                            defaults={
+                                "message": "Your scheduled PDF export for Executive Leadership Digest is ready for review.",
+                                "severity": "info",
+                                "category": "subscription_digest",
+                                "status": "read",
+                                "alert_rule": None,
+                                "burst_run": run1,
+                                "action_url": f"/bi/dashboards/{dash.pk}/" if dash else "/bi/dashboards/",
+                                "read_at": timezone.now(),
+                            },
+                        )
+
+                        BiNotificationItem.objects.get_or_create(
+                            tenant=tenant,
+                            recipient=tenant_admin,
+                            title="Statistical Revenue Outlier Detected",
+                            defaults={
+                                "message": "Z-score deviation exceeded 3.0 on Midwest logistics revenues. Incident escalated to operations lead.",
+                                "severity": "warning",
+                                "category": "anomaly_alert",
+                                "status": "escalated",
+                                "alert_rule": rule2,
+                                "burst_run": run2,
+                                "action_url": f"/bi/predictive/anomalies/{anomaly_item.pk}/" if anomaly_item else "/bi/predictive/anomalies/",
+                                "escalation_level": 1,
+                                "escalated_to": tenant_admin,
+                            },
+                        )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Alerts, Subscriptions & Distribution for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Alerts, Subscriptions & Distribution already seeded for tenant: {tenant.name}")
 
             # -------------------------------------------------------------
             # Sub-module 10.17: Embedded & Mobile BI
