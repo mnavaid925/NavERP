@@ -197,7 +197,7 @@
                 </div>
                 <div class="flex justify-between items-center py-1 border-b border-slate-100">
                     <span class="text-muted">Created By</span>
-                    <span class="font-medium text-slate-800">{{ display.created_by.get_full_name|default:display.created_by.username|default:"System" }}</span>
+                    <span class="font-medium text-slate-800">{% if display.created_by %}{{ display.created_by.get_full_name|default:display.created_by.username }}{% else %}System{% endif %}</span>
                 </div>
                 <div class="flex justify-between items-center py-1">
                     <span class="text-muted">Created At</span>
