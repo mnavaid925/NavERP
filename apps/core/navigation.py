@@ -3049,6 +3049,18 @@ LIVE_LINKS = {
         "What-If Scenarios": "bi:what_if_scenario_list",
         "Writeback Cells": "bi:writeback_cell_list",
     },
+    "10.14": {
+        "Auto-Generated Insights": "bi:augmented_insight_list",
+        "Smart Insight Feed": "bi:augmented_insight_feed",
+        "Automated Data Preparation": "bi:smart_data_prep_suggestion_list",
+        "Text & Sentiment Analytics": "bi:text_sentiment_analysis_list",
+        "Recommendation Engine": "bi:analytics_recommendation_list",
+        # Extra live leaves
+        "Augmented Insights": "bi:augmented_insight_list",
+        "Data Prep Suggestions": "bi:smart_data_prep_suggestion_list",
+        "Sentiment Analyses": "bi:text_sentiment_analysis_list",
+        "Recommendations": "bi:analytics_recommendation_list",
+    },
 
 
 
