@@ -120,8 +120,16 @@ def mobile_bi_config_detail(request, pk):
     dash_ids = config.pinned_dashboard_ids if isinstance(config.pinned_dashboard_ids, list) else []
     rep_ids = config.pinned_report_ids if isinstance(config.pinned_report_ids, list) else []
 
-    pinned_dashboards = BiDashboard.objects.filter(tenant=request.tenant, id__in=dash_ids) if dash_ids else []
-    pinned_reports = ReportDefinition.objects.filter(tenant=request.tenant, id__in=rep_ids) if rep_ids else []
+    pinned_dashboards = (
+        BiDashboard.objects.filter(tenant=request.tenant, id__in=dash_ids).only("id", "title", "number")
+        if dash_ids
+        else []
+    )
+    pinned_reports = (
+        ReportDefinition.objects.filter(tenant=request.tenant, id__in=rep_ids).only("id", "name", "number")
+        if rep_ids
+        else []
+    )
 
     context = {
         "config": config,
