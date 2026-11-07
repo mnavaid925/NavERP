@@ -124,11 +124,10 @@ def distribution_burst_run_create(request):
                 run.save()
 
                 write_audit_log(
-                    request,
-                    action="create",
-                    model_name="DistributionBurstRun",
-                    object_id=run.pk,
-                    object_repr=str(run),
+                    request.user,
+                    run,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Distribution burst run {run.number} logged successfully."
@@ -163,11 +162,10 @@ def distribution_burst_run_edit(request, pk):
             with transaction.atomic():
                 run = form.save()
                 write_audit_log(
-                    request,
-                    action="update",
-                    model_name="DistributionBurstRun",
-                    object_id=run.pk,
-                    object_repr=str(run),
+                    request.user,
+                    run,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(
                 request, f"Distribution burst run {run.number} updated successfully."
@@ -198,11 +196,10 @@ def distribution_burst_run_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="delete",
-            model_name="DistributionBurstRun",
-            object_id=burst_run.pk,
-            object_repr=str(burst_run),
+            request.user,
+            burst_run,
+            "delete",
+            tenant=request.tenant,
         )
         burst_run.delete()
 
