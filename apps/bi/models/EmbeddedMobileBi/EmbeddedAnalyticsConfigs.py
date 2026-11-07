@@ -123,7 +123,10 @@ class EmbeddedAnalyticsConfig(TenantNumbered):
             base_slug = slugify(self.name) or "embed-config"
             slug = base_slug
             counter = 1
-            while EmbeddedAnalyticsConfig.objects.filter(tenant=self.tenant, slug=slug).exclude(pk=self.pk).exists():
+            qs = EmbeddedAnalyticsConfig.objects.filter(tenant=self.tenant)
+            if self.pk:
+                qs = qs.exclude(pk=self.pk)
+            while qs.filter(slug=slug).exists():
                 slug = f"{base_slug}-{counter}"
                 counter += 1
             self.slug = slug
