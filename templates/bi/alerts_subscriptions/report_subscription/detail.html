@@ -198,7 +198,11 @@
                 <div>
                     <div class="text-xs text-muted uppercase font-semibold">Scheduled By</div>
                     <div class="text-sm text-slate-700 mt-1">
+                        {% if subscription.created_by %}
                         {{ subscription.created_by.get_full_name|default:subscription.created_by.username }}
+                        {% else %}
+                        <span class="text-muted">System</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
