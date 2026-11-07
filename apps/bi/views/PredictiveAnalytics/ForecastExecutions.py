@@ -92,8 +92,8 @@ def forecast_execution_create(request):
             execution = form.save(commit=False)
             execution.tenant = request.tenant
             execution.executed_by = request.user
+            execution.generate_forecast_points(save=False)
             execution.save()
-            execution.generate_forecast_points()
             write_audit_log(request.user, execution, "create", changes={"name": execution.name, "number": execution.number}, tenant=request.tenant)
             messages.success(request, f"Forecast run '{execution.name}' ({execution.number}) projected successfully.")
             return redirect("bi:forecast_execution_detail", pk=execution.pk)
