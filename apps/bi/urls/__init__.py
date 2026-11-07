@@ -39,6 +39,9 @@ from apps.bi.urls.AiAugmentedAnalytics import (
 from apps.bi.urls.ConversationalBi import (
     urlpatterns as conversational_bi_urlpatterns,
 )
+from apps.bi.urls.EmbeddedMobileBi import (
+    urlpatterns as embedded_mobile_bi_urlpatterns,
+)
 from apps.bi.urls.PerformanceScorecards import (
     urlpatterns as performance_scorecards_urlpatterns,
 )
@@ -93,4 +96,5 @@ urlpatterns = (
     + predictive_analytics_urlpatterns
     + ai_augmented_analytics_urlpatterns
     + conversational_bi_urlpatterns
+    + embedded_mobile_bi_urlpatterns
 )
