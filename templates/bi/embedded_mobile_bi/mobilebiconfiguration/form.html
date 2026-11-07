@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Mobile BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:mobile_bi_config_list' %}">Mobile BI</a>
+            <span class="sep">/</span>
+            <span>{% if config %}Edit {{ config.number }}{% else %}New Profile{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Configure mobile touch layouts, offline Service Worker snapshot caching, and push alert schedules</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if config %}{% url 'bi:mobile_bi_config_detail' config.pk %}{% else %}{% url 'bi:mobile_bi_config_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Target Scope & Profile Identification -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="smartphone" class="w-4 h-4 text-primary-600"></i>
+                    <span>Profile Target Scope</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Profile Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.target_user.id_for_label }}" class="form-label">Target Specific User (Optional)</label>
+                        {{ form.target_user }}
+                        <span class="text-xs text-muted">Leave blank for tenant-wide or role baseline profile</span>
+                        {% if form.target_user.errors %}<div class="form-error">{{ form.target_user.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.is_default_profile }}
+                        <label for="{{ form.is_default_profile.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Set as Tenant Default Mobile Profile
+                        </label>
+                        {% if form.is_default_profile.errors %}<div class="form-error">{{ form.is_default_profile.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Profile Status *</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Offline Caching & Bandwidth Policies -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="hard-drive" class="w-4 h-4 text-purple-600"></i>
+                    <span>Offline Caching & Bandwidth Policy</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.offline_caching_enabled }}
+                        <label for="{{ form.offline_caching_enabled.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Enable Offline Service Worker Snapshot Caching
+                        </label>
+                        {% if form.offline_caching_enabled.errors %}<div class="form-error">{{ form.offline_caching_enabled.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.sync_on_wifi_only }}
+                        <label for="{{ form.sync_on_wifi_only.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Sync on Wi-Fi Only (Bandwidth Saver)
+                        </label>
+                        {% if form.sync_on_wifi_only.errors %}<div class="form-error">{{ form.sync_on_wifi_only.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.cache_max_age_hours.id_for_label }}" class="form-label">Cache Snapshot Max Age (Hours) *</label>
+                        {{ form.cache_max_age_hours }}
+                        {% if form.cache_max_age_hours.errors %}<div class="form-error">{{ form.cache_max_age_hours.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.max_cache_storage_mb.id_for_label }}" class="form-label">Max Local Storage Quota (MB) *</label>
+                        {{ form.max_cache_storage_mb }}
+                        {% if form.max_cache_storage_mb.errors %}<div class="form-error">{{ form.max_cache_storage_mb.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Pinned Pre-Fetch Assets -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="bookmark" class="w-4 h-4 text-blue-600"></i>
+                    <span>Pinned Offline Assets (JSON Arrays)</span>
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label for="{{ form.pinned_dashboard_ids_raw.id_for_label }}" class="form-label">
+                            {{ form.pinned_dashboard_ids_raw.label }}
+                        </label>
+                        {{ form.pinned_dashboard_ids_raw }}
+                        <span class="text-xs text-muted">{{ form.pinned_dashboard_ids_raw.help_text }}</span>
+                        {% if form.pinned_dashboard_ids_raw.errors %}<div class="form-error">{{ form.pinned_dashboard_ids_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.pinned_report_ids_raw.id_for_label }}" class="form-label">
+                            {{ form.pinned_report_ids_raw.label }}
+                        </label>
+                        {{ form.pinned_report_ids_raw }}
+                        <span class="text-xs text-muted">{{ form.pinned_report_ids_raw.help_text }}</span>
+                        {% if form.pinned_report_ids_raw.errors %}<div class="form-error">{{ form.pinned_report_ids_raw.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Touch Layout & Alerts & Device Security -->
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
+                    <i data-lucide="bell" class="w-4 h-4 text-emerald-600"></i>
+                    <span>Touch Layout, Push Alerts & Security</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.touch_layout_preset.id_for_label }}" class="form-label">Touch Layout Density *</label>
+                        {{ form.touch_layout_preset }}
+                        {% if form.touch_layout_preset.errors %}<div class="form-error">{{ form.touch_layout_preset.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.push_digest_frequency.id_for_label }}" class="form-label">Push Digest Frequency *</label>
+                        {{ form.push_digest_frequency }}
+                        {% if form.push_digest_frequency.errors %}<div class="form-error">{{ form.push_digest_frequency.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.enable_push_insights }}
+                        <label for="{{ form.enable_push_insights.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Enable Proactive Push Insights & Anomaly Alerts
+                        </label>
+                        {% if form.enable_push_insights.errors %}<div class="form-error">{{ form.enable_push_insights.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 pt-2">
+                        {{ form.require_biometric_lock }}
+                        <label for="{{ form.require_biometric_lock.id_for_label }}" class="form-label mb-0 cursor-pointer">
+                            Require Biometric / PIN Lockout
+                        </label>
+                        {% if form.require_biometric_lock.errors %}<div class="form-error">{{ form.require_biometric_lock.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.inactivity_lock_minutes.id_for_label }}" class="form-label">Inactivity Lockout (Minutes) *</label>
+                        {{ form.inactivity_lock_minutes }}
+                        {% if form.inactivity_lock_minutes.errors %}<div class="form-error">{{ form.inactivity_lock_minutes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if config %}{% url 'bi:mobile_bi_config_detail' config.pk %}{% else %}{% url 'bi:mobile_bi_config_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check"></i>
+                    <span>Save Mobile Profile</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
