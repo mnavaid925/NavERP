@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{% if subscription %}Edit {{ subscription.number }}{% else %}New Report Subscription{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_subscription_list' %}">Subscriptions</a>
+            <span class="sep">/</span>
+            <span>{% if subscription %}Edit {{ subscription.number }}{% else %}New Schedule{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if subscription %}Edit Subscription: {{ subscription.name }}{% else %}Create Report Subscription{% endif %}</h1>
+        <p class="text-muted text-sm">Schedule recurring multi-format report exports and personalized data bursting</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% if subscription %}{% url 'bi:report_subscription_detail' subscription.pk %}{% else %}{% url 'bi:report_subscription_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="arrow-left"></i>
+            <span>Cancel</span>
+        </a>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title text-base font-semibold">Subscription Delivery Settings</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" novalidate class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 rounded bg-rose-50 border border-rose-200 text-rose-700 text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.name.id_for_label }}">Subscription Title <span class="text-rose-500">*</span></label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.target_asset_type.id_for_label }}">Target Asset Type</label>
+                        {{ form.target_asset_type }}
+                        {% if form.target_asset_type.errors %}<div class="form-error">{{ form.target_asset_type.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.export_format.id_for_label }}">Export Format</label>
+                        {{ form.export_format }}
+                        {% if form.export_format.errors %}<div class="form-error">{{ form.export_format.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.dashboard.id_for_label }}">Target Dashboard</label>
+                        {{ form.dashboard }}
+                        {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Required if target asset is Dashboard</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.report.id_for_label }}">Target Report Definition</label>
+                        {{ form.report }}
+                        {% if form.report.errors %}<div class="form-error">{{ form.report.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Required if target asset is Operational Report</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cadence.id_for_label }}">Delivery Cadence</label>
+                        {{ form.cadence }}
+                        {% if form.cadence.errors %}<div class="form-error">{{ form.cadence.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.scheduled_time.id_for_label }}">Scheduled Delivery Time</label>
+                        {{ form.scheduled_time }}
+                        {% if form.scheduled_time.errors %}<div class="form-error">{{ form.scheduled_time.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cron_expression.id_for_label }}">Cron Schedule Expression</label>
+                        {{ form.cron_expression }}
+                        {% if form.cron_expression.errors %}<div class="form-error">{{ form.cron_expression.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Standard 5-part cron syntax (e.g. 0 8 * * 1)</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.burst_mode.id_for_label }}">Bursting / Slicing Mode</label>
+                        {{ form.burst_mode }}
+                        {% if form.burst_mode.errors %}<div class="form-error">{{ form.burst_mode.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                        {{ form.status }}
+                        {% if form.status.errors %}<div class="form-error">{{ form.status.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group flex flex-col justify-center space-y-2 pt-2">
+                        <div class="flex items-center gap-2">
+                            {{ form.include_cover_page }}
+                            <label class="form-label mb-0" for="{{ form.include_cover_page.id_for_label }}">Include Branded Cover Page</label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {{ form.skip_if_empty }}
+                            <label class="form-label mb-0" for="{{ form.skip_if_empty.id_for_label }}">Skip Delivery If Result Is Empty</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.subscriber_users.id_for_label }}">Internal User Subscribers</label>
+                        {{ form.subscriber_users }}
+                        {% if form.subscriber_users.errors %}<div class="form-error">{{ form.subscriber_users.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Hold Ctrl/Cmd to select multiple user accounts</div>
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.subscriber_org_units.id_for_label }}">Department / OrgUnit Subscribers</label>
+                        {{ form.subscriber_org_units }}
+                        {% if form.subscriber_org_units.errors %}<div class="form-error">{{ form.subscriber_org_units.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Hold Ctrl/Cmd to select departments for group distribution</div>
+                    </div>
+
+                    <div class="form-group sm:col-span-2">
+                        <label class="form-label" for="{{ form.external_recipient_emails.id_for_label }}">External Recipient Email Addresses</label>
+                        {{ form.external_recipient_emails }}
+                        {% if form.external_recipient_emails.errors %}<div class="form-error">{{ form.external_recipient_emails.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Comma-separated email addresses</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if subscription %}{% url 'bi:report_subscription_detail' subscription.pk %}{% else %}{% url 'bi:report_subscription_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="check"></i>
+                        <span>{% if subscription %}Save Changes{% else %}Schedule Subscription{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
