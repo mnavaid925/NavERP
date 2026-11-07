@@ -172,7 +172,7 @@
                         </div>
                     </td>
                     <td>
-                        <span class="badge {% if item.embedding_mode == 'iframe' %}badge-info{% elif item.embedding_mode == 'web_component' %}badge-purple{% else %}badge-slate{% endif %}">
+                        <span class="badge {% if item.embedding_mode == 'iframe' %}badge-info{% elif item.embedding_mode == 'web_component' %}badge-slate{% else %}badge-muted{% endif %}">
                             {{ item.get_embedding_mode_display }}
                         </span>
                         <div class="text-xs text-muted mt-1">Theme: {{ item.get_theme_mode_display }}</div>
