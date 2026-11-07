@@ -106,5 +106,25 @@ Request Changes (1 Important finding, 3 Minor findings).
 - Surgical `update_fields` on status and action mutations.
 - Fast, atomic, idempotent seeder.
 
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Verdict
+Request Changes (Fail on Form POST submissions, 57/65 runtime checks passed).
+
+### Critical
+1. `apps/bi/forms/PredictiveAnalytics/` — HTTP 500 on all Form POST submissions (both create and edit across all 4 entities).
+   - Traceback: `TypeError: reject_foreign() missing 1 required positional argument: 'names'`.
+   - Affected URLs: `bi:predictive_model_create`, `bi:predictive_model_edit`, `bi:forecast_execution_create`, `bi:forecast_execution_edit`, `bi:statistical_anomaly_create`, `bi:statistical_anomaly_edit`, `bi:optimization_scenario_create`, `bi:optimization_scenario_edit`.
+   - Fix: Remove per-field `clean_<name>` methods and implement `clean(self)` calling `reject_foreign(self, cleaned_data, [...])`.
+
+### Runtime Test Summary
+- 16 core GET URLs returned 200 with zero comment leaks and live `BPML-*`, `BFOR-*`, `BANM-*`, `BOPT-*` numbers displayed.
+- 3 custom actions (`train`, `triage`, `solve`) executed cleanly and redirected (302).
+- Search, choices filters, junk parameters, and pagination handled gracefully without 500s.
+- Cross-tenant IDOR: all 11 cross-tenant attempts against Globex returned 404 cleanly.
+
+
 
 
