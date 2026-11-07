@@ -262,7 +262,16 @@ def bi_alert_rule_test_evaluate(request, pk):
             f"Alert {rule.number} evaluated: condition within normal bounds ({simulated_value}).",
         )
 
-    rule.save()
+    rule.save(
+        update_fields=[
+            "status",
+            "last_evaluated_at",
+            "last_triggered_at",
+            "trigger_count",
+            "last_trigger_value",
+            "updated_at",
+        ]
+    )
 
     write_audit_log(
         request.user,
