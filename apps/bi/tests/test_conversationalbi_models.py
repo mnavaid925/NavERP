@@ -93,7 +93,31 @@ def _conversationalbi_create_search_index(tenant, **kwargs):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_defaults_and_autonumber(tenant_a, admin_user):
+
+@pytest.mark.django_db
+def test_conversationalbi_model_nlq_fixture_and_properties(natural_language_query_a, tenant_a, admin_user):
+    """Test NaturalLanguageQuery fixture from conftest, is_successful, and is_voice_query."""
+    assert natural_language_query_a.pk is not None
+    assert natural_language_query_a.tenant == tenant_a
+    assert natural_language_query_a.number == "BNLQ-00001"
+    assert natural_language_query_a.execution_status == "completed"
+    assert natural_language_query_a.is_successful is True
+    assert natural_language_query_a.is_voice_query is False
+    assert natural_language_query_a.status_badge_color == "badge-green"
+    assert natural_language_query_a.modality_badge_color == "badge-slate"
+    assert natural_language_query_a.rating_badge_color == "badge-green"
+
+    # Verify property changes on status/modality
+    natural_language_query_a.execution_status = "failed"
+    assert natural_language_query_a.is_successful is False
+    assert natural_language_query_a.status_badge_color == "badge-red"
+
+    natural_language_query_a.input_modality = "voice"
+    assert natural_language_query_a.is_voice_query is True
+    assert natural_language_query_a.modality_badge_color == "badge-info"
+
+@pytest.mark.django_db
+def test_conversationalbi_model_nlq_defaults_and_autonumber(tenant_a, admin_user):
     """Test NaturalLanguageQuery creation, BNLQ prefix, defaults, __str__, and URL."""
     nlq = NaturalLanguageQuery.objects.create(
         tenant=tenant_a,
@@ -122,7 +146,7 @@ def test_conversationalbi_nlq_defaults_and_autonumber(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_autonumber_increment_and_tenant_isolation(
+def test_conversationalbi_model_nlq_autonumber_increment_and_tenant_isolation(
     tenant_a, tenant_b, admin_user, admin_user_b
 ):
     """Test autonumber incrementing within a tenant and isolation across tenants."""
@@ -141,7 +165,7 @@ def test_conversationalbi_nlq_autonumber_increment_and_tenant_isolation(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_str_representation(tenant_a, admin_user):
+def test_conversationalbi_model_nlq_str_representation(tenant_a, admin_user):
     """Test NaturalLanguageQuery __str__ behavior for short and long text (> 50 chars)."""
     short_query = "What is ARR?"
     q_short = _conversationalbi_create_nlq(tenant_a, user=admin_user, query_text=short_query)
@@ -158,14 +182,14 @@ def test_conversationalbi_nlq_str_representation(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_get_absolute_url(tenant_a, admin_user):
+def test_conversationalbi_model_nlq_get_absolute_url(tenant_a, admin_user):
     """Test get_absolute_url maps to bi:natural_language_query_detail."""
     nlq = _conversationalbi_create_nlq(tenant_a, user=admin_user)
     assert nlq.get_absolute_url() == f"/bi/natural-language-queries/{nlq.pk}/"
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_choices():
+def test_conversationalbi_model_nlq_choices():
     """Test choices enumerations for NaturalLanguageQuery."""
     modality_keys = _conversationalbi_choice_keys(NaturalLanguageQuery.INPUT_MODALITY_CHOICES)
     assert "text" in modality_keys
@@ -204,7 +228,7 @@ def test_conversationalbi_nlq_choices():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_badge_colors(tenant_a):
+def test_conversationalbi_model_nlq_badge_colors(tenant_a):
     """Test computed status_badge_color, modality_badge_color, rating_badge_color on NaturalLanguageQuery."""
     nlq = NaturalLanguageQuery(tenant=tenant_a, query_text="Test Badge Query")
 
@@ -257,7 +281,7 @@ def test_conversationalbi_nlq_badge_colors(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_json_fields(tenant_a, admin_user):
+def test_conversationalbi_model_nlq_json_fields(tenant_a, admin_user):
     """Test parsed_measures, parsed_dimensions, parsed_filters, chart_config, result_summary serialization."""
     measures = ["gross_revenue", "discount_amount", "net_revenue"]
     dimensions = ["sales_territory", "fiscal_quarter"]
@@ -289,7 +313,7 @@ def test_conversationalbi_nlq_json_fields(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_unique_constraint(tenant_a, tenant_b, admin_user, admin_user_b):
+def test_conversationalbi_model_nlq_unique_constraint(tenant_a, tenant_b, admin_user, admin_user_b):
     """Verify unique constraint on (tenant, number) for NaturalLanguageQuery."""
     q1 = _conversationalbi_create_nlq(tenant_a, user=admin_user)
 
@@ -313,7 +337,7 @@ def test_conversationalbi_nlq_unique_constraint(tenant_a, tenant_b, admin_user, 
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_foreign_keys_and_cascade(
+def test_conversationalbi_model_nlq_foreign_keys_and_cascade(
     tenant_a, admin_user, semantic_model_a, warehouse_table_a, kpi_definition_a
 ):
     """Test foreign keys and SET_NULL behavior on NaturalLanguageQuery."""
@@ -352,7 +376,7 @@ def test_conversationalbi_nlq_foreign_keys_and_cascade(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_nlq_ordering_and_indexes():
+def test_conversationalbi_model_nlq_ordering_and_indexes():
     """Verify NaturalLanguageQuery Meta ordering and defined indexes."""
     assert NaturalLanguageQuery._meta.ordering == ["-created_at", "-id"]
     index_names = [idx.name for idx in NaturalLanguageQuery._meta.indexes]
@@ -368,7 +392,28 @@ def test_conversationalbi_nlq_ordering_and_indexes():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_defaults_and_autonumber(tenant_a, admin_user):
+
+@pytest.mark.django_db
+def test_conversationalbi_model_session_fixture_and_properties(conversation_session_a, tenant_a, admin_user):
+    """Test BiConversationSession fixture from conftest, is_active, and suggested_followups alias."""
+    assert conversation_session_a.pk is not None
+    assert conversation_session_a.tenant == tenant_a
+    assert conversation_session_a.number == "BCON-00001"
+    assert conversation_session_a.session_status == "active"
+    assert conversation_session_a.is_active is True
+    assert conversation_session_a.status_badge_color == "badge-green"
+    assert "What is the forecast?" in conversation_session_a.suggested_followups
+
+    conversation_session_a.session_status = "closed"
+    assert conversation_session_a.is_active is False
+    assert conversation_session_a.status_badge_color == "badge-slate"
+
+    conversation_session_a.session_status = "archived"
+    assert conversation_session_a.is_active is False
+    assert conversation_session_a.status_badge_color == "badge-amber"
+
+@pytest.mark.django_db
+def test_conversationalbi_model_session_defaults_and_autonumber(tenant_a, admin_user):
     """Test BiConversationSession creation, BCON prefix, defaults, __str__, and URL."""
     session = BiConversationSession.objects.create(
         tenant=tenant_a,
@@ -387,7 +432,7 @@ def test_conversationalbi_session_defaults_and_autonumber(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_autonumber_increment_and_tenant_isolation(
+def test_conversationalbi_model_session_autonumber_increment_and_tenant_isolation(
     tenant_a, tenant_b, admin_user, admin_user_b
 ):
     """Test autonumber incrementing for BiConversationSession and tenant isolation."""
@@ -405,7 +450,7 @@ def test_conversationalbi_session_autonumber_increment_and_tenant_isolation(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_str_representation(tenant_a, admin_user):
+def test_conversationalbi_model_session_str_representation(tenant_a, admin_user):
     """Test BiConversationSession string representation format."""
     session = _conversationalbi_create_session(
         tenant=tenant_a, user=admin_user, title="Weekly Ops Chat"
@@ -414,14 +459,14 @@ def test_conversationalbi_session_str_representation(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_get_absolute_url(tenant_a, admin_user):
+def test_conversationalbi_model_session_get_absolute_url(tenant_a, admin_user):
     """Test BiConversationSession get_absolute_url matches reverse routing."""
     session = _conversationalbi_create_session(tenant_a, admin_user)
     assert session.get_absolute_url() == f"/bi/conversations/{session.pk}/"
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_choices():
+def test_conversationalbi_model_session_choices():
     """Test choices enumeration on BiConversationSession."""
     status_keys = _conversationalbi_choice_keys(BiConversationSession.SESSION_STATUS_CHOICES)
     assert "active" in status_keys
@@ -430,7 +475,7 @@ def test_conversationalbi_session_choices():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_badge_colors(tenant_a, admin_user):
+def test_conversationalbi_model_session_badge_colors(tenant_a, admin_user):
     """Test computed status_badge_color property mappings on BiConversationSession."""
     session = BiConversationSession(tenant=tenant_a, user=admin_user, title="Badge Test Session")
 
@@ -452,7 +497,7 @@ def test_conversationalbi_session_badge_colors(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_json_fields(tenant_a, admin_user):
+def test_conversationalbi_model_session_json_fields(tenant_a, admin_user):
     """Test suggested_prompts and context_state JSONField serialization on BiConversationSession."""
     prompts = [
         "Which sales territories are trailing target?",
@@ -479,7 +524,7 @@ def test_conversationalbi_session_json_fields(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_unique_constraint(tenant_a, tenant_b, admin_user, admin_user_b):
+def test_conversationalbi_model_session_unique_constraint(tenant_a, tenant_b, admin_user, admin_user_b):
     """Verify unique constraint on (tenant, number) for BiConversationSession."""
     s1 = _conversationalbi_create_session(tenant_a, admin_user)
 
@@ -503,7 +548,7 @@ def test_conversationalbi_session_unique_constraint(tenant_a, tenant_b, admin_us
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_foreign_keys_and_cascade(
+def test_conversationalbi_model_session_foreign_keys_and_cascade(
     tenant_a, admin_user, semantic_model_a, bi_dashboard_a
 ):
     """Test foreign keys, CASCADE on user, and SET_NULL on models/dashboards."""
@@ -530,7 +575,7 @@ def test_conversationalbi_session_foreign_keys_and_cascade(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_session_ordering_and_indexes(tenant_a, admin_user):
+def test_conversationalbi_model_session_ordering_and_indexes(tenant_a, admin_user):
     """Verify BiConversationSession Meta ordering and indexes."""
     assert BiConversationSession._meta.ordering == ["-is_pinned", "-last_interaction_at", "-id"]
     index_names = [idx.name for idx in BiConversationSession._meta.indexes]
@@ -553,7 +598,29 @@ def test_conversationalbi_session_ordering_and_indexes(tenant_a, admin_user):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_defaults_and_autonumber(tenant_a):
+
+@pytest.mark.django_db
+def test_conversationalbi_model_narrative_fixture_and_properties(narrative_explanation_a, tenant_a, admin_user):
+    """Test NarrativeExplanation fixture from conftest, is_published, has_voice_script, and SSML script."""
+    assert narrative_explanation_a.pk is not None
+    assert narrative_explanation_a.tenant == tenant_a
+    assert narrative_explanation_a.number == "BNLG-00001"
+    assert narrative_explanation_a.status == "published"
+    assert narrative_explanation_a.is_published is True
+    assert narrative_explanation_a.has_voice_script is True
+    assert narrative_explanation_a.status_badge_color == "badge-green"
+    assert narrative_explanation_a.style_badge_color == "badge-info"
+    assert "Executive briefing for Q3 revenue" in narrative_explanation_a.audio_ready_script
+
+    narrative_explanation_a.status = "draft"
+    assert narrative_explanation_a.is_published is False
+    assert narrative_explanation_a.status_badge_color == "badge-slate"
+
+    narrative_explanation_a.audio_ready_script = ""
+    assert narrative_explanation_a.has_voice_script is False
+
+@pytest.mark.django_db
+def test_conversationalbi_model_narrative_defaults_and_autonumber(tenant_a):
     """Test NarrativeExplanation creation, BNLG prefix, defaults, __str__, and URL."""
     narrative = NarrativeExplanation.objects.create(
         tenant=tenant_a,
@@ -576,7 +643,7 @@ def test_conversationalbi_narrative_defaults_and_autonumber(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_autonumber_increment_and_tenant_isolation(
+def test_conversationalbi_model_narrative_autonumber_increment_and_tenant_isolation(
     tenant_a, tenant_b
 ):
     """Test autonumber incrementing for NarrativeExplanation and tenant isolation."""
@@ -594,7 +661,7 @@ def test_conversationalbi_narrative_autonumber_increment_and_tenant_isolation(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_str_representation(tenant_a):
+def test_conversationalbi_model_narrative_str_representation(tenant_a):
     """Test NarrativeExplanation string representation format."""
     narrative = _conversationalbi_create_narrative(
         tenant=tenant_a, title="Executive ARR Variance Summary"
@@ -603,14 +670,14 @@ def test_conversationalbi_narrative_str_representation(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_get_absolute_url(tenant_a):
+def test_conversationalbi_model_narrative_get_absolute_url(tenant_a):
     """Test NarrativeExplanation get_absolute_url maps to bi:narrative_explanation_detail."""
     narrative = _conversationalbi_create_narrative(tenant_a)
     assert narrative.get_absolute_url() == f"/bi/narratives/{narrative.pk}/"
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_choices():
+def test_conversationalbi_model_narrative_choices():
     """Test choices enumerations for NarrativeExplanation."""
     artifact_keys = _conversationalbi_choice_keys(NarrativeExplanation.TARGET_ARTIFACT_TYPE_CHOICES)
     assert "dashboard" in artifact_keys
@@ -634,7 +701,7 @@ def test_conversationalbi_narrative_choices():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_badge_colors(tenant_a):
+def test_conversationalbi_model_narrative_badge_colors(tenant_a):
     """Test computed status_badge_color and style_badge_color on NarrativeExplanation."""
     narrative = NarrativeExplanation(
         tenant=tenant_a,
@@ -683,7 +750,7 @@ def test_conversationalbi_narrative_badge_colors(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_json_fields(tenant_a):
+def test_conversationalbi_model_narrative_json_fields(tenant_a):
     """Test key_takeaways JSONField serialization on NarrativeExplanation."""
     bullets = [
         "Subscription revenue exceeded plan by $1.2M",
@@ -702,7 +769,7 @@ def test_conversationalbi_narrative_json_fields(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_unique_constraint(tenant_a, tenant_b):
+def test_conversationalbi_model_narrative_unique_constraint(tenant_a, tenant_b):
     """Verify unique constraint on (tenant, number) for NarrativeExplanation."""
     n1 = _conversationalbi_create_narrative(tenant_a)
 
@@ -728,7 +795,7 @@ def test_conversationalbi_narrative_unique_constraint(tenant_a, tenant_b):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_foreign_keys_and_cascade(
+def test_conversationalbi_model_narrative_foreign_keys_and_cascade(
     tenant_a, bi_dashboard_a, kpi_definition_a
 ):
     """Test foreign keys and SET_NULL behavior on NarrativeExplanation."""
@@ -766,7 +833,7 @@ def test_conversationalbi_narrative_foreign_keys_and_cascade(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_narrative_ordering_and_indexes():
+def test_conversationalbi_model_narrative_ordering_and_indexes():
     """Verify NarrativeExplanation Meta ordering and indexes."""
     assert NarrativeExplanation._meta.ordering == ["-created_at", "-id"]
     index_names = [idx.name for idx in NarrativeExplanation._meta.indexes]
@@ -782,7 +849,26 @@ def test_conversationalbi_narrative_ordering_and_indexes():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_defaults_and_autonumber(tenant_a):
+
+@pytest.mark.django_db
+def test_conversationalbi_model_search_discovery_fixture_and_properties(search_discovery_index_a, tenant_a):
+    """Test SearchDiscoveryIndex fixture from conftest, type_badge_color alias, and effective_score."""
+    assert search_discovery_index_a.pk is not None
+    assert search_discovery_index_a.tenant == tenant_a
+    assert search_discovery_index_a.number == "BSDI-00001"
+    assert search_discovery_index_a.asset_type == "dashboard"
+    assert search_discovery_index_a.asset_type_badge_color == "badge-info"
+    assert search_discovery_index_a.type_badge_color == "badge-info"
+    assert search_discovery_index_a.verification_badge_color == "badge-green"
+    assert search_discovery_index_a.effective_score > Decimal("1.00")
+
+    # Verify score updates on featured/engagement
+    score_featured = search_discovery_index_a.effective_score
+    search_discovery_index_a.is_featured = False
+    assert search_discovery_index_a.effective_score < score_featured
+
+@pytest.mark.django_db
+def test_conversationalbi_model_search_discovery_defaults_and_autonumber(tenant_a):
     """Test SearchDiscoveryIndex creation, BSDI prefix, defaults, __str__, and URL."""
     idx = SearchDiscoveryIndex.objects.create(
         tenant=tenant_a,
@@ -806,7 +892,7 @@ def test_conversationalbi_search_discovery_defaults_and_autonumber(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_autonumber_increment_and_tenant_isolation(
+def test_conversationalbi_model_search_discovery_autonumber_increment_and_tenant_isolation(
     tenant_a, tenant_b
 ):
     """Test autonumber incrementing for SearchDiscoveryIndex and tenant isolation."""
@@ -824,7 +910,7 @@ def test_conversationalbi_search_discovery_autonumber_increment_and_tenant_isola
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_str_representation(tenant_a):
+def test_conversationalbi_model_search_discovery_str_representation(tenant_a):
     """Test SearchDiscoveryIndex string representation format."""
     idx = _conversationalbi_create_search_index(
         tenant=tenant_a, asset_name="Enterprise Customer Churn Model"
@@ -833,14 +919,14 @@ def test_conversationalbi_search_discovery_str_representation(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_get_absolute_url(tenant_a):
+def test_conversationalbi_model_search_discovery_get_absolute_url(tenant_a):
     """Test SearchDiscoveryIndex get_absolute_url matches reverse routing."""
     idx = _conversationalbi_create_search_index(tenant_a)
     assert idx.get_absolute_url() == f"/bi/search-discovery/{idx.pk}/"
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_choices():
+def test_conversationalbi_model_search_discovery_choices():
     """Test choices enumeration for SearchDiscoveryIndex."""
     type_keys = _conversationalbi_choice_keys(SearchDiscoveryIndex.ASSET_TYPE_CHOICES)
     assert "dashboard" in type_keys
@@ -853,7 +939,7 @@ def test_conversationalbi_search_discovery_choices():
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_badge_colors(tenant_a):
+def test_conversationalbi_model_search_discovery_badge_colors(tenant_a):
     """Test computed asset_type_badge_color, type_badge_color, and verification_badge_color."""
     idx = SearchDiscoveryIndex(
         tenant=tenant_a, asset_name="Badge Test Asset", target_url="/test/"
@@ -904,7 +990,7 @@ def test_conversationalbi_search_discovery_badge_colors(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_json_fields(tenant_a):
+def test_conversationalbi_model_search_discovery_json_fields(tenant_a):
     """Test synonyms JSONField serialization on SearchDiscoveryIndex."""
     syns = ["revenue", "turnover", "topline", "gross sales", "invoiced volume"]
     idx = SearchDiscoveryIndex.objects.create(
@@ -918,7 +1004,7 @@ def test_conversationalbi_search_discovery_json_fields(tenant_a):
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_unique_constraint(tenant_a, tenant_b):
+def test_conversationalbi_model_search_discovery_unique_constraint(tenant_a, tenant_b):
     """Verify unique constraint on (tenant, number) for SearchDiscoveryIndex."""
     idx1 = _conversationalbi_create_search_index(tenant_a)
 
@@ -942,7 +1028,7 @@ def test_conversationalbi_search_discovery_unique_constraint(tenant_a, tenant_b)
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_foreign_keys_and_cascade(
+def test_conversationalbi_model_search_discovery_foreign_keys_and_cascade(
     tenant_a, bi_dashboard_a, semantic_model_a, warehouse_table_a, kpi_definition_a
 ):
     """Test foreign keys and related reverse managers on SearchDiscoveryIndex."""
@@ -963,7 +1049,7 @@ def test_conversationalbi_search_discovery_foreign_keys_and_cascade(
 
 
 @pytest.mark.django_db
-def test_conversationalbi_search_discovery_composite_index_and_ordering(tenant_a):
+def test_conversationalbi_model_search_discovery_composite_index_and_ordering(tenant_a):
     """Verify composite index idx_bsdi_ten_feat_rw and ordering on SearchDiscoveryIndex."""
     assert SearchDiscoveryIndex._meta.ordering == [
         "-is_featured",
@@ -1016,7 +1102,7 @@ def test_conversationalbi_search_discovery_composite_index_and_ordering(tenant_a
 
 
 @pytest.mark.django_db
-def test_conversationalbi_tenant_cascade_delete():
+def test_conversationalbi_model_tenant_cascade_delete():
     """Verify that deleting a tenant cascades and removes all associated conversational BI records."""
     temp_tenant = Tenant.objects.create(
         name="ConversationalBI Temp Tenant",
