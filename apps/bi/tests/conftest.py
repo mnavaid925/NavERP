@@ -53,6 +53,10 @@ from apps.bi.models import (
     TransformationStep,
     WarehouseStoragePolicy,
     WarehouseTable,
+    ForecastExecution,
+    OptimizationScenario,
+    PredictiveModel,
+    StatisticalAnomaly,
     WhatIfScenario,
 )
 
@@ -1789,8 +1793,206 @@ def scorecard_kpi_assignment_b(
         sort_order=10,
     )
 
+# ---------------------------------------------------------------------------
+# Sub-module 10.13: Predictive & Advanced Analytics Fixtures
+# ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def predictive_model_a(db, tenant_a, semantic_model_a, admin_user):
+    return PredictiveModel.objects.create(
+        tenant=tenant_a,
+        number="BPML-00001",
+        name="Acme Demand Forecasting Model",
+        code="acme_demand_forecast",
+        problem_type="time_series_forecast",
+        target_metric="sales_units",
+        algorithm="auto_arima",
+        cadence="monthly",
+        status="active",
+        owner=admin_user,
+        features_list=["historical_sales", "promotions", "seasonality"],
+        hyperparameters={"p": 1, "d": 1, "q": 1},
+        semantic_model=semantic_model_a,
+    )
 
 
+@pytest.fixture
+def predictive_model_b(db, tenant_b, semantic_model_b, admin_user_b):
+    return PredictiveModel.objects.create(
+        tenant=tenant_b,
+        number="BPML-00002",
+        name="Globex Churn Risk Classifier",
+        code="globex_churn_classifier",
+        problem_type="binary_classification",
+        target_metric="churned",
+        algorithm="random_forest",
+        cadence="daily",
+        status="active",
+        owner=admin_user_b,
+        features_list=["usage_frequency", "support_tickets"],
+        hyperparameters={"n_estimators": 100},
+        semantic_model=semantic_model_b,
+    )
+
+
+@pytest.fixture
+def forecast_execution_a(
+    db, tenant_a, predictive_model_a, semantic_model_a, kpi_definition_a, admin_user
+):
+    return ForecastExecution.objects.create(
+        tenant=tenant_a,
+        number="BFOR-00001",
+        name="Acme H1 2027 Revenue Projection",
+        model=predictive_model_a,
+        semantic_model=semantic_model_a,
+        kpi_definition=kpi_definition_a,
+        cadence="monthly",
+        horizon_periods=6,
+        confidence_level="95",
+        status="completed",
+        baseline_value=Decimal("10000.0000"),
+        projected_value=Decimal("11500.0000"),
+        mape_score=Decimal("4.25"),
+        executed_by=admin_user,
+        forecast_output_data=[
+            {"period": "2027-01", "predicted": 10200.0, "lower_bound": 9800.0, "upper_bound": 10600.0},
+            {"period": "2027-02", "predicted": 10450.0, "lower_bound": 10000.0, "upper_bound": 10900.0},
+        ],
+    )
+
+
+@pytest.fixture
+def forecast_execution_b(
+    db, tenant_b, predictive_model_b, semantic_model_b, kpi_definition_b, admin_user_b
+):
+    return ForecastExecution.objects.create(
+        tenant=tenant_b,
+        number="BFOR-00002",
+        name="Globex Commercial Forecast Run",
+        model=predictive_model_b,
+        semantic_model=semantic_model_b,
+        kpi_definition=kpi_definition_b,
+        cadence="monthly",
+        horizon_periods=3,
+        confidence_level="90",
+        status="completed",
+        baseline_value=Decimal("5000.0000"),
+        projected_value=Decimal("5300.0000"),
+        mape_score=Decimal("5.10"),
+        executed_by=admin_user_b,
+        forecast_output_data=[
+            {"period": "2027-01", "predicted": 5100.0, "lower_bound": 4900.0, "upper_bound": 5300.0},
+        ],
+    )
+
+
+@pytest.fixture
+def statistical_anomaly_a(
+    db, tenant_a, predictive_model_a, semantic_model_a, kpi_definition_a, admin_user
+):
+    return StatisticalAnomaly.objects.create(
+        tenant=tenant_a,
+        number="BANM-00001",
+        title="Unexpected Spike in Daily Server Latency",
+        model=predictive_model_a,
+        semantic_model=semantic_model_a,
+        kpi_definition=kpi_definition_a,
+        metric_name="response_latency_ms",
+        anomaly_type="spike",
+        detection_method="z_score",
+        severity="critical",
+        observed_value=Decimal("850.5000"),
+        expected_value=Decimal("120.0000"),
+        deviation_percentage=Decimal("608.75"),
+        anomaly_timestamp=timezone.now(),
+        triage_status="open",
+        assigned_to=admin_user,
+        root_cause_factors=[{"factor": "traffic_surge", "contribution_pct": 75.0}],
+    )
+
+
+@pytest.fixture
+def statistical_anomaly_b(
+    db, tenant_b, predictive_model_b, semantic_model_b, kpi_definition_b, admin_user_b
+):
+    return StatisticalAnomaly.objects.create(
+        tenant=tenant_b,
+        number="BANM-00002",
+        title="Sudden Drop in User Engagement",
+        model=predictive_model_b,
+        semantic_model=semantic_model_b,
+        kpi_definition=kpi_definition_b,
+        metric_name="daily_active_users",
+        anomaly_type="drop",
+        detection_method="moving_average",
+        severity="warning",
+        observed_value=Decimal("350.0000"),
+        expected_value=Decimal("1200.0000"),
+        deviation_percentage=Decimal("-70.83"),
+        anomaly_timestamp=timezone.now(),
+        triage_status="open",
+        assigned_to=admin_user_b,
+        root_cause_factors=[{"factor": "auth_outage", "contribution_pct": 90.0}],
+    )
+
+
+@pytest.fixture
+def optimization_scenario_a(db, tenant_a, kpi_definition_a, admin_user):
+    return OptimizationScenario.objects.create(
+        tenant=tenant_a,
+        number="BOPT-00001",
+        name="Acme Supply Chain Inventory Optimization",
+        slug="acme-supply-chain-inventory-opt",
+        objective_type="maximize",
+        target_metric_name="gross_margin_profit",
+        kpi_definition=kpi_definition_a,
+        baseline_value=Decimal("50000.0000"),
+        target_value=Decimal("65000.0000"),
+        optimal_value=Decimal("62500.0000"),
+        projected_lift_percentage=Decimal("25.00"),
+        solver_algorithm="linear_programming",
+        solver_status="optimal",
+        status="active",
+        owner=admin_user,
+        decision_variables=[
+            {"name": "safety_stock_level", "min_val": 100, "max_val": 500, "optimal_val": 320}
+        ],
+        constraint_rules=[
+            {"rule": "budget_cap <= 100000", "status": "satisfied"}
+        ],
+        recommended_actions=[
+            {"action": "Increase buffer stock in central distribution hub", "priority": "high"}
+        ],
+    )
+
+
+@pytest.fixture
+def optimization_scenario_b(db, tenant_b, kpi_definition_b, admin_user_b):
+    return OptimizationScenario.objects.create(
+        tenant=tenant_b,
+        number="BOPT-00002",
+        name="Globex Logistics Delivery Cost Minimization",
+        slug="globex-logistics-delivery-cost-min",
+        objective_type="minimize",
+        target_metric_name="freight_expense",
+        kpi_definition=kpi_definition_b,
+        baseline_value=Decimal("80000.0000"),
+        target_value=Decimal("60000.0000"),
+        optimal_value=Decimal("64000.0000"),
+        projected_lift_percentage=Decimal("-20.00"),
+        solver_algorithm="mixed_integer_programming",
+        solver_status="optimal",
+        status="active",
+        owner=admin_user_b,
+        decision_variables=[
+            {"name": "carrier_route_selection", "min_val": 1, "max_val": 10, "optimal_val": 4}
+        ],
+        constraint_rules=[
+            {"rule": "service_sla_hours <= 24", "status": "satisfied"}
+        ],
+        recommended_actions=[
+            {"action": "Consolidate regional shipments via Tier-1 carrier", "priority": "critical"}
+        ],
+    )
 
