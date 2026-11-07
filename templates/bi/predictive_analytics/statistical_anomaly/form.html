@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Anomaly — {{ anomaly_obj.title }}{% else %}Log Statistical Anomaly{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:statistical_anomaly_list' %}">Statistical Anomalies</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Incident{% else %}Log Anomaly{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Incident: {{ anomaly_obj.title }}{% else %}Log Statistical Anomaly{% endif %}</h1>
+        <p class="text-muted text-sm">Record detected metric spikes, dips, observed deviations, and triage ownership</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Incident Info -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Incident Telemetry & Classification</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.title.id_for_label }}">Incident Title *</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.metric_name.id_for_label }}">Monitored Metric *</label>
+                            {{ form.metric_name }}
+                            {% if form.metric_name.errors %}<div class="form-error">{{ form.metric_name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.anomaly_type.id_for_label }}">Anomaly Type *</label>
+                            {{ form.anomaly_type }}
+                            {% if form.anomaly_type.errors %}<div class="form-error">{{ form.anomaly_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.detection_method.id_for_label }}">Detection Method *</label>
+                            {{ form.detection_method }}
+                            {% if form.detection_method.errors %}<div class="form-error">{{ form.detection_method.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.severity.id_for_label }}">Severity Level *</label>
+                            {{ form.severity }}
+                            {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.model.id_for_label }}">Predictive Model</label>
+                            {{ form.model }}
+                            {% if form.model.errors %}<div class="form-error">{{ form.model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.kpi_definition.id_for_label }}">Target KPI</label>
+                            {{ form.kpi_definition }}
+                            {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Values & Deviation -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Observed Telemetry & Variance</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.observed_value.id_for_label }}">Observed Value *</label>
+                            {{ form.observed_value }}
+                            {% if form.observed_value.errors %}<div class="form-error">{{ form.observed_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.expected_value.id_for_label }}">Expected Value *</label>
+                            {{ form.expected_value }}
+                            {% if form.expected_value.errors %}<div class="form-error">{{ form.expected_value.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.deviation_percentage.id_for_label }}">Deviation (%) *</label>
+                            {{ form.deviation_percentage }}
+                            {% if form.deviation_percentage.errors %}<div class="form-error">{{ form.deviation_percentage.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.anomaly_timestamp.id_for_label }}">Timestamp *</label>
+                            {{ form.anomaly_timestamp }}
+                            {% if form.anomaly_timestamp.errors %}<div class="form-error">{{ form.anomaly_timestamp.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-4 form-group">
+                            <label class="form-label" for="{{ form.root_cause_factors_raw.id_for_label }}">Root-Cause Factors (JSON Array)</label>
+                            {{ form.root_cause_factors_raw }}
+                            <span class="text-xs text-muted">JSON list of dimensional segments contributing to this anomaly</span>
+                            {% if form.root_cause_factors_raw.errors %}<div class="form-error">{{ form.root_cause_factors_raw.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Triage & Ownership -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Triage & Investigation Governance</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.triage_status.id_for_label }}">Triage Status *</label>
+                            {{ form.triage_status }}
+                            {% if form.triage_status.errors %}<div class="form-error">{{ form.triage_status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assignee</label>
+                            {{ form.assigned_to }}
+                            {% if form.assigned_to.errors %}<div class="form-error">{{ form.assigned_to.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.resolution_notes.id_for_label }}">Investigation & Resolution Notes</label>
+                            {{ form.resolution_notes }}
+                            {% if form.resolution_notes.errors %}<div class="form-error">{{ form.resolution_notes.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:statistical_anomaly_detail' anomaly_obj.pk %}{% else %}{% url 'bi:statistical_anomaly_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Log Anomaly{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
