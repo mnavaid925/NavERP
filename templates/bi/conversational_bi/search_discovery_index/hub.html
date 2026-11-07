@@ -41,7 +41,7 @@
         <p class="text-indigo-200 text-sm mb-6">Search by metric names, business synonyms ("turnover", "NPS", "lead time"), or dashboard titles</p>
 
         <form method="get" action="{% url 'bi:search_discovery_hub' %}" class="relative">
-            <input type="text" name="q" value="{{ search_query }}" placeholder="Search dashboards, metrics, datasets, glossaries (e.g. 'Gross Margin', 'Revenue', 'OTD')..." class="w-full pl-12 pr-28 py-3.5 text-base rounded-2xl bg-white text-slate-900 shadow-xl border-0 focus:ring-4 focus:ring-indigo-400 placeholder:text-slate-400" autofocus autocomplete="off">
+            <input type="text" name="q" value="{{ search_query }}" aria-label="Search analytical assets" placeholder="Search dashboards, metrics, datasets, glossaries (e.g. 'Gross Margin', 'Revenue', 'OTD')..." class="w-full pl-12 pr-28 py-3.5 text-base rounded-2xl bg-white text-slate-900 shadow-xl border-0 focus:ring-4 focus:ring-indigo-400 placeholder:text-slate-400" autofocus autocomplete="off">
             <span class="absolute left-4 top-4 text-slate-400">
                 <i data-lucide="search" class="w-6 h-6"></i>
             </span>
