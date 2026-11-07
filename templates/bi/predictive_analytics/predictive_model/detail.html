@@ -275,4 +275,84 @@
         </table>
     </div>
 </div>
+
+<!-- Recent Detected Anomalies Table -->
+<div class="card mb-6">
+    <div class="card-header flex justify-between items-center">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500"></i>
+            Recent Anomalies Detected by this Model
+        </h3>
+        <span class="text-xs text-muted font-mono">{{ anomalies_count }} Total Anomalies</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th scope="col">Anomaly Title</th>
+                    <th scope="col">Metric</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Severity</th>
+                    <th scope="col">Observed vs Expected</th>
+                    <th scope="col">Deviation</th>
+                    <th scope="col">Triage Status</th>
+                    <th scope="col">Detected At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for anomaly in anomalies %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bi:statistical_anomaly_detail' anomaly.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ anomaly.title }}
+                        </a>
+                        <div class="text-xs text-muted">{{ anomaly.number }}</div>
+                    </td>
+                    <td class="font-mono text-sm text-slate-700">{{ anomaly.metric_name }}</td>
+                    <td>
+                        <span class="badge badge-info">{{ anomaly.get_anomaly_type_display }}</span>
+                    </td>
+                    <td>
+                        {% if anomaly.severity == 'critical' %}
+                        <span class="badge badge-red">Critical</span>
+                        {% elif anomaly.severity == 'warning' %}
+                        <span class="badge badge-amber">Warning</span>
+                        {% else %}
+                        <span class="badge badge-info">Info</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-sm text-slate-700">
+                        <span class="font-semibold text-slate-900">{{ anomaly.observed_value }}</span>
+                        <span class="text-slate-400">/</span>
+                        <span class="text-slate-500">{{ anomaly.expected_value }}</span>
+                    </td>
+                    <td class="font-mono text-sm font-bold {% if anomaly.deviation_percentage > 0 %}text-red-600{% else %}text-amber-600{% endif %}">
+                        {{ anomaly.deviation_percentage }}%
+                    </td>
+                    <td>
+                        {% if anomaly.triage_status == 'resolved' %}
+                        <span class="badge badge-green">Resolved</span>
+                        {% elif anomaly.triage_status == 'open' %}
+                        <span class="badge badge-red">Open</span>
+                        {% elif anomaly.triage_status == 'acknowledged' %}
+                        <span class="badge badge-amber">Acknowledged</span>
+                        {% elif anomaly.triage_status == 'investigating' %}
+                        <span class="badge badge-info">Investigating</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ anomaly.get_triage_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-500">{{ anomaly.anomaly_timestamp|date:"M d, Y H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-6 text-muted text-sm">
+                        No statistical anomalies detected for this model yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
 {% endblock %}
