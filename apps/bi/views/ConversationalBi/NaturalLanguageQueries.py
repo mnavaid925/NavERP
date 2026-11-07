@@ -92,7 +92,7 @@ def natural_language_query_list(request):
 
 @login_required
 def natural_language_query_detail(request, pk):
-    query = bi_object(NaturalLanguageQuery, request, pk)
+    query = bi_object(request, NaturalLanguageQuery, pk)
 
     parsed_measures = query.parsed_measures if isinstance(query.parsed_measures, list) else []
     parsed_dimensions = query.parsed_dimensions if isinstance(query.parsed_dimensions, list) else []
@@ -182,7 +182,7 @@ def natural_language_query_create(request):
 
 @login_required
 def natural_language_query_edit(request, pk):
-    query = bi_object(NaturalLanguageQuery, request, pk)
+    query = bi_object(request, NaturalLanguageQuery, pk)
 
     if request.method == "POST":
         form = NaturalLanguageQueryForm(request.POST, instance=query, tenant=request.tenant)
@@ -216,7 +216,7 @@ def natural_language_query_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def natural_language_query_delete(request, pk):
-    query = bi_object(NaturalLanguageQuery, request, pk)
+    query = bi_object(request, NaturalLanguageQuery, pk)
     num = query.number
 
     with transaction.atomic():
@@ -236,7 +236,7 @@ def natural_language_query_delete(request, pk):
 @login_required
 @require_POST
 def natural_language_query_rate(request, pk):
-    query = bi_object(NaturalLanguageQuery, request, pk)
+    query = bi_object(request, NaturalLanguageQuery, pk)
     rating = request.POST.get("rating", "").strip()
     notes = request.POST.get("notes", "").strip()
 
