@@ -74,6 +74,11 @@ from apps.bi.models import (
 
 
 @pytest.fixture
+def admin_user_a(admin_user):
+    return admin_user
+
+
+@pytest.fixture
 def admin_user_b(db, tenant_b):
     user = User.objects.filter(username="admin_globex").first()
     if user:
