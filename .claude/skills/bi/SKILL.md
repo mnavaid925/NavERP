@@ -20,7 +20,7 @@ Comprehensive enterprise Business Intelligence, data ingestion, transformation p
 - **10.10 Real-time Streaming Analytics**: Micro-batch processing, stream windows, live telemetry feeds.
 - **10.11 KPI & Performance Scorecards**: KPI library, Balanced Scorecards (4 Kaplan & Norton perspectives: Financial, Customer, Internal Process, Learning & Growth), plan-vs-actual variance, trend arrows, industry benchmarks, and strategy maps.
 - **10.12 OLAP & Multidimensional Analysis**: Pre-aggregated cubes, hierarchies, pivot matrix analysis, what-if planning scenarios, writeback adjustments.
-- **10.13 Geospatial Analytics & Mapping**: Choropleth maps, territory heatmaps, spatial clustering.
+- **10.13 Predictive & Advanced Analytics**: Time-series forecasting, predictive & propensity modeling, prescriptive scenario optimization, automated statistical anomaly detection, and AutoML model lifecycle management.
 - **10.14 Financial Analytics & Planning**: Variance analysis, budget vs. actuals, financial ratio scorecards.
 - **10.15 Supply Chain & Operations Analytics**: Inventory turns, vendor delivery reliability, demand forecasts.
 - **10.16 Sales & Marketing Analytics**: Pipeline velocity, CAC, LTV, conversion attribution.
@@ -992,6 +992,93 @@ Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
 - **Audit Logging**: `write_audit_log(request.user, obj, action, changes=..., tenant=request.tenant)` correctly implemented across all 14 mutation endpoints.
 - **Route Validation**: `drill_through_target` dynamically validated in form via `django.urls.reverse` to prevent `NoReverseMatch` 500 crashes.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.12"]`.
+
+---
+
+## Sub-module 10.13: Predictive & Advanced Analytics
+
+### Models
+1. **`PredictiveModel`** (`apps/bi/models/PredictiveAnalytics/PredictiveModels.py`):
+   - Table: `bi_predictive_model`, Prefix: `BPML` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `problem_type` (`time_series_forecast`, `binary_classification`, `multiclass_classification`, `regression`, `anomaly_detection`), `algorithm` (`linear_regression`, `logistic_regression`, `random_forest`, `gradient_boosting`, `exponential_smoothing`, `arima`, `isolation_forest`, `z_score`), `semantic_model` (FK `SemanticModel`), `warehouse_table` (FK `WarehouseTable`), `target_metric`, `features_list` (JSON list), `hyperparameters` (JSON dict), `model_version`, `status` (`draft`, `training`, `active`, `under_review`, `retired`), `accuracy_metric_name`, `accuracy_metric_value`, `feature_importance` (JSON dict), `drift_threshold`, `is_active`, `created_by` (FK `User`).
+   - Constraints & Indexes: unique on `(tenant, slug)`, composite indexes on `(tenant, -created_at)`, `(tenant, status)`, `(tenant, problem_type)`.
+   - Methods: `trigger_training()` (simulates AutoML training, calculates accuracy metrics, updates status and feature importance).
+   - Badge Properties: `badge_status` (`badge-info`, `badge-green`, `badge-amber`, `badge-muted`), `badge_problem_type`.
+
+2. **`ForecastExecution`** (`apps/bi/models/PredictiveAnalytics/ForecastExecutions.py`):
+   - Table: `bi_forecast_execution`, Prefix: `BFOR` (`TenantNumbered`).
+   - Fields: `name`, `model` (FK `PredictiveModel`), `semantic_model` (FK `SemanticModel`), `kpi_definition` (FK `KpiDefinition`), `cadence` (`daily`, `weekly`, `monthly`, `quarterly`, `yearly`), `horizon_periods`, `confidence_level` (`80`, `90`, `95`, `99`), `historical_window_periods`, `seasonality_detected`, `seasonal_cycle_length`, `trend_direction` (`upward`, `downward`, `stationary`), `mape_score`, `forecast_output_data` (JSON list of predictions and intervals), `status` (`completed`, `running`, `failed`), `execution_duration_ms`, `notes`, `executed_by` (FK `User`), `executed_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -executed_at)`, `(tenant, status)`, `(tenant, model)`.
+   - Methods: `generate_forecast_points(base_value=..., trend_rate=..., save=True)` generates point projections with lower and upper confidence intervals.
+   - Badge Properties: `badge_status` (`badge-green`, `badge-amber`, `badge-red`).
+
+3. **`StatisticalAnomaly`** (`apps/bi/models/PredictiveAnalytics/StatisticalAnomalies.py`):
+   - Table: `bi_statistical_anomaly`, Prefix: `BANM` (`TenantNumbered`).
+   - Fields: `title`, `model` (FK `PredictiveModel`), `semantic_model` (FK `SemanticModel`), `kpi_definition` (FK `KpiDefinition`), `metric_name`, `anomaly_type` (`spike`, `drop`, `level_shift`, `trend_change`, `variance_outlier`), `detection_method` (`z_score`, `iqr`, `isolation_forest`, `moving_average`), `severity` (`info`, `warning`, `critical`), `observed_value`, `expected_value`, `deviation_percentage`, `anomaly_timestamp`, `root_cause_factors` (JSON list), `triage_status` (`open`, `acknowledged`, `investigating`, `false_positive`, `resolved`), `resolution_notes`, `assigned_to` (FK `User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, -anomaly_timestamp)`, `(tenant, triage_status)`, `(tenant, severity)`, `(tenant, assigned_to)`.
+   - Methods: `mark_triage(status, notes, user)` updates triage state and assigned user with audit trail.
+   - Badge Properties: `badge_severity` (`badge-red`, `badge-amber`, `badge-info`), `badge_triage_status`.
+
+4. **`OptimizationScenario`** (`apps/bi/models/PredictiveAnalytics/OptimizationScenarios.py`):
+   - Table: `bi_optimization_scenario`, Prefix: `BOPT` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `objective_type` (`maximize`, `minimize`), `target_metric_name`, `kpi_definition` (FK `KpiDefinition`), `baseline_value`, `target_value`, `optimal_value`, `projected_lift_percentage`, `solver_algorithm` (`linear_programming`, `goal_programming`, `heuristic`), `solver_status` (`draft`, `optimal`, `feasible`, `infeasible`), `decision_variables` (JSON list), `constraint_rules` (JSON list), `recommended_actions` (JSON list), `status` (`active`, `draft`, `applied`, `archived`), `owner` (FK `User`).
+   - Constraints & Indexes: unique on `(tenant, slug)`, composite indexes on `(tenant, -created_at)`, `(tenant, status)`, `(tenant, solver_status)`.
+   - Methods: `solve_scenario()` runs prescriptive solver heuristic, updates optimal value, lift, solver status, and recommendations.
+   - Badge Properties: `badge_status`, `badge_solver_status` (`badge-green`, `badge-amber`, `badge-red`, `badge-slate`).
+
+### URLs & Routes
+- Predictive Models:
+  - `bi:predictive_model_list` (`/bi/predictive-models/`)
+  - `bi:predictive_model_create` (`/bi/predictive-models/create/`)
+  - `bi:predictive_model_detail` (`/bi/predictive-models/<int:pk>/`)
+  - `bi:predictive_model_edit` (`/bi/predictive-models/<int:pk>/edit/`)
+  - `bi:predictive_model_delete` (`/bi/predictive-models/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:predictive_model_train` (`/bi/predictive-models/<int:pk>/train/` - `@require_POST`)
+- Forecast Executions:
+  - `bi:forecast_execution_list` (`/bi/forecast-executions/`)
+  - `bi:forecast_execution_create` (`/bi/forecast-executions/create/`)
+  - `bi:forecast_execution_detail` (`/bi/forecast-executions/<int:pk>/`)
+  - `bi:forecast_execution_edit` (`/bi/forecast-executions/<int:pk>/edit/`)
+  - `bi:forecast_execution_delete` (`/bi/forecast-executions/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+- Statistical Anomalies:
+  - `bi:statistical_anomaly_list` (`/bi/statistical-anomalies/`)
+  - `bi:statistical_anomaly_create` (`/bi/statistical-anomalies/create/`)
+  - `bi:statistical_anomaly_detail` (`/bi/statistical-anomalies/<int:pk>/`)
+  - `bi:statistical_anomaly_edit` (`/bi/statistical-anomalies/<int:pk>/edit/`)
+  - `bi:statistical_anomaly_delete` (`/bi/statistical-anomalies/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:statistical_anomaly_triage` (`/bi/statistical-anomalies/<int:pk>/triage/` - `@require_POST`)
+- Optimization Scenarios:
+  - `bi:optimization_scenario_list` (`/bi/optimization-scenarios/`)
+  - `bi:optimization_scenario_create` (`/bi/optimization-scenarios/create/`)
+  - `bi:optimization_scenario_detail` (`/bi/optimization-scenarios/<int:pk>/`)
+  - `bi:optimization_scenario_edit` (`/bi/optimization-scenarios/<int:pk>/edit/`)
+  - `bi:optimization_scenario_delete` (`/bi/optimization-scenarios/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:optimization_scenario_solve` (`/bi/optimization-scenarios/<int:pk>/solve/` - `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/predictive_analytics/`:
+  - `predictive_model/` (`list.html`, `detail.html`, `form.html`).
+  - `forecast_execution/` (`list.html`, `detail.html`, `form.html`).
+  - `statistical_anomaly/` (`list.html`, `detail.html`, `form.html`).
+  - `optimization_scenario/` (`list.html`, `detail.html`, `form.html`).
+- Design System: Colour-named badge modifiers only (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-muted`, `badge-slate`), stat-card icons (`stat-icon blue`, `stat-icon green`, `stat-icon orange`, `stat-icon purple`, `stat-icon slate`), table wrappers (`.table-wrap` with accessible `scope="col"` headers).
+- Safe Client-Side Rendering: Forecast charts consume data safely via Django's `json_script` tag (`JSON.parse`) without raw `|safe` in `<script>` tags.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Predictive & Advanced Analytics records:
+  - Predictive Models: Enterprise Monthly Demand Forecast (ARIMA), Churn Propensity Classifier.
+  - Forecast Executions: Forward-looking multi-period demand projections with 95% confidence intervals and MAPE scores.
+  - Statistical Anomalies: Outlier latency spikes and volume drops with categorized root causes and triage workflows.
+  - Optimization Scenarios: Supply chain inventory buffer and delivery cost optimization models with decision levers and operational constraints.
+- 100% idempotent with `--flush` support for all four 10.13 tables.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Form Scoping**: `assigned_to` User selection in `StatisticalAnomalyForm` strictly filtered by tenant (`tenant=self.tenant`).
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all delete views.
+- **Audit Logging**: `write_audit_log` records all model fittings, triage changes, optimizations, and CRUD mutations.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.13"]`.
+
 
 
 
