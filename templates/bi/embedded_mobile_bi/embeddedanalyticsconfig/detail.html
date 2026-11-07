@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}{{ config.name }} ({{ config.number }}) — Embedded Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:embedded_analytics_config_list' %}">Embedded Analytics</a>
+            <span class="sep">/</span>
+            <span>{{ config.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ config.name }}</h1>
+            <span class="badge {% if config.status == 'active' %}badge-green{% elif config.status == 'paused' %}badge-amber{% else %}badge-red{% endif %}">
+                {{ config.get_status_display }}
+            </span>
+            <span class="badge badge-info">
+                {{ config.get_embedding_mode_display }}
+            </span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ config.slug }} • {{ config.number }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:embedded_analytics_config_preview' config.pk %}" class="btn btn-primary" target="_blank">
+            <i data-lucide="external-link"></i>
+            <span>Open Live Preview</span>
+        </a>
+        <a href="{% url 'bi:embedded_analytics_config_edit' config.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Config</span>
+        </a>
+        <form method="post" action="{% url 'bi:embedded_analytics_config_delete' config.pk %}" onsubmit="return confirm('Delete embedded configuration {{ config.number }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Left Column: Integration Code & Previews -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Live Embed Preview Frame -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="monitor" class="w-5 h-5 text-primary-600"></i>
+                    <h2 class="text-base font-semibold">Embedded View Preview</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-muted">Theme: {{ config.get_theme_mode_display }}</span>
+                    <a href="{{ embed_url }}" target="_blank" class="btn btn-icon btn-outline text-xs" title="Open in new window">
+                        <i data-lucide="maximize-2"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0 border-t border-slate-200 bg-slate-50">
+                <div class="w-full h-[450px] relative">
+                    <iframe
+                        src="{{ embed_url }}"
+                        class="w-full h-full border-0 rounded-b-lg"
+                        title="Embedded Analytics Preview"
+                    ></iframe>
+                </div>
+            </div>
+        </div>
+
+        <!-- Code Snippets Generator -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="code" class="w-5 h-5 text-purple-600"></i>
+                    <h2 class="text-base font-semibold">Developer Integration Snippets</h2>
+                </div>
+                <span class="text-xs text-muted">Copy ready-to-use embedding code</span>
+            </div>
+            <div class="card-body space-y-6">
+                <!-- Iframe Snippet -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="layout" class="w-3.5 h-3.5 text-blue-600"></i>
+                            <span>HTML Iframe Snippet</span>
+                        </label>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('snippet_iframe').innerText); alert('Iframe code copied!');" class="btn btn-outline text-xs py-1 px-2.5">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span>Copy Iframe</span>
+                        </button>
+                    </div>
+                    <pre id="snippet_iframe" class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto whitespace-pre">{{ iframe_snippet }}</pre>
+                </div>
+
+                <!-- Web Component SDK -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="box" class="w-3.5 h-3.5 text-purple-600"></i>
+                            <span>Web Component SDK (&lt;nav-bi-embed&gt;)</span>
+                        </label>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('snippet_wc').innerText); alert('Web component code copied!');" class="btn btn-outline text-xs py-1 px-2.5">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span>Copy SDK Code</span>
+                        </button>
+                    </div>
+                    <pre id="snippet_wc" class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto whitespace-pre">{{ web_component_snippet }}</pre>
+                </div>
+
+                <!-- cURL REST API -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="terminal" class="w-3.5 h-3.5 text-emerald-600"></i>
+                            <span>Headless cURL Query API</span>
+                        </label>
+                        <button onclick="navigator.clipboard.writeText(document.getElementById('snippet_curl').innerText); alert('cURL command copied!');" class="btn btn-outline text-xs py-1 px-2.5">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                            <span>Copy cURL</span>
+                        </button>
+                    </div>
+                    <pre id="snippet_curl" class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto whitespace-pre">{{ curl_snippet }}</pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- RLS Attributes Inspector -->
+        {% if config.enable_rls_filter %}
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="shield-check" class="w-5 h-5 text-emerald-600"></i>
+                    <h2 class="text-base font-semibold">Row-Level Security (RLS) Rules</h2>
+                </div>
+                <span class="badge badge-green">Enforced</span>
+            </div>
+            <div class="card-body">
+                <p class="text-xs text-muted mb-3">These tenant attribute constraints are automatically merged into queries executed through this embed:</p>
+                <pre class="p-3 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto">{{ config.default_rls_attributes|default:"{}" }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Side Column: Configuration Details & Telemetry -->
+    <div class="space-y-6">
+        <!-- Target Asset Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">Target Analytical Asset</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Asset Type</div>
+                    <div class="text-sm font-semibold text-slate-800">{{ config.get_target_type_display }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Linked Entity</div>
+                    <div class="text-sm font-medium">
+                        {% if config.dashboard %}
+                            <a href="{% url 'bi:bi_dashboard_detail' config.dashboard.pk %}" class="text-primary-600 hover:underline flex items-center gap-1.5 mt-0.5">
+                                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                                <span>{{ config.dashboard.name }} ({{ config.dashboard.number }})</span>
+                            </a>
+                        {% elif config.report %}
+                            <a href="{% url 'bi:report_definition_detail' config.report.pk %}" class="text-primary-600 hover:underline flex items-center gap-1.5 mt-0.5">
+                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                                <span>{{ config.report.name }} ({{ config.report.number }})</span>
+                            </a>
+                        {% elif config.semantic_model %}
+                            <a href="{% url 'bi:semantic_model_detail' config.semantic_model.pk %}" class="text-primary-600 hover:underline flex items-center gap-1.5 mt-0.5">
+                                <i data-lucide="database" class="w-4 h-4"></i>
+                                <span>{{ config.semantic_model.name }} ({{ config.semantic_model.number }})</span>
+                            </a>
+                        {% else %}
+                            <span class="text-muted">No linked entity assigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if config.description %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs text-muted uppercase tracking-wider mb-1">Description</div>
+                    <div class="text-xs text-slate-700 leading-relaxed">{{ config.description }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Security & Security Policy Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">Security & Policies</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Authentication Mode</div>
+                    <div class="font-medium text-slate-800">{{ config.get_auth_mode_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Allowed Domain Origins (CORS)</div>
+                    <div class="font-mono text-xs bg-slate-100 p-2 rounded mt-1 break-all">{{ config.allowed_origins }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Row-Level Security</div>
+                    <div class="mt-1">
+                        {% if config.enable_rls_filter %}
+                            <span class="badge badge-green">Enabled</span>
+                        {% else %}
+                            <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Styling & Theming Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">White-Label Branding</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider">Theme Preset</div>
+                    <div class="font-medium text-slate-800">{{ config.get_theme_mode_display }}</div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase tracking-wider mb-1">Primary</div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-5 h-5 rounded border border-slate-300" style="background-color: {{ config.primary_color }};"></span>
+                            <span class="font-mono text-xs">{{ config.primary_color }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase tracking-wider mb-1">Accent</div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-5 h-5 rounded border border-slate-300" style="background-color: {{ config.accent_color }};"></span>
+                            <span class="font-mono text-xs">{{ config.accent_color }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% if config.custom_css %}
+                <div>
+                    <div class="text-xs text-muted uppercase tracking-wider mb-1">Custom CSS</div>
+                    <pre class="p-2 bg-slate-900 text-slate-100 rounded text-xs font-mono max-h-32 overflow-y-auto">{{ config.custom_css }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Telemetry Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-base font-semibold">Telemetry & Usage</h3>
+            </div>
+            <div class="card-body space-y-3 text-xs">
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Total Embed Views</span>
+                    <span class="font-semibold text-slate-800 text-sm">{{ config.view_count }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Last Accessed</span>
+                    <span class="font-medium text-slate-800">
+                        {% if config.last_accessed_at %}
+                            {{ config.last_accessed_at|date:"M d, Y H:i" }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center py-1 border-b border-slate-100">
+                    <span class="text-muted">Created By</span>
+                    <span class="font-medium text-slate-800">{{ config.created_by.get_full_name|default:config.created_by.username|default:"System" }}</span>
+                </div>
+                <div class="flex justify-between items-center py-1">
+                    <span class="text-muted">Created At</span>
+                    <span class="font-medium text-slate-800">{{ config.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
