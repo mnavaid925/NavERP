@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Embedded Analytics Configurations — Embedded & Mobile BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Embedded & Mobile BI</span>
+            <span class="sep">/</span>
+            <span>Embedded Analytics</span>
+        </div>
+        <h1 class="page-title">Embedded Analytics Configurations</h1>
+        <p class="text-muted text-sm">Deploy white-labeled dashboards, operational reports, and semantic models into ERP modules, customer portals, and external applications</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:kiosk_wallboard_display_list' %}" class="btn btn-outline">
+            <i data-lucide="tv"></i>
+            <span>TV & Kiosks</span>
+        </a>
+        <a href="{% url 'bi:mobile_bi_config_list' %}" class="btn btn-outline">
+            <i data-lucide="smartphone"></i>
+            <span>Mobile BI</span>
+        </a>
+        <a href="{% url 'bi:embed_api_token_list' %}" class="btn btn-outline">
+            <i data-lucide="key"></i>
+            <span>API Tokens</span>
+        </a>
+        <a href="{% url 'bi:embedded_analytics_config_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Embed Config</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layout"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Configs</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active & Serving</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="code"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Iframe Embeds</div>
+            <div class="text-2xl font-bold text-purple-600">{{ iframe_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Web Component SDK</div>
+            <div class="text-2xl font-bold text-amber-600">{{ component_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <label for="filter_q" class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input id="filter_q" type="text" name="q" value="{{ request.GET.q }}" placeholder="Search name, slug, number..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label for="filter_status" class="form-label text-xs">Status</label>
+                <select id="filter_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_target_type" class="form-label text-xs">Target Asset Type</label>
+                <select id="filter_target_type" name="target_type" class="form-select text-sm">
+                    <option value="">All Target Types</option>
+                    {% for code, label in target_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.target_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_embedding_mode" class="form-label text-xs">Embedding Mode</label>
+                <select id="filter_embedding_mode" name="embedding_mode" class="form-select text-sm">
+                    <option value="">All Modes</option>
+                    {% for code, label in embedding_mode_choices %}
+                    <option value="{{ code }}" {% if request.GET.embedding_mode == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="sm:col-span-2 lg:col-span-4 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:embedded_analytics_config_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Configs</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Embedded Analytics Configurations</h2>
+        <span class="text-xs text-muted">{{ configs.paginator.count }} total records</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Config Name & Slug</th>
+                    <th>Target Asset</th>
+                    <th>Embedding Mode</th>
+                    <th>Auth & Origins</th>
+                    <th>Status</th>
+                    <th>Telemetry</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in configs %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:embedded_analytics_config_detail' item.pk %}" class="hover:text-primary-600">
+                                {{ item.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2">
+                            <span>{{ item.number }}</span>
+                            <span>•</span>
+                            <span>{{ item.slug }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-0.5">
+                            {{ item.get_target_type_display }}
+                        </div>
+                        <div class="text-sm font-medium">
+                            {% if item.dashboard %}
+                                <span class="text-blue-700"><i data-lucide="layout-dashboard" class="inline w-3.5 h-3.5 mr-1"></i>{{ item.dashboard.name }}</span>
+                            {% elif item.report %}
+                                <span class="text-emerald-700"><i data-lucide="file-text" class="inline w-3.5 h-3.5 mr-1"></i>{{ item.report.name }}</span>
+                            {% elif item.semantic_model %}
+                                <span class="text-purple-700"><i data-lucide="database" class="inline w-3.5 h-3.5 mr-1"></i>{{ item.semantic_model.name }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.embedding_mode == 'iframe' %}badge-info{% elif item.embedding_mode == 'web_component' %}badge-purple{% else %}badge-slate{% endif %}">
+                            {{ item.get_embedding_mode_display }}
+                        </span>
+                        <div class="text-xs text-muted mt-1">Theme: {{ item.get_theme_mode_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">{{ item.get_auth_mode_display }}</div>
+                        <div class="text-xs text-muted truncate max-w-xs" title="{{ item.allowed_origins }}">Origins: {{ item.allowed_origins }}</div>
+                        {% if item.enable_rls_filter %}
+                        <div class="text-[11px] text-emerald-600 font-medium">RLS Filter: Active</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'active' %}badge-green{% elif item.status == 'paused' %}badge-amber{% else %}badge-red{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-semibold">{{ item.view_count }} views</div>
+                        <div class="text-xs text-muted">
+                            {% if item.last_accessed_at %}
+                                {{ item.last_accessed_at|date:"M d, H:i" }}
+                            {% else %}
+                                Never accessed
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'bi:embedded_analytics_config_preview' item.pk %}" class="btn btn-icon btn-outline" title="Live Preview" target="_blank">
+                                <i data-lucide="play"></i>
+                            </a>
+                            <a href="{% url 'bi:embedded_analytics_config_detail' item.pk %}" class="btn btn-icon btn-outline" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:embedded_analytics_config_edit' item.pk %}" class="btn btn-icon btn-outline" title="Edit Config">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:embedded_analytics_config_delete' item.pk %}" onsubmit="return confirm('Delete embedded configuration {{ item.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon btn-outline text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="layout" class="w-12 h-12 text-muted mb-2"></i>
+                            <h3 class="text-base font-semibold">No Embedded Configurations Found</h3>
+                            <p class="text-sm text-muted mb-4">Create your first white-labeled embed to share analytics securely across ERP modules and portals.</p>
+                            <a href="{% url 'bi:embedded_analytics_config_create' %}" class="btn btn-primary text-xs">
+                                <i data-lucide="plus"></i>
+                                <span>Create Configuration</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if configs.paginator.num_pages > 1 %}
+    <div class="card-footer flex justify-between items-center text-xs text-muted">
+        <div>
+            Page {{ configs.number }} of {{ configs.paginator.num_pages }}
+        </div>
+        <div class="pagination flex gap-1">
+            {% if configs.has_previous %}
+            <a href="?page={{ configs.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.embedding_mode %}&embedding_mode={{ request.GET.embedding_mode }}{% endif %}" class="btn btn-outline text-xs">
+                Previous
+            </a>
+            {% endif %}
+            {% if configs.has_next %}
+            <a href="?page={{ configs.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.embedding_mode %}&embedding_mode={{ request.GET.embedding_mode }}{% endif %}" class="btn btn-outline text-xs">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
