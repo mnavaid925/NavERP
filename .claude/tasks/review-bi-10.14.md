@@ -16,7 +16,7 @@ All six review lanes (`code-reviewer`, `explorer`, `frontend-reviewer`, `perform
 - [x] **I2**: fixed in 82138837 — Validated next redirect parameter using url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}) in action views (augmented_insight_triage, smart_data_prep_suggestion_action, analytics_recommendation_interact).
 - [x] **I3**: fixed in f423ad77 — Added clean_target_url() validation to AnalyticsRecommendationForm restricting target_url to relative paths starting with /, and added rel="noopener noreferrer" to external links in templates.
 - [x] **I4**: fixed in 572efa4a — Wrapped all 16 mutating views in apps/bi/views/AiAugmentedAnalytics/*.py with @transaction.atomic.
-- [ ] **I5**: In `apps/bi/views/AiAugmentedAnalytics/AugmentedInsights.py:augmented_insight_list`, aggregate `key_drivers=Count("id", filter=Q(insight_type="key_driver"))` and pass `key_driver_count` to context; update `templates/bi/ai_augmented_analytics/augmented_insight/list.html:58` from `{{ insights|length }}` to `{{ key_driver_count }}`.
+- [x] **I5**: fixed in b6ed9367 — Aggregated key_drivers count in augmented_insight_list context and displayed key_driver_count in list.html.
 - [ ] **I6**: Create sub-package `__init__.py` files re-exporting entity classes:
   - `apps/bi/models/AiAugmentedAnalytics/__init__.py`
   - `apps/bi/forms/AiAugmentedAnalytics/__init__.py`
