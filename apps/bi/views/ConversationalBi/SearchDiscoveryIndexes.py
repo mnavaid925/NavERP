@@ -79,7 +79,7 @@ def search_discovery_index_list(request):
 
 @login_required
 def search_discovery_index_detail(request, pk):
-    index = bi_object(SearchDiscoveryIndex, request, pk)
+    index = bi_object(request, SearchDiscoveryIndex, pk)
     synonyms_list = index.synonyms if isinstance(index.synonyms, list) else []
 
     context = {
@@ -129,7 +129,7 @@ def search_discovery_index_create(request):
 
 @login_required
 def search_discovery_index_edit(request, pk):
-    index = bi_object(SearchDiscoveryIndex, request, pk)
+    index = bi_object(request, SearchDiscoveryIndex, pk)
 
     if request.method == "POST":
         form = SearchDiscoveryIndexForm(request.POST, instance=index, tenant=request.tenant)
@@ -163,7 +163,7 @@ def search_discovery_index_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def search_discovery_index_delete(request, pk):
-    index = bi_object(SearchDiscoveryIndex, request, pk)
+    index = bi_object(request, SearchDiscoveryIndex, pk)
     num = index.number
 
     with transaction.atomic():
@@ -183,7 +183,7 @@ def search_discovery_index_delete(request, pk):
 @login_required
 @require_POST
 def search_discovery_index_reweight(request, pk):
-    index = bi_object(SearchDiscoveryIndex, request, pk)
+    index = bi_object(request, SearchDiscoveryIndex, pk)
     weight_val = request.POST.get("weight", "").strip()
 
     with transaction.atomic():
