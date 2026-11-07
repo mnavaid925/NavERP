@@ -144,11 +144,13 @@
         </div>
     </footer>
 
+    {{ playlist_items|json_script:"kiosk-playlist-data" }}
+
     <script>
         lucide.createIcons();
 
         // Playlist data
-        const playlist = {{ playlist_json|safe }};
+        const playlist = JSON.parse(document.getElementById('kiosk-playlist-data').textContent);
         const defaultDwell = {{ display.default_slide_duration_seconds }};
         const heartbeatUrl = "{% url 'bi:kiosk_wallboard_display_heartbeat' display.pk %}";
 
