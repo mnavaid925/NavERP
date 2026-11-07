@@ -36,6 +36,9 @@ from apps.bi.urls.PredictiveAnalytics import (
 from apps.bi.urls.AiAugmentedAnalytics import (
     urlpatterns as ai_augmented_analytics_urlpatterns,
 )
+from apps.bi.urls.ConversationalBi import (
+    urlpatterns as conversational_bi_urlpatterns,
+)
 from apps.bi.urls.PerformanceScorecards import (
     urlpatterns as performance_scorecards_urlpatterns,
 )
@@ -89,4 +92,5 @@ urlpatterns = (
     + olap_analysis_urlpatterns
     + predictive_analytics_urlpatterns
     + ai_augmented_analytics_urlpatterns
+    + conversational_bi_urlpatterns
 )
