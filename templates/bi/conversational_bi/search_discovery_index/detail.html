@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ index.asset_name }} — Search & Discovery — NavERP{% endblock %}
+{% block title %}{{ index.asset_name }} — Search Discovery Index — NavERP{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -8,44 +8,27 @@
         <div class="breadcrumb">
             <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
             <span class="sep">/</span>
-            <a href="{% url 'bi:search_discovery_index_list' %}">Discovery Catalog</a>
+            <a href="{% url 'bi:search_discovery_index_list' %}">Search Discovery</a>
             <span class="sep">/</span>
             <span>{{ index.number }}</span>
         </div>
-        <div class="flex items-center gap-3 mt-1">
-            <h1 class="page-title text-xl font-bold text-slate-900">{{ index.asset_name }}</h1>
-            <span class="badge {{ index.asset_type_badge_color }} text-xs">{{ index.get_asset_type_display }}</span>
-            <span class="badge {{ index.verification_badge_color }} text-xs">{% if index.is_verified %}Verified Truth{% else %}Unverified{% endif %}</span>
-            {% if index.is_featured %}
-            <span class="badge badge-amber text-xs">Featured Asset</span>
-            {% endif %}
-        </div>
-        <p class="text-muted text-sm mt-1">
-            {{ index.number }} · Category: <span class="font-medium text-slate-800">{{ index.category|default:"General BI" }}</span>
-            · Relevance Boost: <span class="font-mono text-slate-800 font-semibold">{{ index.relevance_weight }}x</span>
-        </p>
+        <h1 class="page-title">{{ index.asset_name }}</h1>
+        <p class="text-muted text-sm">Enterprise search discovery dictionary and search relevance boost telemetry</p>
     </div>
     <div class="page-actions">
         <a href="{% url 'bi:search_discovery_index_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left"></i>
-            <span>Back to List</span>
+            <span>Back to Catalog</span>
         </a>
-        <a href="{{ index.target_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-            <i data-lucide="external-link"></i>
-            <span>Open Asset</span>
+        <a href="{% url 'bi:search_discovery_hub' %}" class="btn btn-outline">
+            <i data-lucide="compass"></i>
+            <span>Discovery Hub</span>
         </a>
-        <form method="post" action="{% url 'bi:search_discovery_index_reweight' index.pk %}" class="inline">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-outline text-sky-700 border-sky-300 hover:bg-sky-50" title="Boost relevance weight (+0.50x)">
-                <i data-lucide="arrow-up-circle"></i>
-                <span>Boost</span>
-            </button>
-        </form>
         <a href="{% url 'bi:search_discovery_index_edit' index.pk %}" class="btn btn-outline">
             <i data-lucide="pencil"></i>
             <span>Edit</span>
         </a>
-        <form method="post" action="{% url 'bi:search_discovery_index_delete' index.pk %}" onsubmit="return confirm('Delete discovery index {{ index.number }}?');" class="inline">
+        <form method="post" action="{% url 'bi:search_discovery_index_delete' index.pk %}" class="inline" onsubmit="return confirm('Delete discovery index for {{ index.asset_name }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2"></i>
@@ -55,188 +38,167 @@
     </div>
 </div>
 
-<!-- Main Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-    <!-- Left Column: Description, Synonyms & Keywords (2 cols) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Asset Info & Synonyms (2 cols) -->
     <div class="lg:col-span-2 space-y-6">
-        <!-- Asset Overview Card -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="text-base font-semibold">Asset Overview & Description</h2>
-            </div>
-            <div class="card-body">
-                {% if index.description %}
-                <p class="text-sm text-slate-800 leading-relaxed">{{ index.description }}</p>
-                {% else %}
-                <p class="text-muted text-sm italic">No detailed description provided for this indexed asset.</p>
-                {% endif %}
-
-                <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-                    <div>
-                        <div class="text-xs uppercase tracking-wider text-muted font-medium">Target Navigation Route</div>
-                        <div class="text-xs font-mono text-slate-800 mt-0.5 break-all">{{ index.target_url }}</div>
-                    </div>
-                    <a href="{{ index.target_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm text-xs shrink-0">
-                        <i data-lucide="external-link"></i>
-                        <span>Visit</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Business Synonyms Dictionary -->
+        <!-- Overview Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
                 <div class="flex items-center gap-2">
-                    <i data-lucide="book-open" class="w-4 h-4 text-sky-600"></i>
-                    <h2 class="text-base font-semibold">Business Synonyms & Colloquial Aliases</h2>
-                </div>
-                <span class="text-xs text-muted">{{ synonyms_list|length }} registered synonyms</span>
-            </div>
-            <div class="card-body space-y-3">
-                <p class="text-xs text-muted">
-                    When conversational searches or NLQ prompts use any of these colloquial terms, the discovery engine grounds intent directly to this certified asset.
-                </p>
-                {% if synonyms_list %}
-                <div class="flex flex-wrap gap-2 pt-1">
-                    {% for syn in synonyms_list %}
-                    <span class="badge badge-info text-xs py-1 px-2.5 font-medium">
-                        "{{ syn }}"
+                    <span class="badge {{ index.type_badge_color }} text-xs">{{ index.get_asset_type_display }}</span>
+                    {% if index.is_verified %}
+                    <span class="badge badge-green text-xs flex items-center gap-1">
+                        <i data-lucide="check-circle" class="w-3 h-3"></i>
+                        <span>Verified Asset</span>
                     </span>
-                    {% endfor %}
+                    {% endif %}
+                    {% if index.is_featured %}
+                    <span class="badge badge-amber text-xs flex items-center gap-1">
+                        <i data-lucide="star" class="w-3 h-3"></i>
+                        <span>Featured</span>
+                    </span>
+                    {% endif %}
                 </div>
-                {% else %}
-                <p class="text-muted text-sm italic">No synonym phrases mapped yet. Edit this asset to add colloquial phrases.</p>
-                {% endif %}
+                <span class="text-xs font-mono text-muted">{{ index.number }}</span>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900">{{ index.asset_name }}</h2>
+                    <p class="text-sm text-slate-700 mt-2 leading-relaxed">
+                        {{ index.description|default:"No description provided for this indexed asset." }}
+                    </p>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-medium">Target Destination URL</div>
+                        <div class="font-mono text-xs text-indigo-600 mt-0.5 break-all">{{ index.target_url }}</div>
+                    </div>
+                    {% if index.target_url %}
+                    <a href="{{ index.target_url }}" class="btn btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                        <span>Open Asset</span>
+                    </a>
+                    {% endif %}
+                </div>
             </div>
         </div>
 
-        <!-- Search Keyword Tokens -->
+        <!-- Synonyms & Search Lexicon Card -->
         <div class="card">
-            <div class="card-header">
-                <h2 class="text-base font-semibold">Search Keywords & Taxonomy Tokens</h2>
-            </div>
-            <div class="card-body">
-                {% if index.search_keywords %}
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded font-mono text-xs text-slate-800 leading-relaxed">
-                    {{ index.search_keywords }}
+            <div class="card-header flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="book-open" class="w-5 h-5 text-indigo-600"></i>
+                    <h3 class="font-semibold text-base">Synonyms & Search Term Lexicon</h3>
                 </div>
-                {% else %}
-                <p class="text-muted text-sm italic">No extra search keywords configured.</p>
-                {% endif %}
+                <span class="text-xs text-muted">{{ synonyms_list|length }} colloquial terms mapped</span>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-medium text-slate-700 uppercase tracking-wider mb-2">Colloquial Aliases (Synonyms)</div>
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for syn in synonyms_list %}
+                        <span class="badge badge-indigo text-xs py-1 px-2.5 font-medium">{{ syn }}</span>
+                        {% empty %}
+                        <span class="text-xs text-muted italic">No synonyms assigned. Add synonyms to help users find this asset using different terminology.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100">
+                    <div class="text-xs font-medium text-slate-700 uppercase tracking-wider mb-1.5">Indexed Keywords & Tokens</div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-xs font-mono text-slate-700">
+                        {{ index.search_keywords|default:"No explicit search keywords defined." }}
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Right Column: Bound Models & Discovery Telemetry (1 col) -->
+    <!-- Right Column: Relevance & Anchors (1 col) -->
     <div class="space-y-6">
-        <!-- Telemetry Card -->
+        <!-- Relevance Weight & Boost Card -->
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold">Discovery Telemetry & Ranking</h2>
+                <h3 class="font-semibold text-base">Relevance & Search Boost</h3>
             </div>
             <div class="card-body space-y-4">
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="p-3 bg-slate-50 rounded border border-slate-100 text-center">
-                        <div class="text-xs text-muted font-medium uppercase">Search Hits</div>
-                        <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ index.search_hit_count }}</div>
-                    </div>
-                    <div class="p-3 bg-slate-50 rounded border border-slate-100 text-center">
-                        <div class="text-xs text-muted font-medium uppercase">Views</div>
-                        <div class="text-xl font-bold font-mono text-slate-900 mt-1">{{ index.view_count }}</div>
-                    </div>
+                <div class="p-4 bg-indigo-50/70 border border-indigo-100 rounded-lg text-center">
+                    <div class="text-xs uppercase text-indigo-800 font-semibold tracking-wider">Current Search Weight</div>
+                    <div class="text-3xl font-extrabold text-indigo-700 mt-1">{{ index.relevance_weight }}x</div>
+                    <div class="text-xs text-indigo-600/80 mt-1">Multiplier applied in global discovery ranking</div>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-medium text-slate-600 mb-1">Relevance Multiplier Boost</label>
-                    <form method="post" action="{% url 'bi:search_discovery_index_reweight' index.pk %}" class="flex gap-2">
-                        {% csrf_token %}
-                        <input type="number" step="0.10" min="0.10" max="99.99" name="weight" value="{{ index.relevance_weight }}" class="form-input text-xs font-mono w-24">
-                        <button type="submit" class="btn btn-outline btn-sm text-xs flex-1">
+                <!-- Reweight Form -->
+                <form method="post" action="{% url 'bi:search_discovery_index_reweight' index.pk %}" class="space-y-2">
+                    {% csrf_token %}
+                    <label for="weight_input" class="form-label text-xs">Adjust Relevance Multiplier</label>
+                    <div class="flex gap-2">
+                        <input type="number" step="0.1" min="0.1" max="99.9" id="weight_input" name="weight" value="{{ index.relevance_weight }}" class="form-input text-xs">
+                        <button type="submit" class="btn btn-outline text-xs whitespace-nowrap">
+                            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
                             <span>Update Boost</span>
                         </button>
-                    </form>
-                    <p class="text-[11px] text-muted mt-1">Multiplies full-text match score during search ordering.</p>
+                    </div>
+                </form>
+
+                <div class="pt-3 border-t border-slate-100 grid grid-cols-2 gap-3 text-center">
+                    <div class="p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-[11px] text-muted uppercase">Search Hits</div>
+                        <div class="text-lg font-bold text-slate-800">{{ index.search_hit_count }}</div>
+                    </div>
+                    <div class="p-2.5 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-[11px] text-muted uppercase">Click-throughs</div>
+                        <div class="text-lg font-bold text-emerald-600">{{ index.view_count }}</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Bound Analytical Model -->
+        <!-- Bound Analytical Object Card -->
         <div class="card">
             <div class="card-header">
-                <h2 class="text-base font-semibold">Underlying Analytical Asset</h2>
+                <h3 class="font-semibold text-base">Underlying Asset Reference</h3>
             </div>
-            <div class="card-body">
-                <dl class="space-y-3 text-sm">
-                    <div>
-                        <dt class="text-xs text-muted">Asset Type</dt>
-                        <dd class="font-medium text-slate-900">{{ index.get_asset_type_display }}</dd>
-                    </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-muted block uppercase">Category</span>
+                    <span class="font-medium text-slate-800">{{ index.category|default:"General Enterprise" }}</span>
+                </div>
+                <div>
+                    <span class="text-xs text-muted block uppercase">Bound Entity</span>
                     {% if index.semantic_model %}
-                    <div>
-                        <dt class="text-xs text-muted">Semantic Model</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:semantic_model_detail' index.semantic_model.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.semantic_model.name }}
-                            </a>
-                        </dd>
-                    </div>
+                    <a href="{% url 'bi:semantic_model_detail' index.semantic_model.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.semantic_model.name }} (Semantic Model)
+                    </a>
+                    {% elif index.dashboard %}
+                    <a href="{% url 'bi:bi_dashboard_detail' index.dashboard.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.dashboard.name }} (Dashboard)
+                    </a>
+                    {% elif index.report %}
+                    <a href="{% url 'bi:report_definition_detail' index.report.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.report.title }} (Report)
+                    </a>
+                    {% elif index.kpi %}
+                    <a href="{% url 'bi:kpi_definition_detail' index.kpi.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.kpi.name }} (KPI)
+                    </a>
+                    {% elif index.warehouse_table %}
+                    <a href="{% url 'bi:warehouse_table_detail' index.warehouse_table.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.warehouse_table.name }} (Warehouse Table)
+                    </a>
+                    {% elif index.glossary_term %}
+                    <a href="{% url 'bi:business_glossary_term_detail' index.glossary_term.pk %}" class="text-indigo-600 font-medium hover:underline">
+                        {{ index.glossary_term.term }} (Glossary Term)
+                    </a>
+                    {% else %}
+                    <span class="text-muted italic">External or custom route link</span>
                     {% endif %}
-                    {% if index.dashboard %}
-                    <div>
-                        <dt class="text-xs text-muted">Dashboard</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:bi_dashboard_detail' index.dashboard.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.dashboard.name }}
-                            </a>
-                        </dd>
-                    </div>
-                    {% endif %}
-                    {% if index.report %}
-                    <div>
-                        <dt class="text-xs text-muted">Report</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:report_definition_detail' index.report.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.report.name }}
-                            </a>
-                        </dd>
-                    </div>
-                    {% endif %}
-                    {% if index.kpi %}
-                    <div>
-                        <dt class="text-xs text-muted">KPI Definition</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:kpi_definition_detail' index.kpi.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.kpi.name }}
-                            </a>
-                        </dd>
-                    </div>
-                    {% endif %}
-                    {% if index.warehouse_table %}
-                    <div>
-                        <dt class="text-xs text-muted">Warehouse Table</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:warehouse_table_detail' index.warehouse_table.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.warehouse_table.name }}
-                            </a>
-                        </dd>
-                    </div>
-                    {% endif %}
-                    {% if index.glossary_term %}
-                    <div>
-                        <dt class="text-xs text-muted">Glossary Term</dt>
-                        <dd class="font-medium text-slate-900">
-                            <a href="{% url 'bi:business_glossary_term_detail' index.glossary_term.pk %}" class="text-sky-600 hover:underline">
-                                {{ index.glossary_term.name }}
-                            </a>
-                        </dd>
-                    </div>
-                    {% endif %}
-                    <div>
-                        <dt class="text-xs text-muted">Registered On</dt>
-                        <dd class="text-slate-700 text-xs">{{ index.created_at|date:"Y-m-d H:i:s" }}</dd>
-                    </div>
-                </dl>
+                </div>
+                <div>
+                    <span class="text-xs text-muted block uppercase">Created</span>
+                    <span>{{ index.created_at|date:"M d, Y H:i" }}</span>
+                </div>
             </div>
         </div>
     </div>
