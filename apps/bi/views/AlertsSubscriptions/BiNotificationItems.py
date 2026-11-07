@@ -29,11 +29,9 @@ User = get_user_model()
 
 @login_required
 def bi_notification_item_list(request):
-    qs = bi_scope(BiNotificationItem.objects.all(), request).select_related(
-        "recipient", "alert_rule", "burst_run", "acknowledged_by", "escalated_to"
-    )
+    base_qs = bi_scope(BiNotificationItem.objects.all(), request)
 
-    counts = qs.aggregate(
+    counts = base_qs.aggregate(
         total=Count("id"),
         unread=Count("id", filter=Q(status="unread")),
         critical=Count("id", filter=Q(severity="critical")),
@@ -43,6 +41,10 @@ def bi_notification_item_list(request):
     unread_count = counts["unread"] or 0
     critical_count = counts["critical"] or 0
     escalated_count = counts["escalated"] or 0
+
+    qs = base_qs.select_related(
+        "recipient", "alert_rule", "burst_run", "acknowledged_by", "escalated_to"
+    )
 
     # Search
     q = request.GET.get("q", "").strip()
