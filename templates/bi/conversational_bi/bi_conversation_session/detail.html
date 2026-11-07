@@ -160,7 +160,7 @@
         <div class="p-3 bg-white border-t border-slate-200">
             <form method="post" action="{% url 'bi:bi_conversation_session_ask' session.pk %}" class="flex gap-2">
                 {% csrf_token %}
-                <input type="text" id="chatInput" name="query_text" placeholder="Ask a question about your enterprise metrics (e.g. 'Show revenue by region')..." class="form-input flex-1 text-sm rounded-xl py-2 px-4 border-slate-300 focus:border-indigo-500" required autocomplete="off">
+                <input type="text" id="chatInput" name="query_text" aria-label="Ask a question" placeholder="Ask a question about your enterprise metrics (e.g. 'Show revenue by region')..." class="form-input flex-1 text-sm rounded-xl py-2 px-4 border-slate-300 focus:border-indigo-500" required autocomplete="off">
                 <button type="submit" class="btn btn-primary rounded-xl px-5 flex items-center gap-1.5">
                     <i data-lucide="send" class="w-4 h-4"></i>
                     <span>Ask</span>
