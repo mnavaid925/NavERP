@@ -51,5 +51,21 @@
 5. `templates/bi/conversational_bi/chat_workspace.html:186` — **Missing `next` redirect target**: The query form submits to `{% url 'bi:bi_conversation_session_ask' active_session.pk %}` without a `next` parameter, which causes the user to be redirected out of the workspace into the session detail page upon submitting a question. Fix: Add `<input type="hidden" name="next" value="{{ request.get_full_path }}">` inside the form.
 6. `templates/bi/conversational_bi/chat_workspace.html:188`, `templates/bi/conversational_bi/bi_conversation_session/detail.html:163`, `templates/bi/conversational_bi/search_discovery_index/hub.html:44` — **Accessibility: missing input label or aria-label**: Text inputs lack matching `<label>` or `aria-label`. Fix: Add `aria-label="Ask a question"` / `aria-label="Search analytical assets"` to the input tags.
 
+## 4. Performance Reviewer
+**Verdict**: Solid performance baseline with SQL aggregate stat cards and pre-Paginator filters. Requires fixes for N+1 query loops on conversation turns, missing eager loading in chat workspace, unbounded search evaluation in discovery hub, and transaction wrapping in publish action.
+
+### Important
+1. `apps/bi/views/ConversationalBi/BiConversationSessions.py:88, 122` — **N+1 Queries on `turn.user` in Thread Detail and Chat Workspace**: `turns` evaluated without `.select_related("user")`, firing 1+N queries when rendering user initials in conversation streams. Fix: Add `.select_related("user")` to `session.queries` and `active_session.queries`.
+2. `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Missing `select_related` on Active Session in `bi_chat_workspace`**: Header accesses `active_session.user` and `active_session.primary_semantic_model`. Fix: Add `.select_related("user", "primary_semantic_model")` to `sessions` query.
+3. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:226, 242` — **Unbounded QuerySet Evaluation in `search_discovery_hub`**: `results` evaluated via `len(results)` in template without slice/limit. Fix: Slice `results = matched[:24]`, pass `result_count = matched.count()`, and use `{{ result_count }}` in `hub.html:74`.
+4. `apps/bi/views/ConversationalBi/BiConversationSessions.py:113` — **Unbounded Conversation Session Drawer**: `sessions` loads all threads without limit. Fix: Limit drawer query to `sessions[:50]`.
+5. `apps/bi/views/ConversationalBi/NarrativeExplanations.py:207-217` — **Missing `transaction.atomic()` in `narrative_explanation_publish`**: `save` and `write_audit_log` execute without atomic transaction. Fix: Wrap in `with transaction.atomic():`.
+
+### Minor
+1. `apps/bi/views/ConversationalBi/SearchDiscoveryIndexes.py:244-246` — Redundant table joins on category extraction query. Fix: Use clean tenant-filtered queryset on `SearchDiscoveryIndex.objects.filter(tenant=request.tenant).exclude(category="").values_list("category", flat=True).distinct()`.
+2. `apps/bi/views/ConversationalBi/NaturalLanguageQueries.py:95` & `SearchDiscoveryIndexes.py:82` — Detail views perform lazy lookups on frequently displayed FKs. Fix: Pass `select_related(...)` to `bi_object`.
+3. `apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py:122-127` — Missing composite index for curated discovery ranking `(tenant, is_featured, -relevance_weight)`. Fix: Add composite index to `Meta.indexes`.
+
+
 
 
