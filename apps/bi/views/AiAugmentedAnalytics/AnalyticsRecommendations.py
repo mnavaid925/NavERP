@@ -124,7 +124,7 @@ def analytics_recommendation_create(request):
 @login_required
 @transaction.atomic
 def analytics_recommendation_edit(request, pk):
-    recommendation = bi_object(request, AnalyticsRecommendation, pk)
+    recommendation = bi_object(request, AnalyticsRecommendation, pk, select_related=("user",))
     if request.method == "POST":
         form = AnalyticsRecommendationForm(request.POST, instance=recommendation, tenant=request.tenant)
         if form.is_valid():
@@ -157,7 +157,7 @@ def analytics_recommendation_edit(request, pk):
 @require_POST
 @transaction.atomic
 def analytics_recommendation_delete(request, pk):
-    recommendation = bi_object(request, AnalyticsRecommendation, pk)
+    recommendation = bi_object(request, AnalyticsRecommendation, pk, select_related=("user",))
     number = recommendation.number
     write_audit_log(
         request.user,
@@ -175,7 +175,7 @@ def analytics_recommendation_delete(request, pk):
 @require_POST
 @transaction.atomic
 def analytics_recommendation_interact(request, pk):
-    recommendation = bi_object(request, AnalyticsRecommendation, pk)
+    recommendation = bi_object(request, AnalyticsRecommendation, pk, select_related=("user",))
     if not (
         recommendation.user == request.user
         or getattr(request.user, "is_tenant_admin", False)
