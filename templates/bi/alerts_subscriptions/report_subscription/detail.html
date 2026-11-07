@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ subscription.number }} — {{ subscription.name }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:report_subscription_list' %}">Subscriptions</a>
+            <span class="sep">/</span>
+            <span>{{ subscription.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ subscription.name }}</h1>
+            <span class="badge {{ subscription.format_badge_class }}">{{ subscription.export_format|upper }}</span>
+            <span class="badge {{ subscription.status_badge_class }}">{{ subscription.get_status_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">Schedule ID: {{ subscription.number }} • Created {{ subscription.created_at|date:"M d, Y H:i" }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:report_subscription_run_now' subscription.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play"></i>
+                <span>Run Now</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:report_subscription_edit' subscription.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:report_subscription_delete' subscription.pk %}" class="inline" onsubmit="return confirm('Delete subscription {{ subscription.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Specs -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Distribution & Delivery Specifications</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Target Asset</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">
+                            {% if subscription.target_asset_type == 'dashboard' and subscription.dashboard %}
+                            <a href="{% url 'bi:bi_dashboard_detail' subscription.dashboard.pk %}" class="text-blue-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+                                <span>{{ subscription.dashboard.title }}</span>
+                            </a>
+                            {% elif subscription.target_asset_type == 'report' and subscription.report %}
+                            <a href="{% url 'bi:report_definition_detail' subscription.report.pk %}" class="text-emerald-600 hover:underline inline-flex items-center gap-1">
+                                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                                <span>{{ subscription.report.name }}</span>
+                            </a>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Document Export Format</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">
+                            {{ subscription.get_export_format_display }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Cadence & Frequency</div>
+                        <div class="text-sm text-slate-900 mt-1">
+                            {{ subscription.get_cadence_display }} at {{ subscription.scheduled_time|time:"H:i" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Data Bursting Mode</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-1">
+                            {{ subscription.get_burst_mode_display }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Cover Page</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {% if subscription.include_cover_page %}
+                            <span class="text-emerald-700 font-medium">Included with summary header</span>
+                            {% else %}
+                            <span class="text-muted">Excluded</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Empty Result Handling</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {% if subscription.skip_if_empty %}
+                            <span class="text-amber-700 font-medium">Skip delivery if empty</span>
+                            {% else %}
+                            <span class="text-muted">Always deliver</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if subscription.external_recipient_emails %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold">External Email Destinations</div>
+                    <div class="text-xs text-slate-700 mt-1">
+                        {{ subscription.external_recipient_emails }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Runs -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title text-base font-semibold">Recent Distribution Runs</h2>
+                <a href="{% url 'bi:distribution_burst_run_list' %}" class="text-xs text-blue-600 hover:underline">View All Runs</a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Run ID</th>
+                            <th>Trigger</th>
+                            <th>Recipients</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in recent_burst_runs %}
+                        <tr>
+                            <td class="font-mono text-xs font-semibold">
+                                <a href="{% url 'bi:distribution_burst_run_detail' r.pk %}" class="text-blue-600 hover:underline">
+                                    {{ r.number }}
+                                </a>
+                            </td>
+                            <td class="text-sm">{{ r.get_run_trigger_display }}</td>
+                            <td class="text-sm font-mono">{{ r.delivered_count }} / {{ r.recipient_count }}</td>
+                            <td><span class="badge {{ r.status_badge_class }}">{{ r.get_status_display }}</span></td>
+                            <td class="text-xs text-muted">{{ r.started_at|date:"M d, H:i" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-6 text-sm text-muted">
+                                No distribution runs executed yet. Click "Run Now" to test immediately.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Subscribers -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Execution Statistics</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Total Runs Completed</div>
+                    <div class="text-2xl font-bold font-mono text-slate-900 mt-1">{{ subscription.run_count }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Last Execution</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if subscription.last_run_at %}
+                        {{ subscription.last_run_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-muted">Never executed</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Next Scheduled Run</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {% if subscription.next_run_at %}
+                        {{ subscription.next_run_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-muted">Calculated on schedule</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Scheduled By</div>
+                    <div class="text-sm text-slate-700 mt-1">
+                        {{ subscription.created_by.get_full_name|default:subscription.created_by.username }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title text-base font-semibold">Assigned Internal Recipients</h2>
+            </div>
+            <div class="card-body">
+                {% if subscription.subscriber_users.all %}
+                <div class="text-xs uppercase text-muted font-semibold mb-2">Users</div>
+                <ul class="divide-y divide-slate-100 text-sm mb-4">
+                    {% for u in subscription.subscriber_users.all %}
+                    <li class="py-1.5 flex justify-between items-center">
+                        <span class="font-medium text-slate-800">{{ u.username }}</span>
+                        <span class="text-xs text-muted">{{ u.email }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if subscription.subscriber_org_units.all %}
+                <div class="text-xs uppercase text-muted font-semibold mb-2">Departments / Org Units</div>
+                <ul class="divide-y divide-slate-100 text-sm">
+                    {% for o in subscription.subscriber_org_units.all %}
+                    <li class="py-1.5 font-medium text-slate-800">
+                        {{ o.name }}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if not subscription.subscriber_users.all and not subscription.subscriber_org_units.all %}
+                <div class="text-xs text-muted">No internal users or departments linked directly.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
