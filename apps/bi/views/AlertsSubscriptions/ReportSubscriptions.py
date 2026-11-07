@@ -19,11 +19,9 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def report_subscription_list(request):
-    qs = bi_scope(ReportSubscription.objects.all(), request).select_related(
-        "dashboard", "report", "created_by"
-    )
+    base_qs = bi_scope(ReportSubscription.objects.all(), request)
 
-    counts = qs.aggregate(
+    counts = base_qs.aggregate(
         total=Count("id"),
         active=Count("id", filter=Q(status="active")),
         pdf=Count("id", filter=Q(export_format="pdf")),
@@ -33,6 +31,10 @@ def report_subscription_list(request):
     active_count = counts["active"] or 0
     pdf_count = counts["pdf"] or 0
     excel_count = counts["excel"] or 0
+
+    qs = base_qs.select_related(
+        "dashboard", "report", "created_by"
+    )
 
     # Search
     q = request.GET.get("q", "").strip()
