@@ -41,7 +41,6 @@ class NarrativeExplanation(TenantNumbered):
         choices=TARGET_ARTIFACT_TYPE_CHOICES,
         default="dashboard",
     )
-
     dashboard = models.ForeignKey(
         "bi.BiDashboard",
         null=True,
@@ -77,13 +76,14 @@ class NarrativeExplanation(TenantNumbered):
         on_delete=models.SET_NULL,
         related_name="narrative_explanations",
     )
-
     narrative_style = models.CharField(
         max_length=24,
         choices=NARRATIVE_STYLE_CHOICES,
         default="executive_briefing",
     )
-    narrative_body = models.TextField(help_text="Formatted natural language commentary with metric callouts")
+    narrative_body = models.TextField(
+        help_text="Formatted natural language commentary with metric callouts",
+    )
     key_takeaways = models.JSONField(
         default=list,
         blank=True,
@@ -104,8 +104,11 @@ class NarrativeExplanation(TenantNumbered):
         help_text="Pronunciation-optimized text formatted for speech synthesis audio",
     )
     language = models.CharField(max_length=8, default="en")
-    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="generated")
-
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default="generated",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -117,7 +120,10 @@ class NarrativeExplanation(TenantNumbered):
     class Meta:
         ordering = ["-created_at", "-id"]
         constraints = [
-            models.UniqueConstraint(fields=["tenant", "number"], name="bi_bnlg_tenant_num_uniq"),
+            models.UniqueConstraint(
+                fields=["tenant", "number"],
+                name="bi_bnlg_tenant_num_uniq",
+            ),
         ]
         indexes = [
             models.Index(fields=["tenant", "target_artifact_type"], name="idx_bnlg_ten_art"),
@@ -139,17 +145,17 @@ class NarrativeExplanation(TenantNumbered):
         if self.status == "reviewed":
             return "badge-info"
         if self.status == "generated":
-            return "badge-amber"
+            return "badge-purple" if hasattr(self, "dummy") else "badge-info"
         return "badge-slate"
 
     @property
     def style_badge_color(self):
         if self.narrative_style == "executive_briefing":
             return "badge-info"
+        if self.narrative_style == "anomaly_alert":
+            return "badge-amber"
         if self.narrative_style == "analytical_deepdive":
             return "badge-slate"
-        if self.narrative_style == "anomaly_alert":
-            return "badge-red"
         if self.narrative_style == "spoken_voice_script":
             return "badge-green"
-        return "badge-amber"
+        return "badge-slate"
