@@ -15,3 +15,19 @@
 1. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` — Model property mismatch: `detail.html:48` and `hub.html:83, 154` query `type_badge_color`, but `SearchDiscoveryIndex` defines `asset_type_badge_color`, causing the asset type badge class to evaluate to empty and render uncolored. Fix: Update templates to use `asset_type_badge_color` or alias `type_badge_color` on `SearchDiscoveryIndex`.
 2. `templates/bi/conversational_bi/natural_language_query/detail.html:149` — Non-standard theme classes `badge-purple` (`natural_language_query/detail.html:149`, `NaturalLanguageQueries.py:206`) and `badge-indigo` (`search_discovery_index/detail.html:101`) are used, which are absent from `theme.css:286-291` and render unstyled (Lesson L33). Fix: Standardize on supported palette classes (`badge-info`, `badge-slate`, `badge-muted`).
 3. `templates/bi/conversational_bi/search_explorer.html:1` — Orphan template file committed in changeset that is neither mapped in `urls/` nor rendered by any view in `apps/bi/`. Fix: Remove the unused file or wire it to an explicit view.
+
+## 2. Explorer (Contract Compliance)
+**Verdict**: Commit after fixing Important findings. High adherence to frozen contract across all 4 models, 4 forms, 23 URL routes, and pinned view context keys.
+
+### Important
+1. `templates/bi/conversational_bi/narrative_explanation/list.html:102` — Filter Parameter Contract Mismatch: Section 4.3 pins `artifact_choices`. Template dropdown submits `name="artifact"` but view reads `request.GET.get("artifact_type")`. Fix: Change `list.html:102` to `name="artifact_type"` (and `request.GET.artifact_type == val`) or update view to inspect both.
+2. `templates/bi/conversational_bi/search_discovery_index/detail.html:180` — Non-Existent Attribute Access: `index.report.title` rendered for `ReportDefinition`, but model has `name`. Fix: Replace `{{ index.report.title }}` with `{{ index.report.name }}`.
+3. `templates/bi/conversational_bi/search_discovery_index/detail.html:192` — Non-Existent Attribute Access: `index.glossary_term.term` rendered for `BusinessGlossaryTerm`, but model has `name`. Fix: Replace `{{ index.glossary_term.term }}` with `{{ index.glossary_term.name }}`.
+4. `apps/bi/models/ConversationalBi/*.py` — Omission of Explicit `db_table` Pinned in Contract: Models omitted explicit `db_table` declarations (`bi_natural_language_query`, `bi_conversation_session`, etc.), defaulting to Django's standard auto-naming. Fix: Note/accept standard Django names or add explicit `db_table`.
+
+### Minor
+1. `templates/bi/conversational_bi/search_discovery_index/detail.html:48` and `hub.html:83, 154` — Model Property Name Mismatch: `type_badge_color` queried vs `asset_type_badge_color` defined. Fix: Alias `type_badge_color` on `SearchDiscoveryIndex`.
+2. `templates/bi/conversational_bi/natural_language_query/detail.html:149` & `search_discovery_index/detail.html:101` — Non-Standard Palette Badge Classes: `badge-purple` and `badge-indigo` not in `theme.css`. Fix: Replace with `badge-info` / `badge-slate`.
+3. `templates/bi/conversational_bi/search_explorer.html` — Orphan Template File: Committed file not mapped to route. Fix: Remove orphan template.
+4. `contract-bi-10.15.md` Section 3 & 4 — Unpinned Convenience Route & Context: `bi_chat_workspace` not explicitly in Section 3/4 table. Fix: Update contract to document workspace route.
+
