@@ -173,7 +173,7 @@
                     </a>
                     {% elif index.dashboard %}
                     <a href="{% url 'bi:bi_dashboard_detail' index.dashboard.pk %}" class="text-indigo-600 font-medium hover:underline">
-                        {{ index.dashboard.name }} (Dashboard)
+                        {{ index.dashboard.title }} (Dashboard)
                     </a>
                     {% elif index.report %}
                     <a href="{% url 'bi:report_definition_detail' index.report.pk %}" class="text-indigo-600 font-medium hover:underline">
