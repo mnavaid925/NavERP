@@ -109,6 +109,38 @@ def bi_conversation_session_detail(request, pk):
 
 
 @login_required
+def bi_chat_workspace(request):
+    sessions = bi_scope(BiConversationSession.objects.all(), request).order_by("-is_pinned", "-last_interaction_at")
+    active_session_id = request.GET.get("session")
+    active_session = None
+
+    if active_session_id and active_session_id.isdigit():
+        active_session = sessions.filter(pk=int(active_session_id)).first()
+    if not active_session:
+        active_session = sessions.first()
+
+    turns = active_session.queries.all().order_by("created_at") if active_session else []
+    suggested_prompts = active_session.suggested_prompts if active_session and active_session.suggested_prompts else [
+        "What is our YTD Revenue vs Plan?",
+        "Show quarterly gross margin trend by product family",
+        "Which sales territories are trailing target?",
+        "Top 5 suppliers by on-time delivery rate",
+    ]
+
+    context = {
+        "sessions": sessions,
+        "active_session": active_session,
+        "turns": turns,
+        "suggested_prompts": suggested_prompts,
+    }
+    return render(
+        request,
+        "bi/conversational_bi/chat_workspace.html",
+        context,
+    )
+
+
+@login_required
 def bi_conversation_session_create(request):
     if request.method == "POST":
         form = BiConversationSessionForm(request.POST, tenant=request.tenant)
