@@ -47,6 +47,10 @@ from apps.bi.models.ConversationalBi.BiConversationSessions import BiConversatio
 from apps.bi.models.ConversationalBi.NarrativeExplanations import NarrativeExplanation
 from apps.bi.models.ConversationalBi.NaturalLanguageQueries import NaturalLanguageQuery
 from apps.bi.models.ConversationalBi.SearchDiscoveryIndexes import SearchDiscoveryIndex
+from apps.bi.models.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnalyticsConfig
+from apps.bi.models.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplay
+from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
+from apps.bi.models.EmbeddedMobileBi.EmbedApiTokens import EmbedApiToken
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -127,4 +131,8 @@ __all__ = [
     "BiConversationSession",
     "NarrativeExplanation",
     "SearchDiscoveryIndex",
+    "EmbeddedAnalyticsConfig",
+    "KioskWallboardDisplay",
+    "MobileBiConfiguration",
+    "EmbedApiToken",
 ]
