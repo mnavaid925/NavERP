@@ -277,7 +277,9 @@ def report_subscription_run_now(request, pk):
 
         subscription.last_run_at = now
         subscription.run_count += 1
-        subscription.save()
+        subscription.save(
+            update_fields=["last_run_at", "run_count", "updated_at"]
+        )
 
         write_audit_log(
             request.user,
