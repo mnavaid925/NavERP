@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ recommendation.number }}{% else %}New Recommendation{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:analytics_recommendation_list' %}">AI & Augmented Analytics</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ recommendation.number }}{% else %}New Recommendation{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Recommendation: {{ recommendation.number }}{% else %}Create Recommendation{% endif %}</h1>
+        <p class="text-muted text-sm">Configure tailored analytical suggestions for users based on domain context, role, and usage patterns</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.user.id_for_label }}">Target User Recipient *</label>
+                    {{ form.user }}
+                    {% if form.user.errors %}<div class="form-error">{{ form.user.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.recommendation_type.id_for_label }}">Asset Type *</label>
+                    {{ form.recommendation_type }}
+                    {% if form.recommendation_type.errors %}<div class="form-error">{{ form.recommendation_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.target_title.id_for_label }}">Target Asset Title *</label>
+                    {{ form.target_title }}
+                    {% if form.target_title.errors %}<div class="form-error">{{ form.target_title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.target_url.id_for_label }}">Target Destination URL *</label>
+                    {{ form.target_url }}
+                    {% if form.target_url.errors %}<div class="form-error">{{ form.target_url.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reason.id_for_label }}">Recommendation Reason *</label>
+                    {{ form.reason }}
+                    {% if form.reason.errors %}<div class="form-error">{{ form.reason.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.affinity_score.id_for_label }}">Affinity Match Score (0-100%) *</label>
+                    {{ form.affinity_score }}
+                    {% if form.affinity_score.errors %}<div class="form-error">{{ form.affinity_score.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.rationale_text.id_for_label }}">Recommendation Rationale</label>
+                    {{ form.rationale_text }}
+                    {% if form.rationale_text.errors %}<div class="form-error">{{ form.rationale_text.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dashboard.id_for_label }}">Linked Dashboard (Optional)</label>
+                    {{ form.dashboard }}
+                    {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.report.id_for_label }}">Linked Report (Optional)</label>
+                    {{ form.report }}
+                    {% if form.report.errors %}<div class="form-error">{{ form.report.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.kpi.id_for_label }}">Linked KPI (Optional)</label>
+                    {{ form.kpi }}
+                    {% if form.kpi.errors %}<div class="form-error">{{ form.kpi.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Linked Semantic Model (Optional)</label>
+                    {{ form.semantic_model }}
+                    {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'bi:analytics_recommendation_detail' recommendation.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'bi:analytics_recommendation_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Recommendation{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
