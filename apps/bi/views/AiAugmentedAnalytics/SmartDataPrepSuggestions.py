@@ -108,13 +108,11 @@ def smart_data_prep_suggestion_create(request):
             suggestion.tenant = request.tenant
             suggestion.save()
             write_audit_log(
+                request.user,
+                suggestion,
+                "create",
+                changes={"details": f"Created prep suggestion {suggestion.number} for {suggestion.target_table.name}.{suggestion.target_column}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="SmartDataPrepSuggestion",
-                object_id=str(suggestion.pk),
-                object_repr=str(suggestion),
-                details=f"Created prep suggestion {suggestion.number} for {suggestion.target_table.name}.{suggestion.target_column}",
             )
             messages.success(request, f"Data prep suggestion {suggestion.number} created successfully.")
             return redirect("bi:smart_data_prep_suggestion_detail", pk=suggestion.pk)
@@ -140,13 +138,11 @@ def smart_data_prep_suggestion_edit(request, pk):
         if form.is_valid():
             suggestion = form.save()
             write_audit_log(
+                request.user,
+                suggestion,
+                "update",
+                changes={"details": f"Updated prep suggestion {suggestion.number}"},
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="SmartDataPrepSuggestion",
-                object_id=str(suggestion.pk),
-                object_repr=str(suggestion),
-                details=f"Updated prep suggestion {suggestion.number}",
             )
             messages.success(request, f"Data prep suggestion {suggestion.number} updated successfully.")
             return redirect("bi:smart_data_prep_suggestion_detail", pk=suggestion.pk)
@@ -169,16 +165,14 @@ def smart_data_prep_suggestion_edit(request, pk):
 def smart_data_prep_suggestion_delete(request, pk):
     suggestion = bi_object(request, SmartDataPrepSuggestion, pk)
     number = suggestion.number
-    suggestion.delete()
     write_audit_log(
+        request.user,
+        suggestion,
+        "delete",
+        changes={"number": number, "details": f"Deleted data prep suggestion {number}"},
         tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="SmartDataPrepSuggestion",
-        object_id=str(pk),
-        object_repr=number,
-        details=f"Deleted data prep suggestion {number}",
     )
+    suggestion.delete()
     messages.success(request, f"Data prep suggestion {number} was deleted.")
     return redirect("bi:smart_data_prep_suggestion_list")
 
@@ -204,13 +198,11 @@ def smart_data_prep_suggestion_action(request, pk):
         suggestion.save()
 
         write_audit_log(
+            request.user,
+            suggestion,
+            action_type,
+            changes={"action": action_type, "status": suggestion.status, "details": f"Data prep suggestion {suggestion.number} was marked as {suggestion.get_status_display()}"},
             tenant=request.tenant,
-            user=request.user,
-            action=f"prep_{action_type}",
-            model_name="SmartDataPrepSuggestion",
-            object_id=str(suggestion.pk),
-            object_repr=str(suggestion),
-            details=f"Data prep suggestion {suggestion.number} was marked as {suggestion.get_status_display()}",
         )
         messages.success(request, f"Data prep suggestion {suggestion.number} is now {suggestion.get_status_display()}.")
 
