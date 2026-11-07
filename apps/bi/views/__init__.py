@@ -377,6 +377,39 @@ from apps.bi.views.OlapAnalysis import (
     writeback_cell_edit,
     writeback_cell_list,
 )
+from apps.bi.views.AiAugmentedAnalytics.AugmentedInsights import (
+    augmented_insight_create,
+    augmented_insight_delete,
+    augmented_insight_detail,
+    augmented_insight_edit,
+    augmented_insight_feed,
+    augmented_insight_list,
+    augmented_insight_triage,
+)
+from apps.bi.views.AiAugmentedAnalytics.SmartDataPrepSuggestions import (
+    smart_data_prep_suggestion_action,
+    smart_data_prep_suggestion_create,
+    smart_data_prep_suggestion_delete,
+    smart_data_prep_suggestion_detail,
+    smart_data_prep_suggestion_edit,
+    smart_data_prep_suggestion_list,
+)
+from apps.bi.views.AiAugmentedAnalytics.TextSentimentAnalyses import (
+    text_sentiment_analysis_create,
+    text_sentiment_analysis_delete,
+    text_sentiment_analysis_detail,
+    text_sentiment_analysis_edit,
+    text_sentiment_analysis_list,
+    text_sentiment_analysis_recalculate,
+)
+from apps.bi.views.AiAugmentedAnalytics.AnalyticsRecommendations import (
+    analytics_recommendation_create,
+    analytics_recommendation_delete,
+    analytics_recommendation_detail,
+    analytics_recommendation_edit,
+    analytics_recommendation_interact,
+    analytics_recommendation_list,
+)
 from apps.bi.views.SemanticLayer.SemanticOverviewViews import semantic_overview
 
 __all__ = [
@@ -672,4 +705,29 @@ __all__ = [
     "writeback_cell_create",
     "writeback_cell_edit",
     "writeback_cell_delete",
+    "augmented_insight_list",
+    "augmented_insight_feed",
+    "augmented_insight_detail",
+    "augmented_insight_create",
+    "augmented_insight_edit",
+    "augmented_insight_delete",
+    "augmented_insight_triage",
+    "smart_data_prep_suggestion_list",
+    "smart_data_prep_suggestion_detail",
+    "smart_data_prep_suggestion_create",
+    "smart_data_prep_suggestion_edit",
+    "smart_data_prep_suggestion_delete",
+    "smart_data_prep_suggestion_action",
+    "text_sentiment_analysis_list",
+    "text_sentiment_analysis_detail",
+    "text_sentiment_analysis_create",
+    "text_sentiment_analysis_edit",
+    "text_sentiment_analysis_delete",
+    "text_sentiment_analysis_recalculate",
+    "analytics_recommendation_list",
+    "analytics_recommendation_detail",
+    "analytics_recommendation_create",
+    "analytics_recommendation_edit",
+    "analytics_recommendation_delete",
+    "analytics_recommendation_interact",
 ]
