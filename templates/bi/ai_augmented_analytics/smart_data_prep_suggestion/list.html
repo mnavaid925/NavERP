@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+
+{% block title %}Automated Data Preparation Suggestions — AI & Augmented Analytics — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>AI & Augmented Analytics</span>
+        </div>
+        <h1 class="page-title">Automated Data Preparation Suggestions</h1>
+        <p class="text-muted text-sm">AI-suggested table joins, column type conversions, delimiter extractions, and data quality imputation rules</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:augmented_insight_list' %}" class="btn btn-outline">
+            <i data-lucide="sparkles"></i>
+            <span>Insights Catalog</span>
+        </a>
+        <a href="{% url 'bi:smart_data_prep_suggestion_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Suggestion</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="wand-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Suggestions</div>
+            <div class="text-2xl font-bold">{{ suggestions.paginator.count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pending Review</div>
+            <div class="text-2xl font-bold text-amber-600">{{ pending_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Warehouse Tables</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ tables|length }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="shield-check"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Governed Scoping</div>
+            <div class="text-sm font-bold truncate">{{ request.tenant.name }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label class="form-label text-xs">Search Prep Suggestions</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search column, table, rationale..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Suggestion Type</label>
+                <select name="suggestion_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for code, label in suggestion_type_choices %}
+                    <option value="{{ code }}" {% if request.GET.suggestion_type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Target Table</label>
+                <select name="target_table" class="form-select text-sm">
+                    <option value="">All Tables</option>
+                    {% for t in tables %}
+                    <option value="{{ t.pk }}" {% if request.GET.target_table == t.pk|stringformat:"d" %}selected{% endif %}>{{ t.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-5 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:smart_data_prep_suggestion_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Suggestions</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Data Prep & Transformation Queue</h2>
+        <span class="text-xs text-muted">{{ suggestions.paginator.count }} total suggestions</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Suggestion</th>
+                    <th>Target & Related Fields</th>
+                    <th>Confidence</th>
+                    <th>Rationale</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in suggestions %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:smart_data_prep_suggestion_detail' item.pk %}" class="hover:underline text-indigo-600">
+                                {{ item.get_suggestion_type_display }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono mt-0.5">{{ item.number }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-semibold text-slate-800">
+                            {{ item.target_table.name }}.<span class="text-indigo-600">{{ item.target_column }}</span>
+                        </div>
+                        {% if item.related_table %}
+                        <div class="text-xs text-muted mt-0.5">
+                            ⇄ {{ item.related_table.name }}.<span class="text-slate-700 font-medium">{{ item.related_column }}</span>
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold">{{ item.confidence_score }}%</div>
+                        <div class="w-16 bg-slate-100 rounded-full h-1.5 mt-1 overflow-hidden">
+                            <div class="bg-indigo-600 h-1.5 rounded-full" style="width: {{ item.confidence_score }}%"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-600 max-w-xs truncate" title="{{ item.rationale }}">
+                            {{ item.rationale }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.badge_color }} text-xs">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <div class="flex justify-end items-center gap-1">
+                            <a href="{% url 'bi:smart_data_prep_suggestion_detail' item.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                            </a>
+                            <a href="{% url 'bi:smart_data_prep_suggestion_edit' item.pk %}" class="btn btn-icon" title="Edit suggestion">
+                                <i data-lucide="pencil" class="w-4 h-4"></i>
+                            </a>
+                            {% if item.status == 'pending' %}
+                            <form method="post" action="{% url 'bi:smart_data_prep_suggestion_action' item.pk %}" class="inline">
+                                {% csrf_token %}
+                                <input type="hidden" name="action_type" value="accept">
+                                <button type="submit" class="btn btn-icon text-emerald-600 hover:bg-emerald-50" title="Accept Suggestion">
+                                    <i data-lucide="check" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'bi:smart_data_prep_suggestion_delete' item.pk %}" onsubmit="return confirm('Delete suggestion {{ item.number }}?');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state py-12 text-center">
+                            <i data-lucide="wand-2" class="w-10 h-10 text-muted mx-auto mb-2"></i>
+                            <h3 class="text-base font-medium text-slate-800">No Data Prep Suggestions</h3>
+                            <p class="text-sm text-muted mb-4">No recommendations found matching your current filter criteria.</p>
+                            <a href="{% url 'bi:smart_data_prep_suggestion_create' %}" class="btn btn-primary text-xs">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Prep Suggestion
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if suggestions.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3">
+        <div class="text-xs text-muted">
+            Page {{ suggestions.number }} of {{ suggestions.paginator.num_pages }} ({{ suggestions.paginator.count }} items)
+        </div>
+        <div class="pagination flex gap-1">
+            {% if suggestions.has_previous %}
+            <a href="?page={{ suggestions.previous_page_number }}&q={{ request.GET.q }}&suggestion_type={{ request.GET.suggestion_type }}&target_table={{ request.GET.target_table }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if suggestions.has_next %}
+            <a href="?page={{ suggestions.next_page_number }}&q={{ request.GET.q }}&suggestion_type={{ request.GET.suggestion_type }}&target_table={{ request.GET.target_table }}&status={{ request.GET.status }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
