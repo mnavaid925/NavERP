@@ -12,6 +12,13 @@ User = get_user_model()
 
 
 class ReportSubscriptionForm(TenantUniqueMixin, TenantModelForm):
+    """
+    Form for ReportSubscription instances.
+
+    Note: `filter_overrides` (JSONField) is intentionally excluded from this standard CRUD form;
+    runtime parameter overrides are configured and evaluated dynamically by execution engines.
+    """
+
     class Meta:
         model = ReportSubscription
         fields = [
