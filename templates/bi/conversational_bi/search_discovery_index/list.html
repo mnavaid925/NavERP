@@ -30,9 +30,9 @@
 </div>
 
 <!-- Stat Cards -->
-<div class="stats-grid mb-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
-        <div class="stat-icon bg-sky-50 text-sky-600">
+        <div class="stat-icon blue">
             <i data-lucide="search"></i>
         </div>
         <div class="stat-content">
@@ -41,21 +41,21 @@
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon bg-emerald-50 text-emerald-600">
+        <div class="stat-icon green">
             <i data-lucide="shield-check"></i>
         </div>
         <div class="stat-content">
             <div class="stat-label">Verified Enterprise Truth</div>
-            <div class="stat-value text-emerald-600">{{ verified_count }}</div>
+            <div class="stat-value">{{ verified_count }}</div>
         </div>
     </div>
     <div class="stat-card">
-        <div class="stat-icon bg-amber-50 text-amber-600">
+        <div class="stat-icon orange">
             <i data-lucide="star"></i>
         </div>
         <div class="stat-content">
             <div class="stat-label">Featured & Pinned</div>
-            <div class="stat-value text-amber-600">{{ featured_count }}</div>
+            <div class="stat-value">{{ featured_count }}</div>
         </div>
     </div>
 </div>
