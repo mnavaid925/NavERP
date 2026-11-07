@@ -1169,3 +1169,96 @@ Sub-package Path: `apps/bi/{models,forms,views,urls}/SelfServiceAnalytics/`
 
 
 
+
+---
+
+## Sub-module 10.15: Natural Language & Conversational BI
+
+### Overview
+Natural Language & Conversational BI brings search-first and conversation-first analytics to NavERP. It enables non-technical business leaders and operational teams to ask natural language questions (NLQ), engage in multi-turn analytical chat dialogs with conversational context, receive auto-written executive narrative briefings (NLG), listen to generated audio scripts, and explore analytical assets through global search-driven discovery.
+
+### Models
+1. **`NaturalLanguageQuery`** (`apps/bi/models/ConversationalBi/NaturalLanguageQueries.py`):
+   - Table: `bi_naturallanguagequery`, Prefix: `BNLQ` (`TenantNumbered`).
+   - Fields: `query_text`, `input_modality` (`text`, `voice`, `api`, `suggested`), `intent_type` (`metric_lookup`, `trend_analysis`, `comparative`, `root_cause`, `drill_down`, `forecasting`, `filter_slice`), `semantic_model` (FK `SemanticModel`), `warehouse_table` (FK `WarehouseTable`), `grounded_sql`, `execution_status` (`pending`, `translating`, `executing`, `completed`, `ambiguous`, `failed`), `execution_duration_ms`, `error_message`, `chart_type` (`table`, `bar_chart`, `line_chart`, `pie_chart`, `kpi_card`, `scatter_plot`), `user` (FK `auth.User`), `user_rating` (`unrated`, `helpful`, `unhelpful`), `user_feedback_notes`, `parsed_measures` (JSON list), `parsed_dimensions` (JSON list), `parsed_filters` (JSON dict), `chart_config` (JSON dict), `result_summary` (JSON dict), `conversation_session` (FK `BiConversationSession`).
+   - Constraints & Indexes: unique on `(tenant, number)`, indexes on `(tenant, execution_status)`, `(tenant, input_modality)`, `(tenant, intent_type)`, `(tenant, user)`.
+   - Properties: `status_badge_color`, `modality_badge_color`.
+
+2. **`BiConversationSession`** (`apps/bi/models/ConversationalBi/BiConversationSessions.py`):
+   - Table: `bi_biconversationsession`, Prefix: `BCON` (`TenantNumbered`).
+   - Fields: `title`, `user` (FK `auth.User`), `primary_semantic_model` (FK `SemanticModel`), `active_dashboard` (FK `BiDashboard`), `session_status` (`active`, `archived`, `closed`), `is_pinned` (bool), `message_count` (int), `last_interaction_at`, `suggested_prompts` (JSON list), `context_state` (JSON dict), `suggested_followups` (JSON list).
+   - Constraints & Indexes: unique on `(tenant, number)`, indexes on `(tenant, -last_interaction_at)`, `(tenant, is_pinned)`, `(tenant, session_status)`, `(tenant, user)`.
+   - Properties: `session_status_badge_color`.
+
+3. **`NarrativeExplanation`** (`apps/bi/models/ConversationalBi/NarrativeExplanations.py`):
+   - Table: `bi_narrativeexplanation`, Prefix: `BNLG` (`TenantNumbered`).
+   - Fields: `title`, `target_artifact_type` (`dashboard`, `report`, `kpi`, `semantic_model`, `anomaly`), `dashboard` (FK `BiDashboard`), `report` (FK `ReportDefinition`), `kpi` (FK `KpiDefinition`), `narrative_style` (`executive_briefing`, `operational_summary`, `anomaly_alert`, `performance_driver`, `board_presentation`), `headline`, `narrative_body` (TextField markdown), `top_positive_driver`, `top_negative_driver`, `key_takeaways` (JSON list), `audio_ready_script` (TextField spoken summary), `status` (`draft`, `generated`, `published`, `archived`), `author` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, indexes on `(tenant, target_artifact_type)`, `(tenant, narrative_style)`, `(tenant, status)`.
+   - Properties: `narrative_style_badge_color`, `status_badge_color`.
+
+4. **`SearchDiscoveryIndex`** (`apps/bi/models/ConversationalBi/SearchDiscoveryIndexes.py`):
+   - Table: `bi_searchdiscoveryindex`, Prefix: `BSDI` (`TenantNumbered`).
+   - Fields: `asset_name`, `asset_type` (`dashboard`, `report`, `kpi`, `semantic_model`, `dataset`, `glossary_term`), `semantic_model` (FK `SemanticModel`), `dashboard` (FK `BiDashboard`), `report` (FK `ReportDefinition`), `kpi` (FK `KpiDefinition`), `glossary_term` (FK `BusinessGlossaryTerm`), `synonyms` (JSON list), `description`, `category`, `relevance_weight` (Decimal 0.10-99.99), `view_count`, `search_hit_count`, `is_featured` (bool), `is_verified` (bool), `target_url`.
+   - Constraints & Indexes: unique on `(tenant, number)`, indexes on `(tenant, asset_type)`, `(tenant, is_featured)`, `(tenant, is_verified)`, composite index `idx_bsdi_ten_feat_rw` on `(tenant, is_featured, -relevance_weight)`.
+   - Properties: `asset_type_badge_color`, `type_badge_color`.
+
+### URLs & Routes
+- Natural Language Queries (NLQ):
+  - `bi:natural_language_query_list` (`/bi/natural-language-queries/`)
+  - `bi:natural_language_query_create` (`/bi/natural-language-queries/create/`)
+  - `bi:natural_language_query_detail` (`/bi/natural-language-queries/<int:pk>/`)
+  - `bi:natural_language_query_edit` (`/bi/natural-language-queries/<int:pk>/edit/`)
+  - `bi:natural_language_query_delete` (`/bi/natural-language-queries/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:natural_language_query_rate` (`/bi/natural-language-queries/<int:pk>/rate/` - `@require_POST`)
+- Conversational BI Assistant:
+  - `bi:bi_conversation_session_list` (`/bi/conversations/`)
+  - `bi:bi_conversation_session_create` (`/bi/conversations/create/`)
+  - `bi:bi_conversation_session_detail` (`/bi/conversations/<int:pk>/`)
+  - `bi:bi_conversation_session_edit` (`/bi/conversations/<int:pk>/edit/`)
+  - `bi:bi_conversation_session_delete` (`/bi/conversations/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:bi_conversation_session_toggle_pin` (`/bi/conversations/<int:pk>/toggle-pin/` - `@require_POST`)
+  - `bi:bi_conversation_session_close` (`/bi/conversations/<int:pk>/close/` - `@require_POST`)
+  - `bi:bi_conversation_session_ask` (`/bi/conversations/<int:pk>/ask/` - `@require_POST`, open redirect safe with `next`)
+  - `bi:bi_chat_workspace` (`/bi/conversations/workspace/` - Interactive chat workspace with session selector)
+- Natural Language Generation (NLG):
+  - `bi:narrative_explanation_list` (`/bi/narratives/`)
+  - `bi:narrative_explanation_create` (`/bi/narratives/create/`)
+  - `bi:narrative_explanation_detail` (`/bi/narratives/<int:pk>/`)
+  - `bi:narrative_explanation_edit` (`/bi/narratives/<int:pk>/edit/`)
+  - `bi:narrative_explanation_delete` (`/bi/narratives/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:narrative_explanation_publish` (`/bi/narratives/<int:pk>/publish/` - `@require_POST`, atomic)
+  - `bi:narrative_explanation_regenerate` (`/bi/narratives/<int:pk>/regenerate/` - `@require_POST`)
+- Search-Driven Discovery:
+  - `bi:search_discovery_index_list` (`/bi/search-discovery/`)
+  - `bi:search_discovery_index_create` (`/bi/search-discovery/create/`)
+  - `bi:search_discovery_index_detail` (`/bi/search-discovery/<int:pk>/`)
+  - `bi:search_discovery_index_edit` (`/bi/search-discovery/<int:pk>/edit/`)
+  - `bi:search_discovery_index_delete` (`/bi/search-discovery/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:search_discovery_index_reweight` (`/bi/search-discovery/<int:pk>/reweight/` - `@require_POST`, `is_finite()` guarded)
+  - `bi:search_discovery_hub` (`/bi/search-discovery/hub/` - Enterprise search discovery hub with synonym search)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/conversational_bi/`:
+  - `natural_language_query/` (`list.html`, `detail.html`, `form.html`).
+  - `bi_conversation_session/` (`list.html`, `detail.html`, `form.html`).
+  - `chat_workspace.html` (Full-featured split-pane conversational analytics assistant with suggestion chips and AST drawers).
+  - `narrative_explanation/` (`list.html`, `detail.html`, `form.html` with audio briefing audio script player).
+  - `search_discovery_index/` (`list.html`, `detail.html`, `form.html`, `hub.html` enterprise search console).
+- Design System: Colour-named badge modifiers only (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat-card icons (`blue`, `green`, `orange`, `purple`), accessible `<table class="table">` in `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Conversational BI demo records:
+  - Natural Language Queries: Revenue by product line in Q3, territory performance, inventory stock exceptions with grounded SQL and simulated Chart.js JSON configs.
+  - Conversation Sessions: Q4 Executive Revenue & Profitability Analysis, Logistics Fulfillment Review with suggested follow-up prompts.
+  - Narrative Explanations: Executive Briefings on margin expansion, On-Time Delivery operational summaries with audio TTS scripts.
+  - Search Discovery Indexes: High-relevance indexed dashboards, reports, and KPIs with colloquial business synonyms (`gross margin`, `bottom line`, `ebitda`, `lead time`).
+- 100% idempotent with `--flush` cleanup across all 10.15 tables.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all delete views.
+- **Open Redirect Protection**: `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()})` enforced on all next redirect parameters.
+- **Numeric Input Hardening (Lesson L35)**: `Decimal(weight_val)` is guarded with `is_finite()` before persistence.
+- **Protocol-Relative URL Defense (M8)**: `clean_target_url` disallows `//evil.com` protocol-relative paths.
+- **Mass Assignment Defense (M9)**: `status` excluded from `NarrativeExplanationForm` to require dedicated atomic publish view.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.15"]`.
