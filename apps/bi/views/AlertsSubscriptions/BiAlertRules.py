@@ -182,6 +182,7 @@ def bi_alert_rule_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def bi_alert_rule_delete(request, pk):
     rule = bi_object(request, BiAlertRule, pk=pk)
     num = rule.number
