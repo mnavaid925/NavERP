@@ -158,13 +158,13 @@
 - [x] Create `temp/smoke_10_15.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.15.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-bi-10.15.md` (27 findings: 0C, 16I, 11M)
 
 ### Phase 5: Code Fixer
 - [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
