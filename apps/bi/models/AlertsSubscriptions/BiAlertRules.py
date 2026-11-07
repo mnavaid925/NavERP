@@ -196,7 +196,7 @@ class BiAlertRule(TenantNumbered):
         mapping = {
             "critical": "badge-red",
             "warning": "badge-amber",
-            "info": "badge-blue",
+            "info": "badge-info",
         }
         return mapping.get(self.severity, "badge-slate")
 
