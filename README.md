@@ -2027,4 +2027,36 @@ Migrations `apps/bi/migrations/0022_reportdefinition_reportdrillpath_reportexecu
 
 Migrations `apps/bi/migrations/0024_datablenddefinition_adhocquery_savedanalysisview_and_more.py` and `0025_savedanalysisview_idx_bsav_ten_qry_and_more.py` provide the 10.10 schema, unique constraints, and composite indexes. `seed_bi` idempotently seeds demo ad-hoc queries, calculated fields, multi-source data blends, and saved views for both Acme and Globex with full `--flush` wipe support. The test suite for 10.10 is **complete and green** with 56 dedicated tests across 4 modules (`test_selfserviceanalytics_models.py`, `_forms.py`, `_views.py`, and `_security.py`) bringing the entire `apps/bi` test suite to 1,315 passing tests. See `.claude/tasks/research-bi-10.10.md` for domain research, `.claude/tasks/contract-bi-10.10.md` for the contract, `.claude/tasks/review-bi-10.10.md` for review findings, and `.claude/skills/bi/SKILL.md` for the as-built module guide.
 
+---
+
+### Module 10 10.12 — OLAP & Multidimensional Analysis (built)
+
+10.12 delivers enterprise multidimensional Online Analytical Processing (OLAP), pre-aggregated multidimensional cubes with configurable storage modes (ROLAP, MOLAP, HOLAP), interactive pivot and cross-tab matrix analysis with nested row/column dimensions and subtotal calculations, dynamic drill-through navigation to accounting and reporting detail, time-intelligence planning, and what-if simulation workbenches with financial budget writeback ledgers.
+
+- **Ownership boundaries & Spine Alignment (L28/L29/L36/L37)**:
+  - Extends `apps/bi/` with four `TenantNumbered` models (`BOCB-`, `BPIV-`, `BWIF-`, `BWBC-`) with strict multi-tenant isolation (`core.Tenant`, CASCADE).
+  - Sourcing integration with `bi.SemanticModel` (10.4), `bi.WarehouseTable` (10.3), `bi.DrillHierarchy` (10.4), `accounting.FiscalPeriod` (2.2), and `accounting.Budget` / `BudgetLine` (2.13).
+  - Financial Ledger & State Immutability: What-if scenarios commit atomic financial writeback cells directly linked to `accounting.BudgetLine`. Once committed, both scenarios and cells are strictly immutable and protected against modification or deletion across both UI and backend views.
+  - Role-Based Authorization: Enforces `@tenant_admin_required` on all destructive delete views (`olap_cube_delete`, `pivot_view_delete`, `what_if_scenario_delete`, `writeback_cell_delete`) and financial commit (`what_if_scenario_commit`).
+  - Governance & Integrity: Enforces `@require_POST` on all deletions, refresh, and commit actions; validates dynamic `drill_through_target` routes to eliminate `NoReverseMatch` crashes; implements safe user FK template guards preventing Lesson L10 500 errors; and adds composite indexes `(tenant, cube)` on both `PivotAnalysisView` and `WhatIfScenario` (`idx_bwif_ten_cube`).
+
+**What shipped**
+
+| Model | Prefix | Carries |
+|---|---|---|
+| `OlapCube` | `BOCB-` | Multidimensional OLAP cube — storage mode (`rolap`, `molap`, `holap`), optional links to `semantic_model`, `warehouse_table`, `default_hierarchy`, dimensions config JSON, measures config JSON, pre-aggregations config JSON, realtime toggle, cache TTL minutes, last refreshed timestamp, and `refresh_cube()` action |
+| `PivotAnalysisView` | `BPIV-` | Interactive pivot analysis matrix view — target OLAP cube, row dimensions JSON, column dimensions JSON, measures selection JSON, filter slice JSON, conditional formatting rules JSON, grand total position (`bottom_right`, `top_left`, `none`), subtotal toggle, drill-through enabled flag, and validated `drill_through_target` route |
+| `WhatIfScenario` | `BWIF-` | Multidimensional what-if planning scenario — target cube, fiscal period link, baseline budget link, driver parameters JSON, disaggregation method (`proportional`, `equal`, `custom_weights`), derived baseline/adjusted/variance amounts, lifecycle status (`draft`, `simulated`, `committed`, `archived`), and formal commit audit timestamps |
+| `ScenarioWritebackCell` | `BWBC-` | Dimensional leaf adjustment writeback cell — target scenario, coordinate keys JSON, baseline value, delta adjustment, simulated value, adjustment method (`absolute`, `percentage_delta`, `formula_spread`), commitment flag, and optional `committed_budget_line` link |
+
+**Routes & Management Hub**:
+- **OLAP Cubes Hub**: `bi:olap_cube_list` (`/bi/cubes/`) featuring cube inventory, storage mode breakdown, cache statistics, and 1-click cube cache refresh (`bi:olap_cube_refresh` - `@require_POST`).
+- **Interactive Pivot Matrix Workspace**: `bi:pivot_view_matrix` (`/bi/pivots/<pk>/matrix/`) rendering dynamic cross-tab grid, nested row/column headers, computed cell values, row/column subtotals, and verified drill-through navigation links.
+- **What-If Simulation Workbench**: `bi:what_if_scenario_simulate` (`/bi/scenarios/<pk>/simulate/`) with scenario driver summaries, aggregated baseline vs simulated comparison cards, and adjustment spreadsheet view.
+- **Financial Writeback Ledger Commit**: `bi:what_if_scenario_commit` (`/bi/scenarios/<pk>/commit/` - `@tenant_admin_required`, `@require_POST`) locking scenario adjustments into the financial ledger with immutable audit logging.
+- **20 Complete Routes**: Full CRUD, cube refresh, interactive matrix workspace, what-if simulation, and financial commit workflows across cubes, pivot views, scenarios, and writeback adjustment cells.
+
+Migrations `apps/bi/migrations/0026_olapcube_pivotanalysisview_whatifscenario_and_more.py` and `0028_whatifscenario_idx_bwif_ten_cube.py` provide the 10.12 schema, unique constraints, and composite indexes. `seed_bi` idempotently seeds enterprise financial cubes, multidimensional expense breakdown matrices, what-if planning scenarios, and coordinate adjustments for both Acme and Globex with full `--flush` wipe support. The test suite for 10.12 is **complete and green** with 115 dedicated tests across 4 modules (`test_olapanalysis_models.py`, `_forms.py`, `_views.py`, and `_security.py`) bringing the entire `apps/bi` test suite to 1,487 passing tests (100% green). See `.claude/tasks/research-bi-10.12.md` for domain research, `.claude/tasks/contract-bi-10.12.md` for the build contract, `.claude/tasks/review-bi-10.12.md` for the 6-lane review record, and `.claude/skills/bi/SKILL.md` for the living module documentation.
+
+
 
