@@ -4,6 +4,7 @@ from apps.bi.views.ConversationalBi import BiConversationSessions as views
 
 urlpatterns = [
     path("conversations/", views.bi_conversation_session_list, name="bi_conversation_session_list"),
+    path("conversations/workspace/", views.bi_chat_workspace, name="bi_chat_workspace"),
     path("conversations/create/", views.bi_conversation_session_create, name="bi_conversation_session_create"),
     path("conversations/<int:pk>/", views.bi_conversation_session_detail, name="bi_conversation_session_detail"),
     path("conversations/<int:pk>/edit/", views.bi_conversation_session_edit, name="bi_conversation_session_edit"),
