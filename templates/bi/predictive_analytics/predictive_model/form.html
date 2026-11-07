@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Predictive Model — {{ model_obj.name }}{% else %}New Predictive Model{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:predictive_model_list' %}">Predictive Models</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Model{% else %}New Model{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Model: {{ model_obj.name }}{% else %}Register Predictive Model{% endif %}</h1>
+        <p class="text-muted text-sm">Configure AutoML problem archetype, algorithms, target metric, and governance</p>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-body p-6">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Model Identity -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Model Identity & Archetype</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.name.id_for_label }}">Model Name *</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.slug.id_for_label }}">URL Slug</label>
+                            {{ form.slug }}
+                            {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.problem_type.id_for_label }}">Problem Archetype *</label>
+                            {{ form.problem_type }}
+                            {% if form.problem_type.errors %}<div class="form-error">{{ form.problem_type.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.algorithm.id_for_label }}">Algorithm / Method *</label>
+                            {{ form.algorithm }}
+                            {% if form.algorithm.errors %}<div class="form-error">{{ form.algorithm.errors }}</div>{% endif %}
+                        </div>
+                        <div class="md:col-span-2 form-group">
+                            <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Training Source & Target Metric -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Data Source & Target Metric</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Semantic Model</label>
+                            {{ form.semantic_model }}
+                            {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Warehouse Table</label>
+                            {{ form.warehouse_table }}
+                            {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.target_metric.id_for_label }}">Target Metric / Measure *</label>
+                            {{ form.target_metric }}
+                            <span class="text-xs text-muted">Column name or calculated KPI being forecasted or predicted</span>
+                            {% if form.target_metric.errors %}<div class="form-error">{{ form.target_metric.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.model_version.id_for_label }}">Version Tag</label>
+                            {{ form.model_version }}
+                            {% if form.model_version.errors %}<div class="form-error">{{ form.model_version.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Features & Hyperparameters JSON -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Features & Hyperparameter Specification</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.features_list_raw.id_for_label }}">Input Features (JSON Array)</label>
+                            {{ form.features_list_raw }}
+                            <span class="text-xs text-muted">Valid JSON array of feature column names</span>
+                            {% if form.features_list_raw.errors %}<div class="form-error">{{ form.features_list_raw.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.hyperparameters_raw.id_for_label }}">Hyperparameters (JSON Object)</label>
+                            {{ form.hyperparameters_raw }}
+                            <span class="text-xs text-muted">Valid JSON dictionary of model arguments</span>
+                            {% if form.hyperparameters_raw.errors %}<div class="form-error">{{ form.hyperparameters_raw.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Governance & Drift -->
+                <div class="border-b border-slate-200 pb-5">
+                    <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-4">Governance & Drift Thresholds</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.drift_threshold.id_for_label }}">Drift Threshold (%)</label>
+                            {{ form.drift_threshold }}
+                            {% if form.drift_threshold.errors %}<div class="form-error">{{ form.drift_threshold.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                        </div>
+                        <div class="form-group flex items-center pt-6">
+                            <label class="inline-flex items-center gap-2 cursor-pointer">
+                                {{ form.is_active }}
+                                <span class="text-sm font-medium text-slate-800">Model Active</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="{% if is_edit %}{% url 'bi:predictive_model_detail' model_obj.pk %}{% else %}{% url 'bi:predictive_model_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save"></i>
+                        <span>{% if is_edit %}Save Changes{% else %}Create Model{% endif %}</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
