@@ -4255,6 +4255,13 @@ class Command(BaseCommand):
             # -------------------------------------------------------------
             if not EmbeddedAnalyticsConfig.objects.filter(tenant=tenant).exists():
                 with transaction.atomic():
+                    admin_user = (
+                        get_user_model().objects.filter(tenant=tenant, is_staff=True).first()
+                        or get_user_model().objects.filter(tenant=tenant).first()
+                    )
+                    dash = BiDashboard.objects.filter(tenant=tenant).first()
+                    rep = ReportDefinition.objects.filter(tenant=tenant).first()
+
                     # 1. Embedded Analytics Configs
                     emb1, _ = EmbeddedAnalyticsConfig.objects.get_or_create(
                         tenant=tenant,
