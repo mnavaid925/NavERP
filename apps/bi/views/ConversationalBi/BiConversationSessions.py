@@ -84,7 +84,7 @@ def bi_conversation_session_list(request):
 
 @login_required
 def bi_conversation_session_detail(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
     turns = session.queries.all().order_by("created_at")
 
     suggested_prompts = session.suggested_prompts
@@ -183,7 +183,7 @@ def bi_conversation_session_create(request):
 
 @login_required
 def bi_conversation_session_edit(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
 
     if request.method == "POST":
         form = BiConversationSessionForm(request.POST, instance=session, tenant=request.tenant)
@@ -217,7 +217,7 @@ def bi_conversation_session_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def bi_conversation_session_delete(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
     num = session.number
 
     with transaction.atomic():
@@ -237,7 +237,7 @@ def bi_conversation_session_delete(request, pk):
 @login_required
 @require_POST
 def bi_conversation_session_toggle_pin(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
     with transaction.atomic():
         session.is_pinned = not session.is_pinned
         session.save(update_fields=["is_pinned", "updated_at"])
@@ -261,7 +261,7 @@ def bi_conversation_session_toggle_pin(request, pk):
 @login_required
 @require_POST
 def bi_conversation_session_close(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
     with transaction.atomic():
         session.session_status = "closed"
         session.save(update_fields=["session_status", "updated_at"])
@@ -280,7 +280,7 @@ def bi_conversation_session_close(request, pk):
 @login_required
 @require_POST
 def bi_conversation_session_ask(request, pk):
-    session = bi_object(BiConversationSession, request, pk)
+    session = bi_object(request, BiConversationSession, pk)
     question_text = request.POST.get("query_text", "").strip()
 
     if not question_text:
