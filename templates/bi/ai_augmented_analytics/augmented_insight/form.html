@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ insight.number }}{% else %}New Augmented Insight{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:augmented_insight_list' %}">AI & Augmented Analytics</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit {{ insight.number }}{% else %}New Insight{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Insight: {{ insight.number }}{% else %}Create Augmented Insight{% endif %}</h1>
+        <p class="text-muted text-sm">Configure statistical variance, baseline values, NLG narrative explanations, and dimensional context</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Insight Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.insight_type.id_for_label }}">Insight Type *</label>
+                    {{ form.insight_type }}
+                    {% if form.insight_type.errors %}<div class="form-error">{{ form.insight_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.metric_name.id_for_label }}">Target Metric Name *</label>
+                    {{ form.metric_name }}
+                    {% if form.metric_name.errors %}<div class="form-error">{{ form.metric_name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.baseline_value.id_for_label }}">Baseline Value *</label>
+                    {{ form.baseline_value }}
+                    {% if form.baseline_value.errors %}<div class="form-error">{{ form.baseline_value.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.observed_value.id_for_label }}">Observed Value *</label>
+                    {{ form.observed_value }}
+                    {% if form.observed_value.errors %}<div class="form-error">{{ form.observed_value.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.variance_percentage.id_for_label }}">Variance Percentage (%) *</label>
+                    {{ form.variance_percentage }}
+                    {% if form.variance_percentage.errors %}<div class="form-error">{{ form.variance_percentage.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.confidence_score.id_for_label }}">Confidence Score (0-100%) *</label>
+                    {{ form.confidence_score }}
+                    {% if form.confidence_score.errors %}<div class="form-error">{{ form.confidence_score.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.impact_direction.id_for_label }}">Impact Direction *</label>
+                    {{ form.impact_direction }}
+                    {% if form.impact_direction.errors %}<div class="form-error">{{ form.impact_direction.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.severity.id_for_label }}">Severity Level *</label>
+                    {{ form.severity }}
+                    {% if form.severity.errors %}<div class="form-error">{{ form.severity.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dimension_name.id_for_label }}">Dimension Sliced (Optional)</label>
+                    {{ form.dimension_name }}
+                    {% if form.dimension_name.errors %}<div class="form-error">{{ form.dimension_name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dimension_value.id_for_label }}">Dimension Value (Optional)</label>
+                    {{ form.dimension_value }}
+                    {% if form.dimension_value.errors %}<div class="form-error">{{ form.dimension_value.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.narrative_summary.id_for_label }}">Executive Narrative Summary (NLG) *</label>
+                    {{ form.narrative_summary }}
+                    {% if form.narrative_summary.errors %}<div class="form-error">{{ form.narrative_summary.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Linked Semantic Model (Optional)</label>
+                    {{ form.semantic_model }}
+                    {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.kpi_definition.id_for_label }}">Linked KPI Definition (Optional)</label>
+                    {{ form.kpi_definition }}
+                    {% if form.kpi_definition.errors %}<div class="form-error">{{ form.kpi_definition.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.warehouse_table.id_for_label }}">Linked Warehouse Table (Optional)</label>
+                    {{ form.warehouse_table }}
+                    {% if form.warehouse_table.errors %}<div class="form-error">{{ form.warehouse_table.errors }}</div>{% endif %}
+                </div>
+
+                <div class="md:col-span-2 form-group">
+                    <label class="form-label" for="{{ form.action_notes.id_for_label }}">Action Notes & Follow-up</label>
+                    {{ form.action_notes }}
+                    {% if form.action_notes.errors %}<div class="form-error">{{ form.action_notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                {% if is_edit %}
+                <a href="{% url 'bi:augmented_insight_detail' insight.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'bi:augmented_insight_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">
+                    {% if is_edit %}Save Changes{% else %}Create Insight{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
