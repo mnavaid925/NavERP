@@ -49,6 +49,10 @@ from apps.bi.models import (
     PivotAnalysisView,
     WhatIfScenario,
     ScenarioWritebackCell,
+    PredictiveModel,
+    ForecastExecution,
+    StatisticalAnomaly,
+    OptimizationScenario,
     AugmentedInsight,
     SmartDataPrepSuggestion,
     TextSentimentAnalysis,
@@ -517,7 +521,37 @@ class AnalyticsRecommendationAdmin(admin.ModelAdmin):
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
 
 
+@admin.register(PredictiveModel)
+class PredictiveModelAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'problem_type', 'algorithm', 'target_metric', 'accuracy_metric_name', 'accuracy_metric_value', 'status', 'tenant')
+    list_select_related = ('tenant', 'semantic_model', 'warehouse_table', 'created_by')
+    list_filter = ('problem_type', 'algorithm', 'status', 'is_active', 'tenant')
+    search_fields = ('number', 'name', 'slug', 'target_metric', 'description')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
 
 
+@admin.register(ForecastExecution)
+class ForecastExecutionAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'model', 'cadence', 'horizon_periods', 'confidence_level', 'trend_direction', 'mape_score', 'status', 'tenant')
+    list_select_related = ('tenant', 'model', 'semantic_model', 'kpi_definition', 'executed_by')
+    list_filter = ('cadence', 'confidence_level', 'trend_direction', 'status', 'tenant')
+    search_fields = ('number', 'name', 'notes')
+    readonly_fields = ('number', 'tenant', 'executed_at')
 
 
+@admin.register(StatisticalAnomaly)
+class StatisticalAnomalyAdmin(admin.ModelAdmin):
+    list_display = ('number', 'title', 'metric_name', 'anomaly_type', 'detection_method', 'severity', 'observed_value', 'expected_value', 'triage_status', 'tenant')
+    list_select_related = ('tenant', 'model', 'semantic_model', 'kpi_definition', 'assigned_to')
+    list_filter = ('anomaly_type', 'detection_method', 'severity', 'triage_status', 'tenant')
+    search_fields = ('number', 'title', 'metric_name', 'resolution_notes')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
+
+
+@admin.register(OptimizationScenario)
+class OptimizationScenarioAdmin(admin.ModelAdmin):
+    list_display = ('number', 'name', 'objective_type', 'target_metric_name', 'baseline_value', 'optimal_value', 'projected_lift_percentage', 'solver_status', 'tenant')
+    list_select_related = ('tenant', 'kpi_definition', 'owner')
+    list_filter = ('objective_type', 'solver_algorithm', 'solver_status', 'status', 'tenant')
+    search_fields = ('number', 'name', 'slug', 'target_metric_name', 'description')
+    readonly_fields = ('number', 'tenant', 'created_at', 'updated_at')
