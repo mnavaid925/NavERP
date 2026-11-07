@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}Conversational BI Sessions — Conversational BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Conversational BI</span>
+        </div>
+        <h1 class="page-title">Conversational BI Sessions</h1>
+        <p class="text-muted text-sm">Multi-turn analytical chat threads with persistent conversational context, follow-up suggestions, and cross-metric exploration</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:natural_language_query_list' %}" class="btn btn-outline">
+            <i data-lucide="search"></i>
+            <span>All Queries</span>
+        </a>
+        <a href="{% url 'bi:search_discovery_hub' %}" class="btn btn-outline">
+            <i data-lucide="compass"></i>
+            <span>Discovery Hub</span>
+        </a>
+        <a href="{% url 'bi:bi_conversation_session_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Conversation</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="messages-square"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Sessions</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="message-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Threads</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="pin"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Pinned Threads</div>
+            <div class="text-2xl font-bold text-amber-600">{{ pinned_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="building"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Workspace</div>
+            <div class="text-base font-bold truncate">{{ request.tenant.name }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label for="filter_q" class="form-label text-xs">Search Conversations</label>
+                <div class="relative">
+                    <input type="text" id="filter_q" name="q" value="{{ request.GET.q }}" placeholder="Search title, session number..." class="form-input text-sm pl-9">
+                    <span class="absolute left-3 top-2.5 text-muted"><i data-lucide="search" class="w-4 h-4"></i></span>
+                </div>
+            </div>
+            <div>
+                <label for="filter_status" class="form-label text-xs">Session Status</label>
+                <select id="filter_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if request.GET.status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_semantic_model" class="form-label text-xs">Semantic Model</label>
+                <select id="filter_semantic_model" name="semantic_model" class="form-select text-sm">
+                    <option value="">All Models</option>
+                    {% for sm in semantic_models %}
+                    <option value="{{ sm.pk }}" {% if request.GET.semantic_model == sm.pk|stringformat:"d" %}selected{% endif %}>{{ sm.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="filter_dashboard" class="form-label text-xs">Bound Dashboard</label>
+                <select id="filter_dashboard" name="dashboard" class="form-select text-sm">
+                    <option value="">All Dashboards</option>
+                    {% for d in dashboards %}
+                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-6 flex justify-end gap-2 mt-2">
+                <a href="{% url 'bi:bi_conversation_session_list' %}" class="btn btn-outline text-xs">Clear</a>
+                <button type="submit" class="btn btn-primary text-xs">Filter Sessions</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Conversational Threads</h2>
+        <span class="text-xs text-muted">{{ sessions.paginator.count }} total threads</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Conversation</th>
+                    <th>Status</th>
+                    <th>Context Anchor</th>
+                    <th>Turns</th>
+                    <th>Last Active</th>
+                    <th>Initiated By</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sess in sessions %}
+                <tr class="{% if sess.is_pinned %}bg-amber-50/30{% endif %}">
+                    <td>
+                        <div class="flex items-center gap-2">
+                            {% if sess.is_pinned %}
+                            <i data-lucide="pin" class="w-4 h-4 text-amber-500 fill-amber-500 flex-shrink-0" title="Pinned Thread"></i>
+                            {% endif %}
+                            <div>
+                                <div class="font-medium text-slate-900">
+                                    <a href="{% url 'bi:bi_conversation_session_detail' sess.pk %}" class="hover:underline text-indigo-600">
+                                        {{ sess.title }}
+                                    </a>
+                                </div>
+                                <div class="text-xs text-muted font-mono mt-0.5">{{ sess.number }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ sess.status_badge_color }} text-xs">
+                            {{ sess.get_session_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if sess.primary_semantic_model %}
+                        <div class="text-sm font-medium text-slate-800">{{ sess.primary_semantic_model.name }}</div>
+                        <div class="text-xs text-muted">Semantic Model</div>
+                        {% elif sess.primary_dashboard %}
+                        <div class="text-sm font-medium text-slate-800">{{ sess.primary_dashboard.name }}</div>
+                        <div class="text-xs text-muted">Dashboard Context</div>
+                        {% else %}
+                        <span class="text-xs text-muted italic">Global Context</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-semibold text-sm">{{ sess.message_count }}</div>
+                        <div class="text-xs text-muted">queries exchanged</div>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ sess.last_interaction_at|date:"M d, Y" }}</div>
+                        <div class="text-xs text-muted">{{ sess.last_interaction_at|time:"H:i" }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ sess.user.get_full_name|default:sess.user.username }}</div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <form method="post" action="{% url 'bi:bi_conversation_session_toggle_pin' sess.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-amber-600 hover:bg-amber-50" title="{% if sess.is_pinned %}Unpin Thread{% else %}Pin to Top{% endif %}">
+                                    <i data-lucide="pin"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:bi_conversation_session_detail' sess.pk %}" class="btn btn-icon" title="Open Conversation">
+                                <i data-lucide="message-square"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_conversation_session_edit' sess.pk %}" class="btn btn-icon" title="Edit Session">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:bi_conversation_session_delete' sess.pk %}" class="inline" onsubmit="return confirm('Delete conversation {{ sess.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:bg-red-50" title="Delete Session">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state text-center py-12">
+                            <div class="inline-flex p-3 rounded-full bg-slate-100 text-slate-400 mb-3">
+                                <i data-lucide="messages-square" class="w-8 h-8"></i>
+                            </div>
+                            <h3 class="text-base font-semibold text-slate-800">No conversational threads found</h3>
+                            <p class="text-sm text-muted mt-1 max-w-sm mx-auto">Start a conversational chat session to interrogate enterprise data with automated follow-ups.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:bi_conversation_session_create' %}" class="btn btn-primary text-xs">
+                                    <i data-lucide="plus"></i>
+                                    <span>Start New Conversation</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if sessions.has_other_pages %}
+    <div class="card-footer flex justify-between items-center py-3">
+        <div class="text-xs text-muted">
+            Page {{ sessions.number }} of {{ sessions.paginator.num_pages }} ({{ sessions.paginator.count }} items)
+        </div>
+        <div class="pagination flex gap-1">
+            {% if sessions.has_previous %}
+            <a href="?page={{ sessions.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&semantic_model={{ request.GET.semantic_model }}&dashboard={{ request.GET.dashboard }}" class="btn btn-outline text-xs">Previous</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if sessions.has_next %}
+            <a href="?page={{ sessions.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&semantic_model={{ request.GET.semantic_model }}&dashboard={{ request.GET.dashboard }}" class="btn btn-outline text-xs">Next</a>
+            {% else %}
+            <span class="btn btn-outline text-xs opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
