@@ -70,6 +70,10 @@ from apps.bi.models import (
     KioskWallboardDisplay,
     MobileBiConfiguration,
     EmbedApiToken,
+    BiAlertRule,
+    ReportSubscription,
+    DistributionBurstRun,
+    BiNotificationItem,
 )
 
 
@@ -2497,4 +2501,141 @@ def embed_api_token_b(db, tenant_b, admin_user_b, embedded_analytics_config_b):
         status="active",
         created_by=admin_user_b,
     )
+
+
+@pytest.fixture
+def bi_alert_rule_a(db, tenant_a, admin_user):
+    rule = BiAlertRule.objects.create(
+        tenant=tenant_a,
+        number="BALR-00001",
+        name="Acme Revenue Target Alert",
+        alert_type="threshold",
+        threshold_value=Decimal("1000.00"),
+        comparison_operator="gt",
+        severity="high",
+        status="active",
+        delivery_channels=["email", "in_app"],
+        created_by=admin_user,
+    )
+    rule.recipient_users.add(admin_user)
+    return rule
+
+
+@pytest.fixture
+def bi_alert_rule_b(db, tenant_b, admin_user_b):
+    rule = BiAlertRule.objects.create(
+        tenant=tenant_b,
+        number="BALR-00002",
+        name="Globex Cost Floor Alert",
+        alert_type="threshold",
+        threshold_value=Decimal("500.00"),
+        comparison_operator="lt",
+        severity="medium",
+        status="active",
+        delivery_channels=["email"],
+        created_by=admin_user_b,
+    )
+    rule.recipient_users.add(admin_user_b)
+    return rule
+
+
+@pytest.fixture
+def report_subscription_a(db, tenant_a, admin_user, bi_dashboard_a):
+    sub = ReportSubscription.objects.create(
+        tenant=tenant_a,
+        number="BSUB-00001",
+        name="Weekly Executive KPI Digest",
+        target_asset_type="dashboard",
+        dashboard=bi_dashboard_a,
+        frequency="weekly",
+        export_format="pdf",
+        delivery_channel="email",
+        status="active",
+        include_table_data=True,
+        created_by=admin_user,
+    )
+    sub.subscriber_users.add(admin_user)
+    return sub
+
+
+@pytest.fixture
+def report_subscription_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    sub = ReportSubscription.objects.create(
+        tenant=tenant_b,
+        number="BSUB-00002",
+        name="Globex Monthly Operational Summary",
+        target_asset_type="dashboard",
+        dashboard=bi_dashboard_b,
+        frequency="monthly",
+        export_format="csv",
+        delivery_channel="email",
+        status="active",
+        include_table_data=False,
+        created_by=admin_user_b,
+    )
+    sub.subscriber_users.add(admin_user_b)
+    return sub
+
+
+@pytest.fixture
+def distribution_burst_run_a(db, tenant_a, admin_user, report_subscription_a):
+    return DistributionBurstRun.objects.create(
+        tenant=tenant_a,
+        number="BBRS-00001",
+        subscription=report_subscription_a,
+        run_type="subscription",
+        delivery_channel="email",
+        batch_size=10,
+        delivered_count=10,
+        failed_count=0,
+        status="completed",
+        executed_by=admin_user,
+    )
+
+
+@pytest.fixture
+def distribution_burst_run_b(db, tenant_b, admin_user_b, report_subscription_b):
+    return DistributionBurstRun.objects.create(
+        tenant=tenant_b,
+        number="BBRS-00002",
+        subscription=report_subscription_b,
+        run_type="subscription",
+        delivery_channel="email",
+        batch_size=5,
+        delivered_count=5,
+        failed_count=0,
+        status="completed",
+        executed_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_notification_item_a(db, tenant_a, admin_user, bi_alert_rule_a):
+    return BiNotificationItem.objects.create(
+        tenant=tenant_a,
+        number="BNTF-00001",
+        title="Revenue Threshold Alert Tripped",
+        message="Monthly revenue exceeded 1000.00 target.",
+        severity="high",
+        category="threshold_alert",
+        alert_rule=bi_alert_rule_a,
+        recipient=admin_user,
+        status="unread",
+    )
+
+
+@pytest.fixture
+def bi_notification_item_b(db, tenant_b, admin_user_b, bi_alert_rule_b):
+    return BiNotificationItem.objects.create(
+        tenant=tenant_b,
+        number="BNTF-00002",
+        title="Globex Floor Alert Tripped",
+        message="Unit cost fell below floor threshold.",
+        severity="medium",
+        category="threshold_alert",
+        alert_rule=bi_alert_rule_b,
+        recipient=admin_user_b,
+        status="unread",
+    )
+
 
