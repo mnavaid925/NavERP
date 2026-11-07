@@ -141,8 +141,8 @@
                     <td class="text-right font-mono text-slate-500">{{ pt.lower_bound }}</td>
                     <td class="text-right font-mono font-bold text-blue-600">{{ pt.predicted }}</td>
                     <td class="text-right font-mono text-slate-500">{{ pt.upper_bound }}</td>
-                    <td class="text-right font-mono text-xs text-slate-400">
-                        &plusmn;{{ pt.upper_bound|add:pt.lower_bound }}
+                    <td class="text-right font-mono text-xs text-slate-500">
+                        [{{ pt.lower_bound }}, {{ pt.upper_bound }}]
                     </td>
                 </tr>
                 {% empty %}
