@@ -49,6 +49,10 @@ from apps.bi.models import (
     PivotAnalysisView,
     WhatIfScenario,
     ScenarioWritebackCell,
+    AugmentedInsight,
+    SmartDataPrepSuggestion,
+    TextSentimentAnalysis,
+    AnalyticsRecommendation,
 )
 
 
@@ -475,6 +479,43 @@ class StrategicObjectiveAdmin(admin.ModelAdmin):
     list_filter = ("perspective", "rag_status", "status", "tenant")
     search_fields = ("number", "code", "name", "slug", "statement_of_intent")
     readonly_fields = ("number", "tenant", "alignment_score", "rag_status", "created_at", "updated_at")
+
+
+@admin.register(AugmentedInsight)
+class AugmentedInsightAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "insight_type", "metric_name", "variance_percentage", "impact_direction", "severity", "status", "tenant")
+    list_select_related = ("tenant", "semantic_model", "kpi_definition", "warehouse_table", "created_by")
+    list_filter = ("insight_type", "impact_direction", "severity", "status", "tenant")
+    search_fields = ("number", "title", "metric_name", "dimension_name", "dimension_value", "narrative_summary")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(SmartDataPrepSuggestion)
+class SmartDataPrepSuggestionAdmin(admin.ModelAdmin):
+    list_display = ("number", "suggestion_type", "target_table", "target_column", "related_table", "related_column", "confidence_score", "status", "tenant")
+    list_select_related = ("tenant", "target_table", "related_table", "reviewed_by")
+    list_filter = ("suggestion_type", "status", "tenant")
+    search_fields = ("number", "target_column", "related_column", "rationale")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(TextSentimentAnalysis)
+class TextSentimentAnalysisAdmin(admin.ModelAdmin):
+    list_display = ("number", "source_reference", "source_type", "sentiment_category", "polarity_score", "subjectivity_score", "linked_party", "tenant")
+    list_select_related = ("tenant", "linked_party", "linked_org_unit")
+    list_filter = ("source_type", "sentiment_category", "tenant")
+    search_fields = ("number", "source_reference", "text_content")
+    readonly_fields = ("number", "tenant", "analyzed_at", "created_at", "updated_at")
+
+
+@admin.register(AnalyticsRecommendation)
+class AnalyticsRecommendationAdmin(admin.ModelAdmin):
+    list_display = ("number", "target_title", "recommendation_type", "user", "reason", "affinity_score", "status", "tenant")
+    list_select_related = ("tenant", "user", "dashboard", "report", "kpi", "semantic_model")
+    list_filter = ("recommendation_type", "reason", "status", "tenant")
+    search_fields = ("number", "target_title", "target_url", "rationale_text", "user__username")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
 
 
 
