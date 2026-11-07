@@ -6,8 +6,16 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.bi.models import (
+    BiConversationSession,
+    NarrativeExplanation,
+    NaturalLanguageQuery,
+    SearchDiscoveryIndex,
     AnalyticsRecommendation,
     AugmentedInsight,
+    BiConversationSession,
+    NarrativeExplanation,
+    NaturalLanguageQuery,
+    SearchDiscoveryIndex,
     AdHocCalculatedField,
     AdHocQuery,
     BiDashboard,
@@ -2150,4 +2158,317 @@ def analytics_recommendation_b(db, tenant_b, admin_user_b, bi_dashboard_b, seman
         status="active",
         dashboard=bi_dashboard_b,
         semantic_model=semantic_model_b,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 10.15 Natural Language & Conversational BI Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def conversation_session_a(db, tenant_a, admin_user, semantic_model_a, bi_dashboard_a):
+    return BiConversationSession.objects.create(
+        tenant=tenant_a,
+        number="BCON-00001",
+        title="Acme Financial and Revenue Q3 Review",
+        user=admin_user,
+        primary_semantic_model=semantic_model_a,
+        primary_dashboard=bi_dashboard_a,
+        session_status="active",
+        is_pinned=True,
+        context_state={"perspective": "financial", "timeframe": "Q3"},
+        suggested_followups=["What is the forecast?", "Show variance by region"],
+    )
+
+
+@pytest.fixture
+def conversation_session_b(db, tenant_b, admin_user_b, semantic_model_b, bi_dashboard_b):
+    return BiConversationSession.objects.create(
+        tenant=tenant_b,
+        number="BCON-00002",
+        title="Globex Procurement and Spend Analysis",
+        user=admin_user_b,
+        primary_semantic_model=semantic_model_b,
+        primary_dashboard=bi_dashboard_b,
+        session_status="active",
+        is_pinned=False,
+        context_state={"perspective": "procurement"},
+    )
+
+
+@pytest.fixture
+def natural_language_query_a(db, tenant_a, admin_user, conversation_session_a, semantic_model_a, warehouse_table_sales):
+    return NaturalLanguageQuery.objects.create(
+        tenant=tenant_a,
+        number="BNLQ-00001",
+        conversation_session=conversation_session_a,
+        user=admin_user,
+        question_text="What was total gross revenue by territory in Q2?",
+        input_modality="text",
+        intent_type="aggregation",
+        semantic_model=semantic_model_a,
+        warehouse_table=warehouse_table_sales,
+        generated_sql="SELECT territory, SUM(gross_amount) FROM fct_sales GROUP BY territory",
+        result_summary="Q2 gross revenue was highest in North America, followed by EMEA.",
+        execution_status="completed",
+        execution_duration_ms=45,
+        user_rating="helpful",
+    )
+
+
+@pytest.fixture
+def natural_language_query_b(db, tenant_b, admin_user_b, conversation_session_b, semantic_model_b):
+    return NaturalLanguageQuery.objects.create(
+        tenant=tenant_b,
+        number="BNLQ-00002",
+        conversation_session=conversation_session_b,
+        user=admin_user_b,
+        question_text="Show top spend categories for Globex",
+        input_modality="text",
+        intent_type="aggregation",
+        semantic_model=semantic_model_b,
+        execution_status="completed",
+        execution_duration_ms=52,
+    )
+
+
+@pytest.fixture
+def narrative_explanation_a(db, tenant_a, admin_user, bi_dashboard_a, semantic_model_a, natural_language_query_a):
+    return NarrativeExplanation.objects.create(
+        tenant=tenant_a,
+        number="BNLG-00001",
+        title="Executive Revenue Narrative Q3",
+        target_artifact_type="dashboard",
+        narrative_style="executive_briefing",
+        status="published",
+        executive_summary="Revenue increased 14.2% quarter-over-quarter driven by high enterprise expansion.",
+        full_narrative="Total gross revenue reached 12.8M against a budget target of 11.5M. Customer renewal rates held steady at 96.4%.",
+        key_takeaways=["QoQ revenue grew 14.2%", "Enterprise expansion exceeded targets by 8%"],
+        dashboard=bi_dashboard_a,
+        semantic_model=semantic_model_a,
+        query=natural_language_query_a,
+        created_by=admin_user,
+        speech_script_ssml="<speak>Good morning. Quarter 3 revenue rose fourteen percent, led by strong enterprise renewals.</speak>",
+        voice_audio_duration_seconds=42,
+    )
+
+
+@pytest.fixture
+def narrative_explanation_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    return NarrativeExplanation.objects.create(
+        tenant=tenant_b,
+        number="BNLG-00002",
+        title="Globex Procurement Monthly Briefing",
+        target_artifact_type="dashboard",
+        narrative_style="operational_summary",
+        status="draft",
+        executive_summary="Procurement spend was within allowable variance bands for October.",
+        full_narrative="Raw material acquisition tracked budget within 2.1% across all production sites.",
+        dashboard=bi_dashboard_b,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def search_discovery_index_a(db, tenant_a, bi_dashboard_a, semantic_model_a):
+    return SearchDiscoveryIndex.objects.create(
+        tenant=tenant_a,
+        number="BSDI-00001",
+        asset_type="dashboard",
+        asset_name="Executive Revenue Dashboard",
+        description="High-level KPI overview of monthly revenue, gross margins, and customer churn metrics.",
+        target_url="/bi/dashboards/1/",
+        search_keywords="revenue sales margin churn executive cfo",
+        synonyms=["income", "turnover", "topline"],
+        is_featured=True,
+        is_verified=True,
+        relevance_weight=Decimal("1.25"),
+        dashboard=bi_dashboard_a,
+        semantic_model=semantic_model_a,
+        search_hit_count=120,
+    )
+
+
+@pytest.fixture
+def search_discovery_index_b(db, tenant_b, bi_dashboard_b):
+    return SearchDiscoveryIndex.objects.create(
+        tenant=tenant_b,
+        number="BSDI-00002",
+        asset_type="dashboard",
+        asset_name="Globex Logistics Hub",
+        description="Logistics tracking and distribution metrics for Globex EMEA operations.",
+        target_url="/bi/dashboards/2/",
+        search_keywords="logistics shipping fleet supply globex",
+        is_featured=False,
+        is_verified=False,
+        relevance_weight=Decimal("1.00"),
+        dashboard=bi_dashboard_b,
+        search_hit_count=45,
+    )
+
+
+# ============================================================================
+# Sub-module 10.15 Natural Language & Conversational BI Fixtures
+# ============================================================================
+
+@pytest.fixture
+def natural_language_query_a(db, tenant_a, admin_user, semantic_model_a, warehouse_table_a):
+    return NaturalLanguageQuery.objects.create(
+        tenant=tenant_a,
+        number='BNLQ-00001',
+        query_text='What is our total revenue by product line for Q3?',
+        input_modality='text',
+        intent_type='metric_lookup',
+        semantic_model=semantic_model_a,
+        warehouse_table=warehouse_table_a,
+        grounded_sql='SELECT product_line, SUM(revenue) FROM sales_fact WHERE quarter = 3 GROUP BY product_line',
+        execution_status='completed',
+        execution_duration_ms=45,
+        user=admin_user,
+        user_rating='helpful',
+        parsed_measures=['total_revenue'],
+        parsed_dimensions=['product_line'],
+        parsed_filters={'quarter': 3},
+    )
+
+
+@pytest.fixture
+def natural_language_query_b(db, tenant_b, admin_user_b, semantic_model_b, warehouse_table_b):
+    return NaturalLanguageQuery.objects.create(
+        tenant=tenant_b,
+        number='BNLQ-00002',
+        query_text='List inventory replenishment exceptions in Globex Europe',
+        input_modality='text',
+        intent_type='root_cause',
+        semantic_model=semantic_model_b,
+        warehouse_table=warehouse_table_b,
+        grounded_sql='SELECT item, variance FROM stock_exceptions WHERE region = Europe',
+        execution_status='completed',
+        execution_duration_ms=62,
+        user=admin_user_b,
+        user_rating='helpful',
+        parsed_measures=['variance'],
+        parsed_dimensions=['item'],
+        parsed_filters={'region': 'Europe'},
+    )
+
+
+@pytest.fixture
+def bi_conversation_session_a(db, tenant_a, admin_user, semantic_model_a, bi_dashboard_a):
+    return BiConversationSession.objects.create(
+        tenant=tenant_a,
+        number='BCON-00001',
+        title='Q4 Executive Revenue & Profitability Analysis',
+        user=admin_user,
+        primary_semantic_model=semantic_model_a,
+        active_dashboard=bi_dashboard_a,
+        session_status='active',
+        is_pinned=True,
+        message_count=4,
+        suggested_followups=[
+            'Which sales territories are trailing target?',
+            'Show gross margin trend by product family',
+        ],
+    )
+
+
+@pytest.fixture
+def bi_conversation_session_b(db, tenant_b, admin_user_b, semantic_model_b, bi_dashboard_b):
+    return BiConversationSession.objects.create(
+        tenant=tenant_b,
+        number='BCON-00002',
+        title='Globex EMEA Inventory Optimization Discussion',
+        user=admin_user_b,
+        primary_semantic_model=semantic_model_b,
+        active_dashboard=bi_dashboard_b,
+        session_status='active',
+        is_pinned=False,
+        message_count=2,
+        suggested_followups=['Show supplier lead time variance'],
+    )
+
+
+@pytest.fixture
+def narrative_explanation_a(db, tenant_a, admin_user, bi_dashboard_a, kpi_definition_a):
+    return NarrativeExplanation.objects.create(
+        tenant=tenant_a,
+        number='BNLG-00001',
+        title='Executive Narrative: Q3 Revenue Outperformance',
+        target_artifact_type='dashboard',
+        dashboard=bi_dashboard_a,
+        kpi=kpi_definition_a,
+        narrative_style='executive_briefing',
+        headline='Q3 gross margin expanded +2.8% driven by high-margin software renewals',
+        narrative_body='Q3 performance was highlighted by strong momentum in subscription tiers...',
+        top_positive_driver='Enterprise SaaS renewals',
+        top_negative_driver='Professional services margin compression',
+        key_takeaways=[
+            'Subscription revenue exceeded plan by ',
+            'Operating margin held steady at 28.4%',
+        ],
+        audio_ready_script='Executive briefing for Q3 revenue. Margins expanded 2.8 percent...',
+        status='published',
+        author=admin_user,
+    )
+
+
+@pytest.fixture
+def narrative_explanation_b(db, tenant_b, admin_user_b, bi_dashboard_b):
+    return NarrativeExplanation.objects.create(
+        tenant=tenant_b,
+        number='BNLG-00002',
+        title='Globex EMEA Operations Weekly Digest',
+        target_artifact_type='dashboard',
+        dashboard=bi_dashboard_b,
+        narrative_style='operational_summary',
+        headline='On-time delivery rose to 96.2% across Frankfurt and Rotterdam hubs',
+        narrative_body='Supply chain fluidity improved following customs automation rollouts...',
+        top_positive_driver='Automated customs processing',
+        top_negative_driver='Fuel surcharge increases',
+        key_takeaways=['OTD reached 96.2%', 'Backlog decreased 14%'],
+        audio_ready_script='Spoken summary of Globex EMEA operations. On time delivery reached 96.2 percent...',
+        status='generated',
+        author=admin_user_b,
+    )
+
+
+@pytest.fixture
+def search_discovery_index_a(db, tenant_a, bi_dashboard_a, semantic_model_a):
+    return SearchDiscoveryIndex.objects.create(
+        tenant=tenant_a,
+        number='BSDI-00001',
+        asset_name='Executive Profitability Dashboard',
+        asset_type='dashboard',
+        dashboard=bi_dashboard_a,
+        semantic_model=semantic_model_a,
+        synonyms=['gross margin', 'bottom line', 'ebitda', 'net income', 'pnl'],
+        description='Consolidated executive profitability and operating margin tracking.',
+        category='Finance & Accounting',
+        relevance_weight=Decimal('1.50'),
+        view_count=184,
+        search_hit_count=92,
+        is_featured=True,
+        is_verified=True,
+        target_url='/bi/dashboards/1/',
+    )
+
+
+@pytest.fixture
+def search_discovery_index_b(db, tenant_b, bi_dashboard_b, semantic_model_b):
+    return SearchDiscoveryIndex.objects.create(
+        tenant=tenant_b,
+        number='BSDI-00002',
+        asset_name='Globex Logistics Fulfillment Dashboard',
+        asset_type='dashboard',
+        dashboard=bi_dashboard_b,
+        semantic_model=semantic_model_b,
+        synonyms=['lead time', 'fulfillment rate', 'freight costs', 'otd'],
+        description='Supply chain transit and delivery execution tracker for Globex EMEA.',
+        category='Logistics & Supply Chain',
+        relevance_weight=Decimal('1.20'),
+        view_count=65,
+        search_hit_count=31,
+        is_featured=False,
+        is_verified=True,
+        target_url='/bi/dashboards/2/',
     )
