@@ -78,3 +78,17 @@ None.
 2. `apps/bi/views/AlertsSubscriptions/BiAlertRules.py:256`, `ReportSubscriptions.py:271` — State mutations in action handlers invoke `.save()` without `update_fields`, rewriting all fields. Fix: Add explicit `update_fields` list matching the updated fields.
 
 ---
+
+## 5. QA Smoke Tester Findings
+
+### Critical
+1. `templates/bi/alerts_subscriptions/report_subscription/detail.html:201` — Accessing a `ReportSubscription` where `created_by=None` raises `AttributeError: 'NoneType' object has no attribute 'username'`, crashing the detail page with HTTP 500 (Lesson L10). Fix: Guard with `{% if subscription.created_by %}{{ subscription.created_by.get_full_name|default:subscription.created_by.username }}{% else %}<span class="text-muted">System</span>{% endif %}`.
+2. `apps/bi/views/AlertsSubscriptions/BiNotificationItems.py:329` — `hours = int(request.POST.get("hours", "4"))` without error handling raises `ValueError` 500 server crash when `hours` is malformed or empty string (Lesson L35). Fix: Wrap with `try/except (ValueError, TypeError)` or validate `.isdigit()`.
+
+### Important
+1. URL Name Consistency: URL routes registered in `BiAlertRules.py` and `BiNotificationItems.py` use `bi:bi_alert_rule_*` and `bi:bi_notification_item_*`. If short aliases (`bi:alert_rule_*`, `bi:notification_item_*`) are expected by callers, add alias paths to prevent `NoReverseMatch`.
+
+### Minor
+None.
+
+---
