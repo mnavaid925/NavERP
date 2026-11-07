@@ -155,7 +155,7 @@
 - [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_10_15.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
+- [x] Create `temp/smoke_10_15.py` and run thorough smoke checks (status 200, content assertions, IDOR 404, filters)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
 - [ ] 1. Code Reviewer
