@@ -8,6 +8,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Avg, Count, Q
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.bi.forms.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysisForm
@@ -254,4 +255,7 @@ def text_sentiment_analysis_recalculate(request, pk):
         tenant=request.tenant,
     )
     messages.success(request, f"Recalculated sentiment: {analysis.get_sentiment_category_display()} (Polarity: {pol}).")
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
+        return redirect(next_url)
     return redirect("bi:text_sentiment_analysis_detail", pk=analysis.pk)
