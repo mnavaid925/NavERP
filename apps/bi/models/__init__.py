@@ -33,6 +33,10 @@ from apps.bi.models.OlapAnalysis import (
     ScenarioWritebackCell,
     WhatIfScenario,
 )
+from apps.bi.models.AiAugmentedAnalytics.AugmentedInsights import AugmentedInsight
+from apps.bi.models.AiAugmentedAnalytics.SmartDataPrepSuggestions import SmartDataPrepSuggestion
+from apps.bi.models.AiAugmentedAnalytics.TextSentimentAnalyses import TextSentimentAnalysis
+from apps.bi.models.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendation
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -101,4 +105,8 @@ __all__ = [
     "PivotAnalysisView",
     "WhatIfScenario",
     "ScenarioWritebackCell",
+    "AugmentedInsight",
+    "SmartDataPrepSuggestion",
+    "TextSentimentAnalysis",
+    "AnalyticsRecommendation",
 ]
