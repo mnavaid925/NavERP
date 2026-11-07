@@ -125,12 +125,11 @@ def narrative_explanation_create(request):
                 form.save_m2m()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="create",
-                    model_name="NarrativeExplanation",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Created natural language narrative explanation",
+                    changes={"details": "Created natural language narrative explanation"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Narrative explanation '{instance.number}' created successfully.")
                 return redirect("bi:narrative_explanation_detail", pk=instance.pk)
@@ -159,12 +158,11 @@ def narrative_explanation_edit(request, pk):
                 instance = form.save()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="update",
-                    model_name="NarrativeExplanation",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Updated narrative explanation",
+                    changes={"details": "Updated narrative explanation"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Narrative '{instance.number}' updated.")
                 return redirect("bi:narrative_explanation_detail", pk=instance.pk)
@@ -190,12 +188,11 @@ def narrative_explanation_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request=request,
+            user=request.user,
+            obj=narrative,
             action="delete",
-            model_name="NarrativeExplanation",
-            object_id=narrative.pk,
-            object_repr=str(narrative),
-            change_message="Deleted narrative explanation",
+            changes={"details": f"Deleted narrative explanation {num}"},
+            tenant=request.tenant,
         )
         narrative.delete()
 
@@ -211,12 +208,11 @@ def narrative_explanation_publish(request, pk):
     narrative.save(update_fields=["status", "updated_at"])
 
     write_audit_log(
-        request=request,
+        user=request.user,
+        obj=narrative,
         action="update",
-        model_name="NarrativeExplanation",
-        object_id=narrative.pk,
-        object_repr=str(narrative),
-        change_message="Published narrative explanation",
+        changes={"details": "Published narrative explanation"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Narrative '{narrative.number}' is now published and distributed.")
 
@@ -259,12 +255,11 @@ def narrative_explanation_regenerate(request, pk):
         narrative.save()
 
         write_audit_log(
-            request=request,
+            user=request.user,
+            obj=narrative,
             action="update",
-            model_name="NarrativeExplanation",
-            object_id=narrative.pk,
-            object_repr=str(narrative),
-            change_message="Regenerated narrative body, takeaways, and audio script",
+            changes={"details": "Regenerated narrative body, takeaways, and audio script"},
+            tenant=request.tenant,
         )
 
     messages.success(request, f"Narrative and spoken audio script for '{narrative.number}' regenerated.")
