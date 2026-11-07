@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.bi.forms.AiAugmentedAnalytics.AnalyticsRecommendations import AnalyticsRecommendationForm
@@ -192,6 +193,6 @@ def analytics_recommendation_interact(request, pk):
         messages.success(request, f"Recommendation {recommendation.number} marked as {recommendation.get_status_display()}.")
 
     next_url = request.POST.get("next") or request.META.get("HTTP_REFERER")
-    if next_url:
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
         return redirect(next_url)
     return redirect("bi:analytics_recommendation_detail", pk=recommendation.pk)
