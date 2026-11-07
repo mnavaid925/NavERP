@@ -20,11 +20,9 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_alert_rule_list(request):
-    qs = bi_scope(BiAlertRule.objects.all(), request).select_related(
-        "kpi_definition", "anomaly_detection", "created_by"
-    )
+    base_qs = bi_scope(BiAlertRule.objects.all(), request)
 
-    counts = qs.aggregate(
+    counts = base_qs.aggregate(
         total=Count("id"),
         active=Count("id", filter=Q(status="active")),
         tripped=Count("id", filter=Q(status="tripped")),
@@ -34,6 +32,10 @@ def bi_alert_rule_list(request):
     active_count = counts["active"] or 0
     tripped_count = counts["tripped"] or 0
     critical_count = counts["critical"] or 0
+
+    qs = base_qs.select_related(
+        "kpi_definition", "anomaly_detection", "created_by"
+    )
 
     # Search
     q = request.GET.get("q", "").strip()
