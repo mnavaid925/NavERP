@@ -87,10 +87,10 @@ def kiosk_wallboard_display_create(request):
                 display.created_by = request.user
                 display.save()
                 write_audit_log(
-                    request,
-                    action="CREATE",
-                    instance=display,
-                    description=f"Created kiosk wallboard display {display.number} ({display.name})",
+                    request.user,
+                    display,
+                    "create",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Display '{display.name}' created successfully.")
             return redirect("bi:kiosk_wallboard_display_detail", pk=display.pk)
@@ -139,10 +139,10 @@ def kiosk_wallboard_display_edit(request, pk):
             with transaction.atomic():
                 display = form.save()
                 write_audit_log(
-                    request,
-                    action="UPDATE",
-                    instance=display,
-                    description=f"Updated kiosk wallboard display {display.number}",
+                    request.user,
+                    display,
+                    "update",
+                    tenant=request.tenant,
                 )
             messages.success(request, f"Display '{display.name}' updated successfully.")
             return redirect("bi:kiosk_wallboard_display_detail", pk=display.pk)
@@ -163,10 +163,10 @@ def kiosk_wallboard_display_delete(request, pk):
     display = bi_object(request, KioskWallboardDisplay, pk)
     with transaction.atomic():
         write_audit_log(
-            request,
-            action="DELETE",
-            instance=display,
-            description=f"Deleted kiosk wallboard display {display.number}",
+            request.user,
+            display,
+            "delete",
+            tenant=request.tenant,
         )
         display.delete()
     messages.success(request, "Display deleted.")
