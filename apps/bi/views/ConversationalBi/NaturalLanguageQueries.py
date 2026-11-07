@@ -154,12 +154,11 @@ def natural_language_query_create(request):
                 form.save_m2m()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="create",
-                    model_name="NaturalLanguageQuery",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Created natural language analytical query",
+                    changes={"details": "Created natural language analytical query"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Natural language query '{instance.number}' submitted successfully.")
                 return redirect("bi:natural_language_query_detail", pk=instance.pk)
@@ -192,12 +191,11 @@ def natural_language_query_edit(request, pk):
                 instance = form.save()
 
                 write_audit_log(
-                    request=request,
+                    user=request.user,
+                    obj=instance,
                     action="update",
-                    model_name="NaturalLanguageQuery",
-                    object_id=instance.pk,
-                    object_repr=str(instance),
-                    change_message="Updated natural language query parameters",
+                    changes={"details": "Updated natural language query parameters"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Natural language query '{instance.number}' updated.")
                 return redirect("bi:natural_language_query_detail", pk=instance.pk)
@@ -223,12 +221,11 @@ def natural_language_query_delete(request, pk):
 
     with transaction.atomic():
         write_audit_log(
-            request=request,
+            user=request.user,
+            obj=query,
             action="delete",
-            model_name="NaturalLanguageQuery",
-            object_id=query.pk,
-            object_repr=str(query),
-            change_message="Deleted natural language query",
+            changes={"details": f"Deleted natural language query {num}"},
+            tenant=request.tenant,
         )
         query.delete()
 
@@ -245,19 +242,19 @@ def natural_language_query_rate(request, pk):
 
     valid_ratings = [c[0] for c in NaturalLanguageQuery.USER_RATING_CHOICES]
     if rating in valid_ratings:
-        query.user_rating = rating
-        if notes:
-            query.user_feedback_notes = notes
-        query.save(update_fields=["user_rating", "user_feedback_notes", "updated_at"])
+        with transaction.atomic():
+            query.user_rating = rating
+            if notes:
+                query.user_feedback_notes = notes
+            query.save(update_fields=["user_rating", "user_feedback_notes", "updated_at"])
 
-        write_audit_log(
-            request=request,
-            action="update",
-            model_name="NaturalLanguageQuery",
-            object_id=query.pk,
-            object_repr=str(query),
-            change_message=f"Logged user accuracy rating: {rating}",
-        )
+            write_audit_log(
+                user=request.user,
+                obj=query,
+                action="rate",
+                changes={"details": f"Logged user accuracy rating: {rating}"},
+                tenant=request.tenant,
+            )
         messages.success(request, f"Thank you for rating query '{query.number}'.")
     else:
         messages.error(request, "Invalid rating value provided.")
