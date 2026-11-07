@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scenario_obj.name }} — Optimization Scenario — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:optimization_scenario_list' %}">Optimization Scenarios</a>
+            <span class="sep">/</span>
+            <span>{{ scenario_obj.name }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scenario_obj.name }}</h1>
+            {% if scenario_obj.solver_status == 'optimal' %}
+            <span class="badge badge-green">Optimal Solution</span>
+            {% elif scenario_obj.solver_status == 'feasible' %}
+            <span class="badge badge-info">Feasible</span>
+            {% elif scenario_obj.solver_status == 'infeasible' %}
+            <span class="badge badge-red">Infeasible</span>
+            {% else %}
+            <span class="badge badge-slate">{{ scenario_obj.get_solver_status_display }}</span>
+            {% endif %}
+
+            <span class="badge badge-info">{{ scenario_obj.get_objective_type_display }}</span>
+        </div>
+        <div class="text-xs text-muted font-mono flex items-center gap-2 mt-1">
+            <span>{{ scenario_obj.number }}</span>
+            <span class="text-slate-300">•</span>
+            <span>Target: {{ scenario_obj.target_metric_name }}</span>
+            <span class="text-slate-300">•</span>
+            <span>slug: {{ scenario_obj.slug }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:optimization_scenario_solve' scenario_obj.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Execute prescriptive optimization algorithm">
+                <i data-lucide="play-circle"></i>
+                <span>Run Solver</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:optimization_scenario_edit' scenario_obj.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Scenario</span>
+        </a>
+        <form method="post" action="{% url 'bi:optimization_scenario_delete' scenario_obj.pk %}" onsubmit="return confirm('Delete scenario {{ scenario_obj.name }}?');" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-icon" title="Delete Scenario">
+                <i data-lucide="trash-2"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Baseline Value</div>
+            <div class="text-2xl font-bold font-mono text-slate-800">{{ scenario_obj.baseline_value }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Optimal Solution</div>
+            <div class="text-2xl font-bold font-mono text-emerald-700">
+                {% if scenario_obj.optimal_value %}{{ scenario_obj.optimal_value }}{% else %}Unsolved{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="trending-up"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Projected Lift</div>
+            <div class="text-2xl font-bold font-mono text-indigo-600">
+                {% if scenario_obj.projected_lift_percentage != 0 %}+{{ scenario_obj.projected_lift_percentage }}%{% else %}&mdash;{% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="cpu"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Solver Engine</div>
+            <div class="text-sm font-bold text-amber-700 truncate">{{ scenario_obj.get_solver_algorithm_display }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Recommended Prescriptive Actions Card -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+            <i data-lucide="sparkles" class="w-4 h-4 text-emerald-500"></i>
+            Prescriptive Next-Best-Action Recommendations
+        </h3>
+    </div>
+    <div class="card-body">
+        {% if scenario_obj.recommended_actions %}
+        <div class="space-y-3">
+            {% for act in scenario_obj.recommended_actions %}
+            <div class="p-4 rounded-lg bg-slate-50 border border-slate-200 flex items-start justify-between gap-4">
+                <div class="flex items-start gap-3">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold text-xs flex items-center justify-center">
+                        {{ act.rank }}
+                    </span>
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">{{ act.action }}</div>
+                        <div class="text-xs text-muted mt-1">Confidence Rating: <span class="font-semibold text-slate-700">{{ act.confidence }}</span></div>
+                    </div>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <span class="badge badge-green font-mono text-xs font-semibold">{{ act.expected_delta }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-6 text-muted text-sm">
+            Run the prescriptive solver to generate actionable next-best-action guidance.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Decision Variables Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-blue-500"></i>
+                Controllable Decision Variables
+            </h3>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Variable Name</th>
+                        <th class="text-right">Min Bound</th>
+                        <th class="text-right">Max Bound</th>
+                        <th class="text-right">Step</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for var in scenario_obj.decision_variables %}
+                    <tr>
+                        <td class="font-mono text-xs font-semibold text-slate-800">{{ var.name }}</td>
+                        <td class="text-right font-mono text-xs text-slate-600">{{ var.min }}</td>
+                        <td class="text-right font-mono text-xs text-slate-600">{{ var.max }}</td>
+                        <td class="text-right font-mono text-xs text-slate-400">{{ var.step }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted text-xs">No decision variables defined.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Constraints Card -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="font-semibold text-slate-800 flex items-center gap-2">
+                <i data-lucide="lock" class="w-4 h-4 text-amber-500"></i>
+                Operational Boundary Constraints
+            </h3>
+        </div>
+        <div class="card-body">
+            {% if scenario_obj.constraint_rules %}
+            <div class="space-y-3">
+                {% for rule in scenario_obj.constraint_rules %}
+                <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                    <div class="text-xs font-semibold text-slate-800">{{ rule.name }}</div>
+                    <div class="font-mono text-xs text-blue-700 bg-white p-2 rounded border border-slate-200 mt-1">
+                        {{ rule.expression }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-4 text-muted text-xs">No mathematical constraints defined.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
