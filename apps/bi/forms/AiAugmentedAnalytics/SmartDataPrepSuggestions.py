@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
@@ -38,6 +40,27 @@ class SmartDataPrepSuggestionForm(TenantUniqueMixin, TenantModelForm):
             self.fields["target_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant)
             self.fields["related_table"].queryset = WarehouseTable.objects.filter(tenant=self.tenant)
         self.fields["related_table"].required = False
+
+    def clean_suggested_config(self):
+        raw = getattr(self, "cleaned_data", {}).get("suggested_config")
+        if raw is None and hasattr(self, "data") and "suggested_config" in self.data:
+            raw = self.data.get("suggested_config")
+        if raw is None:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            raw = raw.strip()
+            if not raw:
+                return {}
+            try:
+                parsed = json.loads(raw)
+                if not isinstance(parsed, dict):
+                    raise forms.ValidationError("Suggested configuration must be a valid JSON dictionary.")
+                return parsed
+            except (json.JSONDecodeError, ValueError) as exc:
+                raise forms.ValidationError(f"Invalid JSON for suggested config: {exc}")
+        raise forms.ValidationError("Suggested configuration must be a valid JSON dictionary.")
 
     def clean(self):
         cleaned_data = super().clean()
