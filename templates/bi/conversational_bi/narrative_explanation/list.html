@@ -99,10 +99,10 @@
             </div>
 
             <div class="w-48">
-                <select name="artifact" class="form-select text-sm w-full">
+                <select name="artifact_type" class="form-select text-sm w-full">
                     <option value="">All Target Artifacts</option>
                     {% for val, label in artifact_choices %}
-                    <option value="{{ val }}" {% if request.GET.artifact == val %}selected{% endif %}>{{ label }}</option>
+                    <option value="{{ val }}" {% if request.GET.artifact_type == val or request.GET.artifact == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -111,7 +111,7 @@
                 <i data-lucide="filter"></i>
                 <span>Filter</span>
             </button>
-            {% if request.GET.q or request.GET.status or request.GET.style or request.GET.artifact %}
+            {% if request.GET.q or request.GET.status or request.GET.style or request.GET.artifact_type or request.GET.artifact %}
             <a href="{% url 'bi:narrative_explanation_list' %}" class="btn btn-ghost text-sm text-muted">Clear</a>
             {% endif %}
         </form>
@@ -223,10 +223,10 @@
         </div>
         <div class="flex items-center gap-2">
             {% if narratives.has_previous %}
-            <a href="?page={{ narratives.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact %}&artifact={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Previous</a>
+            <a href="?page={{ narratives.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact_type %}&artifact_type={{ request.GET.artifact_type }}{% elif request.GET.artifact %}&artifact_type={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Previous</a>
             {% endif %}
             {% if narratives.has_next %}
-            <a href="?page={{ narratives.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact %}&artifact={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Next</a>
+            <a href="?page={{ narratives.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.style %}&style={{ request.GET.style }}{% endif %}{% if request.GET.artifact_type %}&artifact_type={{ request.GET.artifact_type }}{% elif request.GET.artifact %}&artifact_type={{ request.GET.artifact }}{% endif %}" class="btn btn-outline btn-sm text-xs">Next</a>
             {% endif %}
         </div>
     </div>
