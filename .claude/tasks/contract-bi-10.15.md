@@ -275,6 +275,11 @@ Every context variable is pinned.
   - `form`: `BiConversationSessionForm`
   - `session`: `BiConversationSession` instance (edit) or `None` (create)
   - `is_edit`: Boolean
+- **Interactive Chat Assistant Workspace (`bi_chat_workspace`)**:
+  - `sessions`: Top 50 sessions for left drawer (`BiConversationSession.objects.filter(tenant=request.tenant)...[:50]`)
+  - `active_session`: Selected or first active `BiConversationSession` or `None`
+  - `turns`: Ordered queryset of `NaturalLanguageQuery` turns with `.select_related('user')`
+  - `suggested_prompts`: list of suggested analytical prompt strings
 
 ### 4.3 `NarrativeExplanations`
 - **List View (`narrative_explanation_list`)**:
@@ -310,7 +315,8 @@ Every context variable is pinned.
   - `is_edit`: Boolean
 - **Hub View (`search_discovery_hub`)**:
   - `search_query`: str from `request.GET.get('q', '')`
-  - `results`: List of matched `SearchDiscoveryIndex` items
+  - `results`: List of matched `SearchDiscoveryIndex` items (sliced to 24)
+  - `result_count`: Total count of matched search assets
   - `categories`: Distinct category strings
   - `featured_assets`: Queryset of featured/verified assets
 
