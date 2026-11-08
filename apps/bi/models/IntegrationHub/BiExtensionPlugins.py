@@ -115,6 +115,7 @@ class BiExtensionPlugin(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_bext_ten_stat"),
             models.Index(fields=["tenant", "plugin_type"], name="idx_bext_ten_type"),
             models.Index(fields=["tenant", "category"], name="idx_bext_ten_cat"),
+            models.Index(fields=["tenant", "is_verified"], name="idx_bext_ten_ver"),
             models.Index(fields=["tenant", "created_at"], name="idx_bext_ten_created"),
         ]
 
