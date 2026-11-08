@@ -7,6 +7,186 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.3: Asset Classification & Categorization (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.3.md` (2026-11-08)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 and 11.2.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0004_assetaudit_assetcustodylog_assetincidentreport_and_more.py` (from 11.2), so **11.3 claims `0005`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.3.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetClassification/`
+> Template folder name: `templates/assets/asset_classification/{asset_category,asset_model,asset_criticality_assessment,asset_specification_template}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Asset Classification & Categorization Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine: Extends `scm.Asset` [AST-] by string foreign key (`"scm.Asset"`), maintaining complete separation between operational taxonomy / engineering risk classification and financial fixed asset ledgers (`accounting.FixedAsset`).
+  - Core Spine Bindings: Reuses `core.Party` for manufacturers and assessors, and `settings.AUTH_USER_MODEL` for audit and review stakeholders.
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetCategory` -> `NUMBER_PREFIX = "ACAT"` (format: `ACAT-YYYYMM-XXXX`)
+    - `AssetModel` -> `NUMBER_PREFIX = "AMOD"` (format: `AMOD-YYYYMM-XXXX`)
+    - `AssetCriticalityAssessment` -> `NUMBER_PREFIX = "ACRT"` (format: `ACRT-YYYYMM-XXXX`)
+    - `AssetSpecificationTemplate` -> `NUMBER_PREFIX = "ASPC"` (format: `ASPC-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetCategory` [ACAT-]:
+      - Enterprise asset taxonomy tree, self-referential parent-child hierarchy, category classification, UNSPSC commodity coding, and default depreciation / maintenance policy profiles.
+      - Identity & Taxonomy: `code` (CharField 32, db_index=True, help_text="Unique category identifier, e.g. HVAC-CHL, PUMP-CENT"), `name` (CharField 150), `parent` (FK `"self"`, SET_NULL, null=True, blank=True, related_name="children", help_text="Parent category in classification tree").
+      - Domain Classification: `category_type` (`machinery`, `facility`, `vehicle`, `it_hardware`, `tooling`, `furniture`, `infrastructure`, `electrical`, `piping`, `other`, default `machinery`).
+      - Commodity Standards: `unspsc_code` (CharField 16 blank=True, help_text="8-digit UNSPSC commodity code, e.g. 40151503"), `unspsc_title` (CharField 150 blank=True, help_text="UNSPSC commodity description").
+      - Default Accounting & Maintenance Policies: `default_depreciation_method` (`straight_line`, `declining_balance`, `double_declining`, `sum_of_years`, `none`, default `straight_line`), `default_useful_life_months` (PositiveIntegerField default=60, help_text="Default useful life in months"), `default_maintenance_strategy` (`preventive_calendar`, `preventive_meter`, `condition_based`, `predictive`, `run_to_failure`, default `preventive_calendar`), `default_criticality` (`critical`, `high`, `medium`, `low`, default `medium`).
+      - Presentation & Lifecycle: `description` (TextField blank=True), `display_order` (PositiveIntegerField default=10), `is_active` (BooleanField default=True).
+      - Status / Badge CSS: `active -> badge-green`, `inactive -> badge-muted`.
+      - Validation: Circular parent loop detection in `clean()` (max depth 10 levels).
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+    - `AssetModel` [AMOD-]:
+      - Manufacturer equipment catalog, model blueprints, standard warranty templates, operating meter baselines, and replacement cost benchmarks.
+      - Identity: `model_number` (CharField 64, db_index=True, help_text="Manufacturer model number, e.g. CAT-320GC, CVHE-500"), `name` (CharField 200, help_text="Commercial model name / series").
+      - Category & Manufacturer: `category` (FK `"assets.AssetCategory"`, PROTECT, related_name="models"), `manufacturer` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="asset_models"), `manufacturer_name_fallback` (CharField 120 blank=True).
+      - Warranty & Service Standards: `standard_warranty_months` (PositiveIntegerField default=12, help_text="Standard warranty duration in months"), `warranty_coverage_type` (`full_parts_labor`, `parts_only`, `powertrain_only`, `limited`, `no_warranty`, default `full_parts_labor`).
+      - Life & Valuation Benchmarks: `expected_useful_life_months` (PositiveIntegerField default=60), `estimated_replacement_cost` (DecimalField max_digits=14 decimal_places=2 default=0.00).
+      - Baseline Meter Configuration: `default_meter_name` (CharField 40 blank=True, help_text="e.g. Running Hours, Odometer, Stroke Count"), `default_meter_unit` (CharField 16 blank=True, help_text="e.g. h, km, cycles").
+      - Engineering Details & Status: `technical_specifications` (TextField blank=True), `model_status` (`active`, `phased_out`, `discontinued`, `draft`, default `active`), `description` (TextField blank=True), `is_active` (BooleanField default=True).
+      - Status / Badge CSS: `active -> badge-green`, `phased_out -> badge-amber`, `discontinued -> badge-red`, `draft -> badge-slate`.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+    - `AssetCriticalityAssessment` [ACRT-]:
+      - Multi-factor consequence analysis (Safety, Environment, Downtime, Financial, Compliance), Single Point of Failure (SPOF) assessment, composite risk score calculation, and ABC rating ($A/B/C$).
+      - Identity & Subject: `title` (CharField 200), `asset` (FK `"scm.Asset"`, CASCADE, related_name="criticality_assessments"), `assessor` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="asset_assessments"), `assessment_date` (DateField default=timezone.now).
+      - Consequence Scoring Matrix (1 to 5 scale):
+        - `safety_impact` (PositiveSmallIntegerField default=1, validators=[1..5], help_text="1: Negligible first aid, 5: Fatality / Major hazard")
+        - `environmental_impact` (PositiveSmallIntegerField default=1, validators=[1..5], help_text="1: Zero release, 5: Major toxic release / EPA breach")
+        - `operational_downtime_impact` (PositiveSmallIntegerField default=1, validators=[1..5], help_text="1: No impact / idle standby, 5: Total plant stoppage / bottleneck line")
+        - `financial_impact` (PositiveSmallIntegerField default=1, validators=[1..5], help_text="1: <$1k, 5: Catastrophic repair/replacement >$250k")
+        - `regulatory_compliance_impact` (PositiveSmallIntegerField default=1, validators=[1..5], help_text="1: Minor internal variance, 5: Loss of operating license / major citation")
+      - Vulnerability & Scoring Engine: `is_single_point_of_failure` (BooleanField default=False, help_text="Asset has zero redundancy / standby unit"), `composite_score` (PositiveSmallIntegerField default=5, help_text="Auto-calculated consequence score + SPOF escalation (5 to 30)"), `abc_rating` (`A`, `B`, `C`, default `C`, help_text="A: Mission-Critical, B: Important, C: Non-Critical").
+      - Recommendations & Lifecycle: `recommended_strategy` (`rcm_predictive`, `rigorous_pm`, `standard_pm`, `run_to_failure`, default `standard_pm`), `assessment_status` (`draft`, `reviewed`, `approved`, `superseded`, default `draft`), `review_cycle_months` (PositiveIntegerField default=12), `next_assessment_due` (DateField null=True, blank=True), `findings_and_mitigation` (TextField blank=True).
+      - Status / Badge CSS:
+        - Status: `draft -> badge-slate`, `reviewed -> badge-info`, `approved -> badge-green`, `superseded -> badge-muted`
+        - ABC Rating: `A -> badge-red`, `B -> badge-amber`, `C -> badge-slate`
+      - Business Logic:
+        - `calculate_composite_score()` auto-sums the 5 consequence dimensions and adds 5 points if `is_single_point_of_failure` is True.
+        - Automatically derives `abc_rating` from composite score: $\ge 20 \rightarrow A$, $12..19 \rightarrow B$, $< 12 \rightarrow C$.
+        - On approval action (`asset_criticality_assessment_approve`): sets status to `approved`, calculates `next_assessment_due` based on `review_cycle_months`, and updates `scm.Asset.criticality` (`critical` if A, `high`/`medium` if B, `low` if C).
+      - Form exclusions: `tenant`, `number`, `composite_score`, `abc_rating`, `assessment_status`, `next_assessment_due`, `created_at`, `updated_at`.
+    - `AssetSpecificationTemplate` [ASPC-]:
+      - Dynamic custom attribute definitions, technical specification schemas, strongly typed parameters, units of measure, and validation bounds scoped to Asset Categories or Models.
+      - Identity & Scope: `attribute_key` (CharField 50, help_text="Machine-readable attribute slug, e.g. rated_voltage, cooling_capacity_tons"), `display_name` (CharField 120, help_text="Human-readable label, e.g. Rated Operating Voltage"), `category` (FK `"assets.AssetCategory"`, CASCADE, null=True, blank=True, related_name="spec_templates"), `model` (FK `"assets.AssetModel"`, CASCADE, null=True, blank=True, related_name="spec_templates").
+      - Data Typing & Units: `data_type` (`text`, `number`, `boolean`, `date`, `select`, default `text`), `unit_of_measure` (CharField 24 blank=True, help_text="e.g. V, kW, HP, PSI, bar, GPM, RPM, ton, kg, degC"), `allowed_choices` (TextField blank=True, help_text="Comma-separated choice values for select type"), `default_value` (CharField 200 blank=True).
+      - Constraints & Bounds: `min_value` (DecimalField max_digits=14 decimal_places=4 null=True, blank=True), `max_value` (DecimalField max_digits=14 decimal_places=4 null=True, blank=True), `is_required` (BooleanField default=False), `is_filterable` (BooleanField default=True).
+      - Presentation & Lifecycle: `display_order` (PositiveIntegerField default=10), `description` (CharField 255 blank=True), `is_active` (BooleanField default=True).
+      - Status / Badge CSS: `active -> badge-green`, `inactive -> badge-muted`.
+      - Helpers: `get_choices_list()`, `validate_value(raw_value)`.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `ACAT` (AssetCategory), `AMOD` (AssetModel), `ACRT` (AssetCriticalityAssessment), `ASPC` (AssetSpecificationTemplate) verified 100% collision-free repository-wide.
+
+---
+
+## 11.3-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO runtime dynamic database schema migrations / ALTER TABLE DDL generation** — Custom attributes are managed via strongly typed schema templates and structured attribute dictionaries, not runtime DDL.
+- [ ] **NO automated background SCADA / PLC continuous telemetry daemon** — Specification templates record engineering parameter definitions and operating thresholds; continuous telemetry streaming belongs to 11.7.
+- [ ] **NO duplicate operational asset master** — Assets remain anchored to `scm.Asset` [AST-] from SCM 4.13.
+- [ ] **NO parallel depreciation ledger** — Category-level default depreciation parameters establish baseline capitalization rules; financial asset depreciation remains in `accounting.FixedAsset` [FA-].
+- [ ] **NO duplicate manufacturer / supplier master** — Manufacturers reuse `core.Party` with roles `manufacturer` or `vendor`.
+
+---
+
+## Sub-module 11.3 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.3.md` with exact model fields, forms, url names, context keys, choices, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetCategory (`ACAT`)**
+  - [ ] `apps/assets/models/AssetClassification/AssetCategories.py`
+  - [ ] `apps/assets/forms/AssetClassification/AssetCategories.py`
+  - [ ] `apps/assets/views/AssetClassification/AssetCategories.py` (CRUD + toggle_active)
+  - [ ] `apps/assets/urls/AssetClassification/AssetCategories.py`
+  - [ ] `templates/assets/asset_classification/asset_category/list.html`
+  - [ ] `templates/assets/asset_classification/asset_category/detail.html`
+  - [ ] `templates/assets/asset_classification/asset_category/form.html`
+- [ ] **Entity 2: AssetModel (`AMOD`)**
+  - [ ] `apps/assets/models/AssetClassification/AssetModels.py`
+  - [ ] `apps/assets/forms/AssetClassification/AssetModels.py`
+  - [ ] `apps/assets/views/AssetClassification/AssetModels.py` (CRUD + toggle_active)
+  - [ ] `apps/assets/urls/AssetClassification/AssetModels.py`
+  - [ ] `templates/assets/asset_classification/asset_model/list.html`
+  - [ ] `templates/assets/asset_classification/asset_model/detail.html`
+  - [ ] `templates/assets/asset_classification/asset_model/form.html`
+- [ ] **Entity 3: AssetCriticalityAssessment (`ACRT`)**
+  - [ ] `apps/assets/models/AssetClassification/AssetCriticalityAssessments.py`
+  - [ ] `apps/assets/forms/AssetClassification/AssetCriticalityAssessments.py`
+  - [ ] `apps/assets/views/AssetClassification/AssetCriticalityAssessments.py` (CRUD + review + approve + supersede)
+  - [ ] `apps/assets/urls/AssetClassification/AssetCriticalityAssessments.py`
+  - [ ] `templates/assets/asset_classification/asset_criticality_assessment/list.html`
+  - [ ] `templates/assets/asset_classification/asset_criticality_assessment/detail.html`
+  - [ ] `templates/assets/asset_classification/asset_criticality_assessment/form.html`
+- [ ] **Entity 4: AssetSpecificationTemplate (`ASPC`)**
+  - [ ] `apps/assets/models/AssetClassification/AssetSpecificationTemplates.py`
+  - [ ] `apps/assets/forms/AssetClassification/AssetSpecificationTemplates.py`
+  - [ ] `apps/assets/views/AssetClassification/AssetSpecificationTemplates.py` (CRUD + toggle_active)
+  - [ ] `apps/assets/urls/AssetClassification/AssetSpecificationTemplates.py`
+  - [ ] `templates/assets/asset_classification/asset_specification_template/list.html`
+  - [ ] `templates/assets/asset_classification/asset_specification_template/detail.html`
+  - [ ] `templates/assets/asset_classification/asset_specification_template/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetClassification/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetClassification/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetClassification/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetClassification/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.3 models (`_seed_tenant_11_3`)
+- [ ] Add `LIVE_LINKS["11.3"]` in `apps/core/navigation.py`:
+  - `"Asset Hierarchy & Taxonomy"`: `assets:asset_category_list`
+  - `"Asset Type & Model Management"`: `assets:asset_model_list`
+  - `"Criticality & Risk Classification"`: `assets:asset_criticality_assessment_list`
+  - `"Asset Lifecycle Stage Tracking"`: `assets:asset_category_list`
+  - `"Custom Attributes & Specifications"`: `assets:asset_specification_template_list`
+  - Plural & convenience aliases:
+    - `"Asset Categories"`: `assets:asset_category_list`
+    - `"Asset Models"`: `assets:asset_model_list`
+    - `"Criticality Assessments"`: `assets:asset_criticality_assessment_list`
+    - `"Risk Assessments"`: `assets:asset_criticality_assessment_list`
+    - `"Specification Templates"`: `assets:asset_specification_template_list`
+    - `"Custom Attributes"`: `assets:asset_specification_template_list`
+    - `"Asset Classification"`: `assets:asset_category_list`
+- [ ] Run `makemigrations assets` (generating `0005_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_3.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.3.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_assetclassification_models.py`
+- [ ] `test_assetclassification_forms.py`
+- [ ] `test_assetclassification_views.py`
+- [ ] `test_assetclassification_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/` (100% green)
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.3 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.3.md` (or declare None in review notes)
+
+---
+
 # Sub-module 11.2: Asset Inventory & Tracking (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.2.md` (2026-11-08)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-module 11.1.
