@@ -1,12 +1,15 @@
 import json
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspace
 from apps.core.forms import TenantModelForm
 from apps.core.models import OrgUnit
+
+User = get_user_model()
 
 
 class BiSharedWorkspaceForm(TenantUniqueMixin, TenantModelForm):
@@ -50,13 +53,18 @@ class BiSharedWorkspaceForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
+            self.fields["owner"].queryset = User.objects.filter(tenant=self.tenant).order_by("username")
+        else:
+            self.fields["department"].queryset = OrgUnit.objects.none()
+            self.fields["owner"].queryset = User.objects.none()
         if self.instance and self.instance.pk:
             if self.instance.members_json:
                 self.fields["members_raw"].initial = json.dumps(self.instance.members_json, indent=2)
 
-    def clean_department(self):
-        dept = self.cleaned_data.get("department")
-        return reject_foreign(dept, self.tenant, "Department")
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["department", "owner"])
+        return cleaned
 
     def clean_members_raw(self):
         raw = self.cleaned_data.get("members_raw", "").strip()
