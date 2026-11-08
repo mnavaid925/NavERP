@@ -26,7 +26,6 @@ class AssetMovementLogForm(TenantUniqueMixin, forms.ModelForm):
             "gps_address",
             "carrier_name",
             "tracking_number",
-            "condition_on_receipt",
             "reason",
             "notes",
         ]
@@ -34,6 +33,7 @@ class AssetMovementLogForm(TenantUniqueMixin, forms.ModelForm):
             "tenant",
             "number",
             "status",
+            "condition_on_receipt",
             "created_at",
             "updated_at",
             "dispatch_date",
@@ -58,7 +58,6 @@ class AssetMovementLogForm(TenantUniqueMixin, forms.ModelForm):
             "gps_address": forms.TextInput(attrs={"class": "form-input", "placeholder": "Physical address or landmark"}),
             "carrier_name": forms.TextInput(attrs={"class": "form-input", "placeholder": "Internal Fleet / Commercial Carrier"}),
             "tracking_number": forms.TextInput(attrs={"class": "form-input", "placeholder": "Tracking code or transfer manifest ID"}),
-            "condition_on_receipt": forms.Select(attrs={"class": "form-select"}),
             "reason": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Reason for relocation, project requirements..."}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Special handling instructions, rigging notes..."}),
         }
