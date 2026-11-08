@@ -154,3 +154,6 @@ class AssetCapitalization(TenantNumbered):
 
     def can_reverse(self):
         return self.status == "capitalized"
+
+    def can_reverse_capitalization(self):
+        return self.can_reverse()
