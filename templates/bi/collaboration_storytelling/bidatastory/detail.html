@@ -54,7 +54,7 @@
             <div class="card-body space-y-4">
                 <div>
                     <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Executive Summary</div>
-                    <div class="text-sm text-slate-800 bg-slate-50 rounded p-4 border border-slate-200 leading-relaxed">
+                    <div class="text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded p-4 border border-slate-200 dark:border-slate-700 leading-relaxed">
                         {{ story.summary|default:"No executive summary provided for this story."|linebreaksbr }}
                     </div>
                 </div>
@@ -103,14 +103,14 @@
                 {% if story.slides_data %}
                 <div class="space-y-3">
                     {% for slide in story.slides_data %}
-                    <div class="p-4 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-primary-300 transition-colors">
+                    <div class="p-4 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm hover:border-primary-300 dark:hover:border-primary-500 transition-colors">
                         <div class="flex items-start justify-between">
                             <div class="flex items-center gap-3">
-                                <span class="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs">
+                                <span class="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs">
                                     {{ forloop.counter }}
                                 </span>
                                 <div>
-                                    <h3 class="font-semibold text-sm text-slate-900">{{ slide.title|default:"Untitled Slide" }}</h3>
+                                    <h3 class="font-semibold text-sm text-slate-900 dark:text-white">{{ slide.title|default:"Untitled Slide" }}</h3>
                                     <p class="text-xs text-muted mt-0.5">{% if slide.narrative %}{{ slide.narrative|truncatewords:20 }}{% else %}No speaker notes.{% endif %}</p>
                                 </div>
                             </div>
@@ -140,19 +140,19 @@
                 {% if comments %}
                 <div class="space-y-4">
                     {% for c in comments %}
-                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div class="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg">
                         <div class="flex justify-between items-start mb-2">
                             <div class="flex items-center gap-2">
-                                <span class="font-medium text-xs text-slate-800">
+                                <span class="font-medium text-xs text-slate-800 dark:text-slate-200">
                                     {% if c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}Anonymous{% endif %}
                                 </span>
                                 <span class="text-muted text-[11px]">{{ c.created_at|date:"M d, Y H:i" }}</span>
                             </div>
-                            <span class="badge {% if c.status == 'open' %}badge-amber{% else %}badge-green{% endif %}">
+                            <span class="badge {% if c.status == 'open' %}badge-amber{% elif c.status == 'in_review' %}badge-info{% elif c.status == 'resolved' %}badge-green{% else %}badge-slate{% endif %}">
                                 {{ c.get_status_display }}
                             </span>
                         </div>
-                        <div class="text-sm text-slate-700 leading-normal">{{ c.content|linebreaksbr }}</div>
+                        <div class="text-sm text-slate-700 dark:text-slate-300 leading-normal">{{ c.content|linebreaksbr }}</div>
                     </div>
                     {% endfor %}
                 </div>
@@ -177,10 +177,10 @@
                 <p class="text-xs text-muted">Connect live, refreshable data slides directly into PowerPoint or Excel via secure API link.</p>
                 <div>
                     <label class="form-label text-xs">Live Office Endpoint</label>
-                    <input type="text" readonly value="{{ office_link }}" class="form-input text-xs font-mono bg-slate-50 select-all w-full">
+                    <input type="text" readonly value="{{ office_link }}" class="form-input text-xs font-mono bg-slate-50 dark:bg-slate-800 select-all w-full">
                 </div>
                 <div class="pt-2">
-                    <a href="{{ office_link }}" target="_blank" class="btn btn-outline btn-sm w-full text-center">
+                    <a href="{{ office_link }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm w-full text-center">
                         <i data-lucide="download"></i>
                         <span>Download Office Payload (JSON)</span>
                     </a>
