@@ -75,6 +75,10 @@ from apps.bi.forms.CollaborationStorytelling.BiSharedWorkspaces import BiSharedW
 from apps.bi.forms.CollaborationStorytelling.BiDataStories import BiDataStoryForm
 from apps.bi.forms.CollaborationStorytelling.BiVisualComments import BiVisualCommentForm
 from apps.bi.forms.CollaborationStorytelling.BiDecisionLogs import BiDecisionLogForm
+from apps.bi.forms.IntegrationHub.IntegrationConnectors import IntegrationConnectorForm
+from apps.bi.forms.IntegrationHub.WarehouseSyncEndpoints import WarehouseSyncEndpointForm
+from apps.bi.forms.IntegrationHub.BiWebhookSubscriptions import BiWebhookSubscriptionForm
+from apps.bi.forms.IntegrationHub.BiExtensionPlugins import BiExtensionPluginForm
 from apps.bi.forms.OperationalReporting.ReportDefinitions import (
     ReportCloneForm,
     ReportDefinitionForm,
@@ -205,4 +209,8 @@ __all__ = [
     "BiDataStoryForm",
     "BiVisualCommentForm",
     "BiDecisionLogForm",
+    "IntegrationConnectorForm",
+    "WarehouseSyncEndpointForm",
+    "BiWebhookSubscriptionForm",
+    "BiExtensionPluginForm",
 ]
