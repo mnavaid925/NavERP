@@ -75,7 +75,7 @@ class AssetAuditForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if self.tenant:
-            reject_foreign(self, cleaned_data, ["target_location", "target_org_unit"])
+            reject_foreign(self, cleaned_data, ["target_location", "target_org_unit", "lead_auditor", "supervisor"])
 
         # Count sanity validation
         expected = cleaned_data.get("expected_asset_count") or 0
