@@ -92,10 +92,11 @@ def asset_tag_create(request):
             tag.tenant = request.tenant
             tag.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=tag,
-                details=f"Issued asset tag {tag.tag_code} ({tag.number})",
+                request.user,
+                tag,
+                "create",
+                changes={"details": f"Issued asset tag {tag.tag_code} ({tag.number})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Tag {tag.tag_code} created successfully.")
             return redirect("assets:asset_tag_detail", pk=tag.pk)
@@ -119,10 +120,11 @@ def asset_tag_edit(request, pk):
         if form.is_valid():
             t = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=t,
-                details=f"Updated asset tag {t.tag_code}",
+                request.user,
+                t,
+                "update",
+                changes={"details": f"Updated asset tag {t.tag_code}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Tag {t.tag_code} updated successfully.")
             return redirect("assets:asset_tag_detail", pk=t.pk)
@@ -143,10 +145,11 @@ def asset_tag_delete(request, pk):
     tag = assets_object(request, AssetTag, pk)
     code = tag.tag_code
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=tag,
-        details=f"Deleted asset tag {code}",
+        request.user,
+        tag,
+        "delete",
+        changes={"details": f"Deleted asset tag {code}"},
+        tenant=request.tenant,
     )
     tag.delete()
     messages.success(request, f"Asset Tag {code} was deleted.")
@@ -166,10 +169,11 @@ def asset_tag_mark_printed(request, pk):
     tag.save(update_fields=["status", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="mark_printed",
-        instance=tag,
-        details=f"Marked asset tag {tag.tag_code} as printed",
+        request.user,
+        tag,
+        "update",
+        changes={"action": "mark_printed", "details": f"Marked asset tag {tag.tag_code} as printed"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Tag {tag.tag_code} marked as printed.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
@@ -194,10 +198,11 @@ def asset_tag_affix(request, pk):
     tag.save(update_fields=["status", "physical_placement", "affixed_by", "affixed_at", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="affix_tag",
-        instance=tag,
-        details=f"Affixed asset tag {tag.tag_code} to equipment",
+        request.user,
+        tag,
+        "update",
+        changes={"action": "affix_tag", "details": f"Affixed asset tag {tag.tag_code} to equipment"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Tag {tag.tag_code} confirmed affixed to physical asset.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
@@ -223,10 +228,11 @@ def asset_tag_verify(request, pk):
     tag.save(update_fields=["status", "is_verified", "scanner_device_id", "verified_by", "verified_at", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="verify_tag",
-        instance=tag,
-        details=f"Verified asset tag {tag.tag_code} with scanner {tag.scanner_device_id or 'standard'}",
+        request.user,
+        tag,
+        "update",
+        changes={"action": "verify_tag", "details": f"Verified asset tag {tag.tag_code} with scanner {tag.scanner_device_id or 'standard'}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Tag {tag.tag_code} successfully verified by scanner.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
