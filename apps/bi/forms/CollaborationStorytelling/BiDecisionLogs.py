@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLog
@@ -7,6 +8,8 @@ from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
 from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
 from apps.core.forms import TenantModelForm
+
+User = get_user_model()
 
 
 class BiDecisionLogForm(TenantUniqueMixin, TenantModelForm):
@@ -60,17 +63,17 @@ class BiDecisionLogForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             self.fields["workspace"].queryset = BiSharedWorkspace.objects.filter(tenant=self.tenant)
             self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant)
-            self.fields["widget"].queryset = BiDashboardWidget.objects.filter(dashboard__tenant=self.tenant)
+            self.fields["widget"].queryset = BiDashboardWidget.objects.filter(tenant=self.tenant)
             self.fields["kpi"].queryset = KpiDefinition.objects.filter(tenant=self.tenant)
+            self.fields["decision_maker"].queryset = User.objects.filter(tenant=self.tenant).order_by("username")
+        else:
+            self.fields["workspace"].queryset = BiSharedWorkspace.objects.none()
+            self.fields["dashboard"].queryset = BiDashboard.objects.none()
+            self.fields["widget"].queryset = BiDashboardWidget.objects.none()
+            self.fields["kpi"].queryset = KpiDefinition.objects.none()
+            self.fields["decision_maker"].queryset = User.objects.none()
 
-    def clean_workspace(self):
-        w = self.cleaned_data.get("workspace")
-        return reject_foreign(w, self.tenant, "Workspace")
-
-    def clean_dashboard(self):
-        d = self.cleaned_data.get("dashboard")
-        return reject_foreign(d, self.tenant, "Dashboard")
-
-    def clean_kpi(self):
-        k = self.cleaned_data.get("kpi")
-        return reject_foreign(k, self.tenant, "KPI")
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["workspace", "dashboard", "widget", "kpi", "decision_maker"])
+        return cleaned
