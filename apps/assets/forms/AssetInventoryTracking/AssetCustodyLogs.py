@@ -60,7 +60,7 @@ class AssetCustodyLogForm(TenantUniqueMixin, forms.ModelForm):
 
         if self.tenant:
             self.fields["asset"].queryset = Asset.objects.filter(tenant=self.tenant).order_by("number")
-            self.fields["borrower"].queryset = Party.objects.filter(tenant=self.tenant, is_active=True).order_by("name")
+            self.fields["borrower"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["crib_attendant"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
     def clean(self):
