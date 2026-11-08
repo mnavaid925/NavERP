@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Equipment Models & Blueprints — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Classification & Categorization</span>
+            <span>/</span>
+            <span>Equipment Models</span>
+        </div>
+        <h1 class="page-title">Equipment Models & Engineering Blueprints</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_model_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Model
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="cpu"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Models</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Production</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Phased Out</div>
+            <div class="stat-value">{{ phased_out_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="archive"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Discontinued</div>
+            <div class="stat-value">{{ discontinued_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ q }}" placeholder="Model #, name, manufacturer, specs..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Production Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in model_statuses %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cat-filter" class="form-label">Asset Category</label>
+                <select id="cat-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for c in categories %}
+                    <option value="{{ c.pk|stringformat:'d' }}" {% if selected_category == c.pk|stringformat:'d' %}selected{% endif %}>{{ c.code }} — {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_model_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Models Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Model Number</th>
+                    <th>Model Name</th>
+                    <th>Category</th>
+                    <th>Manufacturer (OEM)</th>
+                    <th>Warranty</th>
+                    <th>Est. Replace Cost</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mod in model_list %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_model_detail' mod.pk %}" class="font-medium text-brand hover:underline">
+                            {{ mod.model_number }}
+                        </a>
+                        <div class="text-xs text-muted font-mono">{{ mod.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ mod.name }}</div>
+                        {% if mod.default_meter_name %}
+                        <div class="text-xs text-muted">Meter: {{ mod.default_meter_name }} ({{ mod.default_meter_unit }})</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'assets:asset_category_detail' mod.category.pk %}" class="text-slate-800 hover:text-brand">
+                            {{ mod.category.code }}
+                        </a>
+                        <div class="text-xs text-muted">{{ mod.category.get_category_type_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm text-slate-800">{{ mod.display_manufacturer }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ mod.standard_warranty_months }} mos</div>
+                        <div class="text-xs text-muted">{{ mod.get_warranty_coverage_type_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-900">${{ mod.estimated_replacement_cost|floatformat:2 }}</div>
+                        <div class="text-xs text-muted">{{ mod.expected_useful_life_months }} mos useful life</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ mod.status_css }}">{{ mod.get_model_status_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_model_detail' mod.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_model_edit' mod.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_model_delete' mod.pk %}" class="inline" onsubmit="return confirm('Delete model {{ mod.model_number }}? This cannot be undone.');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="cpu" class="w-12 h-12 text-muted mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Equipment Models Configured</h3>
+                            <p class="text-sm text-muted mb-4">No equipment models match your search criteria or none have been cataloged yet.</p>
+                            <a href="{% url 'assets:asset_model_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Register First Model
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex items-center justify-between">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} models
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
