@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}ERP & Streaming Connectors — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Integration & API Hub</span>
+            <span class="sep">/</span>
+            <span>Connectors</span>
+        </div>
+        <h1 class="page-title">ERP & Streaming Connectors</h1>
+        <p class="text-muted text-sm">Bidirectional reverse ETL, operational ERP pushbacks, and event bus message streaming</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:warehouse_sync_endpoint_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Warehouse Syncs</span>
+        </a>
+        <a href="{% url 'bi:bi_webhook_subscription_list' %}" class="btn btn-outline">
+            <i data-lucide="webhook"></i>
+            <span>Webhooks</span>
+        </a>
+        <a href="{% url 'bi:bi_extension_plugin_list' %}" class="btn btn-outline">
+            <i data-lucide="puzzle"></i>
+            <span>Extensions</span>
+        </a>
+        <a href="{% url 'bi:integration_connector_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Connector</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="layers"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Connectors</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="activity"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Channels</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Degraded / Error</div>
+            <div class="text-2xl font-bold text-amber-600">{{ error_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="id_q" class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, slug..." class="form-input text-sm ps-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute start-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label for="id_connector_type" class="form-label text-xs">Connector Type</label>
+                <select id="id_connector_type" name="connector_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.connector_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_target_system" class="form-label text-xs">Target System</label>
+                <select id="id_target_system" name="target_system" class="form-select text-sm">
+                    <option value="">All Systems</option>
+                    {% for val, label in target_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_system == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label text-xs">Status</label>
+                <select id="id_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'bi:integration_connector_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Connector</th>
+                    <th>Type</th>
+                    <th>Target System</th>
+                    <th>Direction</th>
+                    <th>Health</th>
+                    <th>Status</th>
+                    <th>Processed</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in connectors %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:integration_connector_detail' c.pk %}" class="text-blue-600 hover:underline">
+                                {{ c.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ c.number }} • {{ c.slug }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ c.get_connector_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ c.get_target_system_display }}</div>
+                        <div class="text-xs text-muted font-mono">{{ c.get_message_format_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ c.get_sync_direction_display }}</span>
+                    </td>
+                    <td>
+                        {% if c.health_status == 'healthy' %}
+                        <span class="badge badge-green">Healthy</span>
+                        {% elif c.health_status == 'degraded' %}
+                        <span class="badge badge-amber">Degraded</span>
+                        {% elif c.health_status == 'unreachable' %}
+                        <span class="badge badge-red">Unreachable</span>
+                        {% else %}
+                        <span class="badge badge-slate">Untested</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if c.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif c.status == 'paused' %}
+                        <span class="badge badge-amber">Paused</span>
+                        {% elif c.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% else %}
+                        <span class="badge badge-slate">{{ c.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-sm">
+                        {{ c.total_messages_processed }}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'bi:integration_connector_detail' c.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:integration_connector_edit' c.pk %}" class="btn btn-icon" title="Edit connector">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:integration_connector_delete' c.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete connector {{ c.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete connector">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="layers" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Connectors Found</div>
+                            <div class="empty-state-text">Configure an ERP Reverse ETL link or message broker streaming bus.</div>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:integration_connector_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Connector</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} connectors
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.connector_type %}&connector_type={{ request.GET.connector_type }}{% endif %}{% if request.GET.target_system %}&target_system={{ request.GET.target_system }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.connector_type %}&connector_type={{ request.GET.connector_type }}{% endif %}{% if request.GET.target_system %}&target_system={{ request.GET.target_system }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
