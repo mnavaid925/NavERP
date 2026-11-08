@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sync_endpoint.name }} — Warehouse Syncs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_sync_endpoint_list' %}">Warehouse Syncs</a>
+            <span class="sep">/</span>
+            <span>{{ sync_endpoint.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ sync_endpoint.name }}</h1>
+            {% if sync_endpoint.status == 'success' %}
+            <span class="badge badge-green">Success</span>
+            {% elif sync_endpoint.status == 'syncing' %}
+            <span class="badge badge-info">Syncing</span>
+            {% elif sync_endpoint.status == 'error' %}
+            <span class="badge badge-red">Error</span>
+            {% elif sync_endpoint.status == 'disabled' %}
+            <span class="badge badge-slate">Disabled</span>
+            {% else %}
+            <span class="badge badge-slate">Idle</span>
+            {% endif %}
+
+            <span class="badge badge-info">{{ sync_endpoint.get_target_warehouse_display }}</span>
+        </div>
+        <p class="text-muted text-sm mt-1">{{ sync_endpoint.number }} • {{ sync_endpoint.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:warehouse_sync_endpoint_trigger' sync_endpoint.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Trigger instant manual sync">
+                <i data-lucide="play"></i>
+                <span>Run Sync Now</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:warehouse_sync_endpoint_edit' sync_endpoint.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:warehouse_sync_endpoint_delete' sync_endpoint.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete sync endpoint {{ sync_endpoint.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Dataset Specification</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Target Cloud Warehouse</div>
+                        <div class="text-sm font-medium mt-1">{{ sync_endpoint.get_target_warehouse_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Synchronization Mode</div>
+                        <div class="text-sm font-medium mt-1">{{ sync_endpoint.get_sync_mode_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Source Semantic Model</div>
+                        <div class="text-sm font-medium mt-1">
+                            {% if sync_endpoint.semantic_model %}
+                            {{ sync_endpoint.semantic_model.name }}
+                            {% else %}
+                            <span class="text-muted">None (Custom)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Source Data Mart</div>
+                        <div class="text-sm font-medium mt-1">
+                            {% if sync_endpoint.data_mart %}
+                            {{ sync_endpoint.data_mart.name }}
+                            {% else %}
+                            <span class="text-muted">None</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Destination Full Path</div>
+                        <div class="text-sm font-mono mt-1 text-slate-800">
+                            {% if sync_endpoint.destination_database %}{{ sync_endpoint.destination_database }}.{% endif %}{% if sync_endpoint.destination_schema %}{{ sync_endpoint.destination_schema }}.{% endif %}{{ sync_endpoint.destination_table }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Authentication Method</div>
+                        <div class="text-sm font-medium mt-1">{{ sync_endpoint.get_auth_method_display }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Cloud Warehouse Connection Parameters (JSON)</h2>
+            </div>
+            <div class="card-body">
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-x-auto">{{ sync_endpoint.connection_config|default:"{}" }}</pre>
+            </div>
+        </div>
+
+        {% if sync_endpoint.last_error_message %}
+        <div class="card border-red-200 bg-red-50">
+            <div class="card-header border-red-200">
+                <h2 class="card-title text-red-700 flex items-center gap-2">
+                    <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                    <span>Sync Failure Traceback</span>
+                </h2>
+            </div>
+            <div class="card-body">
+                <pre class="text-xs font-mono text-red-900 whitespace-pre-wrap">{{ sync_endpoint.last_error_message }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar Column -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Sync Telemetry</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Cumulative Transferred</div>
+                    <div class="text-2xl font-bold font-mono mt-1">{{ sync_endpoint.total_rows_synced }} rows</div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Last Transferred Rows</div>
+                    <div class="text-sm font-mono mt-1">{{ sync_endpoint.last_rows_synced }} rows ({{ sync_endpoint.last_sync_duration_ms }} ms)</div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Last Execution At</div>
+                    <div class="text-sm mt-1">
+                        {% if sync_endpoint.last_sync_at %}
+                        {{ sync_endpoint.last_sync_at|date:"Y-m-d H:i:s" }}
+                        {% else %}
+                        <span class="text-muted">No runs executed</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Sync Cadence</div>
+                    <div class="text-sm mt-1">
+                        <span class="badge badge-slate">{{ sync_endpoint.get_sync_schedule_display }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Governance & Ownership</h2>
+            </div>
+            <div class="card-body text-xs text-muted space-y-2">
+                <div>Owner: <span class="font-medium text-slate-800">{{ sync_endpoint.owner.get_full_name|default:sync_endpoint.owner.username|default:"Data Team" }}</span></div>
+                <div>Created At: <span class="font-mono text-slate-800">{{ sync_endpoint.created_at|date:"Y-m-d H:i" }}</span></div>
+                <div>Updated At: <span class="font-mono text-slate-800">{{ sync_endpoint.updated_at|date:"Y-m-d H:i" }}</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
