@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}{{ audit.number }} — Physical Asset Audit — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_audit_list' %}">Physical Audits</a>
+            <span>/</span>
+            <span>{{ audit.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ audit.number }} · {{ audit.title }}</h1>
+            {% if audit.status == 'draft' %}
+                <span class="badge badge-slate">{{ audit.get_status_display }}</span>
+            {% elif audit.status == 'scheduled' %}
+                <span class="badge badge-info">{{ audit.get_status_display }}</span>
+            {% elif audit.status == 'in_progress' %}
+                <span class="badge badge-amber">{{ audit.get_status_display }}</span>
+            {% elif audit.status == 'completed' %}
+                <span class="badge badge-info">{{ audit.get_status_display }}</span>
+            {% elif audit.status == 'reconciled' %}
+                <span class="badge badge-green">{{ audit.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-red">{{ audit.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-muted">{{ audit.get_audit_type_display }}</span>
+            {% if audit.is_blind_count %}
+                <span class="badge badge-amber font-semibold">Blind Count</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if audit.status in 'draft scheduled' %}
+        <form method="post" action="{% url 'assets:asset_audit_start' audit.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700">
+                <i data-lucide="play" class="w-4 h-4 mr-1"></i> Start Count Execution
+            </button>
+        </form>
+        {% endif %}
+
+        {% if audit.status == 'in_progress' %}
+        <form method="post" action="{% url 'assets:asset_audit_complete' audit.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-700">
+                <i data-lucide="check" class="w-4 h-4 mr-1"></i> Complete Field Count
+            </button>
+        </form>
+        {% endif %}
+
+        {% if audit.status == 'completed' %}
+        <button type="button" onclick="document.getElementById('reconcile-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="shield-check" class="w-4 h-4 mr-1"></i> Reconcile Discrepancies
+        </button>
+        {% endif %}
+
+        {% if audit.status not in 'completed reconciled cancelled' %}
+        <a href="{% url 'assets:asset_audit_edit' audit.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_audit_cancel' audit.pk %}" class="inline" onsubmit="return confirm('Cancel this audit run?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600">
+                <i data-lucide="slash" class="w-4 h-4 mr-1"></i> Cancel
+            </button>
+        </form>
+        {% endif %}
+
+        {% if audit.status in 'draft cancelled' %}
+        <form method="post" action="{% url 'assets:asset_audit_delete' audit.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete audit {{ audit.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Metrics & Findings -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Count Metrics Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Physical Count Results & Accuracy</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-4 bg-slate-50 rounded-lg">
+                        <div class="text-xs text-muted mb-1">Expected Assets</div>
+                        <div class="text-2xl font-bold font-mono text-slate-900">{{ audit.expected_asset_count }}</div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-lg">
+                        <div class="text-xs text-blue-700 mb-1">Physically Scanned</div>
+                        <div class="text-2xl font-bold font-mono text-blue-900">{{ audit.scanned_asset_count }}</div>
+                    </div>
+                    <div class="p-4 bg-emerald-50 rounded-lg">
+                        <div class="text-xs text-emerald-700 mb-1">Verified Matched</div>
+                        <div class="text-2xl font-bold font-mono text-emerald-900">{{ audit.matched_asset_count }}</div>
+                    </div>
+                    <div class="p-4 bg-red-50 rounded-lg">
+                        <div class="text-xs text-red-700 mb-1">Missing / Variances</div>
+                        <div class="text-2xl font-bold font-mono text-red-900">{{ audit.missing_asset_count }} miss / {{ audit.discrepancy_count }} var</div>
+                    </div>
+                </div>
+
+                {% if audit.discrepancy_notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Discrepancy Observations</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg">{{ audit.discrepancy_notes }}</div>
+                </div>
+                {% endif %}
+
+                {% if audit.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">General Auditor Instructions</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ audit.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Scope & Personnel Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Audit Parameters & Governance</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Target Facility / Stockroom</dt>
+                        <dd>
+                            {% if audit.target_location %}
+                                <a href="{% url 'scm:location_detail' audit.target_location.pk %}" class="text-brand hover:underline font-medium">
+                                    {{ audit.target_location.name }} ({{ audit.target_location.code }})
+                                </a>
+                            {% else %}
+                                <span class="text-muted">Enterprise-Wide / Unspecified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Target Department</dt>
+                        <dd>
+                            {% if audit.target_org_unit %}
+                                <span class="font-medium text-slate-800">{{ audit.target_org_unit.name }}</span>
+                            {% else %}
+                                <span class="text-muted">All Departments</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Asset Category Scope</dt>
+                        <dd>{{ audit.asset_category|default:"All Registered Asset Classes" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Lead Field Auditor</dt>
+                        <dd>
+                            {% if audit.lead_auditor %}
+                                {{ audit.lead_auditor.get_full_name|default:audit.lead_auditor.username }}
+                            {% else %}
+                                <span class="text-muted">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Supervising Auditor</dt>
+                        <dd>
+                            {% if audit.supervisor %}
+                                {{ audit.supervisor.get_full_name|default:audit.supervisor.username }}
+                            {% else %}
+                                <span class="text-muted">Unassigned</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Blind Counting Protocol</dt>
+                        <dd>
+                            {% if audit.is_blind_count %}
+                                <span class="badge badge-amber">Enabled — Field counters blind to expected list</span>
+                            {% else %}
+                                <span class="badge badge-slate">Disabled — Standard verification against roster</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Timeline & Reconciliation -->
+    <div class="space-y-6">
+        <!-- Reconciliation Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Reconciliation Status</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted mb-1">Reconciliation Action</div>
+                    <span class="badge badge-info">{{ audit.get_reconciliation_action_display }}</span>
+                </div>
+                {% if audit.reconciled_by %}
+                <div>
+                    <div class="text-xs text-muted mb-1">Reconciled By</div>
+                    <div class="text-sm font-medium text-slate-900">{{ audit.reconciled_by.get_full_name|default:audit.reconciled_by.username }}</div>
+                    <div class="text-xs text-muted">{{ audit.reconciled_at|date:"Y-m-d H:i" }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Schedule & Timeline -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Audit Timeline</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Scheduled Execution Date</dt>
+                        <dd class="font-medium text-slate-900">{{ audit.scheduled_date|date:"Y-m-d" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Count Started</dt>
+                        <dd class="font-medium text-slate-900">{{ audit.started_at|date:"Y-m-d H:i"|default:"Not Started" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Count Completed</dt>
+                        <dd class="font-medium text-slate-900">{{ audit.completed_at|date:"Y-m-d H:i"|default:"Pending" }}</dd>
+                    </div>
+                    <div class="pt-2 border-t border-slate-200">
+                        <dt class="text-xs text-muted">Created Stamp</dt>
+                        <dd class="text-xs text-slate-500">{{ audit.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reconcile Modal -->
+<div id="reconcile-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-slate-900">Reconcile Physical Audit</h3>
+                <button type="button" onclick="document.getElementById('reconcile-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="post" action="{% url 'assets:asset_audit_reconcile' audit.pk %}">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label" for="reconcile-action">Reconciliation Action</label>
+                        <select id="reconcile-action" name="reconciliation_action" class="form-select">
+                            <option value="no_action_needed">No Discrepancy / Closed</option>
+                            <option value="location_updated">Asset Location Updated in Register</option>
+                            <option value="custodian_reassigned">Custodian Reassigned</option>
+                            <option value="incident_initiated">Initiate Missing Asset Incident Report</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="reconcile-notes">Discrepancy & Sign-off Notes</label>
+                        <textarea id="reconcile-notes" name="discrepancy_notes" rows="4" class="form-textarea" placeholder="Provide formal reconciliation explanation...">{{ audit.discrepancy_notes }}</textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="document.getElementById('reconcile-modal').classList.add('hidden')" class="btn btn-outline">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                        Authorize Reconciliation
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
