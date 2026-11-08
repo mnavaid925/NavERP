@@ -228,6 +228,10 @@ def asset_requisition_reject(request, pk):
         return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
     reason = request.POST.get("rejection_reason", "").strip()
+    if not reason:
+        messages.error(request, "A reason is required to reject an asset requisition.")
+        return redirect("assets:asset_requisition_detail", pk=requisition.pk)
+
     with transaction.atomic():
         requisition.status = "rejected"
         requisition.approved_by = request.user
