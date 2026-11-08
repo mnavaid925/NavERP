@@ -101,6 +101,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                BiDecisionLog.objects.all().delete()
+                BiVisualComment.objects.all().delete()
+                BiDataStory.objects.all().delete()
+                BiSharedWorkspace.objects.all().delete()
                 BiNotificationItem.objects.all().delete()
                 DistributionBurstRun.objects.all().delete()
                 ReportSubscription.objects.all().delete()
