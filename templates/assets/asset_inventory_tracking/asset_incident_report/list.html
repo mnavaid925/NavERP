@@ -130,7 +130,7 @@
 
 <!-- Incidents Table Card -->
 <div class="card">
-    <div class="table-responsive">
+    <div class="table-wrap">
         <table class="table">
             <thead>
                 <tr>
@@ -149,7 +149,7 @@
                 {% for inc in incidents %}
                 <tr>
                     <td class="font-medium whitespace-nowrap">
-                        <a href="{% url 'assets:asset_incident_report_detail' inc.pk %}" class="text-primary hover:underline font-mono">
+                        <a href="{% url 'assets:asset_incident_report_detail' inc.pk %}" class="text-brand hover:underline font-mono">
                             {{ inc.number }}
                         </a>
                     </td>
@@ -215,12 +215,12 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="9" class="text-center py-12">
-                        <div class="flex flex-col items-center justify-center text-slate-500">
-                            <i data-lucide="shield-check" class="w-12 h-12 mb-3 text-slate-300"></i>
-                            <p class="text-base font-medium">No asset incident reports found</p>
-                            <p class="text-sm text-slate-400 mt-1">Report lost, stolen, or damaged assets to initiate investigation or loss write-off.</p>
-                            <a href="{% url 'assets:asset_incident_report_create' %}" class="btn btn-primary btn-sm mt-4">
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No asset incident reports found</div>
+                            <div class="empty-state-description">Report lost, stolen, or damaged assets to initiate investigation or loss write-off.</div>
+                            <a href="{% url 'assets:asset_incident_report_create' %}" class="btn btn-primary mt-4">
                                 <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Report New Incident
                             </a>
                         </div>
@@ -233,21 +233,31 @@
 
     <!-- Pagination -->
     {% if is_paginated %}
-    <div class="card-footer flex items-center justify-between">
-        <div class="text-sm text-slate-600">
+    <div class="pagination">
+        <div class="pagination-info">
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} incidents
         </div>
-        <div class="flex items-center gap-1">
+        <div class="pagination-pages">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.incident_type %}&incident_type={{ request.GET.incident_type }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.location %}&location={{ request.GET.location }}{% endif %}{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}" class="btn btn-outline btn-sm">
-                Previous
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&incident_type={{ request.GET.incident_type }}&severity={{ request.GET.severity }}&location={{ request.GET.location }}&asset={{ request.GET.asset }}" class="btn btn-outline btn-icon" title="Previous Page">
+                <i data-lucide="chevron-left"></i>
             </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+            </span>
             {% endif %}
-            <span class="px-3 py-1 text-sm text-slate-700">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.incident_type %}&incident_type={{ request.GET.incident_type }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.location %}&location={{ request.GET.location }}{% endif %}{% if request.GET.asset %}&asset={{ request.GET.asset }}{% endif %}" class="btn btn-outline btn-sm">
-                Next
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&incident_type={{ request.GET.incident_type }}&severity={{ request.GET.severity }}&location={{ request.GET.location }}&asset={{ request.GET.asset }}" class="btn btn-outline btn-icon" title="Next Page">
+                <i data-lucide="chevron-right"></i>
             </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-right"></i>
+            </span>
             {% endif %}
         </div>
     </div>
