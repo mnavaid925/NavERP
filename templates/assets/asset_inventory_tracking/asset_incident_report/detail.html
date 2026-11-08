@@ -175,7 +175,11 @@
                     <div class="detail-item">
                         <dt>Authorized By</dt>
                         <dd class="font-medium text-slate-900">
-                            {{ incident.write_off_authorized_by.get_full_name|default:incident.write_off_authorized_by.username }}
+                            {% if incident.write_off_authorized_by %}
+                                {{ incident.write_off_authorized_by.get_full_name|default:incident.write_off_authorized_by.username }}
+                            {% else %}
+                                —
+                            {% endif %}
                         </dd>
                     </div>
                     <div class="detail-item">
