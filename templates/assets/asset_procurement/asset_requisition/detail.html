@@ -132,7 +132,7 @@
                     <div class="text-xs font-semibold text-slate-500 uppercase">SCM Purchase Order Issued</div>
                     <div class="text-sm font-medium text-blue-600 mt-1 flex items-center gap-1.5">
                         <i data-lucide="shopping-cart" class="w-4 h-4"></i>
-                        <span>{{ requisition.purchase_order.number }} · {{ requisition.purchase_order.vendor.name }}</span>
+                        <span>{{ requisition.purchase_order.number }}{% if requisition.purchase_order.vendor %} · {{ requisition.purchase_order.vendor.name }}{% endif %}</span>
                     </div>
                 </div>
                 {% endif %}
