@@ -181,7 +181,9 @@ def asset_custody_log_delete(request, pk):
 @login_required
 @require_POST
 def asset_custody_log_checkin(request, pk):
-    custody_log = get_object_or_404(AssetCustodyLog, pk=pk, tenant=request.tenant)
+    custody_log = get_object_or_404(
+        AssetCustodyLog.objects.select_related("asset"), pk=pk, tenant=request.tenant
+    )
     if custody_log.status not in ("active_loan", "overdue"):
         messages.error(request, f"Cannot check in loan in '{custody_log.get_status_display()}' state.")
         return redirect("assets:asset_custody_log_detail", pk=custody_log.pk)
