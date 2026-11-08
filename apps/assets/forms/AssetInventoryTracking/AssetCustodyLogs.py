@@ -66,6 +66,6 @@ class AssetCustodyLogForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if self.tenant:
-            reject_foreign(self, cleaned_data, ["asset", "borrower"])
+            reject_foreign(self, cleaned_data, ["asset", "borrower", "crib_attendant"])
 
         return cleaned_data
