@@ -13,6 +13,7 @@ class AssetAcquisitionReceiptForm(TenantUniqueMixin, forms.ModelForm):
         exclude = [
             "tenant",
             "number",
+            "status",
             "created_at",
             "updated_at",
             "inspected_by",
@@ -34,7 +35,6 @@ class AssetAcquisitionReceiptForm(TenantUniqueMixin, forms.ModelForm):
             "receiving_location": forms.Select(attrs={"class": "form-select"}),
             "condition_on_arrival": forms.Select(attrs={"class": "form-select"}),
             "inspection_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Visual inspection findings, package integrity, damages..."}),
-            "status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
