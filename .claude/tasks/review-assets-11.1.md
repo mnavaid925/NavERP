@@ -17,7 +17,7 @@ Reviewers: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-review
 
 ## Important
 
-- [ ] `I1` — `apps/assets/models/__init__.py:1-7`: Sub-module models (`AssetRequisition`, `AssetAcquisitionReceipt`, `AssetCapitalization`, `AssetTag`) are not re-exported in `apps/assets/models/__init__.py`, violating the NavERP backend package re-export contract and breaking `from apps.assets.models import *`. Fix: Re-export the 4 models and include them in `__all__`.
+- [x] `I1` — `apps/assets/models/__init__.py:1-7`: Sub-module models (`AssetRequisition`, `AssetAcquisitionReceipt`, `AssetCapitalization`, `AssetTag`) are not re-exported in `apps/assets/models/__init__.py`, violating the NavERP backend package re-export contract and breaking `from apps.assets.models import *`. Fix: Re-export the 4 models and include them in `__all__`.
 - [ ] `I2` — `templates/assets/asset_procurement/*/*.html`: Missing filter dropdowns and pagination parameter loss in all four list templates.
   - `asset_requisition/list.html`: missing `<select name="category">` for `category_choices`, pagination drops `&category={{ request.GET.category }}`.
   - `asset_acquisition_receipt/list.html`: missing `<select name="location">` for `locations`, pagination drops `&location={{ request.GET.location }}`.
