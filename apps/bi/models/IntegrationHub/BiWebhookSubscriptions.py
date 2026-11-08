@@ -93,6 +93,7 @@ class BiWebhookSubscription(TenantNumbered):
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_bwhk_ten_stat"),
             models.Index(fields=["tenant", "is_active"], name="idx_bwhk_ten_act"),
+            models.Index(fields=["tenant", "payload_format"], name="idx_bwhk_ten_fmt"),
             models.Index(fields=["tenant", "created_at"], name="idx_bwhk_ten_created"),
         ]
 
