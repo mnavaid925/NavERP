@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -197,8 +197,9 @@ def warehouse_sync_endpoint_trigger(request, pk):
     sync_endpoint.status = "success"
     sync_endpoint.last_sync_duration_ms = 1420
     sync_endpoint.last_rows_synced = 2500
-    sync_endpoint.total_rows_synced += 2500
+    sync_endpoint.total_rows_synced = F("total_rows_synced") + 2500
     sync_endpoint.last_error_message = ""
+    sync_endpoint.updated_at = timezone.now()
     sync_endpoint.save(
         update_fields=[
             "last_sync_at",
@@ -207,6 +208,7 @@ def warehouse_sync_endpoint_trigger(request, pk):
             "last_rows_synced",
             "total_rows_synced",
             "last_error_message",
+            "updated_at",
         ]
     )
 
