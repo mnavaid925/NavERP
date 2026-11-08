@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Discussion {{ comment.number }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_visual_comment_list' %}">Discussions</a>
+            <span class="sep">/</span>
+            <span>{{ comment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">Discussion: {{ comment.number }}</h1>
+            <span class="badge {% if comment.status == 'resolved' %}badge-green{% elif comment.status == 'open' %}badge-amber{% else %}badge-info{% endif %}">
+                {{ comment.get_status_display }}
+            </span>
+            <span class="badge {% if comment.priority == 'urgent' %}badge-red{% elif comment.priority == 'high' %}badge-amber{% elif comment.priority == 'low' %}badge-muted{% else %}badge-slate{% endif %}">
+                {{ comment.get_priority_display }}
+            </span>
+            <span class="badge badge-slate">{{ comment.get_target_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm mt-1">Recorded on {{ comment.created_at|date:"M d, Y H:i" }} by {% if comment.author %}{{ comment.author.get_full_name|default:comment.author.username }}{% else %}Anonymous{% endif %}</p>
+    </div>
+    <div class="page-actions">
+        {% if comment.status != 'resolved' %}
+        <form method="post" action="{% url 'bi:bi_visual_comment_resolve' comment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-600 border-emerald-300 hover:bg-emerald-50">
+                <i data-lucide="check-circle-2"></i>
+                <span>Mark Resolved</span>
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'bi:bi_visual_comment_create' %}?parent={{ comment.pk }}" class="btn btn-primary">
+            <i data-lucide="corner-down-right"></i>
+            <span>Reply to Thread</span>
+        </a>
+        <a href="{% url 'bi:bi_visual_comment_edit' comment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_visual_comment_delete' comment.pk %}" class="inline" onsubmit="return confirm('Delete this comment?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Comment Body Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Comment & Context</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-5 bg-white border border-slate-200 rounded-xl shadow-sm text-base text-slate-800 leading-relaxed">
+                    {{ comment.content|linebreaksbr }}
+                </div>
+
+                <!-- Anchored Asset Context -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Anchored Target Asset</div>
+                        <div class="text-sm font-semibold mt-1 text-slate-800">
+                            {% if comment.dashboard %}
+                            <a href="{% url 'bi:bi_dashboard_detail' comment.dashboard.pk %}" class="text-primary-600 hover:underline">
+                                {{ comment.dashboard.name }}
+                            </a>
+                            {% elif comment.story %}
+                            <a href="{% url 'bi:bi_data_story_detail' comment.story.pk %}" class="text-primary-600 hover:underline">
+                                {{ comment.story.title }}
+                            </a>
+                            {% elif comment.report %}
+                            <a href="{% url 'bi:report_definition_detail' comment.report.pk %}" class="text-primary-600 hover:underline">
+                                {{ comment.report.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">General Discussion</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Visual Coordinate Pin</div>
+                        <div class="text-sm font-semibold mt-1 text-slate-800">
+                            {% if comment.coordinate_x is not None and comment.coordinate_y is not None %}
+                            <span class="badge badge-slate">X: {{ comment.coordinate_x }}%, Y: {{ comment.coordinate_y }}%</span>
+                            {% else %}
+                            <span class="text-muted text-xs">Unpinned / Canvas Header</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {% if comment.filter_snapshot %}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded text-xs">
+                    <span class="font-bold text-slate-700">Filter Snapshot:</span>
+                    <pre class="mt-1 font-mono text-[11px] text-slate-600">{{ comment.filter_snapshot }}</pre>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Threaded Replies Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Replies & Conversation ({{ replies.count }})</h2>
+                <a href="{% url 'bi:bi_visual_comment_create' %}?parent={{ comment.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Reply</span>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if replies %}
+                <div class="space-y-4">
+                    {% for reply in replies %}
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-xs text-slate-800">
+                                    {% if reply.author %}{{ reply.author.get_full_name|default:reply.author.username }}{% else %}Anonymous{% endif %}
+                                </span>
+                                <span class="text-muted text-[11px]">{{ reply.created_at|date:"M d, Y H:i" }}</span>
+                            </div>
+                            <span class="badge badge-slate text-[11px]">{{ reply.number }}</span>
+                        </div>
+                        <div class="text-sm text-slate-700 leading-normal">{{ reply.content|linebreaksbr }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted text-sm py-4">
+                    No replies in this thread yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Status & Lifecycle Card -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Lifecycle & Resolution</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase">Resolution Status</div>
+                    <div class="text-sm font-semibold mt-0.5">
+                        <span class="badge {% if comment.status == 'resolved' %}badge-green{% elif comment.status == 'open' %}badge-amber{% else %}badge-info{% endif %}">
+                            {{ comment.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+
+                {% if comment.resolved_by %}
+                <div>
+                    <div class="text-xs text-muted uppercase">Resolved By</div>
+                    <div class="text-sm font-medium mt-0.5">{{ comment.resolved_by.get_full_name|default:comment.resolved_by.username }}</div>
+                    <div class="text-xs text-muted">{{ comment.resolved_at|date:"M d, Y H:i" }}</div>
+                </div>
+                {% endif %}
+
+                <div class="border-t pt-3">
+                    <div class="text-xs text-muted uppercase">Author</div>
+                    <div class="text-sm font-medium mt-0.5">
+                        {% if comment.author %}{{ comment.author.get_full_name|default:comment.author.username }}{% else %}Anonymous{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Created At</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ comment.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Last Updated</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ comment.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
