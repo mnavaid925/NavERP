@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Movements & Transfers — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Inventory & Tracking</span>
+            <span>/</span>
+            <span>Movement Logs</span>
+        </div>
+        <h1 class="page-title">Asset Movements & Spatial Transfers</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_movement_log_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Transfer Request
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="truck"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Movements</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Requested</div>
+            <div class="stat-value">{{ requested_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="package-search"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Transit / Dispatched</div>
+            <div class="stat-value">{{ in_transit_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Received & Verified</div>
+            <div class="stat-value">{{ received_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <div class="relative">
+                    <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Transfer #, asset #, carrier, waybill..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-type">Movement Type</label>
+                <select id="filter-type" name="movement_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.movement_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-location">Facility</label>
+                <select id="filter-location" name="location" class="form-select text-sm">
+                    <option value="">All Facilities</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.pk|stringformat:'d' }}" {% if request.GET.location == loc.pk|stringformat:'d' %}selected{% endif %}>{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.movement_type or request.GET.location or request.GET.asset %}
+                <a href="{% url 'assets:asset_movement_log_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Movements Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Transfer Number</th>
+                    <th>Asset</th>
+                    <th>Type</th>
+                    <th>Origin &rarr; Destination</th>
+                    <th>Custody Hand-off</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mov in movements %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_movement_log_detail' mov.pk %}" class="text-brand hover:underline">
+                            {{ mov.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900 font-mono">{{ mov.asset.number }}</div>
+                        <div class="text-xs text-muted truncate max-w-xs">{{ mov.asset.name }}</div>
+                    </td>
+                    <td class="text-sm">
+                        {{ mov.get_movement_type_display }}
+                    </td>
+                    <td class="text-sm">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-slate-700 font-medium">{{ mov.from_location.name|default:"Unassigned" }}</span>
+                            <i data-lucide="arrow-right" class="w-3.5 h-3.5 text-slate-400"></i>
+                            <span class="text-slate-900 font-semibold">{{ mov.to_location.name|default:"Unassigned" }}</span>
+                        </div>
+                        {% if mov.from_room_bin or mov.to_room_bin %}
+                        <div class="text-xs text-muted">
+                            {{ mov.from_room_bin|default:"—" }} &rarr; {{ mov.to_room_bin|default:"—" }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {% if mov.from_custodian or mov.to_custodian %}
+                            <div>{{ mov.from_custodian.name|default:"—" }} &rarr; {{ mov.to_custodian.name|default:"—" }}</div>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if mov.status == 'draft' %}
+                            <span class="badge badge-slate">{{ mov.get_status_display }}</span>
+                        {% elif mov.status == 'requested' %}
+                            <span class="badge badge-info">{{ mov.get_status_display }}</span>
+                        {% elif mov.status in 'dispatched in_transit' %}
+                            <span class="badge badge-amber">{{ mov.get_status_display }}</span>
+                        {% elif mov.status == 'received' %}
+                            <span class="badge badge-green">{{ mov.get_status_display }}</span>
+                        {% elif mov.status == 'rejected' %}
+                            <span class="badge badge-red">{{ mov.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-muted">{{ mov.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_movement_log_detail' mov.pk %}" class="btn btn-outline btn-icon" title="View Transfer Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if mov.status not in 'received cancelled' %}
+                        <a href="{% url 'assets:asset_movement_log_edit' mov.pk %}" class="btn btn-outline btn-icon" title="Edit Movement">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if mov.status in 'draft cancelled' %}
+                        <form method="post" action="{% url 'assets:asset_movement_log_delete' mov.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete movement record {{ mov.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-icon text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="truck" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No asset movements recorded</div>
+                            <div class="empty-state-description">Track inter-facility equipment relocations, department transfers, and GPS coordinates.</div>
+                            <a href="{% url 'assets:asset_movement_log_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Transfer Request
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ movements.start_index }} to {{ movements.end_index }} of {{ paginator.count }} transfers
+        </div>
+        <div class="pagination-pages">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&movement_type={{ request.GET.movement_type }}&location={{ request.GET.location }}" class="btn btn-outline btn-icon" title="Previous Page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&movement_type={{ request.GET.movement_type }}&location={{ request.GET.location }}" class="btn btn-outline btn-icon" title="Next Page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
