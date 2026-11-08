@@ -3125,6 +3125,19 @@ LIVE_LINKS = {
         "Workspaces": "bi:bi_shared_workspace_list",
         "Decision Log": "bi:bi_decision_log_list",
     },
+    "10.19": {
+        "ERP & Application Connectors": "bi:integration_connector_list",
+        "External BI & Warehouse Sync": "bi:warehouse_sync_endpoint_list",
+        "Open APIs & Webhooks": "bi:bi_webhook_subscription_list",
+        "Streaming & Message Queues": "bi:integration_connector_list",
+        "Marketplace & Extensions": "bi:bi_extension_plugin_list",
+        # Extra live leaves & aliases
+        "Integration Connectors": "bi:integration_connector_list",
+        "Warehouse Sync Endpoints": "bi:warehouse_sync_endpoint_list",
+        "Webhook Subscriptions": "bi:bi_webhook_subscription_list",
+        "Extension Plugins": "bi:bi_extension_plugin_list",
+        "API & Integration Hub": "bi:integration_connector_list",
+    },
 
 
 
