@@ -174,12 +174,15 @@ def asset_capitalization_delete(request, pk):
 @require_POST
 def asset_capitalization_execute(request, pk):
     """Execute formal asset capitalization: initializes FixedAsset and updates status."""
-    capitalization = assets_object(request, AssetCapitalization, pk)
-    if not capitalization.can_execute_capitalization():
-        messages.error(request, f"Capitalization {capitalization.number} cannot be executed in state '{capitalization.get_status_display()}'.")
-        return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
-
     with transaction.atomic():
+        capitalization = get_object_or_404(
+            AssetCapitalization.objects.select_for_update(),
+            tenant=request.tenant,
+            pk=pk,
+        )
+        if not capitalization.can_execute_capitalization():
+            messages.error(request, f"Capitalization {capitalization.number} cannot be executed in state '{capitalization.get_status_display()}'.")
+            return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
         # Automatically create financial fixed asset in Module 2 if not explicitly linked
         if not capitalization.fixed_asset:
             fa = FixedAsset(
