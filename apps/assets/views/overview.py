@@ -4,6 +4,10 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 
+from apps.assets.models.AssetInventoryTracking.AssetAudits import AssetAudit
+from apps.assets.models.AssetInventoryTracking.AssetCustodyLogs import AssetCustodyLog
+from apps.assets.models.AssetInventoryTracking.AssetIncidentReports import AssetIncidentReport
+from apps.assets.models.AssetInventoryTracking.AssetMovementLogs import AssetMovementLog
 from apps.assets.models.AssetProcurement.AssetAcquisitionReceipts import AssetAcquisitionReceipt
 from apps.assets.models.AssetProcurement.AssetCapitalizations import AssetCapitalization
 from apps.assets.models.AssetProcurement.AssetRequisitions import AssetRequisition
@@ -18,6 +22,11 @@ def overview(request):
     rcv_qs = assets_scope(AssetAcquisitionReceipt.objects.all(), request)
     cap_qs = assets_scope(AssetCapitalization.objects.all(), request)
     tag_qs = assets_scope(AssetTag.objects.all(), request)
+
+    audit_qs = assets_scope(AssetAudit.objects.all(), request)
+    mov_qs = assets_scope(AssetMovementLog.objects.all(), request)
+    custody_qs = assets_scope(AssetCustodyLog.objects.all(), request)
+    inc_qs = assets_scope(AssetIncidentReport.objects.all(), request)
 
     req_agg = req_qs.aggregate(
         total=Count("id"),
@@ -36,6 +45,24 @@ def overview(request):
         verified=Count("id", filter=Q(is_verified=True)),
     )
 
+    audit_agg = audit_qs.aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status__in=["scheduled", "in_progress"])),
+    )
+    mov_agg = mov_qs.aggregate(
+        total=Count("id"),
+        in_transit=Count("id", filter=Q(status__in=["dispatched", "in_transit"])),
+    )
+    custody_agg = custody_qs.aggregate(
+        total=Count("id"),
+        active_loans=Count("id", filter=Q(status="active_loan")),
+        overdue=Count("id", filter=Q(status="overdue")),
+    )
+    inc_agg = inc_qs.aggregate(
+        total=Count("id"),
+        open=Count("id", filter=Q(status__in=["reported", "under_investigation", "write_off_pending"])),
+    )
+
     kpis = {
         "total_requisitions": req_agg["total"],
         "pending_approval_reqs": req_agg["pending_approval"],
@@ -45,12 +72,23 @@ def overview(request):
         "capitalized_value": cap_agg["total_capex"] or Decimal("0.00"),
         "total_tags": tag_agg["total"],
         "verified_tags": tag_agg["verified"],
+        "total_audits": audit_agg["total"],
+        "active_audits": audit_agg["active"],
+        "total_movements": mov_agg["total"],
+        "in_transit_movements": mov_agg["in_transit"],
+        "total_custody_loans": custody_agg["total"],
+        "active_custody_loans": custody_agg["active_loans"],
+        "overdue_custody_loans": custody_agg["overdue"],
+        "total_incidents": inc_agg["total"],
+        "open_incidents": inc_agg["open"],
     }
 
     recent_requisitions = req_qs.select_related("currency", "proposed_vendor").order_by("-created_at")[:5]
     recent_receipts = rcv_qs.select_related("vendor", "receiving_location").order_by("-created_at")[:5]
     recent_capitalizations = cap_qs.select_related("fixed_asset").order_by("-created_at")[:5]
     recent_tags = tag_qs.select_related("operational_asset").order_by("-created_at")[:5]
+    recent_audits = audit_qs.select_related("target_location").order_by("-created_at")[:5]
+    recent_movements = mov_qs.select_related("asset", "from_location", "to_location").order_by("-created_at")[:5]
 
     context = {
         "kpis": kpis,
@@ -58,5 +96,7 @@ def overview(request):
         "recent_receipts": recent_receipts,
         "recent_capitalizations": recent_capitalizations,
         "recent_tags": recent_tags,
+        "recent_audits": recent_audits,
+        "recent_movements": recent_movements,
     }
     return render(request, "assets/overview.html", context)
