@@ -80,7 +80,7 @@
                 <div class="mt-4 pt-4 border-t border-slate-200">
                     <div class="text-xs text-muted uppercase font-semibold">HMAC Secret Signing Token (X-NavERP-Signature)</div>
                     <div class="flex items-center gap-2 mt-1">
-                        <code class="bg-slate-100 text-slate-800 px-3 py-1.5 rounded text-xs font-mono select-all">{{ webhook.secret_token }}</code>
+                        <code class="bg-slate-100 text-slate-800 px-3 py-1.5 rounded text-xs font-mono">{% if webhook.secret_token %}{{ webhook.secret_token|slice:":10" }}••••••••••••••••••••••••{% else %}<span class="text-muted italic">None</span>{% endif %}</code>
                     </div>
                     <span class="text-xs text-muted">Dispatched in SHA256 hex digest header</span>
                 </div>
