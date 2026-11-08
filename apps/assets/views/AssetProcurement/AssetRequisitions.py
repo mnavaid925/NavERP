@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -166,18 +167,19 @@ def asset_requisition_submit(request, pk):
         messages.error(request, f"Requisition {requisition.number} cannot be submitted in state '{requisition.get_status_display()}'.")
         return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
-    requisition.status = "pending_approval"
-    requisition.submitted_by = request.user
-    requisition.submitted_at = timezone.now()
-    requisition.save(update_fields=["status", "submitted_by", "submitted_at", "updated_at"])
+    with transaction.atomic():
+        requisition.status = "pending_approval"
+        requisition.submitted_by = request.user
+        requisition.submitted_at = timezone.now()
+        requisition.save(update_fields=["status", "submitted_by", "submitted_at", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        requisition,
-        "update",
-        changes={"action": "submit", "details": f"Submitted asset requisition {requisition.number} for approval"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            requisition,
+            "update",
+            changes={"action": "submit", "details": f"Submitted asset requisition {requisition.number} for approval"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Requisition {requisition.number} submitted for approval.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
@@ -195,19 +197,20 @@ def asset_requisition_approve(request, pk):
         messages.error(request, "Segregation of Duties violation: You cannot approve a requisition you submitted.")
         return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
-    requisition.status = "approved"
-    requisition.approved_by = request.user
-    requisition.approved_at = timezone.now()
-    requisition.rejection_reason = ""
-    requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
+    with transaction.atomic():
+        requisition.status = "approved"
+        requisition.approved_by = request.user
+        requisition.approved_at = timezone.now()
+        requisition.rejection_reason = ""
+        requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        requisition,
-        "update",
-        changes={"action": "approve", "details": f"Approved asset requisition {requisition.number}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            requisition,
+            "update",
+            changes={"action": "approve", "details": f"Approved asset requisition {requisition.number}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Requisition {requisition.number} approved.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
@@ -222,18 +225,19 @@ def asset_requisition_reject(request, pk):
         return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
     reason = request.POST.get("rejection_reason", "").strip()
-    requisition.status = "rejected"
-    requisition.approved_by = request.user
-    requisition.approved_at = timezone.now()
-    requisition.rejection_reason = reason
-    requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
+    with transaction.atomic():
+        requisition.status = "rejected"
+        requisition.approved_by = request.user
+        requisition.approved_at = timezone.now()
+        requisition.rejection_reason = reason
+        requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        requisition,
-        "update",
-        changes={"action": "reject", "details": f"Rejected asset requisition {requisition.number}: {reason}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            requisition,
+            "update",
+            changes={"action": "reject", "details": f"Rejected asset requisition {requisition.number}: {reason}"},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Asset Requisition {requisition.number} has been rejected.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
