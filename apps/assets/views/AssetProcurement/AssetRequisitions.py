@@ -141,6 +141,9 @@ def asset_requisition_edit(request, pk):
 def asset_requisition_delete(request, pk):
     """Delete an asset requisition."""
     requisition = assets_object(request, AssetRequisition, pk)
+    if requisition.status not in ("draft", "rejected"):
+        messages.error(request, f"Requisition {requisition.number} cannot be deleted in status '{requisition.get_status_display()}'. Only draft or rejected requisitions can be deleted.")
+        return redirect("assets:asset_requisition_detail", pk=requisition.pk)
     number = requisition.number
     write_audit_log(
         request.user,
