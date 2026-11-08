@@ -14,7 +14,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_webhook_subscription_list(request):
-    qs = bi_scope(BiWebhookSubscription.objects.all(), request).select_related("created_by")
+    qs = bi_scope(BiWebhookSubscription.objects.all(), request)
 
     counts = qs.aggregate(
         total=Count("id"),
