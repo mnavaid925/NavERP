@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Requisitions — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Procurement</span>
+            <span>/</span>
+            <span>Requisitions</span>
+        </div>
+        <h1 class="page-title">Capital Asset Requisitions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_requisition_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New CapEx Request
+        </a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Number, title, budget code, manufacturer..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs">Priority</label>
+                <select name="priority" class="form-select text-sm">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.priority or request.GET.category %}
+                <a href="{% url 'assets:asset_requisition_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Requisitions Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Asset Title & Category</th>
+                    <th>Estimated Cost</th>
+                    <th>Priority</th>
+                    <th>Target Dept / Location</th>
+                    <th>Status</th>
+                    <th>Requested</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in requisitions %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_requisition_detail' req.pk %}" class="text-blue-600 hover:underline">
+                            {{ req.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ req.title }}</div>
+                        <div class="text-xs text-slate-500">{{ req.get_asset_category_display }}</div>
+                    </td>
+                    <td>
+                        <div class="font-semibold text-slate-900">
+                            {% if req.currency %}{{ req.currency.code }}{% else %}${% endif %} {{ req.estimated_cost|floatformat:2 }}
+                        </div>
+                        {% if req.budget_code %}
+                        <div class="text-xs text-slate-500">Budget: {{ req.budget_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ req.priority_css }}">{{ req.get_priority_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm">{% if req.target_org_unit %}{{ req.target_org_unit.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}</div>
+                        <div class="text-xs text-slate-500">{% if req.target_location %}{{ req.target_location.name }}{% endif %}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span>
+                    </td>
+                    <td class="text-xs text-slate-500">
+                        {{ req.created_at|date:"M d, Y" }}
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_requisition_detail' req.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_requisition_edit' req.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_requisition_delete' req.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete requisition {{ req.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="file-text" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-700">No Asset Requisitions Found</h3>
+                            <p class="text-sm text-slate-500 mt-1">Get started by creating a new capital asset request.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'assets:asset_requisition_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create Requisition
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
