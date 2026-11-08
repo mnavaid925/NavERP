@@ -130,6 +130,9 @@ def bi_extension_plugin_create(request):
 @login_required
 def bi_extension_plugin_edit(request, pk):
     plugin = bi_object(request, BiExtensionPlugin, pk)
+    if plugin.is_system_plugin:
+        messages.error(request, "System-bundled extension plugins cannot be modified.")
+        return redirect("bi:bi_extension_plugin_detail", pk=plugin.pk)
 
     if request.method == "POST":
         form = BiExtensionPluginForm(
