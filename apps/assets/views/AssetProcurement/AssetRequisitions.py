@@ -113,6 +113,9 @@ def asset_requisition_create(request):
 def asset_requisition_edit(request, pk):
     """Update an existing asset requisition."""
     requisition = assets_object(request, AssetRequisition, pk)
+    if requisition.status in ("approved", "ordered", "received"):
+        messages.error(request, f"Requisition {requisition.number} cannot be edited in status '{requisition.get_status_display()}'.")
+        return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
     if request.method == "POST":
         form = AssetRequisitionForm(request.POST, instance=requisition, tenant=request.tenant)
