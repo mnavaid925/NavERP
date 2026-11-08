@@ -182,7 +182,7 @@
                 <h2 class="card-title">Audit Metadata</h2>
             </div>
             <div class="card-body text-xs text-muted space-y-2">
-                <div>Created By: <span class="font-medium text-slate-800">{{ webhook.created_by.get_full_name|default:webhook.created_by.username|default:"System" }}</span></div>
+                <div>Created By: <span class="font-medium text-slate-800">{% if webhook.created_by %}{{ webhook.created_by.get_full_name|default:webhook.created_by.username }}{% else %}System{% endif %}</span></div>
                 <div>Created At: <span class="font-mono text-slate-800">{{ webhook.created_at|date:"Y-m-d H:i" }}</span></div>
                 <div>Updated At: <span class="font-mono text-slate-800">{{ webhook.updated_at|date:"Y-m-d H:i" }}</span></div>
             </div>
