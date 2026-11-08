@@ -51,13 +51,6 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="{{ form.secret_token.id_for_label }}">HMAC-SHA256 Secret Token</label>
-                {{ form.secret_token }}
-                <span class="text-xs text-muted">Leave empty to automatically generate a secure 48-character hex token (whsec_...)</span>
-                {% if form.secret_token.errors %}<div class="form-error">{{ form.secret_token.errors }}</div>{% endif %}
-            </div>
-
-            <div class="form-group">
                 <label class="form-label" for="{{ form.event_types_raw.id_for_label }}">{{ form.event_types_raw.label }}</label>
                 {{ form.event_types_raw }}
                 <span class="text-xs text-muted">{{ form.event_types_raw.help_text }}</span>
