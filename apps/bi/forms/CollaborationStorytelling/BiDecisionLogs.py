@@ -76,4 +76,8 @@ class BiDecisionLogForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["workspace", "dashboard", "widget", "kpi", "decision_maker"])
+        dashboard = cleaned.get("dashboard")
+        widget = cleaned.get("widget")
+        if dashboard and widget and widget.dashboard_id != dashboard.id:
+            self.add_error("widget", "The selected widget does not belong to the selected dashboard.")
         return cleaned
