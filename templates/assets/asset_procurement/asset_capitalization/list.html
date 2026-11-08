@@ -24,20 +24,29 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div class="form-group mb-0 md:col-span-2">
-                <label class="form-label text-xs">Search</label>
+                <label class="form-label text-xs" for="filter-q">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Capitalization #, title, asset name..." class="form-input pl-9 text-sm">
+                    <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Capitalization #, title, asset name..." class="form-input pl-9 text-sm">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
                 </div>
             </div>
             <div class="form-group mb-0">
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-method">Method</label>
+                <select id="filter-method" name="method" class="form-select text-sm">
+                    <option value="">All Methods</option>
+                    {% for val, label in method_choices %}
+                    <option value="{{ val }}" {% if request.GET.method == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -144,7 +153,7 @@
     <div class="p-4 border-t border-slate-200">
         <div class="pagination">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="pagination-link">
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.method %}&method={{ request.GET.method }}{% endif %}" class="pagination-link">
                 Previous
             </a>
             {% endif %}
@@ -152,7 +161,7 @@
                 Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
             </span>
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="pagination-link">
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.method %}&method={{ request.GET.method }}{% endif %}" class="pagination-link">
                 Next
             </a>
             {% endif %}
