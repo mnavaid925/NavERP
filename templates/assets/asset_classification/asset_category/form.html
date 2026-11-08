@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Category: {{ category.code }} — NavERP{% else %}New Asset Category — NavERP{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_category_list' %}">Categories</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ category.code }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Asset Category: {{ category.code }}{% else %}Create Asset Category{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_category_detail' category.pk %}{% else %}{% url 'assets:asset_category_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">
+            {% if is_edit %}Update Taxonomy Node{% else %}New Taxonomy Category Configuration{% endif %}
+        </h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Identity & Hierarchy -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Category Identity & Taxonomy Structure
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.code.id_for_label }}" class="form-label">
+                            Category Code <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.code }}
+                        {% if form.code.errors %}<div class="form-error">{{ form.code.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Unique taxonomy code, e.g. HVAC-CHL, PUMP-CENT</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                            Category Name <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.category_type.id_for_label }}" class="form-label">
+                            Category Domain Type <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.category_type }}
+                        {% if form.category_type.errors %}<div class="form-error">{{ form.category_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.parent.id_for_label }}" class="form-label">Parent Group (Optional)</label>
+                        {{ form.parent }}
+                        {% if form.parent.errors %}<div class="form-error">{{ form.parent.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Leave blank for root-level categories</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- UNSPSC Coding -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    UNSPSC Standard Commodity Classification
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.unspsc_code.id_for_label }}" class="form-label">UNSPSC Commodity Code</label>
+                        {{ form.unspsc_code }}
+                        {% if form.unspsc_code.errors %}<div class="form-error">{{ form.unspsc_code.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">8-digit United Nations standard commodity code</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.unspsc_title.id_for_label }}" class="form-label">UNSPSC Commodity Title</label>
+                        {{ form.unspsc_title }}
+                        {% if form.unspsc_title.errors %}<div class="form-error">{{ form.unspsc_title.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Default Policies -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Default Depreciation & Maintenance Governance
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.default_depreciation_method.id_for_label }}" class="form-label">
+                            Default Depreciation Method
+                        </label>
+                        {{ form.default_depreciation_method }}
+                        {% if form.default_depreciation_method.errors %}<div class="form-error">{{ form.default_depreciation_method.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.default_useful_life_months.id_for_label }}" class="form-label">
+                            Default Useful Life (Months)
+                        </label>
+                        {{ form.default_useful_life_months }}
+                        {% if form.default_useful_life_months.errors %}<div class="form-error">{{ form.default_useful_life_months.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">e.g. 60 months = 5 years, 120 months = 10 years</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.default_maintenance_strategy.id_for_label }}" class="form-label">
+                            Default Maintenance Strategy
+                        </label>
+                        {{ form.default_maintenance_strategy }}
+                        {% if form.default_maintenance_strategy.errors %}<div class="form-error">{{ form.default_maintenance_strategy.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.default_criticality.id_for_label }}" class="form-label">
+                            Default Criticality Baseline
+                        </label>
+                        {{ form.default_criticality }}
+                        {% if form.default_criticality.errors %}<div class="form-error">{{ form.default_criticality.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description & Display Order -->
+            <div class="mb-6">
+                <div class="form-group mb-4">
+                    <label for="{{ form.description.id_for_label }}" class="form-label">Description & Inclusion Scope</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.display_order.id_for_label }}" class="form-label">Display Order Sequence</label>
+                        {{ form.display_order }}
+                        {% if form.display_order.errors %}<div class="form-error">{{ form.display_order.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group flex items-center pt-6">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            {{ form.is_active }}
+                            <span class="text-sm font-medium text-slate-800">Active Category Node</span>
+                        </label>
+                        {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'assets:asset_category_detail' category.pk %}{% else %}{% url 'assets:asset_category_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Category{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
