@@ -1,5 +1,11 @@
 """Models package for apps.assets."""
 from apps.assets.models._base import TenantNumbered, TenantOwned
+from apps.assets.models.AssetClassification import (
+    AssetCategory,
+    AssetCriticalityAssessment,
+    AssetModel,
+    AssetSpecificationTemplate,
+)
 from apps.assets.models.AssetInventoryTracking import (
     AssetAudit,
     AssetCustodyLog,
@@ -24,4 +30,8 @@ __all__ = [
     "AssetMovementLog",
     "AssetCustodyLog",
     "AssetIncidentReport",
+    "AssetCategory",
+    "AssetModel",
+    "AssetCriticalityAssessment",
+    "AssetSpecificationTemplate",
 ]
