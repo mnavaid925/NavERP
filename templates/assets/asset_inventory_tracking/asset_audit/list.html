@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Audits & Physical Counts — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Inventory & Tracking</span>
+            <span>/</span>
+            <span>Physical Audits</span>
+        </div>
+        <h1 class="page-title">Physical Asset Audits & Verification</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_audit_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Physical Audit
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Audits</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Scheduled</div>
+            <div class="stat-value">{{ scheduled_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="play-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Progress</div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Counts Complete</div>
+            <div class="stat-value">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Reconciled</div>
+            <div class="stat-value">{{ reconciled_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <div class="relative">
+                    <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Number, title, category, notes..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-type">Audit Type</label>
+                <select id="filter-type" name="audit_type" class="form-select text-sm">
+                    <option value="">All Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.audit_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-location">Location</label>
+                <select id="filter-location" name="location" class="form-select text-sm">
+                    <option value="">All Locations</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.pk|stringformat:'d' }}" {% if request.GET.location == loc.pk|stringformat:'d' %}selected{% endif %}>{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.audit_type or request.GET.location or request.GET.org_unit %}
+                <a href="{% url 'assets:asset_audit_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Audits Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Title & Type</th>
+                    <th>Target Scope</th>
+                    <th>Scheduled Date</th>
+                    <th>Count Progress</th>
+                    <th>Discrepancy</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for audit in audits %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_audit_detail' audit.pk %}" class="text-brand hover:underline">
+                            {{ audit.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ audit.title }}</div>
+                        <div class="text-xs text-muted">{{ audit.get_audit_type_display }}{% if audit.is_blind_count %} • <span class="text-amber-600 font-semibold">Blind Count</span>{% endif %}</div>
+                    </td>
+                    <td class="text-sm">
+                        {% if audit.target_location %}
+                            <div><i data-lucide="map-pin" class="w-3.5 h-3.5 inline mr-1 text-slate-400"></i>{{ audit.target_location.name }}</div>
+                        {% endif %}
+                        {% if audit.target_org_unit %}
+                            <div class="text-xs text-muted">{{ audit.target_org_unit.name }}</div>
+                        {% endif %}
+                        {% if not audit.target_location and not audit.target_org_unit %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {{ audit.scheduled_date|date:"Y-m-d" }}
+                    </td>
+                    <td class="text-sm">
+                        <div class="flex items-center gap-1 font-mono">
+                            <span class="text-slate-900 font-semibold">{{ audit.scanned_asset_count }}</span>
+                            <span class="text-muted">/</span>
+                            <span class="text-slate-500">{{ audit.expected_asset_count }}</span>
+                        </div>
+                        <div class="text-xs text-muted">Matched: {{ audit.matched_asset_count }}</div>
+                    </td>
+                    <td class="text-sm">
+                        {% if audit.discrepancy_count > 0 or audit.missing_asset_count > 0 %}
+                            <span class="badge badge-red font-mono">{{ audit.discrepancy_count }} var / {{ audit.missing_asset_count }} miss</span>
+                        {% else %}
+                            <span class="badge badge-green font-mono">0 variance</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if audit.status == 'draft' %}
+                            <span class="badge badge-slate">{{ audit.get_status_display }}</span>
+                        {% elif audit.status == 'scheduled' %}
+                            <span class="badge badge-info">{{ audit.get_status_display }}</span>
+                        {% elif audit.status == 'in_progress' %}
+                            <span class="badge badge-amber">{{ audit.get_status_display }}</span>
+                        {% elif audit.status == 'completed' %}
+                            <span class="badge badge-info">{{ audit.get_status_display }}</span>
+                        {% elif audit.status == 'reconciled' %}
+                            <span class="badge badge-green">{{ audit.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-red">{{ audit.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_audit_detail' audit.pk %}" class="btn btn-outline btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if audit.status not in 'completed reconciled cancelled' %}
+                        <a href="{% url 'assets:asset_audit_edit' audit.pk %}" class="btn btn-outline btn-icon" title="Edit Audit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if audit.status in 'draft cancelled' %}
+                        <form method="post" action="{% url 'assets:asset_audit_delete' audit.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete audit {{ audit.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-icon text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="clipboard-x" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No physical asset audits found</div>
+                            <div class="empty-state-description">Schedule periodic wall-to-wall or cyclical sample counts to verify physical inventory against the asset register.</div>
+                            <a href="{% url 'assets:asset_audit_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Physical Audit
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ audits.start_index }} to {{ audits.end_index }} of {{ paginator.count }} audits
+        </div>
+        <div class="pagination-pages">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&audit_type={{ request.GET.audit_type }}&location={{ request.GET.location }}&org_unit={{ request.GET.org_unit }}" class="btn btn-outline btn-icon" title="Previous Page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&audit_type={{ request.GET.audit_type }}&location={{ request.GET.location }}&org_unit={{ request.GET.org_unit }}" class="btn btn-outline btn-icon" title="Next Page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
