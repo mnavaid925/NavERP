@@ -164,6 +164,15 @@ def bi_visual_comment_detail(request, pk):
 @login_required
 def bi_visual_comment_edit(request, pk):
     comment = bi_object(request, BiVisualComment, pk)
+    can_manage = (
+        request.user == comment.author
+        or request.user.is_superuser
+        or getattr(request, "is_tenant_admin", False)
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not can_manage:
+        messages.error(request, "You can only edit your own comments.")
+        return redirect("bi:bi_visual_comment_detail", pk=comment.pk)
 
     if request.method == "POST":
         form = BiVisualCommentForm(request.POST, instance=comment, tenant=request.tenant)
@@ -199,6 +208,16 @@ def bi_visual_comment_edit(request, pk):
 @require_POST
 def bi_visual_comment_delete(request, pk):
     comment = bi_object(request, BiVisualComment, pk)
+    can_manage = (
+        request.user == comment.author
+        or request.user.is_superuser
+        or getattr(request, "is_tenant_admin", False)
+        or getattr(request.user, "is_tenant_admin", False)
+    )
+    if not can_manage:
+        messages.error(request, "You can only delete your own comments.")
+        return redirect("bi:bi_visual_comment_detail", pk=comment.pk)
+
     number = comment.number
     with transaction.atomic():
         write_audit_log(
