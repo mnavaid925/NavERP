@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}{{ template.attribute_key }} — Spec Attribute — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_specification_template_list' %}">Spec Templates</a>
+            <span>/</span>
+            <span>{{ template.attribute_key }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ template.display_name }} (<code>{{ template.attribute_key }}</code>)</h1>
+            <span class="badge {{ template.data_type_css }}">{{ template.get_data_type_display }}</span>
+            {% if template.is_required %}<span class="badge badge-red">Required</span>{% endif %}
+            {% if template.is_filterable %}<span class="badge badge-green">Search Filter</span>{% endif %}
+        </div>
+        <p class="text-sm text-muted mt-1">Scope Link: <span class="font-medium text-slate-800">{{ template.target_scope }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_specification_template_edit' template.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Attribute
+        </a>
+        <form method="post" action="{% url 'assets:asset_specification_template_delete' template.pk %}" class="inline" onsubmit="return confirm('Delete specification template {{ template.attribute_key }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_specification_template_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Specification Schema Details Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-brand"></i> Attribute Configuration & Data Typing
+            </h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Machine Attribute Key</label>
+                    <div class="text-sm font-mono font-bold text-slate-900">{{ template.attribute_key }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Display Label</label>
+                    <div class="text-sm font-medium text-slate-800">{{ template.display_name }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Data Storage Type</label>
+                    <div class="text-sm font-medium text-slate-800">{{ template.get_data_type_display }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Engineering Unit of Measure</label>
+                    <div class="text-sm">
+                        {% if template.unit_of_measure %}
+                        <code class="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-800 font-semibold">{{ template.unit_of_measure }}</code>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Default Initial Value</label>
+                    <div class="text-sm text-slate-800 font-mono">{{ template.default_value|default:"—" }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Scope Level</label>
+                    <div class="text-sm">
+                        {% if template.category %}
+                        <a href="{% url 'assets:asset_category_detail' template.category.pk %}" class="text-brand hover:underline font-medium">
+                            Category: {{ template.category.code }} ({{ template.category.name }})
+                        </a>
+                        {% elif template.model %}
+                        <a href="{% url 'assets:asset_model_detail' template.model.pk %}" class="text-brand hover:underline font-medium">
+                            Model: {{ template.model.model_number }} ({{ template.model.name }})
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Global Workspace Scope</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Constraints & Bounds -->
+            <hr class="my-4 border-slate-200">
+            <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3">Validation & Input Constraints</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Numeric Value Bounds</label>
+                    <div class="text-sm text-slate-800">
+                        {% if template.min_numeric_value is not None or template.max_numeric_value is not None %}
+                        Min: <strong>{{ template.min_numeric_value|default:"No limit" }}</strong> — Max: <strong>{{ template.max_numeric_value|default:"No limit" }}</strong>
+                        {% else %}
+                        <span class="text-muted">No numerical bounds enforced</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Validation Regex Pattern</label>
+                    <div class="text-sm">
+                        {% if template.validation_regex %}
+                        <code class="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-800">{{ template.validation_regex }}</code>
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if template.dropdown_options %}
+            <div class="mb-4">
+                <label class="text-xs font-semibold uppercase text-muted">Allowed Dropdown Choice Values</label>
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-800 font-mono mt-1">
+                    {{ template.dropdown_options }}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if template.help_text %}
+            <hr class="my-4 border-slate-200">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Technician Guidance / Field Instructions</label>
+                <p class="text-sm text-slate-700 mt-1">{{ template.help_text }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Metadata Side Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-brand"></i> Form & Search Behavior
+            </h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">System Record Identifier</span>
+                <span class="text-xs font-mono text-slate-700">{{ template.number }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Required During Registration</span>
+                <span class="text-sm font-semibold {% if template.is_required %}text-red{% else %}text-muted{% endif %}">
+                    {% if template.is_required %}Yes (Mandatory){% else %}No (Optional){% endif %}
+                </span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Asset Register Filterable</span>
+                <span class="text-sm font-semibold {% if template.is_filterable %}text-green{% else %}text-muted{% endif %}">
+                    {% if template.is_filterable %}Yes (Indexed){% else %}No{% endif %}
+                </span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Display Sequence Priority</span>
+                <span class="text-sm font-semibold text-slate-900">{{ template.display_order }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">Created</span>
+                <span class="text-xs text-muted">{{ template.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
