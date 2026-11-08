@@ -71,6 +71,10 @@ from apps.bi.forms.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAnal
 from apps.bi.forms.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplayForm
 from apps.bi.forms.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfigurationForm
 from apps.bi.forms.EmbeddedMobileBi.EmbedApiTokens import EmbedApiTokenForm
+from apps.bi.forms.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspaceForm
+from apps.bi.forms.CollaborationStorytelling.BiDataStories import BiDataStoryForm
+from apps.bi.forms.CollaborationStorytelling.BiVisualComments import BiVisualCommentForm
+from apps.bi.forms.CollaborationStorytelling.BiDecisionLogs import BiDecisionLogForm
 from apps.bi.forms.OperationalReporting.ReportDefinitions import (
     ReportCloneForm,
     ReportDefinitionForm,
@@ -197,4 +201,8 @@ __all__ = [
     "KioskWallboardDisplayForm",
     "MobileBiConfigurationForm",
     "EmbedApiTokenForm",
+    "BiSharedWorkspaceForm",
+    "BiDataStoryForm",
+    "BiVisualCommentForm",
+    "BiDecisionLogForm",
 ]
