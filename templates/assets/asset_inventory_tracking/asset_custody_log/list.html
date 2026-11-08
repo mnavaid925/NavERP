@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Tool Crib & Asset Custody Loans — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Inventory & Tracking</span>
+            <span>/</span>
+            <span>Tool Crib & Custody</span>
+        </div>
+        <h1 class="page-title">Tool Crib & Equipment Custody Lending</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_custody_log_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Equipment Checkout
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Loans Logged</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Loans in Field</div>
+            <div class="stat-value">{{ active_loans_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="alert-triangle" class="text-red-500"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue for Return</div>
+            <div class="stat-value text-red-600">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Returned & Checked In</div>
+            <div class="stat-value">{{ returned_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs" for="filter-q">Search</label>
+                <div class="relative">
+                    <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Loan #, asset #, borrower, work order..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-action">Action</label>
+                <select id="filter-action" name="action_type" class="form-select text-sm">
+                    <option value="">All Actions</option>
+                    {% for val, label in action_choices %}
+                    <option value="{{ val }}" {% if request.GET.action_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-borrower">Borrower</label>
+                <select id="filter-borrower" name="borrower" class="form-select text-sm">
+                    <option value="">All Borrowers</option>
+                    {% for b in borrowers %}
+                    <option value="{{ b.pk|stringformat:'d' }}" {% if request.GET.borrower == b.pk|stringformat:'d' %}selected{% endif %}>{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.action_type or request.GET.borrower or request.GET.asset %}
+                <a href="{% url 'assets:asset_custody_log_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Custody Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Loan Number</th>
+                    <th>Asset Lent</th>
+                    <th>Borrower</th>
+                    <th>Checkout Date</th>
+                    <th>Expected Return</th>
+                    <th>Work Order / Purpose</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in custody_logs %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_custody_log_detail' log.pk %}" class="text-brand hover:underline">
+                            {{ log.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-mono font-medium text-slate-900">{{ log.asset.number }}</div>
+                        <div class="text-xs text-muted truncate max-w-xs">{{ log.asset.name }}</div>
+                    </td>
+                    <td class="text-sm">
+                        <div class="font-medium text-slate-800">{{ log.borrower.name|default:log.borrower_name|default:"Unrecorded" }}</div>
+                        {% if log.crib_attendant %}
+                        <div class="text-xs text-muted">Issued by: {{ log.crib_attendant.username }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {{ log.checkout_date|date:"Y-m-d H:i" }}
+                    </td>
+                    <td class="text-sm">
+                        {% if log.expected_return_date %}
+                            <div class="font-mono {% if log.status == 'overdue' %}text-red-600 font-bold{% else %}text-slate-700{% endif %}">
+                                {{ log.expected_return_date|date:"Y-m-d" }}
+                            </div>
+                        {% else %}
+                            <span class="text-muted">Indefinite</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        {% if log.work_order_reference %}
+                            <span class="badge badge-slate font-mono text-xs">{{ log.work_order_reference }}</span>
+                        {% endif %}
+                        <div class="text-xs text-muted truncate max-w-xs">{{ log.purpose|default:"—" }}</div>
+                    </td>
+                    <td>
+                        {% if log.status == 'active_loan' %}
+                            <span class="badge badge-amber">{{ log.get_status_display }}</span>
+                        {% elif log.status == 'returned' %}
+                            <span class="badge badge-green">{{ log.get_status_display }}</span>
+                        {% elif log.status == 'overdue' %}
+                            <span class="badge badge-red font-semibold">{{ log.get_status_display }}</span>
+                        {% elif log.status == 'damaged_returned' %}
+                            <span class="badge badge-red">{{ log.get_status_display }}</span>
+                        {% else %}
+                            <span class="badge badge-muted">{{ log.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_custody_log_detail' log.pk %}" class="btn btn-outline btn-icon" title="View Loan Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if log.status != 'returned' %}
+                        <a href="{% url 'assets:asset_custody_log_edit' log.pk %}" class="btn btn-outline btn-icon" title="Edit Loan">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        {% endif %}
+                        {% if log.status in 'active_loan returned' %}
+                        <form method="post" action="{% url 'assets:asset_custody_log_delete' log.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete loan {{ log.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline btn-icon text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="wrench" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No equipment custody loans recorded</div>
+                            <div class="empty-state-description">Issue serialized tools and diagnostic equipment from the tool crib with return dates and borrower signatures.</div>
+                            <a href="{% url 'assets:asset_custody_log_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Equipment Checkout
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ custody_logs.start_index }} to {{ custody_logs.end_index }} of {{ paginator.count }} loans
+        </div>
+        <div class="pagination-pages">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&action_type={{ request.GET.action_type }}&borrower={{ request.GET.borrower }}" class="btn btn-outline btn-icon" title="Previous Page">
+                <i data-lucide="chevron-left"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-left"></i>
+            </span>
+            {% endif %}
+
+            <span class="px-3 py-1 text-sm font-medium">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}&q={{ request.GET.q }}&status={{ request.GET.status }}&action_type={{ request.GET.action_type }}&borrower={{ request.GET.borrower }}" class="btn btn-outline btn-icon" title="Next Page">
+                <i data-lucide="chevron-right"></i>
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-icon opacity-50 cursor-not-allowed">
+                <i data-lucide="chevron-right"></i>
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
