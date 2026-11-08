@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+
+{% block title %}Contextual Discussions & Comments — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Collaboration & Storytelling</span>
+            <span class="sep">/</span>
+            <span>Discussions</span>
+        </div>
+        <h1 class="page-title">Contextual Discussions & Comments</h1>
+        <p class="text-muted text-sm">Threaded conversations, visual card annotations, and filter snapshot discussions anchored to dashboards and stories</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_shared_workspace_list' %}" class="btn btn-outline">
+            <i data-lucide="folder"></i>
+            <span>Workspaces</span>
+        </a>
+        <a href="{% url 'bi:bi_data_story_list' %}" class="btn btn-outline">
+            <i data-lucide="presentation"></i>
+            <span>Data Stories</span>
+        </a>
+        <a href="{% url 'bi:bi_decision_log_list' %}" class="btn btn-outline">
+            <i data-lucide="git-commit"></i>
+            <span>Decision Log</span>
+        </a>
+        <a href="{% url 'bi:bi_visual_comment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>Post Comment</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="message-square"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Comments</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="clock"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Open Discussions</div>
+            <div class="text-2xl font-bold text-amber-600">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Resolved Topics</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ resolved_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search comment text..." class="form-input text-sm pl-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Target Type</label>
+                <select name="target_type" class="form-select text-sm">
+                    <option value="">All Targets</option>
+                    {% for val, label in target_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Priority</label>
+                <select name="priority" class="form-select text-sm">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Dashboard</label>
+                <select name="dashboard" class="form-select text-sm">
+                    <option value="">All Dashboards</option>
+                    {% for d in dashboards %}
+                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'bi:bi_visual_comment_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Discussion Threads & Annotations</h2>
+        <span class="text-xs text-muted">{{ comments.paginator.count }} total comments</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Comment & Discussion</th>
+                    <th>Target Asset</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Author</th>
+                    <th>Date</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in comments %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:bi_visual_comment_detail' item.pk %}" class="hover:text-primary-600">
+                                {{ item.content|truncatechars:70 }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2">
+                            <span>{{ item.number }}</span>
+                            {% if item.parent_comment %}
+                            <span>•</span>
+                            <span>Reply to {{ item.parent_comment.number }}</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ item.get_target_type_display }}</span>
+                        <div class="text-xs text-muted mt-0.5">
+                            {% if item.dashboard %}
+                                {{ item.dashboard.name }}
+                            {% elif item.story %}
+                                {{ item.story.title }}
+                            {% elif item.report %}
+                                {{ item.report.name }}
+                            {% else %}
+                                General
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.priority == 'urgent' %}badge-red{% elif item.priority == 'high' %}badge-amber{% elif item.priority == 'low' %}badge-muted{% else %}badge-slate{% endif %}">
+                            {{ item.get_priority_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'resolved' %}badge-green{% elif item.status == 'open' %}badge-amber{% else %}badge-info{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">
+                            {% if item.author %}{{ item.author.get_full_name|default:item.author.username }}{% else %}Anonymous{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-xs text-muted">{{ item.created_at|date:"M d, Y" }}</div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            {% if item.status != 'resolved' %}
+                            <form method="post" action="{% url 'bi:bi_visual_comment_resolve' item.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-800" title="Mark Resolved">
+                                    <i data-lucide="check-circle-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <a href="{% url 'bi:bi_visual_comment_detail' item.pk %}" class="btn btn-icon" title="View Thread">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_visual_comment_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:bi_visual_comment_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this comment?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="message-square" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Discussions Found</div>
+                            <div class="empty-state-desc">Start a discussion on an analytical chart, dashboard card, or presentation slide.</div>
+                            <a href="{% url 'bi:bi_visual_comment_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Post Comment</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if comments.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ comments.start_index }} to {{ comments.end_index }} of {{ comments.paginator.count }} comments
+        </div>
+        <div class="pagination-links">
+            {% if comments.has_previous %}
+            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ comments.number }} of {{ comments.paginator.num_pages }}</span>
+
+            {% if comments.has_next %}
+            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
