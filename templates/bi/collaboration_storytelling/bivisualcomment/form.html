@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_visual_comment_list' %}">Discussions</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Comment{% else %}New Comment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Post a visual comment or participate in an ongoing analytical discussion thread</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Discussion Entry</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_type.id_for_label }}">Target Type *</label>
+                    {{ form.target_type }}
+                    {% if form.target_type.errors %}<div class="form-error">{{ form.target_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.priority.id_for_label }}">Priority *</label>
+                    {{ form.priority }}
+                    {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dashboard.id_for_label }}">Target Dashboard</label>
+                    {{ form.dashboard }}
+                    {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.story.id_for_label }}">Target Story</label>
+                    {{ form.story }}
+                    {% if form.story.errors %}<div class="form-error">{{ form.story.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.report.id_for_label }}">Target Report</label>
+                    {{ form.report }}
+                    {% if form.report.errors %}<div class="form-error">{{ form.report.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.parent_comment.id_for_label }}">Parent Comment (for replies)</label>
+                    {{ form.parent_comment }}
+                    {% if form.parent_comment.errors %}<div class="form-error">{{ form.parent_comment.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.content.id_for_label }}">Comment Body *</label>
+                {{ form.content }}
+                {% if form.content.errors %}<div class="form-error">{{ form.content.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded border border-slate-100">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.coordinate_x.id_for_label }}">X-Coordinate Pin (%)</label>
+                    {{ form.coordinate_x }}
+                    <span class="text-xs text-muted">Horizontal coordinate on visual canvas</span>
+                    {% if form.coordinate_x.errors %}<div class="form-error">{{ form.coordinate_x.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.coordinate_y.id_for_label }}">Y-Coordinate Pin (%)</label>
+                    {{ form.coordinate_y }}
+                    <span class="text-xs text-muted">Vertical coordinate on visual canvas</span>
+                    {% if form.coordinate_y.errors %}<div class="form-error">{{ form.coordinate_y.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <a href="{% url 'bi:bi_visual_comment_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="send"></i>
+                    <span>Post Comment</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
