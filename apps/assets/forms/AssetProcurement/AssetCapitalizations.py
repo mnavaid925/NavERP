@@ -64,6 +64,19 @@ class AssetCapitalizationForm(TenantUniqueMixin, forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        cost_fields = [
+            "purchase_cost",
+            "freight_cost",
+            "installation_cost",
+            "customs_duties_cost",
+            "other_initial_costs",
+            "salvage_value",
+        ]
+        for field in cost_fields:
+            val = cleaned_data.get(field)
+            if val is not None and val < Decimal("0.00"):
+                self.add_error(field, f"{field.replace('_', ' ').capitalize()} cannot be negative.")
+
         if self.tenant:
             reject_foreign(
                 self,
