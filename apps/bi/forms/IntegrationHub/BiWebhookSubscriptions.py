@@ -40,7 +40,6 @@ class BiWebhookSubscriptionForm(TenantUniqueMixin, TenantModelForm):
         fields = [
             "name",
             "endpoint_url",
-            "secret_token",
             "payload_format",
             "max_retries",
             "timeout_seconds",
@@ -52,9 +51,6 @@ class BiWebhookSubscriptionForm(TenantUniqueMixin, TenantModelForm):
             ),
             "endpoint_url": forms.URLInput(
                 attrs={"class": "form-input font-mono", "placeholder": "https://hooks.slack.com/services/..."}
-            ),
-            "secret_token": forms.TextInput(
-                attrs={"class": "form-input font-mono", "placeholder": "Leave empty to auto-generate whsec_..."}
             ),
             "payload_format": forms.Select(attrs={"class": "form-select"}),
             "max_retries": forms.NumberInput(attrs={"class": "form-input", "min": 0, "max": 10}),
