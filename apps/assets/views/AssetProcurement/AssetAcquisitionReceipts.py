@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -168,23 +169,24 @@ def asset_acquisition_receipt_inspect(request, pk):
         messages.error(request, f"Receipt {receipt.number} cannot be accepted in state '{receipt.get_status_display()}'.")
         return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
 
-    notes = request.POST.get("inspection_notes", "").strip()
-    if notes:
-        existing = receipt.inspection_notes
-        receipt.inspection_notes = f"{existing}\n[Accepted by {request.user.username}]: {notes}".strip()
+    with transaction.atomic():
+        notes = request.POST.get("inspection_notes", "").strip()
+        if notes:
+            existing = receipt.inspection_notes
+            receipt.inspection_notes = f"{existing}\n[Accepted by {request.user.username}]: {notes}".strip()
 
-    receipt.status = "accepted"
-    receipt.inspected_by = request.user
-    receipt.inspected_at = timezone.now()
-    receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
+        receipt.status = "accepted"
+        receipt.inspected_by = request.user
+        receipt.inspected_at = timezone.now()
+        receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        receipt,
-        "update",
-        changes={"action": "inspect_accept", "details": f"Inspected and accepted asset receipt {receipt.number}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            receipt,
+            "update",
+            changes={"action": "inspect_accept", "details": f"Inspected and accepted asset receipt {receipt.number}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Receipt {receipt.number} inspected and accepted.")
     return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
 
@@ -198,21 +200,22 @@ def asset_acquisition_receipt_quarantine(request, pk):
         messages.error(request, f"Receipt {receipt.number} cannot be quarantined in state '{receipt.get_status_display()}'.")
         return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
 
-    reason = request.POST.get("quarantine_reason", "").strip()
-    existing = receipt.inspection_notes
-    receipt.inspection_notes = f"{existing}\n[Quarantined by {request.user.username}]: {reason}".strip()
+    with transaction.atomic():
+        reason = request.POST.get("quarantine_reason", "").strip()
+        existing = receipt.inspection_notes
+        receipt.inspection_notes = f"{existing}\n[Quarantined by {request.user.username}]: {reason}".strip()
 
-    receipt.status = "quarantined"
-    receipt.inspected_by = request.user
-    receipt.inspected_at = timezone.now()
-    receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
+        receipt.status = "quarantined"
+        receipt.inspected_by = request.user
+        receipt.inspected_at = timezone.now()
+        receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        receipt,
-        "update",
-        changes={"action": "quarantine", "details": f"Quarantined asset receipt {receipt.number}: {reason}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            receipt,
+            "update",
+            changes={"action": "quarantine", "details": f"Quarantined asset receipt {receipt.number}: {reason}"},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Asset Receipt {receipt.number} placed in quarantine.")
     return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
