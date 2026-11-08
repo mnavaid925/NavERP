@@ -252,7 +252,7 @@ def asset_tag_print_label(request, pk):
         request,
         AssetTag,
         pk,
-        select_related=("operational_asset", "capitalization"),
+        select_related=("operational_asset", "operational_asset__location", "capitalization"),
     )
     return render(
         request,
