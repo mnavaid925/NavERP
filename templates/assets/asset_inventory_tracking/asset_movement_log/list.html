@@ -171,7 +171,7 @@
                         <a href="{% url 'assets:asset_movement_log_detail' mov.pk %}" class="btn btn-outline btn-icon" title="View Transfer Details">
                             <i data-lucide="eye"></i>
                         </a>
-                        {% if mov.status not in 'received cancelled' %}
+                        {% if mov.status == 'draft' or mov.status == 'requested' %}
                         <a href="{% url 'assets:asset_movement_log_edit' mov.pk %}" class="btn btn-outline btn-icon" title="Edit Movement">
                             <i data-lucide="pencil"></i>
                         </a>
