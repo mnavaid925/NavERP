@@ -90,10 +90,11 @@ def asset_requisition_create(request):
             req.tenant = request.tenant
             req.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=req,
-                details=f"Created asset requisition {req.number} ({req.title})",
+                request.user,
+                req,
+                "create",
+                changes={"details": f"Created asset requisition {req.number} ({req.title})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Requisition {req.number} created successfully.")
             return redirect("assets:asset_requisition_detail", pk=req.pk)
@@ -117,10 +118,11 @@ def asset_requisition_edit(request, pk):
         if form.is_valid():
             req = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=req,
-                details=f"Updated asset requisition {req.number}",
+                request.user,
+                req,
+                "update",
+                changes={"details": f"Updated asset requisition {req.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Requisition {req.number} updated successfully.")
             return redirect("assets:asset_requisition_detail", pk=req.pk)
@@ -141,10 +143,11 @@ def asset_requisition_delete(request, pk):
     requisition = assets_object(request, AssetRequisition, pk)
     number = requisition.number
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=requisition,
-        details=f"Deleted asset requisition {number}",
+        request.user,
+        requisition,
+        "delete",
+        changes={"details": f"Deleted asset requisition {number}"},
+        tenant=request.tenant,
     )
     requisition.delete()
     messages.success(request, f"Asset Requisition {number} was deleted.")
@@ -166,10 +169,11 @@ def asset_requisition_submit(request, pk):
     requisition.save(update_fields=["status", "submitted_by", "submitted_at", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="submit",
-        instance=requisition,
-        details=f"Submitted asset requisition {requisition.number} for approval",
+        request.user,
+        requisition,
+        "update",
+        changes={"action": "submit", "details": f"Submitted asset requisition {requisition.number} for approval"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Requisition {requisition.number} submitted for approval.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
@@ -191,10 +195,11 @@ def asset_requisition_approve(request, pk):
     requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="approve",
-        instance=requisition,
-        details=f"Approved asset requisition {requisition.number}",
+        request.user,
+        requisition,
+        "update",
+        changes={"action": "approve", "details": f"Approved asset requisition {requisition.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Requisition {requisition.number} approved.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
@@ -217,10 +222,11 @@ def asset_requisition_reject(request, pk):
     requisition.save(update_fields=["status", "approved_by", "approved_at", "rejection_reason", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="reject",
-        instance=requisition,
-        details=f"Rejected asset requisition {requisition.number}: {reason}",
+        request.user,
+        requisition,
+        "update",
+        changes={"action": "reject", "details": f"Rejected asset requisition {requisition.number}: {reason}"},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Asset Requisition {requisition.number} has been rejected.")
     return redirect("assets:asset_requisition_detail", pk=requisition.pk)
