@@ -1,8 +1,14 @@
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.text import slugify
 
 from apps.bi.models._base import TenantNumbered
+
+HEX_COLOR_VALIDATOR = RegexValidator(
+    r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+    "Enter a valid hex color, e.g. #3b82f6",
+)
 
 
 class BiSharedWorkspace(TenantNumbered):
@@ -57,7 +63,7 @@ class BiSharedWorkspace(TenantNumbered):
         default=False,
         help_text="Pinned as top-priority workspace for the tenant",
     )
-    color = models.CharField(max_length=20, default="#3b82f6")
+    color = models.CharField(max_length=20, default="#3b82f6", validators=[HEX_COLOR_VALIDATOR])
     icon = models.CharField(max_length=50, default="folder")
 
     pinned_dashboard_ids = models.JSONField(
