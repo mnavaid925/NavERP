@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{{ connector.name }} — Integration Connectors — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:integration_connector_list' %}">Integration Connectors</a>
+            <span class="sep">/</span>
+            <span>{{ connector.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ connector.name }}</h1>
+            {% if connector.status == 'active' %}
+            <span class="badge badge-green">Active</span>
+            {% elif connector.status == 'paused' %}
+            <span class="badge badge-amber">Paused</span>
+            {% elif connector.status == 'error' %}
+            <span class="badge badge-red">Error</span>
+            {% else %}
+            <span class="badge badge-slate">{{ connector.get_status_display }}</span>
+            {% endif %}
+
+            {% if connector.health_status == 'healthy' %}
+            <span class="badge badge-green">Healthy</span>
+            {% elif connector.health_status == 'degraded' %}
+            <span class="badge badge-amber">Degraded</span>
+            {% elif connector.health_status == 'unreachable' %}
+            <span class="badge badge-red">Unreachable</span>
+            {% else %}
+            <span class="badge badge-slate">Untested</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm mt-1">{{ connector.number }} • {{ connector.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <form method="post" action="{% url 'bi:integration_connector_ping' connector.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Dispatch heartbeat health check">
+                <i data-lucide="activity"></i>
+                <span>Ping Heartbeat</span>
+            </button>
+        </form>
+        <a href="{% url 'bi:integration_connector_edit' connector.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit</span>
+        </a>
+        <form method="post" action="{% url 'bi:integration_connector_delete' connector.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete connector {{ connector.name }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Configuration Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Connector Type</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_connector_type_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Target System</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_target_system_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Sync Direction</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_sync_direction_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Sync Interval</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_sync_interval_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Message Format</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_message_format_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted uppercase font-semibold">Auth Type</div>
+                        <div class="text-sm font-medium mt-1">{{ connector.get_auth_type_display }}</div>
+                    </div>
+                </div>
+
+                {% if connector.description %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted uppercase font-semibold">Description</div>
+                    <p class="text-sm text-slate-700 mt-1 whitespace-pre-line">{{ connector.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Host Connection Config (JSON)</h2>
+            </div>
+            <div class="card-body">
+                <pre class="bg-slate-900 text-slate-100 p-4 rounded text-xs font-mono overflow-x-auto">{{ connector.connection_config|default:"{}" }}</pre>
+            </div>
+        </div>
+
+        {% if connector.error_message %}
+        <div class="card border-red-200 bg-red-50">
+            <div class="card-header border-red-200">
+                <h2 class="card-title text-red-700 flex items-center gap-2">
+                    <i data-lucide="alert-octagon" class="w-4 h-4"></i>
+                    <span>Latest Error Diagnostic</span>
+                </h2>
+            </div>
+            <div class="card-body">
+                <pre class="text-xs font-mono text-red-900 whitespace-pre-wrap">{{ connector.error_message }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar Column -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Channel Telemetry</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase font-semibold">Lifetime Processed</div>
+                    <div class="text-2xl font-bold font-mono mt-1">{{ connector.total_messages_processed }} msgs</div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Last Heartbeat</div>
+                    <div class="text-sm mt-1">
+                        {% if connector.last_heartbeat_at %}
+                        {{ connector.last_heartbeat_at|date:"Y-m-d H:i:s" }}
+                        {% else %}
+                        <span class="text-muted">Never</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Last Sync At</div>
+                    <div class="text-sm mt-1">
+                        {% if connector.last_sync_at %}
+                        {{ connector.last_sync_at|date:"Y-m-d H:i:s" }}
+                        {% else %}
+                        <span class="text-muted">No sync recorded</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="border-t border-slate-200 pt-3">
+                    <div class="text-xs text-muted uppercase font-semibold">Administrative Toggle</div>
+                    <div class="text-sm mt-1">
+                        {% if connector.is_enabled %}
+                        <span class="badge badge-green">Enabled</span>
+                        {% else %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Audit Metadata</h2>
+            </div>
+            <div class="card-body text-xs text-muted space-y-2">
+                <div>Created By: <span class="font-medium text-slate-800">{{ connector.created_by.get_full_name|default:connector.created_by.username|default:"System" }}</span></div>
+                <div>Created At: <span class="font-mono text-slate-800">{{ connector.created_at|date:"Y-m-d H:i" }}</span></div>
+                <div>Updated At: <span class="font-mono text-slate-800">{{ connector.updated_at|date:"Y-m-d H:i" }}</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
