@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}{{ decision.title }} — Decision Log — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_decision_log_list' %}">Decision Log</a>
+            <span class="sep">/</span>
+            <span>{{ decision.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ decision.title }}</h1>
+            <span class="badge {% if decision.status == 'approved' %}badge-green{% elif decision.status == 'proposed' %}badge-amber{% elif decision.status == 'superseded' %}badge-slate{% else %}badge-red{% endif %}">
+                {{ decision.get_status_display }}
+            </span>
+            <span class="badge badge-slate">{{ decision.get_category_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ decision.number }} • Effective Date: {{ decision.decision_date }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_decision_log_edit' decision.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Decision</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_decision_log_delete' decision.pk %}" class="inline" onsubmit="return confirm('Delete this decision record?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Rationale & Business Justification -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Business Justification & Rationale</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if decision.problem_statement %}
+                <div>
+                    <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Problem Statement / Context</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 rounded p-4 border border-slate-200">
+                        {{ decision.problem_statement|linebreaksbr }}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div>
+                    <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Decision Rationale & Logic</div>
+                    <div class="text-sm text-slate-800 bg-emerald-50 rounded p-4 border border-emerald-100 leading-relaxed font-medium">
+                        {{ decision.rationale|linebreaksbr }}
+                    </div>
+                </div>
+
+                {% if decision.alternatives_considered %}
+                <div>
+                    <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Alternatives Evaluated & Rejected</div>
+                    <div class="text-sm text-slate-700 bg-slate-50 rounded p-4 border border-slate-200">
+                        {{ decision.alternatives_considered|linebreaksbr }}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Targeted Expected Impact</div>
+                        <div class="text-sm text-slate-700 mt-1 bg-slate-50 p-3 rounded">
+                            {{ decision.expected_impact|default:"Not specified." }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Actual Outcome / Post-Mortem</div>
+                        <div class="text-sm text-slate-700 mt-1 bg-slate-50 p-3 rounded">
+                            {{ decision.actual_outcome|default:"Pending review date." }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Analytical Assets -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Linked Analytical Assets</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Workspace</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if decision.workspace %}
+                            <a href="{% url 'bi:bi_shared_workspace_detail' decision.workspace.pk %}" class="text-primary-600 hover:underline">
+                                {{ decision.workspace.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">None</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Target Dashboard</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if decision.dashboard %}
+                            <a href="{% url 'bi:bi_dashboard_detail' decision.dashboard.pk %}" class="text-primary-600 hover:underline">
+                                {{ decision.dashboard.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">None</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Linked KPI</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if decision.kpi %}
+                            <a href="{% url 'bi:kpi_definition_detail' decision.kpi.pk %}" class="text-primary-600 hover:underline">
+                                {{ decision.kpi.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">None</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Scheduled Review Date</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if decision.review_date %}{{ decision.review_date }}{% else %}<span class="text-muted">None scheduled</span>{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Card -->
+    <div class="space-y-6">
+        <!-- Visual Marker Overlay Settings -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Chart Marker Projection</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-muted uppercase">Display on Trend Charts</div>
+                    <div class="text-sm font-semibold mt-0.5">
+                        {% if decision.show_on_charts %}
+                        <span class="badge badge-green">Active on Charts</span>
+                        {% else %}
+                        <span class="badge badge-slate">Hidden</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Marker Style</div>
+                    <div class="text-sm font-medium mt-0.5">{{ decision.get_marker_style_display }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Marker Color</div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="w-4 h-4 rounded-full border shadow-sm" style="background-color: {{ decision.marker_color }};"></span>
+                        <span class="text-xs font-mono">{{ decision.marker_color }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Governance & Authority</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase">Decision Authority / Sponsor</div>
+                    <div class="text-sm font-medium mt-0.5">
+                        {% if decision.decision_maker %}{{ decision.decision_maker.get_full_name|default:decision.decision_maker.username }}{% else %}Unassigned{% endif %}
+                    </div>
+                </div>
+
+                <div class="border-t pt-3">
+                    <div class="text-xs text-muted uppercase">Logged By</div>
+                    <div class="text-xs font-medium text-slate-700 mt-0.5">
+                        {% if decision.created_by %}{{ decision.created_by.get_full_name|default:decision.created_by.username }}{% else %}System{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Logged Date</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ decision.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Last Updated</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ decision.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
