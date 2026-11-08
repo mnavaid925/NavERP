@@ -28,7 +28,6 @@ class AssetAuditForm(TenantUniqueMixin, forms.ModelForm):
             "missing_asset_count",
             "discrepancy_count",
             "discrepancy_notes",
-            "reconciliation_action",
             "notes",
         ]
         exclude = [
@@ -39,6 +38,7 @@ class AssetAuditForm(TenantUniqueMixin, forms.ModelForm):
             "updated_at",
             "started_at",
             "completed_at",
+            "reconciliation_action",
             "reconciled_by",
             "reconciled_at",
         ]
@@ -58,7 +58,6 @@ class AssetAuditForm(TenantUniqueMixin, forms.ModelForm):
             "missing_asset_count": forms.NumberInput(attrs={"class": "form-input", "min": "0"}),
             "discrepancy_count": forms.NumberInput(attrs={"class": "form-input", "min": "0"}),
             "discrepancy_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Discrepancy observations, tag condition, missing serial numbers..."}),
-            "reconciliation_action": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Auditor notes and instructions..."}),
         }
 
