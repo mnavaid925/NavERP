@@ -7,6 +7,178 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.2: Asset Inventory & Tracking (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.2.md` (2026-11-08)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-module 11.1.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0001_initial.py` (from 11.1), so **11.2 claims `0002`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.2.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetInventoryTracking/`
+> Template folder name: `templates/assets/asset_inventory_tracking/{asset_audit,asset_movement_log,asset_custody_log,asset_incident_report}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Asset Inventory & Tracking Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine: Extends `scm.Asset` [AST-] by string foreign key (`"scm.Asset"`), maintaining complete separation between operational physical tracking and financial depreciation ledgers (`accounting.FixedAsset`).
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetAudit` -> `NUMBER_PREFIX = "AAUD"` (format: `AAUD-YYYYMM-XXXX`)
+    - `AssetMovementLog` -> `NUMBER_PREFIX = "AMOV"` (format: `AMOV-YYYYMM-XXXX`)
+    - `AssetCustodyLog` -> `NUMBER_PREFIX = "ACHK"` (format: `ACHK-YYYYMM-XXXX`)
+    - `AssetIncidentReport` -> `NUMBER_PREFIX = "AINC"` (format: `AINC-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetAudit` [AAUD-]:
+      - Scheduled cycle counts, wall-to-wall physical inventory audits, blind counting, scanned verification against registered assets, and discrepancy reconciliation.
+      - Identity: `title` (CharField 200).
+      - Classification & Scope: `audit_type` (`wall_to_wall`, `cycle_count`, `spot_check`, `custodian_verification`, default `cycle_count`), `target_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="asset_audits"), `target_org_unit` (FK `core.OrgUnit`, SET_NULL, null=True, blank=True, related_name="asset_audits"), `asset_category` (CharField 100 blank=True).
+      - Personnel: `lead_auditor` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="lead_asset_audits"), `supervisor` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="supervised_asset_audits").
+      - Schedule & Timing: `scheduled_date` (DateField), `started_at` (DateTimeField null=True, blank=True), `completed_at` (DateTimeField null=True, blank=True).
+      - Verification Metrics: `is_blind_count` (BooleanField default=False, help_text="Hide expected asset lists from field counters to prevent confirmation bias"), `expected_asset_count` (PositiveIntegerField default=0), `scanned_asset_count` (PositiveIntegerField default=0), `matched_asset_count` (PositiveIntegerField default=0), `missing_asset_count` (PositiveIntegerField default=0), `discrepancy_count` (PositiveIntegerField default=0).
+      - Lifecycle & Reconciliation: `status` (`draft`, `scheduled`, `in_progress`, `completed`, `reconciled`, `cancelled`, default `draft`), `discrepancy_notes` (TextField blank=True), `reconciliation_action` (`pending_review`, `no_action_needed`, `location_updated`, `incident_initiated`, `custodian_reassigned`, default `pending_review`), `reconciled_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="reconciled_asset_audits"), `reconciled_at` (DateTimeField null=True, blank=True), `notes` (TextField blank=True).
+      - Form exclusions: `tenant`, `number`, `status`, `created_at`, `updated_at`, `started_at`, `completed_at`, `reconciled_by`, `reconciled_at`.
+    - `AssetMovementLog` [AMOV-]:
+      - Inter-facility, room-to-room, or site transfers with custody hand-off, dispatch, in-transit tracking, receipt verification, and GPS coordinate capture.
+      - Identity: `title` (CharField 200).
+      - Asset Anchor: `asset` (FK `scm.Asset`, CASCADE, related_name="movement_logs").
+      - Movement Classification: `movement_type` (`relocation`, `inter_facility_transfer`, `room_reassignment`, `department_transfer`, `repair_dispatch`, `temporary_deployment`, default `relocation`).
+      - Source Hierarchy: `from_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="outgoing_asset_movements"), `from_org_unit` (FK `core.OrgUnit`, SET_NULL, null=True, blank=True, related_name="outgoing_asset_movements"), `from_room_bin` (CharField 100 blank=True, help_text="Specific source building, floor, room, or bin").
+      - Destination Hierarchy: `to_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="incoming_asset_movements"), `to_org_unit` (FK `core.OrgUnit`, SET_NULL, null=True, blank=True, related_name="incoming_asset_movements"), `to_room_bin` (CharField 100 blank=True, help_text="Specific destination building, floor, room, or bin").
+      - Chain of Custody: `from_custodian` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="relinquished_asset_movements"), `to_custodian` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="accepted_asset_movements").
+      - Geolocation Stamping (GPS): `gps_latitude` (DecimalField max_digits=9 decimal_places=6 null=True, blank=True), `gps_longitude` (DecimalField max_digits=9 decimal_places=6 null=True, blank=True), `gps_address` (CharField 255 blank=True).
+      - Logistics & Dispatch: `carrier_name` (CharField 100 blank=True), `tracking_number` (CharField 100 blank=True), `dispatch_date` (DateTimeField null=True, blank=True), `received_date` (DateTimeField null=True, blank=True), `dispatched_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="dispatched_asset_movements"), `received_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="received_asset_movements").
+      - Lifecycle & Condition: `status` (`draft`, `requested`, `dispatched`, `in_transit`, `received`, `rejected`, `cancelled`, default `draft`), `condition_on_receipt` (`good`, `fair`, `damaged`, default `good`), `reason` (TextField blank=True), `notes` (TextField blank=True).
+      - Form exclusions: `tenant`, `number`, `status`, `created_at`, `updated_at`, `dispatch_date`, `dispatched_by`, `received_date`, `received_by`.
+    - `AssetCustodyLog` [ACHK-]:
+      - Tool crib operations, equipment lending, borrower signatures/custody, expected return dates, overdue alerts, and return condition inspection.
+      - Asset Anchor: `asset` (FK `scm.Asset`, CASCADE, related_name="custody_logs").
+      - Action & State: `action_type` (`checkout`, `checkin`, `custody_transfer`, `extension`, default `checkout`), `status` (`active_loan`, `returned`, `overdue`, `damaged_returned`, `unreturned_lost`, default `active_loan`).
+      - People & Accountability: `borrower` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="asset_custody_loans"), `borrower_name` (CharField 120 blank=True), `crib_attendant` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="managed_asset_loans").
+      - Operational Context: `purpose` (CharField 200 blank=True), `work_order_reference` (CharField 64 blank=True), `project_reference` (CharField 100 blank=True).
+      - Timeline: `checkout_date` (DateTimeField default=timezone.now), `expected_return_date` (DateField null=True, blank=True), `actual_return_date` (DateTimeField null=True, blank=True).
+      - Inspection & Condition: `checkout_condition` (`excellent`, `good`, `fair`, default `good`), `return_condition` (`excellent`, `good`, `fair`, `damaged`, `inoperable`, blank=True), `condition_notes` (TextField blank=True).
+      - Acknowledgment: `borrower_signature_acknowledged` (BooleanField default=True), `notes` (TextField blank=True).
+      - Form exclusions: `tenant`, `number`, `status`, `created_at`, `updated_at`, `actual_return_date`, `return_condition`.
+    - `AssetIncidentReport` [AINC-]:
+      - Incident reporting (lost, stolen, damaged beyond repair), investigation findings, insurance claim reference, police report number, and write-off / disposal initiation.
+      - Identity: `title` (CharField 200).
+      - Asset Anchor: `asset` (FK `scm.Asset`, CASCADE, related_name="incident_reports").
+      - Classification: `incident_type` (`lost`, `stolen`, `missing_in_audit`, `damaged_beyond_repair`, `vandalism`, default `lost`), `severity` (`low`, `medium`, `high`, `critical`, default `medium`).
+      - Lifecycle & Resolution: `status` (`reported`, `under_investigation`, `confirmed_lost`, `recovered`, `write_off_pending`, `written_off`, `closed`, default `reported`), `resolution_action` (`pending`, `recovered`, `replacement_sourced`, `written_off`, `unresolved_closed`, default `pending`).
+      - Chronology & Location: `incident_date` (DateField default=timezone.now), `last_known_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="asset_incidents"), `location_details` (CharField 255 blank=True).
+      - Stakeholders: `reported_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="reported_asset_incidents"), `custodian_at_loss` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="custodian_asset_incidents"), `investigator` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="investigated_asset_incidents").
+      - Law Enforcement & Insurance: `police_report_filed` (BooleanField default=False), `police_report_number` (CharField 100 blank=True), `police_precinct` (CharField 120 blank=True), `police_filing_date` (DateField null=True, blank=True), `insurance_claim_filed` (BooleanField default=False), `insurance_carrier` (CharField 120 blank=True), `insurance_claim_number` (CharField 100 blank=True), `estimated_loss_value` (DecimalField 16,2 default=0), `insurance_claimed_amount` (DecimalField 16,2 default=0), `insurance_settled_amount` (DecimalField 16,2 default=0).
+      - Findings & Write-Off: `incident_description` (TextField), `investigation_findings` (TextField blank=True), `write_off_authorized_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="authorized_asset_write_offs"), `write_off_date` (DateField null=True, blank=True), `write_off_notes` (TextField blank=True).
+      - Form exclusions: `tenant`, `number`, `status`, `created_at`, `updated_at`, `reported_by`, `write_off_authorized_by`, `write_off_date`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `AAUD` (AssetAudit), `AMOV` (AssetMovementLog), `ACHK` (AssetCustodyLog), `AINC` (AssetIncidentReport) verified 100% collision-free repository-wide.
+
+---
+
+## 11.2-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO direct socket connections to industrial fixed RFID gate readers** — Scanning operates via mobile/handheld barcode/QR inputs and web forms.
+- [ ] **NO background cellular GPS streaming / continuous telemetry daemon** — Geolocation is captured point-in-time upon dispatch, transfer, or audit scan.
+- [ ] **NO automated police department CAD / NCIC electronic interchange** — Captures report numbers, filing dates, and precinct details without external API dependencies.
+- [ ] **NO direct electronic insurance carrier claims EDI (ACORD XML)** — Manages claim metadata, policy references, claimed values, and settlement amounts internally.
+- [ ] **NO duplicate operational asset master** — Assets are anchored to `scm.Asset` [AST-] from SCM 4.13.
+- [ ] **NO duplicate employee/custodian master** — Custodians and borrowers reuse `core.Party` and `core.PartyRole`.
+
+---
+
+## Sub-module 11.2 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.2.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [x] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetAudit (`AAUD`)**
+  - [ ] `apps/assets/models/AssetInventoryTracking/AssetAudits.py`
+  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetAudits.py`
+  - [ ] `apps/assets/views/AssetInventoryTracking/AssetAudits.py` (CRUD + start + complete + reconcile + cancel)
+  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetAudits.py`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/list.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/detail.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/form.html`
+- [ ] **Entity 2: AssetMovementLog (`AMOV`)**
+  - [ ] `apps/assets/models/AssetInventoryTracking/AssetMovementLogs.py`
+  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetMovementLogs.py`
+  - [ ] `apps/assets/views/AssetInventoryTracking/AssetMovementLogs.py` (CRUD + dispatch + receive + cancel)
+  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetMovementLogs.py`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/list.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/detail.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/form.html`
+- [ ] **Entity 3: AssetCustodyLog (`ACHK`)**
+  - [ ] `apps/assets/models/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [ ] `apps/assets/views/AssetInventoryTracking/AssetCustodyLogs.py` (CRUD + checkin + extend + mark_lost)
+  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/list.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/detail.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/form.html`
+- [ ] **Entity 4: AssetIncidentReport (`AINC`)**
+  - [ ] `apps/assets/models/AssetInventoryTracking/AssetIncidentReports.py`
+  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetIncidentReports.py`
+  - [ ] `apps/assets/views/AssetInventoryTracking/AssetIncidentReports.py` (CRUD + investigate + resolve_recovered + authorize_write_off + close)
+  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetIncidentReports.py`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/list.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/detail.html`
+  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetInventoryTracking/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetInventoryTracking/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetInventoryTracking/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetInventoryTracking/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.2 models
+- [ ] Add `LIVE_LINKS["11.2"]` in `apps/core/navigation.py`:
+  - `"Asset Register & Master Data"`: `assets:asset_audit_list`
+  - `"Physical Verification & Audits"`: `assets:asset_audit_list`
+  - `"Location & Movement Tracking"`: `assets:asset_movement_log_list`
+  - `"Check-in/Check-out Management"`: `assets:asset_custody_log_list`
+  - `"Lost, Stolen & Missing Asset Handling"`: `assets:asset_incident_report_list`
+  - Plural & convenience aliases:
+    - `"Asset Audits"`: `assets:asset_audit_list`
+    - `"Asset Movements"`: `assets:asset_movement_log_list`
+    - `"Asset Custody Logs"`: `assets:asset_custody_log_list`
+    - `"Tool Crib Loans"`: `assets:asset_custody_log_list`
+    - `"Incident Reports"`: `assets:asset_incident_report_list`
+    - `"Asset Tracking"`: `assets:asset_movement_log_list`
+- [ ] Run `makemigrations assets` (generating `0002_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_2.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.2.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_assetinventorytracking_models.py`
+- [ ] `test_assetinventorytracking_forms.py`
+- [ ] `test_assetinventorytracking_views.py`
+- [ ] `test_assetinventorytracking_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.2 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+
+---
+
 # Sub-module 11.1: Asset Procurement & Acquisition (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.1.md` (2026-11-08)
 
 > **This plan SCAFFOLDS a brand-new app.** `apps/assets/` is being initialized for Module 11 (Asset Management System).
