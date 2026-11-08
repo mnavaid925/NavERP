@@ -115,6 +115,9 @@ def asset_acquisition_receipt_create(request):
 def asset_acquisition_receipt_edit(request, pk):
     """Update details of an asset intake receipt."""
     receipt = assets_object(request, AssetAcquisitionReceipt, pk)
+    if receipt.status == "capitalized":
+        messages.error(request, f"Receipt {receipt.number} cannot be edited because it has already been capitalized.")
+        return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
 
     if request.method == "POST":
         form = AssetAcquisitionReceiptForm(request.POST, instance=receipt, tenant=request.tenant)
