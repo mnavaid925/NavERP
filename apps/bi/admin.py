@@ -73,6 +73,10 @@ from apps.bi.models import (
     BiDataStory,
     BiVisualComment,
     BiDecisionLog,
+    IntegrationConnector,
+    WarehouseSyncEndpoint,
+    BiWebhookSubscription,
+    BiExtensionPlugin,
 )
 
 
@@ -716,4 +720,39 @@ class BiDecisionLogAdmin(admin.ModelAdmin):
     search_fields = ("number", "title", "slug", "problem_statement", "rationale")
     readonly_fields = ("number", "tenant", "created_at", "updated_at")
 
+
+@admin.register(IntegrationConnector)
+class IntegrationConnectorAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "connector_type", "target_system", "sync_direction", "health_status", "status", "total_messages_processed", "tenant")
+    list_select_related = ("tenant", "created_by")
+    list_filter = ("connector_type", "target_system", "sync_direction", "health_status", "status", "is_enabled", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_heartbeat_at", "last_sync_at", "total_messages_processed")
+
+
+@admin.register(WarehouseSyncEndpoint)
+class WarehouseSyncEndpointAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "target_warehouse", "sync_mode", "destination_table", "status", "last_sync_at", "total_rows_synced", "tenant")
+    list_select_related = ("tenant", "semantic_model", "data_mart", "owner")
+    list_filter = ("target_warehouse", "sync_mode", "auth_method", "sync_schedule", "status", "is_active", "tenant")
+    search_fields = ("number", "name", "slug", "destination_table", "destination_database")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_sync_at", "last_sync_duration_ms", "last_rows_synced", "total_rows_synced")
+
+
+@admin.register(BiWebhookSubscription)
+class BiWebhookSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "endpoint_url", "payload_format", "status", "consecutive_failures", "total_deliveries", "tenant")
+    list_select_related = ("tenant", "created_by")
+    list_filter = ("payload_format", "status", "is_active", "tenant")
+    search_fields = ("number", "name", "endpoint_url")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "last_triggered_at", "last_response_code", "last_response_time_ms", "total_deliveries")
+
+
+@admin.register(BiExtensionPlugin)
+class BiExtensionPluginAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "plugin_identifier", "version", "plugin_type", "category", "status", "is_verified", "is_system_plugin", "tenant")
+    list_select_related = ("tenant", "installed_by")
+    list_filter = ("plugin_type", "category", "status", "is_verified", "is_system_plugin", "tenant")
+    search_fields = ("number", "name", "plugin_identifier", "author_name", "description")
+    readonly_fields = ("number", "tenant", "installed_at", "created_at", "updated_at")
 
