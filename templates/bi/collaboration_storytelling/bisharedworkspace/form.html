@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_shared_workspace_list' %}">Workspaces</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Workspace{% else %}New Workspace{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Configure collaboration workspace details, department linkage, and collaborator access tiers</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Workspace Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Workspace Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug (optional)</label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Auto-generated from name if left blank</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.department.id_for_label }}">Department / Org Unit</label>
+                    {{ form.department }}
+                    {% if form.department.errors %}<div class="form-error">{{ form.department.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Workspace Lead / Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_access_level.id_for_label }}">Default Access Level *</label>
+                    {{ form.default_access_level }}
+                    {% if form.default_access_level.errors %}<div class="form-error">{{ form.default_access_level.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.color.id_for_label }}">Workspace Color</label>
+                    <div class="flex items-center gap-3">
+                        {{ form.color }}
+                        <span class="text-xs text-muted">Tag color for badge and workspace icons</span>
+                    </div>
+                    {% if form.color.errors %}<div class="form-error">{{ form.color.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.icon.id_for_label }}">Icon (Lucide name)</label>
+                    {{ form.icon }}
+                    {% if form.icon.errors %}<div class="form-error">{{ form.icon.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded">
+                    {{ form.is_public }}
+                    <label class="text-sm font-medium text-slate-800" for="{{ form.is_public.id_for_label }}">
+                        Public Tenant Workspace
+                        <span class="block text-xs font-normal text-muted">All tenant users with BI access can browse this workspace</span>
+                    </label>
+                </div>
+
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded">
+                    {{ form.is_favorite }}
+                    <label class="text-sm font-medium text-slate-800" for="{{ form.is_favorite.id_for_label }}">
+                        Pin as Favorite
+                        <span class="block text-xs font-normal text-muted">Pins this workspace to the top of the directory</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.members_raw.id_for_label }}">{{ form.members_raw.label }}</label>
+                {{ form.members_raw }}
+                <span class="text-xs text-muted">{{ form.members_raw.help_text }}</span>
+                {% if form.members_raw.errors %}<div class="form-error">{{ form.members_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <a href="{% url 'bi:bi_shared_workspace_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>Save Workspace</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
