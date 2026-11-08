@@ -16,6 +16,7 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
             "tenant",
             "number",
             "status",
+            "rejection_reason",
             "created_at",
             "updated_at",
             "submitted_by",
@@ -38,7 +39,6 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
             "required_delivery_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "target_org_unit": forms.Select(attrs={"class": "form-select"}),
             "target_location": forms.Select(attrs={"class": "form-select"}),
-            "rejection_reason": forms.Textarea(attrs={"class": "form-textarea", "rows": 2}),
             "purchase_order": forms.Select(attrs={"class": "form-select"}),
         }
 
