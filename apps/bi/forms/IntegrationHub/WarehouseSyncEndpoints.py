@@ -3,7 +3,7 @@ import json
 from django import forms
 from django.core.exceptions import ValidationError
 
-from apps.bi.forms._common import TenantUniqueMixin
+from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.DataWarehouse.DataMarts import DataMart
 from apps.bi.models.IntegrationHub.WarehouseSyncEndpoints import WarehouseSyncEndpoint
 from apps.bi.models.SemanticLayer.SemanticModels import SemanticModel
@@ -82,6 +82,11 @@ class WarehouseSyncEndpointForm(TenantUniqueMixin, TenantModelForm):
             self.fields["connection_config_raw"].initial = json.dumps(
                 self.instance.connection_config, indent=2
             )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        reject_foreign(self, cleaned_data, ["semantic_model", "data_mart"])
+        return cleaned_data
 
     def clean_connection_config_raw(self):
         data = self.cleaned_data.get("connection_config_raw", "").strip()
