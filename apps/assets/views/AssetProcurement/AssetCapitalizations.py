@@ -154,6 +154,9 @@ def asset_capitalization_edit(request, pk):
 def asset_capitalization_delete(request, pk):
     """Delete an asset capitalization event."""
     capitalization = assets_object(request, AssetCapitalization, pk)
+    if capitalization.status == "capitalized":
+        messages.error(request, f"Capitalization {capitalization.number} cannot be deleted because it is already capitalized. Please reverse it first.")
+        return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
     number = capitalization.number
     write_audit_log(
         request.user,
