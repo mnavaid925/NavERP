@@ -162,6 +162,8 @@ class IntegrationConnector(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_bint_ten_stat"),
             models.Index(fields=["tenant", "connector_type"], name="idx_bint_ten_type"),
             models.Index(fields=["tenant", "target_system"], name="idx_bint_ten_target"),
+            models.Index(fields=["tenant", "sync_interval"], name="idx_bint_ten_intv"),
+            models.Index(fields=["tenant", "is_enabled"], name="idx_bint_ten_enb"),
             models.Index(fields=["tenant", "created_at"], name="idx_bint_ten_created"),
         ]
 
