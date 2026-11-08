@@ -107,13 +107,10 @@ def warehouse_sync_endpoint_create(request):
             sync_endpoint.save()
 
             write_audit_log(
+                request.user,
+                sync_endpoint,
+                "create",
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="WarehouseSyncEndpoint",
-                object_id=str(sync_endpoint.pk),
-                object_repr=str(sync_endpoint),
-                changes={},
             )
             messages.success(
                 request,
@@ -147,13 +144,10 @@ def warehouse_sync_endpoint_edit(request, pk):
         if form.is_valid():
             sync_endpoint = form.save()
             write_audit_log(
+                request.user,
+                sync_endpoint,
+                "update",
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="WarehouseSyncEndpoint",
-                object_id=str(sync_endpoint.pk),
-                object_repr=str(sync_endpoint),
-                changes={},
             )
             messages.success(
                 request,
@@ -183,17 +177,14 @@ def warehouse_sync_endpoint_edit(request, pk):
 def warehouse_sync_endpoint_delete(request, pk):
     sync_endpoint = bi_object(request, WarehouseSyncEndpoint, pk)
     name = sync_endpoint.name
+    write_audit_log(
+        request.user,
+        sync_endpoint,
+        "delete",
+        tenant=request.tenant,
+    )
     sync_endpoint.delete()
 
-    write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="WarehouseSyncEndpoint",
-        object_id=str(pk),
-        object_repr=name,
-        changes={},
-    )
     messages.success(request, f"Warehouse sync endpoint '{name}' deleted successfully.")
     return redirect("bi:warehouse_sync_endpoint_list")
 
@@ -220,13 +211,11 @@ def warehouse_sync_endpoint_trigger(request, pk):
     )
 
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="action",
-        model_name="WarehouseSyncEndpoint",
-        object_id=str(sync_endpoint.pk),
-        object_repr=f"Manual Sync Trigger {sync_endpoint.name}",
+        request.user,
+        sync_endpoint,
+        "action",
         changes={"status": "success", "rows_synced": 2500},
+        tenant=request.tenant,
     )
     messages.success(
         request,
