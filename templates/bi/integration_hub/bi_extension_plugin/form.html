@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}Install Extension Plugin{% else %}Edit {{ plugin.name }}{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_extension_plugin_list' %}">Extensions</a>
+            <span class="sep">/</span>
+            <span>{% if is_create %}Install{% else %}Edit {{ plugin.number }}{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_create %}Install Extension Plugin{% else %}Edit {{ plugin.name }}{% endif %}</h1>
+        <p class="text-muted text-sm">Register custom visualizations, ETL scripts, and dashboard extensions</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Plugin Manifest & Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Plugin Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plugin_identifier.id_for_label }}">Package Identifier *</label>
+                    {{ form.plugin_identifier }}
+                    <span class="text-xs text-muted">e.g. io.naverp.visuals.sankey</span>
+                    {% if form.plugin_identifier.errors %}<div class="form-error">{{ form.plugin_identifier.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.version.id_for_label }}">SemVer Version *</label>
+                    {{ form.version }}
+                    {% if form.version.errors %}<div class="form-error">{{ form.version.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.plugin_type.id_for_label }}">Plugin Type *</label>
+                    {{ form.plugin_type }}
+                    {% if form.plugin_type.errors %}<div class="form-error">{{ form.plugin_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Category *</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.author_name.id_for_label }}">Author / Vendor *</label>
+                    {{ form.author_name }}
+                    {% if form.author_name.errors %}<div class="form-error">{{ form.author_name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.license.id_for_label }}">License *</label>
+                    {{ form.license }}
+                    {% if form.license.errors %}<div class="form-error">{{ form.license.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.homepage_url.id_for_label }}">Homepage URL</label>
+                    {{ form.homepage_url }}
+                    {% if form.homepage_url.errors %}<div class="form-error">{{ form.homepage_url.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.repository_url.id_for_label }}">Source Code Repository</label>
+                    {{ form.repository_url }}
+                    {% if form.repository_url.errors %}<div class="form-error">{{ form.repository_url.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.manifest_metadata_raw.id_for_label }}">{{ form.manifest_metadata_raw.label }}</label>
+                {{ form.manifest_metadata_raw }}
+                <span class="text-xs text-muted">{{ form.manifest_metadata_raw.help_text }}</span>
+                {% if form.manifest_metadata_raw.errors %}<div class="form-error">{{ form.manifest_metadata_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.config_schema_raw.id_for_label }}">{{ form.config_schema_raw.label }}</label>
+                {{ form.config_schema_raw }}
+                <span class="text-xs text-muted">{{ form.config_schema_raw.help_text }}</span>
+                {% if form.config_schema_raw.errors %}<div class="form-error">{{ form.config_schema_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.current_config_raw.id_for_label }}">{{ form.current_config_raw.label }}</label>
+                {{ form.current_config_raw }}
+                <span class="text-xs text-muted">{{ form.current_config_raw.help_text }}</span>
+                {% if form.current_config_raw.errors %}<div class="form-error">{{ form.current_config_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.permissions_required_raw.id_for_label }}">{{ form.permissions_required_raw.label }}</label>
+                {{ form.permissions_required_raw }}
+                <span class="text-xs text-muted">{{ form.permissions_required_raw.help_text }}</span>
+                {% if form.permissions_required_raw.errors %}<div class="form-error">{{ form.permissions_required_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group pt-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_verified }}
+                        <span class="text-sm font-medium">Verified Publisher Badge</span>
+                    </label>
+                    <span class="text-xs text-muted">Governance certification</span>
+                    {% if form.is_verified.errors %}<div class="form-error">{{ form.is_verified.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_create %}{% url 'bi:bi_extension_plugin_list' %}{% else %}{% url 'bi:bi_extension_plugin_detail' plugin.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>{% if is_create %}Install Plugin{% else %}Save Changes{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
