@@ -4484,6 +4484,7 @@ class Command(BaseCommand):
                         get_user_model().objects.filter(tenant=tenant, is_staff=True).first()
                         or get_user_model().objects.filter(tenant=tenant).first()
                     )
+                    from apps.core.models import OrgUnit
                     dept = OrgUnit.objects.filter(tenant=tenant).first()
                     dash = BiDashboard.objects.filter(tenant=tenant).first()
                     widget = BiDashboardWidget.objects.filter(dashboard__tenant=tenant).first()
