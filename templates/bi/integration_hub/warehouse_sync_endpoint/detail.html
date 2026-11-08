@@ -166,7 +166,7 @@
                 <h2 class="card-title">Governance & Ownership</h2>
             </div>
             <div class="card-body text-xs text-muted space-y-2">
-                <div>Owner: <span class="font-medium text-slate-800">{{ sync_endpoint.owner.get_full_name|default:sync_endpoint.owner.username|default:"Data Team" }}</span></div>
+                <div>Owner: <span class="font-medium text-slate-800">{% if sync_endpoint.owner %}{{ sync_endpoint.owner.get_full_name|default:sync_endpoint.owner.username }}{% else %}System{% endif %}</span></div>
                 <div>Created At: <span class="font-mono text-slate-800">{{ sync_endpoint.created_at|date:"Y-m-d H:i" }}</span></div>
                 <div>Updated At: <span class="font-mono text-slate-800">{{ sync_endpoint.updated_at|date:"Y-m-d H:i" }}</span></div>
             </div>
