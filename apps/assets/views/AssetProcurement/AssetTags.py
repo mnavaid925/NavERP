@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -168,16 +169,17 @@ def asset_tag_mark_printed(request, pk):
         messages.error(request, f"Tag {tag.tag_code} cannot be marked printed from state '{tag.get_status_display()}'.")
         return redirect("assets:asset_tag_detail", pk=tag.pk)
 
-    tag.status = "printed"
-    tag.save(update_fields=["status", "updated_at"])
+    with transaction.atomic():
+        tag.status = "printed"
+        tag.save(update_fields=["status", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        tag,
-        "update",
-        changes={"action": "mark_printed", "details": f"Marked asset tag {tag.tag_code} as printed"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            tag,
+            "update",
+            changes={"action": "mark_printed", "details": f"Marked asset tag {tag.tag_code} as printed"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Tag {tag.tag_code} marked as printed.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
 
@@ -191,22 +193,23 @@ def asset_tag_affix(request, pk):
         messages.error(request, f"Tag {tag.tag_code} cannot be affixed from state '{tag.get_status_display()}'.")
         return redirect("assets:asset_tag_detail", pk=tag.pk)
 
-    placement = request.POST.get("physical_placement", "").strip()
-    if placement:
-        tag.physical_placement = placement
+    with transaction.atomic():
+        placement = request.POST.get("physical_placement", "").strip()
+        if placement:
+            tag.physical_placement = placement
 
-    tag.status = "affixed"
-    tag.affixed_by = request.user
-    tag.affixed_at = timezone.now()
-    tag.save(update_fields=["status", "physical_placement", "affixed_by", "affixed_at", "updated_at"])
+        tag.status = "affixed"
+        tag.affixed_by = request.user
+        tag.affixed_at = timezone.now()
+        tag.save(update_fields=["status", "physical_placement", "affixed_by", "affixed_at", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        tag,
-        "update",
-        changes={"action": "affix_tag", "details": f"Affixed asset tag {tag.tag_code} to equipment"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            tag,
+            "update",
+            changes={"action": "affix_tag", "details": f"Affixed asset tag {tag.tag_code} to equipment"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Tag {tag.tag_code} confirmed affixed to physical asset.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
 
@@ -220,23 +223,24 @@ def asset_tag_verify(request, pk):
         messages.error(request, f"Tag {tag.tag_code} cannot be verified from state '{tag.get_status_display()}'.")
         return redirect("assets:asset_tag_detail", pk=tag.pk)
 
-    device_id = request.POST.get("scanner_device_id", "").strip()
-    if device_id:
-        tag.scanner_device_id = device_id
+    with transaction.atomic():
+        device_id = request.POST.get("scanner_device_id", "").strip()
+        if device_id:
+            tag.scanner_device_id = device_id
 
-    tag.status = "verified"
-    tag.is_verified = True
-    tag.verified_by = request.user
-    tag.verified_at = timezone.now()
-    tag.save(update_fields=["status", "is_verified", "scanner_device_id", "verified_by", "verified_at", "updated_at"])
+        tag.status = "verified"
+        tag.is_verified = True
+        tag.verified_by = request.user
+        tag.verified_at = timezone.now()
+        tag.save(update_fields=["status", "is_verified", "scanner_device_id", "verified_by", "verified_at", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        tag,
-        "update",
-        changes={"action": "verify_tag", "details": f"Verified asset tag {tag.tag_code} with scanner {tag.scanner_device_id or 'standard'}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            tag,
+            "update",
+            changes={"action": "verify_tag", "details": f"Verified asset tag {tag.tag_code} with scanner {tag.scanner_device_id or 'standard'}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Tag {tag.tag_code} successfully verified by scanner.")
     return redirect("assets:asset_tag_detail", pk=tag.pk)
 
