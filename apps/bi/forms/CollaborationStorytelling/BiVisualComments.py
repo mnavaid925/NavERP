@@ -59,4 +59,8 @@ class BiVisualCommentForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["dashboard", "widget", "report", "story", "parent_comment"])
+        dashboard = cleaned.get("dashboard")
+        widget = cleaned.get("widget")
+        if dashboard and widget and widget.dashboard_id != dashboard.id:
+            self.add_error("widget", "The selected widget does not belong to the selected dashboard.")
         return cleaned
