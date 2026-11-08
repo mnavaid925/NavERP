@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -186,10 +186,11 @@ def bi_webhook_subscription_ping(request, pk):
     webhook.last_triggered_at = timezone.now()
     webhook.last_response_code = 200
     webhook.last_response_time_ms = 145
-    webhook.total_deliveries += 1
+    webhook.total_deliveries = F("total_deliveries") + 1
     webhook.consecutive_failures = 0
     webhook.status = "active"
     webhook.last_error_log = ""
+    webhook.updated_at = timezone.now()
     webhook.save(
         update_fields=[
             "last_triggered_at",
@@ -199,6 +200,7 @@ def bi_webhook_subscription_ping(request, pk):
             "consecutive_failures",
             "status",
             "last_error_log",
+            "updated_at",
         ]
     )
 
