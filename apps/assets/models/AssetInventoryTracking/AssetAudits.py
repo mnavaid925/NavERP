@@ -124,3 +124,7 @@ class AssetAudit(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} — {self.title}"
+
+    @property
+    def status_css(self):
+        return self.STATUS_CSS.get(self.status, "badge-slate")
