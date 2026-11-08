@@ -59,7 +59,7 @@ class AssetModelForm(TenantUniqueMixin, forms.ModelForm):
                 tenant=self.tenant, is_active=True
             ).order_by("code")
             self.fields["manufacturer"].queryset = Party.objects.filter(
-                tenant=self.tenant, is_active=True
+                tenant=self.tenant
             ).order_by("name")
 
     def clean_model_number(self):
