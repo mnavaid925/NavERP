@@ -190,7 +190,7 @@
                             <a href="{% url 'bi:bi_shared_workspace_edit' item.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            <form method="post" action="{% url 'bi:bi_shared_workspace_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete workspace {{ item.name }}?');">
+                            <form method="post" action="{% url 'bi:bi_shared_workspace_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete workspace {{ item.name|escapejs }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
                                     <i data-lucide="trash-2"></i>
