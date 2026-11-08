@@ -123,7 +123,8 @@ def asset_incident_report_create(request):
         initial = {}
         asset_id = request.GET.get("asset", "").strip()
         if asset_id and asset_id.isdigit():
-            initial["asset"] = int(asset_id)
+            if Asset.objects.filter(pk=int(asset_id), tenant=request.tenant).exists():
+                initial["asset"] = int(asset_id)
         form = AssetIncidentReportForm(initial=initial, tenant=request.tenant)
 
     return render(
