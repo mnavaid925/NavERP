@@ -176,15 +176,15 @@
                     </td>
                     <td class="text-end">
                         <div class="table-actions">
-                            <a href="{% url 'bi:integration_connector_detail' c.pk %}" class="btn btn-icon" title="View details">
+                            <a href="{% url 'bi:integration_connector_detail' c.pk %}" class="btn btn-icon" title="View details" aria-label="View details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:integration_connector_edit' c.pk %}" class="btn btn-icon" title="Edit connector">
+                            <a href="{% url 'bi:integration_connector_edit' c.pk %}" class="btn btn-icon" title="Edit connector" aria-label="Edit connector">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'bi:integration_connector_delete' c.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete connector {{ c.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete connector">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete connector" aria-label="Delete connector">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
