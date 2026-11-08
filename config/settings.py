@@ -171,6 +171,9 @@ STRIPE_PRICE_PRO = os.getenv("STRIPE_PRICE_PRO", "")
 STRIPE_PRICE_ENTERPRISE = os.getenv("STRIPE_PRICE_ENTERPRISE", "")
 STRIPE_ENABLED = bool(STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY)
 
+# Webhook & External Integrations
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+
 # Production hardening (only when DEBUG is off)
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
