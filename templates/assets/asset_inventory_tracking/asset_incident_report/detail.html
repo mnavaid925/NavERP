@@ -41,7 +41,7 @@
             <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Mark Recovered
         </button>
 
-        {% if request.user.is_superuser or request.user.role == 'admin' %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <button type="button" onclick="document.getElementById('write-off-modal').classList.remove('hidden')" class="btn btn-primary bg-rose-600 hover:bg-rose-700">
             <i data-lucide="file-minus" class="w-4 h-4 mr-1"></i> Authorize Write-Off
         </button>
