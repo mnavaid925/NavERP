@@ -213,7 +213,7 @@
     </div>
 
     {% if is_paginated %}
-    <div class="pagination">
+    <nav class="pagination" aria-label="Pagination">
         <div class="pagination-info">
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} connectors
         </div>
@@ -230,7 +230,7 @@
             </a>
             {% endif %}
         </div>
-    </div>
+    </nav>
     {% endif %}
 </div>
 {% endblock %}
