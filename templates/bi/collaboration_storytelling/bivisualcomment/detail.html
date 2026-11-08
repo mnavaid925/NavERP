@@ -60,7 +60,7 @@
                 <h2 class="text-base font-semibold">Comment & Context</h2>
             </div>
             <div class="card-body space-y-4">
-                <div class="p-5 bg-white border border-slate-200 rounded-xl shadow-sm text-base text-slate-800 leading-relaxed">
+                <div class="p-5 bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm text-base text-slate-800 dark:text-slate-200 leading-relaxed">
                     {{ comment.content|linebreaksbr }}
                 </div>
 
@@ -68,7 +68,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                     <div>
                         <div class="text-xs font-medium text-muted uppercase">Anchored Target Asset</div>
-                        <div class="text-sm font-semibold mt-1 text-slate-800">
+                        <div class="text-sm font-semibold mt-1 text-slate-800 dark:text-slate-200">
                             {% if comment.dashboard %}
                             <a href="{% url 'bi:bi_dashboard_detail' comment.dashboard.pk %}" class="text-primary-600 hover:underline">
                                 {{ comment.dashboard.title }}
@@ -89,7 +89,7 @@
 
                     <div>
                         <div class="text-xs font-medium text-muted uppercase">Visual Coordinate Pin</div>
-                        <div class="text-sm font-semibold mt-1 text-slate-800">
+                        <div class="text-sm font-semibold mt-1 text-slate-800 dark:text-slate-200">
                             {% if comment.coordinate_x is not None and comment.coordinate_y is not None %}
                             <span class="badge badge-slate">X: {{ comment.coordinate_x }}%, Y: {{ comment.coordinate_y }}%</span>
                             {% else %}
@@ -100,9 +100,9 @@
                 </div>
 
                 {% if comment.filter_snapshot %}
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded text-xs">
-                    <span class="font-bold text-slate-700">Filter Snapshot:</span>
-                    <pre class="mt-1 font-mono text-[11px] text-slate-600">{{ comment.filter_snapshot }}</pre>
+                <div class="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded text-xs">
+                    <span class="font-bold text-slate-700 dark:text-slate-300">Filter Snapshot:</span>
+                    <pre class="mt-1 font-mono text-[11px] text-slate-600 dark:text-slate-300">{{ comment.filter_snapshot }}</pre>
                 </div>
                 {% endif %}
             </div>
@@ -111,7 +111,7 @@
         <!-- Threaded Replies Card -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h2 class="text-base font-semibold">Replies & Conversation ({{ replies.count }})</h2>
+                <h2 class="text-base font-semibold">Replies & Conversation ({{ replies|length }})</h2>
                 <a href="{% url 'bi:bi_visual_comment_create' %}?parent={{ comment.pk }}" class="btn btn-outline btn-sm">
                     <i data-lucide="plus"></i>
                     <span>Reply</span>
@@ -121,17 +121,17 @@
                 {% if replies %}
                 <div class="space-y-4">
                     {% for reply in replies %}
-                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div class="p-4 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-lg">
                         <div class="flex justify-between items-start mb-2">
                             <div class="flex items-center gap-2">
-                                <span class="font-medium text-xs text-slate-800">
+                                <span class="font-medium text-xs text-slate-800 dark:text-slate-200">
                                     {% if reply.author %}{{ reply.author.get_full_name|default:reply.author.username }}{% else %}Anonymous{% endif %}
                                 </span>
                                 <span class="text-muted text-[11px]">{{ reply.created_at|date:"M d, Y H:i" }}</span>
                             </div>
                             <span class="badge badge-slate text-[11px]">{{ reply.number }}</span>
                         </div>
-                        <div class="text-sm text-slate-700 leading-normal">{{ reply.content|linebreaksbr }}</div>
+                        <div class="text-sm text-slate-700 dark:text-slate-300 leading-normal">{{ reply.content|linebreaksbr }}</div>
                     </div>
                     {% endfor %}
                 </div>
@@ -160,7 +160,7 @@
                     </div>
                 </div>
 
-                {% if comment.resolved_by %}
+                {% if comment.status == 'resolved' and comment.resolved_by %}
                 <div>
                     <div class="text-xs text-muted uppercase">Resolved By</div>
                     <div class="text-sm font-medium mt-0.5">{{ comment.resolved_by.get_full_name|default:comment.resolved_by.username }}</div>
