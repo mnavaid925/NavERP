@@ -187,19 +187,19 @@
                         <div class="table-actions">
                             <form method="post" action="{% url 'bi:warehouse_sync_endpoint_trigger' s.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Trigger Sync Now">
+                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Trigger Sync Now" aria-label="Trigger Sync Now">
                                     <i data-lucide="play"></i>
                                 </button>
                             </form>
-                            <a href="{% url 'bi:warehouse_sync_endpoint_detail' s.pk %}" class="btn btn-icon" title="View details">
+                            <a href="{% url 'bi:warehouse_sync_endpoint_detail' s.pk %}" class="btn btn-icon" title="View details" aria-label="View details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:warehouse_sync_endpoint_edit' s.pk %}" class="btn btn-icon" title="Edit sync">
+                            <a href="{% url 'bi:warehouse_sync_endpoint_edit' s.pk %}" class="btn btn-icon" title="Edit sync" aria-label="Edit sync">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'bi:warehouse_sync_endpoint_delete' s.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete sync endpoint {{ s.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete sync">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete sync" aria-label="Delete sync">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
