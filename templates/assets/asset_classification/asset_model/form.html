@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Model: {{ model.model_number }} — NavERP{% else %}New Equipment Model — NavERP{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_model_list' %}">Models</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ model.model_number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Equipment Model: {{ model.model_number }}{% else %}Create Equipment Model{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_model_detail' model.pk %}{% else %}{% url 'assets:asset_model_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">
+            {% if is_edit %}Update Model Blueprint{% else %}Equipment Model Registration{% endif %}
+        </h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Identity & Classification -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Model Identity & Category Link
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.model_number.id_for_label }}" class="form-label">
+                            Model Number <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.model_number }}
+                        {% if form.model_number.errors %}<div class="form-error">{{ form.model_number.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">e.g. CAT-320GC, CVHE-500, PUMP-ANSI-3196</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">
+                            Commercial Model Name <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.name }}
+                        {% if form.name.errors %}<div class="form-error">{{ form.name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.category.id_for_label }}" class="form-label">
+                            Asset Taxonomy Category <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.model_status.id_for_label }}" class="form-label">
+                            Production Status <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.model_status }}
+                        {% if form.model_status.errors %}<div class="form-error">{{ form.model_status.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manufacturer OEM -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Original Equipment Manufacturer (OEM)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.manufacturer.id_for_label }}" class="form-label">Manufacturer Party Master</label>
+                        {{ form.manufacturer }}
+                        {% if form.manufacturer.errors %}<div class="form-error">{{ form.manufacturer.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Linked vendor or manufacturer record from Party directory</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.manufacturer_name_fallback.id_for_label }}" class="form-label">Manufacturer Text Fallback</label>
+                        {{ form.manufacturer_name_fallback }}
+                        {% if form.manufacturer_name_fallback.errors %}<div class="form-error">{{ form.manufacturer_name_fallback.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Used if Party record is not yet cataloged</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Warranty & Financial Benchmarks -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Warranty Governance & Lifespan Benchmarks
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.standard_warranty_months.id_for_label }}" class="form-label">
+                            Warranty Duration (Months)
+                        </label>
+                        {{ form.standard_warranty_months }}
+                        {% if form.standard_warranty_months.errors %}<div class="form-error">{{ form.standard_warranty_months.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.warranty_coverage_type.id_for_label }}" class="form-label">
+                            Coverage Scope
+                        </label>
+                        {{ form.warranty_coverage_type }}
+                        {% if form.warranty_coverage_type.errors %}<div class="form-error">{{ form.warranty_coverage_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.expected_useful_life_months.id_for_label }}" class="form-label">
+                            Useful Life (Months)
+                        </label>
+                        {{ form.expected_useful_life_months }}
+                        {% if form.expected_useful_life_months.errors %}<div class="form-error">{{ form.expected_useful_life_months.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.estimated_replacement_cost.id_for_label }}" class="form-label">
+                            Est. Replacement Cost ($)
+                        </label>
+                        {{ form.estimated_replacement_cost }}
+                        {% if form.estimated_replacement_cost.errors %}<div class="form-error">{{ form.estimated_replacement_cost.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.default_meter_name.id_for_label }}" class="form-label">Default Meter Name</label>
+                        {{ form.default_meter_name }}
+                        {% if form.default_meter_name.errors %}<div class="form-error">{{ form.default_meter_name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.default_meter_unit.id_for_label }}" class="form-label">Meter Unit</label>
+                        {{ form.default_meter_unit }}
+                        {% if form.default_meter_unit.errors %}<div class="form-error">{{ form.default_meter_unit.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technical Specifications -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Engineering Specifications & Scope
+                </h3>
+                <div class="form-group mb-4">
+                    <label for="{{ form.technical_specifications.id_for_label }}" class="form-label">Technical Specifications Overview</label>
+                    {{ form.technical_specifications }}
+                    {% if form.technical_specifications.errors %}<div class="form-error">{{ form.technical_specifications.errors.0 }}</div>{% endif %}
+                    <div class="text-xs text-muted mt-1">Capacity, voltage, power rating, operating limits, dimensions, weight...</div>
+                </div>
+                <div class="form-group mb-4">
+                    <label for="{{ form.description.id_for_label }}" class="form-label">Model Description & Notes</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors.0 }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-center pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium text-slate-800">Active Model (Available for Physical Deployment)</span>
+                    </label>
+                    {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'assets:asset_model_detail' model.pk %}{% else %}{% url 'assets:asset_model_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Model{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
