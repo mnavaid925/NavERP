@@ -27476,3 +27476,242 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 ## Review & Close-Out Summary (10.18 Collaboration & Data Storytelling)
 *(To be completed during Phase 4–7 close-out)*
 
+
+
+---
+# Sub-module 10.19 - Integration & API Hub (Module 10: Business Intelligence, `bi`) - plan from research-bi-10.19.md (2026-11-08)
+
+## Models (from research — 1–4)
+
+- [ ] `IntegrationConnector` [BINT-] — Operational ERP & streaming broker connector managing bidirectional Reverse ETL metric pushbacks, closed-loop triggers, and real-time event-bus pub/sub.
+  - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BINT-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
+  - **Fields:**
+    - `name`: `CharField(max_length=200)` — Connector display name (e.g., "Finance GL Closed-Loop Sync", "Production Kafka Event Bus").
+    - `slug`: `SlugField(max_length=120)` — URL identifier unique per tenant.
+    - `description`: `TextField(blank=True)` — Functional summary and business objectives.
+    - `connector_type`: `CharField(max_length=40, default="internal_erp")` — `CHOICES`: `internal_erp` ("Internal NavERP Operational Module"), `message_broker` ("Streaming Message Queue / Event Bus"), `saas_application` ("Third-Party SaaS Application"), `custom_api` ("Custom REST/GraphQL Endpoint").
+    - `target_system`: `CharField(max_length=50, default="erp_accounting")` — `CHOICES`: `erp_accounting` ("Module 2: Accounting & Financial Ledger"), `erp_hrm` ("Module 3: Human Resource Management"), `erp_scm` ("Module 4: Supply Chain & Procurement"), `erp_crm` ("Module 1: CRM & Sales Management"), `erp_inventory` ("Module 5: Inventory & Warehouse"), `kafka` ("Apache Kafka Cluster"), `rabbitmq` ("RabbitMQ Message Broker"), `aws_eventbridge` ("AWS EventBridge Event Bus"), `redis_streams` ("Redis Streams Pub/Sub"), `generic_webhook` ("Generic HTTP/REST Gateway").
+    - `sync_direction`: `CharField(max_length=30, default="outbound")` — `CHOICES`: `inbound` ("Inbound (Operational Data → BI Lakehouse)"), `outbound` ("Outbound (BI Intelligence → Operational Target)"), `bidirectional` ("Bidirectional (Continuous Closed-Loop)").
+    - `connection_config`: `JSONField(default=dict, blank=True)` — Host connection settings (bootstrap servers, topic name, batch size, timeout, flush interval).
+    - `auth_type`: `CharField(max_length=40, default="internal_session")` — `CHOICES`: `internal_session` ("Internal NavERP Direct Session"), `api_key` ("API Key Header"), `bearer_token` ("OAuth2 / Bearer Token"), `basic_auth` ("HTTP Basic Authentication"), `iam_role` ("AWS IAM Role / Cloud Identity"), `tls_certificate` ("Mutual TLS Certificate").
+    - `auth_credentials`: `JSONField(default=dict, blank=True)` — Encrypted/masked credential parameters (keys, secrets, certificates).
+    - `message_format`: `CharField(max_length=30, default="json")` — `CHOICES`: `json` ("Standard JSON"), `avro` ("Apache Avro (Schema Governed)"), `protobuf` ("Google Protocol Buffers"), `cloudevents` ("CloudEvents 1.0 Specification").
+    - `sync_interval`: `CharField(max_length=30, default="realtime_event")` — `CHOICES`: `realtime_event` ("Real-Time Event Triggered"), `every_minute` ("Every Minute"), `every_5_minutes` ("Every 5 Minutes"), `hourly` ("Hourly"), `daily` ("Daily Scheduled"), `manual` ("Manual On-Demand Only").
+    - `status`: `CharField(max_length=30, default="active")` — `CHOICES`: `active` ("Active & Running"), `paused` ("Paused by Administrator"), `error` ("Failed / Error State"), `maintenance` ("Under Maintenance").
+    - `health_status`: `CharField(max_length=30, default="healthy")` — `CHOICES`: `healthy` ("Healthy (Heartbeat Normal)"), `degraded` ("Degraded (High Latency / Intermittent)"), `unreachable` ("Unreachable (Connection Refused)"), `untested` ("Untested Configuration").
+    - `last_heartbeat_at`: `DateTimeField(null=True, blank=True)` — Timestamp of last successful ping.
+    - `last_sync_at`: `DateTimeField(null=True, blank=True)` — Timestamp of last completed dispatch.
+    - `total_messages_processed`: `PositiveBigIntegerField(default=0)` — Lifetime count of messages processed.
+    - `error_message`: `TextField(blank=True)` — Diagnostic error message on connection failure.
+    - `is_enabled`: `BooleanField(default=True)` — Administrative enable/disable toggle.
+    - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_connectors")`.
+  - **Research Drivers:** Fivetran Activations, Workato Reverse ETL, Airbyte CDK, Fabric Eventstreams, Snowflake Snowpipe Streaming (catalog 4.1 & 4.4).
+  - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `settings.AUTH_USER_MODEL` (`accounts.User`).
+  - **Form Excludes:** `tenant`, `number`, `health_status`, `last_heartbeat_at`, `last_sync_at`, `total_messages_processed`, `error_message`, `created_by`, `created_at`, `updated_at`.
+
+- [ ] `WarehouseSyncEndpoint` [BSNC-] — Reverse ETL and replication feeds pushing governed semantic models and data marts to external cloud warehouses (Snowflake, BigQuery, Redshift, Databricks) and BI tools (Power BI, Tableau, Looker).
+  - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BSNC-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
+  - **Fields:**
+    - `name`: `CharField(max_length=200)` — Display title (e.g., "Snowflake Finance Mart Sync", "Power BI Executive Dataset Push").
+    - `slug`: `SlugField(max_length=120)` — URL identifier unique per tenant.
+    - `target_warehouse`: `CharField(max_length=40, default="snowflake")` — `CHOICES`: `snowflake` ("Snowflake Cloud Data Warehouse"), `google_bigquery` ("Google BigQuery"), `aws_redshift` ("Amazon Redshift"), `databricks_unity` ("Databricks Unity Catalog"), `power_bi_semantic_model` ("Microsoft Power BI Semantic Model"), `tableau_hyper` ("Tableau Cloud / Server Hyper Extract"), `looker_lookml` ("Google Cloud Looker (LookML Feed)").
+    - `sync_mode`: `CharField(max_length=40, default="incremental_merge")` — `CHOICES`: `incremental_merge` ("Incremental Upsert (Merge on Primary Key)"), `full_refresh` ("Full Overwrite (Truncate & Replace)"), `append_only` ("Append-Only (Time-Series Event Log)"), `delta_sharing` ("Delta Sharing Open Protocol Feed"), `direct_query_federation` ("Direct Query Virtualization View").
+    - `semantic_model`: `ForeignKey("bi.SemanticModel", on_delete=models.SET_NULL, null=True, blank=True, related_name="warehouse_syncs")` — Governed source semantic model.
+    - `data_mart`: `ForeignKey("bi.DataMart", on_delete=models.SET_NULL, null=True, blank=True, related_name="warehouse_syncs")` — Governed source data mart.
+    - `destination_database`: `CharField(max_length=150, blank=True)` — Target database name (e.g., `ANALYTICS_PROD`).
+    - `destination_schema`: `CharField(max_length=150, blank=True)` — Target schema name (e.g., `NAVERP_EXPORTS`).
+    - `destination_table`: `CharField(max_length=150)` — Target table/view name (e.g., `DIM_CUSTOMER_METRICS`).
+    - `connection_config`: `JSONField(default=dict, blank=True)` — Cloud warehouse parameters (account identifier, warehouse name, role, project id, workspace id).
+    - `auth_method`: `CharField(max_length=40, default="service_account_key")` — `CHOICES`: `service_account_key` ("Service Account Key (JSON / PEM)"), `snowflake_keypair` ("Snowflake Key-Pair RSA Authentication"), `oauth2_token` ("OAuth2 Client Credentials Grant"), `iam_role_arn` ("AWS IAM Role ARN Delegation"), `personal_access_token` ("Personal Access Token").
+    - `sync_schedule`: `CharField(max_length=30, default="daily")` — `CHOICES`: `hourly` ("Hourly Sync"), `every_4_hours` ("Every 4 Hours"), `daily` ("Daily Sync (Nightly)"), `weekly` ("Weekly Sync"), `event_triggered` ("Triggered by ETL Pipeline Finish"), `manual` ("Manual Execution Only").
+    - `status`: `CharField(max_length=30, default="idle")` — `CHOICES`: `idle` ("Idle (Scheduled)"), `syncing` ("Syncing in Progress"), `success` ("Last Sync Succeeded"), `error` ("Last Sync Failed"), `disabled` ("Sync Disabled").
+    - `last_sync_at`: `DateTimeField(null=True, blank=True)` — Timestamp of last execution.
+    - `last_sync_duration_ms`: `PositiveIntegerField(default=0)` — Duration of last sync in milliseconds.
+    - `last_rows_synced`: `PositiveIntegerField(default=0)` — Row count transferred during last run.
+    - `total_rows_synced`: `PositiveBigIntegerField(default=0)` — Cumulative row count synced.
+    - `last_error_message`: `TextField(blank=True)` — Detailed failure traceback or message.
+    - `is_active`: `BooleanField(default=True)` — Scheduling toggle.
+    - `owner`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_warehouse_syncs")` — Owner engineer.
+  - **Research Drivers:** Databricks Delta Sharing, Snowflake Secure Data Sharing, Power BI Fabric OneLake Data Hub, Tableau Hyper API (catalog 4.2).
+  - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `bi.SemanticModel` (`apps/bi/models/SemanticLayer/SemanticModels.py`), `bi.DataMart` (`apps/bi/models/DataWarehouse/DataMarts.py`), `settings.AUTH_USER_MODEL` (`accounts.User`).
+  - **Form Excludes:** `tenant`, `number`, `status`, `last_sync_at`, `last_sync_duration_ms`, `last_rows_synced`, `total_rows_synced`, `last_error_message`, `owner`, `created_at`, `updated_at`.
+
+- [ ] `BiWebhookSubscription` [BWHK-] — Outbound event-driven webhook notification dispatcher with HMAC-SHA256 request signing and exponential retry telemetry.
+  - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BWHK-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
+  - **Fields:**
+    - `name`: `CharField(max_length=200)` — Display title (e.g., "Slack KPI Breach Alerts", "Make.com Automation Pipeline").
+    - `endpoint_url`: `URLField(max_length=500)` — Target destination HTTPS URL.
+    - `secret_token`: `CharField(max_length=128)` — Secret key used to compute the `X-NavERP-Signature` HMAC-SHA256 digest.
+    - `event_types`: `JSONField(default=list, blank=True)` — List of subscribed event strings (e.g. `["kpi.threshold_breached", "report.execution_completed", "anomaly.detected", "warehouse_sync.completed", "data_quality.exception_raised"]`).
+    - `payload_format`: `CharField(max_length=30, default="standard_json")` — `CHOICES`: `standard_json` ("NavERP Standard Analytical JSON"), `cloudevents_v1` ("CloudEvents v1.0 Standard"), `slack_compatible` ("Slack Block Kit Compatible"), `compact_minimal` ("Compact Minimalist Payload").
+    - `custom_headers`: `JSONField(default=dict, blank=True)` — Custom HTTP request headers (e.g., `{"Authorization": "Bearer ...", "X-Custom-Env": "prod"}`).
+    - `max_retries`: `PositiveIntegerField(default=3)` — Retry limit on HTTP 5xx errors or network timeouts.
+    - `timeout_seconds`: `PositiveIntegerField(default=10)` — Request timeout threshold in seconds.
+    - `status`: `CharField(max_length=30, default="active")` — `CHOICES`: `active` ("Active (Receiving Events)"), `suspended` ("Suspended (Excessive Consecutive Failures)"), `failing` ("Degraded (Intermittent 5xx Errors)"), `disabled` ("Disabled by Administrator").
+    - `consecutive_failures`: `PositiveIntegerField(default=0)` — Circuit breaker consecutive error counter.
+    - `last_triggered_at`: `DateTimeField(null=True, blank=True)` — Timestamp of last event dispatch attempt.
+    - `last_response_code`: `PositiveIntegerField(null=True, blank=True)` — HTTP response status code (e.g. 200, 202, 500).
+    - `last_response_time_ms`: `PositiveIntegerField(default=0)` — Round-trip delivery latency in milliseconds.
+    - `last_error_log`: `TextField(blank=True)` — Captured error response body.
+    - `total_deliveries`: `PositiveIntegerField(default=0)` — Cumulative delivery attempt counter.
+    - `is_active`: `BooleanField(default=True)` — Subscription active toggle.
+    - `created_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_webhooks")`.
+  - **Research Drivers:** Tableau Webhooks, Fivetran Webhooks API, Segment Actions Webhooks, Stripe/GitHub HMAC Standard (catalog 4.3).
+  - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `settings.AUTH_USER_MODEL` (`accounts.User`).
+  - **Form Excludes:** `tenant`, `number`, `status`, `consecutive_failures`, `last_triggered_at`, `last_response_code`, `last_response_time_ms`, `last_error_log`, `total_deliveries`, `created_by`, `created_at`, `updated_at`.
+
+- [ ] `BiExtensionPlugin` [BEXT-] — Third-party extension and visual component registry governing custom D3/ECharts visuals, ETL transform plugins, and sandboxed dashboard extensions.
+  - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BEXT-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
+  - **Fields:**
+    - `name`: `CharField(max_length=200)` — Extension name (e.g., "ECharts Sankey Diagram Pro", "Shopify Analytics Ingestion Plug-in").
+    - `plugin_identifier`: `CharField(max_length=120)` — Reverse-DNS unique package identifier (e.g., `io.naverp.visuals.sankey-pro`).
+    - `version`: `CharField(max_length=30, default="1.0.0")` — SemVer version string.
+    - `plugin_type`: `CharField(max_length=40, default="custom_visual")` — `CHOICES`: `custom_visual` ("Custom Visualization Canvas Component"), `connector_plugin` ("Third-Party Data Connector Plug-in"), `transformation_script` ("Custom ETL Transformation Step"), `dashboard_extension` ("Interactive Dashboard Extension Action"), `metric_provider` ("External Metric & Benchmark Provider").
+    - `category`: `CharField(max_length=40, default="visualization")` — `CHOICES`: `visualization` ("Charts & Visual Displays"), `data_integration` ("Ingestion & Reverse ETL"), `governance` ("Data Governance & Quality"), `advanced_analytics` ("Predictive & Statistical Tools"), `workflow_action` ("Operational Closed-Loop Actions").
+    - `description`: `TextField(blank=True)` — Overview of capabilities and usage instructions.
+    - `author_name`: `CharField(max_length=150)` — Author, vendor, or publisher organization.
+    - `homepage_url`: `URLField(max_length=500, blank=True)` — Extension product page URL.
+    - `repository_url`: `URLField(max_length=500, blank=True)` — Source code repository or documentation URL.
+    - `license`: `CharField(max_length=60, default="MIT")` — License identifier (e.g., MIT, Apache-2.0, Commercial).
+    - `manifest_metadata`: `JSONField(default=dict, blank=True)` — Technical manifest (entrypoint JS, CSS, icon SVG, min_naverp_version, tags).
+    - `config_schema`: `JSONField(default=dict, blank=True)` — JSON Schema declaring configurable settings.
+    - `current_config`: `JSONField(default=dict, blank=True)` — Active tenant configuration values.
+    - `permissions_required`: `JSONField(default=list, blank=True)` — Declared sandboxed permission scopes (`read_semantic_layer`, `render_canvas_ui`, `network_egress`).
+    - `status`: `CharField(max_length=30, default="installed")` — `CHOICES`: `installed` ("Installed (Not Enabled)"), `enabled` ("Enabled & Active"), `disabled` ("Disabled by Administrator"), `deprecated` ("Deprecated Version"), `quarantined` ("Quarantined (Security Flagged)").
+    - `is_verified`: `BooleanField(default=False)` — Verification badge from NavERP Data Governance.
+    - `is_system_plugin`: `BooleanField(default=False)` — Immutable system-bundled plugin flag.
+    - `installed_at`: `DateTimeField(auto_now_add=True)` — Installation timestamp.
+    - `installed_by`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="bi_installed_plugins")` — Installing user.
+  - **Research Drivers:** Tableau Exchange, Power BI AppSource Custom Visuals, MuleSoft Anypoint Exchange, Databricks Marketplace (catalog 4.5).
+  - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `settings.AUTH_USER_MODEL` (`accounts.User`).
+  - **Form Excludes:** `tenant`, `number`, `installed_at`, `installed_by`, `is_system_plugin`, `created_at`, `updated_at`.
+
+---
+
+## Backend (`apps/bi/{models,forms,views,urls}/IntegrationHub/`)
+
+- [ ] `apps/bi/models/IntegrationHub/IntegrationConnectors.py` (model `IntegrationConnector` [BINT-])
+- [ ] `apps/bi/models/IntegrationHub/WarehouseSyncEndpoints.py` (model `WarehouseSyncEndpoint` [BSNC-])
+- [ ] `apps/bi/models/IntegrationHub/BiWebhookSubscriptions.py` (model `BiWebhookSubscription` [BWHK-])
+- [ ] `apps/bi/models/IntegrationHub/BiExtensionPlugins.py` (model `BiExtensionPlugin` [BEXT-])
+- [ ] `apps/bi/models/IntegrationHub/__init__.py` (re-export all 4 models)
+- [ ] Re-export all 4 models in `apps/bi/models/__init__.py` and add to `__all__`
+
+- [ ] `apps/bi/forms/IntegrationHub/IntegrationConnectors.py` (`IntegrationConnectorForm` with JSON validation & credential masking)
+- [ ] `apps/bi/forms/IntegrationHub/WarehouseSyncEndpoints.py` (`WarehouseSyncEndpointForm` with destination validation)
+- [ ] `apps/bi/forms/IntegrationHub/BiWebhookSubscriptions.py` (`BiWebhookSubscriptionForm` with secret token generator & URL validation)
+- [ ] `apps/bi/forms/IntegrationHub/BiExtensionPlugins.py` (`BiExtensionPluginForm` with JSON schema config validation)
+- [ ] `apps/bi/forms/IntegrationHub/__init__.py` (re-export all 4 forms)
+- [ ] Re-export all 4 forms in `apps/bi/forms/__init__.py`
+
+- [ ] `apps/bi/views/IntegrationHub/IntegrationConnectors.py` (list, create, detail, edit, delete, ping heartbeat action)
+- [ ] `apps/bi/views/IntegrationHub/WarehouseSyncEndpoints.py` (list, create, detail, edit, delete, trigger manual sync action)
+- [ ] `apps/bi/views/IntegrationHub/BiWebhookSubscriptions.py` (list, create, detail, edit, delete, test ping dispatch action)
+- [ ] `apps/bi/views/IntegrationHub/BiExtensionPlugins.py` (list, create, detail, edit, delete, toggle enable/disable action)
+- [ ] `apps/bi/views/IntegrationHub/__init__.py` (re-export all view functions)
+- [ ] Re-export all view functions in `apps/bi/views/__init__.py`
+
+- [ ] `apps/bi/urls/IntegrationHub/IntegrationConnectors.py`
+- [ ] `apps/bi/urls/IntegrationHub/WarehouseSyncEndpoints.py`
+- [ ] `apps/bi/urls/IntegrationHub/BiWebhookSubscriptions.py`
+- [ ] `apps/bi/urls/IntegrationHub/BiExtensionPlugins.py`
+- [ ] `apps/bi/urls/IntegrationHub/__init__.py`
+- [ ] Wire sub-module into `apps/bi/urls/__init__.py` (`integration_hub_urlpatterns`)
+
+- [ ] Register all 4 models in `apps/bi/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields`
+- [ ] Generate incremental migration: `makemigrations bi` (expected `0042_...`)
+- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo records for Acme Corporation & Globex Corporation
+
+---
+
+## Wire-up
+
+- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.19"]` mapping all 5 NavERP.md feature bullets + aliases:
+  ```python
+  "10.19": {
+      "ERP & Application Connectors": "bi:integration_connector_list",
+      "External BI & Warehouse Sync": "bi:warehouse_sync_endpoint_list",
+      "Open APIs & Webhooks": "bi:bi_webhook_subscription_list",
+      "Streaming & Message Queues": "bi:integration_connector_list",
+      "Marketplace & Extensions": "bi:bi_extension_plugin_list",
+      # Extra live leaves & aliases
+      "Integration Connectors": "bi:integration_connector_list",
+      "Warehouse Sync Endpoints": "bi:warehouse_sync_endpoint_list",
+      "Webhook Subscriptions": "bi:bi_webhook_subscription_list",
+      "Extension Plugins": "bi:bi_extension_plugin_list",
+      "API & Integration Hub": "bi:integration_connector_list",
+  },
+  ```
+
+---
+
+## Templates (`templates/bi/integration_hub/`)
+
+Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`) strictly (no semantic `-success/-danger` classes, L33).
+
+- [ ] `templates/bi/integration_hub/integration_connector/list.html` (filter bar for connector_type, target_system, status, health_status; search; pagination; health badges; ping action)
+- [ ] `templates/bi/integration_hub/integration_connector/detail.html` (connector overview, configuration parameters, masked credentials, health telemetry, message processing counter, error logs)
+- [ ] `templates/bi/integration_hub/integration_connector/form.html` (name, slug, connector_type, target_system, sync_direction, sync_interval, message_format, connection_config JSON, auth_type, auth_credentials, is_enabled)
+
+- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/list.html` (filter bar for target_warehouse, sync_mode, sync_schedule, status; search; pagination; sync now action)
+- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/detail.html` (endpoint parameters, linked semantic model / data mart, sync telemetry, duration stats, last error display)
+- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/form.html` (name, slug, target_warehouse, sync_mode, semantic_model, data_mart, destination db/schema/table, connection_config JSON, auth_method, sync_schedule, is_active)
+
+- [ ] `templates/bi/integration_hub/bi_webhook_subscription/list.html` (filter bar for payload_format, status, is_active; search; pagination; response code badges; test ping action)
+- [ ] `templates/bi/integration_hub/bi_webhook_subscription/detail.html` (endpoint URL, secret token display, event subscription badges, headers JSON, retry policy, delivery telemetry & latency)
+- [ ] `templates/bi/integration_hub/bi_webhook_subscription/form.html` (name, endpoint_url, secret_token, event_types multi-select, payload_format, custom_headers JSON, max_retries, timeout_seconds, is_active)
+
+- [ ] `templates/bi/integration_hub/bi_extension_plugin/list.html` (filter bar for plugin_type, category, status, is_verified; search; gallery card & table views; pagination; toggle action)
+- [ ] `templates/bi/integration_hub/bi_extension_plugin/detail.html` (manifest metadata, author info, repository/docs links, sandboxed permissions, active config JSON, verification badge)
+- [ ] `templates/bi/integration_hub/bi_extension_plugin/form.html` (name, plugin_identifier, version, plugin_type, category, description, author_name, URLs, license, manifest_metadata JSON, config_schema JSON, current_config JSON, permissions_required, is_verified)
+
+---
+
+## Verify
+
+- [ ] Run `python manage.py makemigrations bi` -> incremental migration `0042_...` generated.
+- [ ] Run `python manage.py migrate`.
+- [ ] Run `python manage.py seed_bi` (Run 1).
+- [ ] Run `python manage.py seed_bi` (Run 2: verify idempotency, zero duplicate errors).
+- [ ] Run `python manage.py check` (0 issues reported).
+- [ ] Run smoke test script in `temp/smoke_bi_10_19.py`:
+  - Authenticate as `admin_acme` / `password`.
+  - GET all new 10.19 URLs (list, create, detail, edit for all 4 models, plus ping/test/sync actions) -> verify 200/302 responses.
+  - Assert HTML content: page titles, table headers, seeded connectors, sync endpoints, webhooks, and extension plugins; no leaked Django tags (`{#`).
+  - Test cross-tenant isolation (IDOR: accessing Acme objects as Megacorp returns 404).
+  - Test list filter combinations and negative/malformed filter query params (L11).
+  - Assert `apps/core/navigation.py` `LIVE_LINKS["10.19"]` resolves cleanly without `NoReverseMatch`.
+  - Sidebar shows 10.19 Live.
+
+---
+
+## Close-Out Steps
+
+- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [ ] Append findings to `.claude/tasks/review-bi-10.19.md`.
+- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [ ] Run Phase 6 automated test suite:
+  - Update `conftest.py` with 10.19 fixtures.
+  - Author `test_integrationhub_models.py`
+  - Author `test_integrationhub_forms.py`
+  - Author `test_integrationhub_views.py`
+  - Author `test_integrationhub_security.py`
+  - Run full unfiltered test suite: `pytest apps/bi/tests/`
+- [ ] Phase 7 documentation:
+  - Update `.claude/skills/bi/SKILL.md` with 10.19 models, views, and routes.
+  - Update `README.md`.
+  - Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.19.md` (or declare None).
+
+---
+
+## Later Passes / Deferred
+
+- **Dedicated In-Process Kafka/RabbitMQ Socket Daemons**: Connectors track broker configurations, topics, serialization formats, and simulated message dispatch; direct background TCP socket consumer/producer workers deferred to dedicated Celery/worker infrastructure.
+- **Snowflake Snowpipe Streaming TCP Socket Service**: Cloud warehouse destination models track key-pair credentials, table targets, and incremental merge schedules; native C/Rust/Java Snowpipe SDK daemons deferred to dedicated sync service.
+- **WASM / WebWorker JavaScript Sandboxing Runner**: Browser-side sandboxed iframe and WebWorker isolation layers for running unverified third-party plugin visual scripts in complete memory isolation parked for future canvas runtime enhancements.
+- **Comprehensive GraphQL Server Resolvers (Graphene / Strawberry)**: Sub-module 10.19 provides standard REST APIs, reverse ETL endpoints, and outbound webhooks; a unified GraphQL AST query compiler traversing arbitrary cross-module graphs deferred to future API gateway expansion.
+
+---
+
+## Review & Close-Out Summary (10.19 Integration & API Hub)
+*(To be completed during Phase 4–7 close-out)*
