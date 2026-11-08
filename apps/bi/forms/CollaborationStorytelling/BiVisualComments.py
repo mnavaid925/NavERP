@@ -45,23 +45,18 @@ class BiVisualCommentForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["dashboard"].queryset = BiDashboard.objects.filter(tenant=self.tenant)
-            self.fields["widget"].queryset = BiDashboardWidget.objects.filter(dashboard__tenant=self.tenant)
+            self.fields["widget"].queryset = BiDashboardWidget.objects.filter(tenant=self.tenant)
             self.fields["report"].queryset = ReportDefinition.objects.filter(tenant=self.tenant)
             self.fields["story"].queryset = BiDataStory.objects.filter(tenant=self.tenant)
             self.fields["parent_comment"].queryset = BiVisualComment.objects.filter(tenant=self.tenant)
+        else:
+            self.fields["dashboard"].queryset = BiDashboard.objects.none()
+            self.fields["widget"].queryset = BiDashboardWidget.objects.none()
+            self.fields["report"].queryset = ReportDefinition.objects.none()
+            self.fields["story"].queryset = BiDataStory.objects.none()
+            self.fields["parent_comment"].queryset = BiVisualComment.objects.none()
 
-    def clean_dashboard(self):
-        d = self.cleaned_data.get("dashboard")
-        return reject_foreign(d, self.tenant, "Dashboard")
-
-    def clean_report(self):
-        r = self.cleaned_data.get("report")
-        return reject_foreign(r, self.tenant, "Report")
-
-    def clean_story(self):
-        s = self.cleaned_data.get("story")
-        return reject_foreign(s, self.tenant, "Story")
-
-    def clean_parent_comment(self):
-        p = self.cleaned_data.get("parent_comment")
-        return reject_foreign(p, self.tenant, "Parent Comment")
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["dashboard", "widget", "report", "story", "parent_comment"])
+        return cleaned
