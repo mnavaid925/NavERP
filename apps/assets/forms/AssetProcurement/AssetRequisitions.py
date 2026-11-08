@@ -51,7 +51,7 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
             self.fields["proposed_vendor"].queryset = Party.objects.filter(
                 tenant=self.tenant, roles__role__in=["vendor", "supplier"]
             ).distinct()
-            self.fields["target_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["target_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
             self.fields["target_location"].queryset = Location.objects.filter(tenant=self.tenant, is_active=True)
             self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(tenant=self.tenant)
 
