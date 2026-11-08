@@ -53,7 +53,7 @@ def bi_data_story_list(request):
     if workspace_id and workspace_id.isdigit():
         qs = qs.filter(workspace_id=int(workspace_id))
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
