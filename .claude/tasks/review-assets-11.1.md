@@ -48,6 +48,6 @@ Reviewers: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-review
 - [x] `M9` — `templates/assets/asset_procurement/*/*list.html`: Filter labels not explicitly linked with input IDs. Fix: Add `for` and matching `id` attributes.
 - [x] `M10` — `apps/assets/management/commands/seed_assets.py:48`: Seeder output lacks stdout notice regarding tenant admin login credentials (`admin_acme` / `password`). Fix: Add reminder notice.
 - [x] `M11` — `apps/assets/forms/AssetProcurement/AssetRequisitions.py:51`: Vendor queryset does not filter `roles__status="active"`. Fix: Add `roles__status="active"`.
-- [ ] `M12` — `apps/assets/forms/AssetProcurement/AssetCapitalizations.py:30`: Cost fields lack server-side negative amount validation. Fix: Add validation in `clean()` ensuring cost fields are `>= 0`.
+- [x] `M12` — `apps/assets/forms/AssetProcurement/AssetCapitalizations.py:30`: Cost fields lack server-side negative amount validation. Fix: Add validation in `clean()` ensuring cost fields are `>= 0`.
 
 ---
