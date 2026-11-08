@@ -30,3 +30,23 @@ Base changeset: `bc6237b0a0cb658deeb38bad07eb93981df3cc42...HEAD`
 4. `apps/assets/views/AssetProcurement/AssetRequisitions.py:180` — `asset_requisition_approve` permits the submitter to approve their own CapEx requisition (`requisition.submitted_by == request.user`). Fix: Add validation warning or require admin approval.
 
 ---
+
+## Pass 2: Codebase Explorer (`explorer`)
+
+### Critical
+1. `apps/assets/forms/AssetProcurement/AssetTags.py:12` — `is_verified` is not included in `Meta.exclude` on `AssetTagForm` and is not rendered in `templates/assets/asset_procurement/asset_tag/form.html`. Because Django ModelForm treats omitted BooleanField inputs in POST data as `False`, editing any verified `AssetTag` (`is_verified=True`) via `asset_tag_edit` silently overwrites and resets `is_verified` back to `False`. Fix: Add `"is_verified"` to `Meta.exclude` in `AssetTagForm`.
+
+### Important
+1. `apps/assets/models/__init__.py:1-7` — `apps/assets/models/__init__.py` does not re-export `AssetRequisition`, `AssetAcquisitionReceipt`, `AssetCapitalization`, and `AssetTag` from `apps.assets.models.AssetProcurement`. While Django's app registry caches models, importing from `apps.assets.models` or `from apps.assets.models import *` fails to expose the sub-module models, violating the NavERP backend package re-export contract. Fix: Re-export the 4 models from `apps.assets.models.AssetProcurement` in `apps/assets/models/__init__.py` and add them to `__all__`.
+2. `templates/assets/asset_procurement/asset_requisition/list.html:27` — View `asset_requisition_list` passes `"category_choices"` and filters on `request.GET.get("category")`, but the template filter `<form>` omits the category `<select name="category">` dropdown. Additionally, pagination links drop `&category={{ request.GET.category }}`. Fix: Add category dropdown populated from `category_choices` to the filter `<form>` in `list.html` and preserve parameter in pagination links.
+3. `templates/assets/asset_procurement/asset_acquisition_receipt/list.html:27` — View passes `"locations"` and filters on `receiving_location_id`, but template filter `<form>` omits the location `<select name="location">` dropdown. Fix: Add location filter dropdown and preserve in pagination links.
+4. `templates/assets/asset_procurement/asset_capitalization/list.html:27` — View passes `"method_choices"` and filters on `depreciation_method`, but template filter `<form>` omits the depreciation method `<select name="method">` dropdown. Fix: Add method filter dropdown and preserve in pagination links.
+5. `templates/assets/asset_procurement/asset_tag/list.html:27` — View passes `"format_choices"` and filters on `tag_format`, but template filter `<form>` omits the tag format `<select name="format">` dropdown. Fix: Add format filter dropdown and preserve in pagination links.
+
+### Minor
+1. `apps/assets/views/AssetProcurement/AssetCapitalizations.py:88-90` — In `asset_capitalization_create`, `receipt_pk = request.GET.get("receipt")` is passed directly into `.filter(pk=receipt_pk)` without `.isdigit()` validation, raising a 500 / ValueError on malformed query strings. Fix: Guard with `if receipt_pk and receipt_pk.isdigit():`.
+2. `apps/assets/views/AssetProcurement/AssetTags.py:79-81` — In `asset_tag_create`, `cap_pk = request.GET.get("capitalization")` is passed directly into `.filter(pk=cap_pk)` without `.isdigit()` validation, raising a 500 / ValueError on malformed query strings. Fix: Guard with `if cap_pk and cap_pk.isdigit():`.
+3. `apps/assets/views/AssetProcurement/AssetAcquisitionReceipts.py:43-45` — In `asset_acquisition_receipt_list`, `location_id = request.GET.get("location")` is filtered directly via `receiving_location_id=location_id` without checking `.isdigit()`. Fix: Guard with `if location_id and location_id.isdigit():`.
+4. `apps/assets/forms/AssetProcurement/AssetRequisitions.py:51` — `self.fields["proposed_vendor"].queryset` filters `roles__role__in=["vendor", "supplier"]` without checking `roles__status="active"`. Inactive or archived supplier profiles could be selected. Fix: Add `roles__status="active"` to the queryset filter.
+
+---
