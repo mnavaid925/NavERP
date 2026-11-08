@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import Sum
+from django.db.models import Count, Q, Sum
 from django.shortcuts import render
 
 from apps.assets.models.AssetProcurement.AssetAcquisitionReceipts import AssetAcquisitionReceipt
@@ -19,17 +19,32 @@ def overview(request):
     cap_qs = assets_scope(AssetCapitalization.objects.all(), request)
     tag_qs = assets_scope(AssetTag.objects.all(), request)
 
-    total_capex = cap_qs.filter(status="capitalized").aggregate(total=Sum("total_cost_basis"))["total"] or Decimal("0.00")
+    req_agg = req_qs.aggregate(
+        total=Count("id"),
+        pending_approval=Count("id", filter=Q(status="pending_approval")),
+    )
+    rcv_agg = rcv_qs.aggregate(
+        total=Count("id"),
+        pending_inspection=Count("id", filter=Q(status="draft")),
+    )
+    cap_agg = cap_qs.aggregate(
+        total=Count("id"),
+        total_capex=Sum("total_cost_basis", filter=Q(status="capitalized")),
+    )
+    tag_agg = tag_qs.aggregate(
+        total=Count("id"),
+        verified=Count("id", filter=Q(is_verified=True)),
+    )
 
     kpis = {
-        "total_requisitions": req_qs.count(),
-        "pending_approval_reqs": req_qs.filter(status="pending_approval").count(),
-        "total_receipts": rcv_qs.count(),
-        "pending_inspection_rcvs": rcv_qs.filter(status="pending_inspection").count(),
-        "total_capitalizations": cap_qs.count(),
-        "capitalized_value": total_capex,
-        "total_tags": tag_qs.count(),
-        "verified_tags": tag_qs.filter(is_verified=True).count(),
+        "total_requisitions": req_agg["total"],
+        "pending_approval_reqs": req_agg["pending_approval"],
+        "total_receipts": rcv_agg["total"],
+        "pending_inspection_rcvs": rcv_agg["pending_inspection"],
+        "total_capitalizations": cap_agg["total"],
+        "capitalized_value": cap_agg["total_capex"] or Decimal("0.00"),
+        "total_tags": tag_agg["total"],
+        "verified_tags": tag_agg["verified"],
     }
 
     recent_requisitions = req_qs.select_related("currency", "proposed_vendor").order_by("-created_at")[:5]
