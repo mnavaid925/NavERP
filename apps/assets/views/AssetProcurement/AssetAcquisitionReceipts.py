@@ -41,8 +41,8 @@ def asset_acquisition_receipt_list(request):
         queryset = queryset.filter(condition_on_arrival=condition)
 
     location_id = request.GET.get("location", "").strip()
-    if location_id:
-        queryset = queryset.filter(receiving_location_id=location_id)
+    if location_id and location_id.isdigit():
+        queryset = queryset.filter(receiving_location_id=int(location_id))
 
     paginator = Paginator(queryset, 20)
     page_number = request.GET.get("page", 1)
