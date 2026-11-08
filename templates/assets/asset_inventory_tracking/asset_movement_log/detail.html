@@ -187,14 +187,26 @@
             <div class="card-body space-y-3 text-sm">
                 <div>
                     <div class="text-xs text-muted">Dispatched By</div>
-                    <div class="font-medium text-slate-900">{{ movement.dispatched_by.get_full_name|default:movement.dispatched_by.username|default:"Pending Dispatch" }}</div>
+                    <div class="font-medium text-slate-900">
+                        {% if movement.dispatched_by %}
+                            {{ movement.dispatched_by.get_full_name|default:movement.dispatched_by.username }}
+                        {% else %}
+                            Pending Dispatch
+                        {% endif %}
+                    </div>
                     {% if movement.dispatch_date %}
                     <div class="text-xs text-muted">{{ movement.dispatch_date|date:"Y-m-d H:i" }}</div>
                     {% endif %}
                 </div>
                 <div class="pt-3 border-t border-slate-200">
                     <div class="text-xs text-muted">Received By</div>
-                    <div class="font-medium text-slate-900">{{ movement.received_by.get_full_name|default:movement.received_by.username|default:"Pending Receipt" }}</div>
+                    <div class="font-medium text-slate-900">
+                        {% if movement.received_by %}
+                            {{ movement.received_by.get_full_name|default:movement.received_by.username }}
+                        {% else %}
+                            Pending Receipt
+                        {% endif %}
+                    </div>
                     {% if movement.received_date %}
                     <div class="text-xs text-muted">{{ movement.received_date|date:"Y-m-d H:i" }}</div>
                     {% endif %}
