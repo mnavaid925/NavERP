@@ -113,3 +113,7 @@ class AssetCustodyLog(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} — {self.asset.number if self.asset else 'Asset'} ({self.get_action_type_display()})"
+
+    @property
+    def status_css(self):
+        return self.STATUS_CSS.get(self.status, "badge-slate")
