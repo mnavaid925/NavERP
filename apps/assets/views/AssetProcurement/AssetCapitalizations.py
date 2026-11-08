@@ -85,9 +85,9 @@ def asset_capitalization_detail(request, pk):
 def asset_capitalization_create(request):
     """Create a new asset capitalization event with cost basis breakdown."""
     initial = {}
-    receipt_pk = request.GET.get("receipt")
-    if receipt_pk:
-        receipt = assets_scope(AssetAcquisitionReceipt.objects.all(), request).filter(pk=receipt_pk).first()
+    receipt_pk = request.GET.get("receipt", "").strip()
+    if receipt_pk and receipt_pk.isdigit():
+        receipt = assets_scope(AssetAcquisitionReceipt.objects.all(), request).filter(pk=int(receipt_pk)).first()
         if receipt:
             initial["acquisition_receipt"] = receipt
             initial["requisition"] = receipt.requisition
