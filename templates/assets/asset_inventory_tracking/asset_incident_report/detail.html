@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}{{ incident.number }} — Asset Incident & Loss Report — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_incident_report_list' %}">Incident & Loss Reports</a>
+            <span>/</span>
+            <span>{{ incident.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ incident.number }} · {{ incident.title }}</h1>
+            <span class="badge {{ incident.status_css }}">{{ incident.get_status_display }}</span>
+            {% if incident.severity == 'critical' %}
+            <span class="badge badge-red font-semibold">Critical Severity</span>
+            {% elif incident.severity == 'high' %}
+            <span class="badge badge-amber font-semibold">High Severity</span>
+            {% elif incident.severity == 'medium' %}
+            <span class="badge badge-info">Medium Severity</span>
+            {% else %}
+            <span class="badge badge-slate">Low Severity</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if incident.status in 'reported confirmed_lost' %}
+        <form method="post" action="{% url 'assets:asset_incident_report_investigate' incident.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50">
+                <i data-lucide="search" class="w-4 h-4 mr-1"></i> Start Investigation
+            </button>
+        </form>
+        {% endif %}
+
+        {% if incident.status != 'written_off' and incident.status != 'closed' %}
+        <button type="button" onclick="document.getElementById('recover-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Mark Recovered
+        </button>
+
+        {% if request.user.is_superuser or request.user.role == 'admin' %}
+        <button type="button" onclick="document.getElementById('write-off-modal').classList.remove('hidden')" class="btn btn-primary bg-rose-600 hover:bg-rose-700">
+            <i data-lucide="file-minus" class="w-4 h-4 mr-1"></i> Authorize Write-Off
+        </button>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_incident_report_close' incident.pk %}" class="inline" onsubmit="return confirm('Close incident report {{ incident.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="x-circle" class="w-4 h-4 mr-1"></i> Close Incident
+            </button>
+        </form>
+
+        <a href="{% url 'assets:asset_incident_report_edit' incident.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if incident.status in 'reported closed' %}
+        <form method="post" action="{% url 'assets:asset_incident_report_delete' incident.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete incident report {{ incident.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Incident Overview & Investigation -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Incident Summary</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Asset Involved</dt>
+                        <dd>
+                            <span class="font-mono font-semibold text-slate-900">{{ incident.asset.number }}</span> — {{ incident.asset.name }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Incident Type</dt>
+                        <dd>{{ incident.get_incident_type_display }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Incident Date</dt>
+                        <dd>{{ incident.incident_date|date:"F d, Y" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Resolution Action</dt>
+                        <dd>
+                            <span class="font-medium text-slate-800">{{ incident.get_resolution_action_display }}</span>
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Estimated Loss Value</dt>
+                        <dd class="font-mono font-semibold text-red-600">
+                            ${{ incident.estimated_loss_value|floatformat:2 }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Custodian at Loss</dt>
+                        <dd>
+                            {% if incident.custodian_at_loss %}
+                                {{ incident.custodian_at_loss.name }}
+                            {% else %}
+                                <span class="text-muted">None Recorded</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Last Known Location</dt>
+                        <dd>
+                            {% if incident.last_known_location %}
+                                {{ incident.last_known_location.name }}
+                            {% else %}
+                                <span class="text-muted">Unspecified</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Location Details</dt>
+                        <dd>{{ incident.location_details|default:"—" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+
+        <!-- Narrative Description -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Incident Description & Circumstances</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{{ incident.incident_description }}</p>
+            </div>
+        </div>
+
+        <!-- Investigation Findings -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Investigation Findings</h3>
+                <span class="text-xs text-slate-500">
+                    Lead: {{ incident.investigator.get_full_name|default:incident.investigator.username|default:"Unassigned" }}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if incident.investigation_findings %}
+                    <p class="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{{ incident.investigation_findings }}</p>
+                {% else %}
+                    <p class="text-sm text-slate-400 italic">No formal investigation findings recorded yet.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if incident.write_off_authorized_by or incident.write_off_notes %}
+        <!-- Write-Off Authorization Record -->
+        <div class="card border-rose-200 bg-rose-50/20">
+            <div class="card-header bg-rose-100/50 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="file-minus" class="w-4 h-4 text-rose-700"></i>
+                    <h3 class="text-sm font-semibold text-rose-900 uppercase tracking-wide">Authorized Loss Write-Off</h3>
+                </div>
+                <span class="badge badge-muted">Decommissioned</span>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid mb-4">
+                    <div class="detail-item">
+                        <dt>Authorized By</dt>
+                        <dd class="font-medium text-slate-900">
+                            {{ incident.write_off_authorized_by.get_full_name|default:incident.write_off_authorized_by.username }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Authorization Date</dt>
+                        <dd>{{ incident.write_off_date|date:"F d, Y" }}</dd>
+                    </div>
+                </dl>
+                <div>
+                    <h4 class="text-xs font-semibold text-slate-600 uppercase mb-1">Write-Off & Disposal Justification</h4>
+                    <p class="text-sm text-slate-800 whitespace-pre-wrap leading-relaxed">{{ incident.write_off_notes|default:"No notes provided." }}</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar Column: Police, Insurance & Audit -->
+    <div class="space-y-6">
+        <!-- Police Report Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Police & Law Enforcement</h3>
+            </div>
+            <div class="card-body">
+                {% if incident.police_report_filed %}
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Police Report #</dt>
+                        <dd class="font-mono font-semibold text-slate-900 mt-0.5">{{ incident.police_report_number|default:"Pending #" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Precinct / Jurisdiction</dt>
+                        <dd class="text-slate-800 mt-0.5">{{ incident.police_precinct|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Filing Date</dt>
+                        <dd class="text-slate-800 mt-0.5">{{ incident.police_filing_date|date:"M d, Y"|default:"—" }}</dd>
+                    </div>
+                </dl>
+                {% else %}
+                <div class="text-center py-4 text-slate-400">
+                    <i data-lucide="shield-off" class="w-8 h-8 mx-auto mb-1 opacity-50"></i>
+                    <p class="text-sm">No police report filed</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Insurance Claim Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Insurance Claim</h3>
+            </div>
+            <div class="card-body">
+                {% if incident.insurance_claim_filed %}
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Insurance Carrier</dt>
+                        <dd class="font-medium text-slate-900 mt-0.5">{{ incident.insurance_carrier|default:"—" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Claim Number</dt>
+                        <dd class="font-mono text-slate-900 mt-0.5">{{ incident.insurance_claim_number|default:"Pending" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Claimed Amount</dt>
+                        <dd class="font-mono text-slate-900 mt-0.5">${{ incident.insurance_claimed_amount|floatformat:2 }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Settled / Paid Amount</dt>
+                        <dd class="font-mono text-emerald-700 font-semibold mt-0.5">${{ incident.insurance_settled_amount|floatformat:2 }}</dd>
+                    </div>
+                </dl>
+                {% else %}
+                <div class="text-center py-4 text-slate-400">
+                    <i data-lucide="umbrella-off" class="w-8 h-8 mx-auto mb-1 opacity-50"></i>
+                    <p class="text-sm">No insurance claim filed</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Record Metadata Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Report Metadata</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Reported By</dt>
+                        <dd class="text-slate-800 mt-0.5">
+                            {{ incident.reported_by.get_full_name|default:incident.reported_by.username|default:"System" }}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Created Timestamp</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ incident.created_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-slate-500 uppercase">Last Updated</dt>
+                        <dd class="text-slate-600 mt-0.5">{{ incident.updated_at|date:"M d, Y H:i" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Mark Recovered -->
+<div id="recover-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 flex items-center justify-center p-4">
+    <div class="card max-w-lg w-full bg-white shadow-xl">
+        <form method="post" action="{% url 'assets:asset_incident_report_resolve_recovered' incident.pk %}">
+            {% csrf_token %}
+            <div class="card-header flex items-center justify-between">
+                <h3 class="text-base font-semibold text-slate-900">Mark Asset as Recovered</h3>
+                <button type="button" onclick="document.getElementById('recover-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="card-body space-y-4">
+                <p class="text-sm text-slate-600">
+                    Confirm that asset <span class="font-semibold">{{ incident.asset.number }}</span> has been recovered and returned to operational inventory.
+                </p>
+                <div class="form-group mb-0">
+                    <label class="form-label" for="recover-findings">Recovery Details / Condition Notes</label>
+                    <textarea id="recover-findings" name="investigation_findings" rows="3" class="form-input" placeholder="Explain where and how the asset was recovered...">{{ incident.investigation_findings }}</textarea>
+                </div>
+            </div>
+            <div class="card-footer flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('recover-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">Confirm Recovery</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Authorize Loss Write-Off -->
+<div id="write-off-modal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/50 flex items-center justify-center p-4">
+    <div class="card max-w-lg w-full bg-white shadow-xl border-rose-300">
+        <form method="post" action="{% url 'assets:asset_incident_report_authorize_write_off' incident.pk %}">
+            {% csrf_token %}
+            <div class="card-header bg-rose-50 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-rose-900">Authorize Asset Loss Write-Off</h3>
+                <button type="button" onclick="document.getElementById('write-off-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                    <strong>Warning:</strong> Authorizing this write-off will immediately decommission asset <span class="font-mono font-semibold">{{ incident.asset.number }}</span> (status: <code>disposed</code>) and close active operations on it.
+                </div>
+                <div class="form-group mb-0">
+                    <label class="form-label" for="write-off-notes">Write-Off Justification & Ledger Reference *</label>
+                    <textarea id="write-off-notes" name="write_off_notes" rows="3" required class="form-input" placeholder="Enter board/executive approval reference, GL journal voucher #, or loss justification...">{{ incident.write_off_notes }}</textarea>
+                </div>
+            </div>
+            <div class="card-footer flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('write-off-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-rose-600 hover:bg-rose-700">Authorize & Decommission</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
