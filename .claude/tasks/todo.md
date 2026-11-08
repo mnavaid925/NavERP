@@ -251,67 +251,67 @@
 ## Sub-module 11.1 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.1.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.1.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.2: Scaffold (Brand-New App)
-- [ ] Create `apps/assets/` structure:
-  - [ ] `apps/assets/__init__.py`
-  - [ ] `apps/assets/apps.py` (AssetsConfig)
-  - [ ] `apps/assets/admin.py`
-  - [ ] `apps/assets/models/__init__.py`, `apps/assets/models/_base.py`
-  - [ ] `apps/assets/forms/__init__.py`, `apps/assets/forms/_common.py`
-  - [ ] `apps/assets/views/__init__.py`, `apps/assets/views/_common.py`, `apps/assets/views/overview.py`
-  - [ ] `apps/assets/urls/__init__.py`
-  - [ ] `apps/assets/management/__init__.py`, `apps/assets/management/commands/__init__.py`, `apps/assets/management/commands/seed_assets.py`
-  - [ ] `apps/assets/tests/__init__.py`
-- [ ] Wire in `config/settings.py` (`INSTALLED_APPS` -> `"apps.assets"`)
-- [ ] Wire in `config/urls.py` (`path("assets/", include("apps.assets.urls"))`)
+- [x] Create `apps/assets/` structure:
+  - [x] `apps/assets/__init__.py`
+  - [x] `apps/assets/apps.py` (AssetsConfig)
+  - [x] `apps/assets/admin.py`
+  - [x] `apps/assets/models/__init__.py`, `apps/assets/models/_base.py`
+  - [x] `apps/assets/forms/__init__.py`, `apps/assets/forms/_common.py`
+  - [x] `apps/assets/views/__init__.py`, `apps/assets/views/_common.py`, `apps/assets/views/overview.py`
+  - [x] `apps/assets/urls/__init__.py`
+  - [x] `apps/assets/management/__init__.py`, `apps/assets/management/commands/__init__.py`, `apps/assets/management/commands/seed_assets.py`
+  - [x] `apps/assets/tests/__init__.py`
+- [x] Wire in `config/settings.py` (`INSTALLED_APPS` -> "apps.assets")
+- [x] Wire in `config/urls.py` (`path("assets/", include("apps.assets.urls"))`)
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetRequisition (`AREQ`)**
-  - [ ] `apps/assets/models/AssetProcurement/AssetRequisitions.py`
-  - [ ] `apps/assets/forms/AssetProcurement/AssetRequisitions.py`
-  - [ ] `apps/assets/views/AssetProcurement/AssetRequisitions.py` (CRUD + submit + approve + reject)
-  - [ ] `apps/assets/urls/AssetProcurement/AssetRequisitions.py`
-  - [ ] `templates/assets/asset_procurement/asset_requisition/list.html`
-  - [ ] `templates/assets/asset_procurement/asset_requisition/detail.html`
-  - [ ] `templates/assets/asset_procurement/asset_requisition/form.html`
-- [ ] **Entity 2: AssetAcquisitionReceipt (`ARCV`)**
-  - [ ] `apps/assets/models/AssetProcurement/AssetAcquisitionReceipts.py`
-  - [ ] `apps/assets/forms/AssetProcurement/AssetAcquisitionReceipts.py`
-  - [ ] `apps/assets/views/AssetProcurement/AssetAcquisitionReceipts.py` (CRUD + inspect_accept + quarantine + reject)
-  - [ ] `apps/assets/urls/AssetProcurement/AssetAcquisitionReceipts.py`
-  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/list.html`
-  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/detail.html`
-  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/form.html`
-- [ ] **Entity 3: AssetCapitalization (`ACAP`)**
-  - [ ] `apps/assets/models/AssetProcurement/AssetCapitalizations.py`
-  - [ ] `apps/assets/forms/AssetProcurement/AssetCapitalizations.py`
-  - [ ] `apps/assets/views/AssetProcurement/AssetCapitalizations.py` (CRUD + execute_capitalization + reverse)
-  - [ ] `apps/assets/urls/AssetProcurement/AssetCapitalizations.py`
-  - [ ] `templates/assets/asset_procurement/asset_capitalization/list.html`
-  - [ ] `templates/assets/asset_procurement/asset_capitalization/detail.html`
-  - [ ] `templates/assets/asset_procurement/asset_capitalization/form.html`
-- [ ] **Entity 4: AssetTag (`ATAG`)**
-  - [ ] `apps/assets/models/AssetProcurement/AssetTags.py`
-  - [ ] `apps/assets/forms/AssetProcurement/AssetTags.py`
-  - [ ] `apps/assets/views/AssetProcurement/AssetTags.py` (CRUD + mark_printed + affix + verify_tag + print_label)
-  - [ ] `apps/assets/urls/AssetProcurement/AssetTags.py`
-  - [ ] `templates/assets/asset_procurement/asset_tag/list.html`
-  - [ ] `templates/assets/asset_procurement/asset_tag/detail.html`
-  - [ ] `templates/assets/asset_procurement/asset_tag/form.html`
-  - [ ] `templates/assets/asset_procurement/asset_tag/print_label.html`
-- [ ] **App Overview Landing**
-  - [ ] `templates/assets/overview.html`
+- [x] **Entity 1: AssetRequisition (`AREQ`)**
+  - [x] `apps/assets/models/AssetProcurement/AssetRequisitions.py`
+  - [x] `apps/assets/forms/AssetProcurement/AssetRequisitions.py`
+  - [x] `apps/assets/views/AssetProcurement/AssetRequisitions.py` (CRUD + submit + approve + reject)
+  - [x] `apps/assets/urls/AssetProcurement/AssetRequisitions.py`
+  - [x] `templates/assets/asset_procurement/asset_requisition/list.html`
+  - [x] `templates/assets/asset_procurement/asset_requisition/detail.html`
+  - [x] `templates/assets/asset_procurement/asset_requisition/form.html`
+- [x] **Entity 2: AssetAcquisitionReceipt (`ARCV`)**
+  - [x] `apps/assets/models/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [x] `apps/assets/forms/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [x] `apps/assets/views/AssetProcurement/AssetAcquisitionReceipts.py` (CRUD + inspect_accept + quarantine + reject)
+  - [x] `apps/assets/urls/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [x] `templates/assets/asset_procurement/asset_acquisition_receipt/list.html`
+  - [x] `templates/assets/asset_procurement/asset_acquisition_receipt/detail.html`
+  - [x] `templates/assets/asset_procurement/asset_acquisition_receipt/form.html`
+- [x] **Entity 3: AssetCapitalization (`ACAP`)**
+  - [x] `apps/assets/models/AssetProcurement/AssetCapitalizations.py`
+  - [x] `apps/assets/forms/AssetProcurement/AssetCapitalizations.py`
+  - [x] `apps/assets/views/AssetProcurement/AssetCapitalizations.py` (CRUD + execute_capitalization + reverse)
+  - [x] `apps/assets/urls/AssetProcurement/AssetCapitalizations.py`
+  - [x] `templates/assets/asset_procurement/asset_capitalization/list.html`
+  - [x] `templates/assets/asset_procurement/asset_capitalization/detail.html`
+  - [x] `templates/assets/asset_procurement/asset_capitalization/form.html`
+- [x] **Entity 4: AssetTag (`ATAG`)**
+  - [x] `apps/assets/models/AssetProcurement/AssetTags.py`
+  - [x] `apps/assets/forms/AssetProcurement/AssetTags.py`
+  - [x] `apps/assets/views/AssetProcurement/AssetTags.py` (CRUD + mark_printed + affix + verify_tag + print_label)
+  - [x] `apps/assets/urls/AssetProcurement/AssetTags.py`
+  - [x] `templates/assets/asset_procurement/asset_tag/list.html`
+  - [x] `templates/assets/asset_procurement/asset_tag/detail.html`
+  - [x] `templates/assets/asset_procurement/asset_tag/form.html`
+  - [x] `templates/assets/asset_procurement/asset_tag/print_label.html`
+- [x] **App Overview Landing**
+  - [x] `templates/assets/overview.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all models in `apps/assets/models/AssetProcurement/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all forms in `apps/assets/forms/AssetProcurement/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetProcurement/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetProcurement/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Complete `apps/assets/management/commands/seed_assets.py` with idempotent demo data
-- [ ] Add `LIVE_LINKS["11.1"]` in `apps/core/navigation.py`:
+- [x] Re-export all models in `apps/assets/models/AssetProcurement/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all forms in `apps/assets/forms/AssetProcurement/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetProcurement/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetProcurement/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Complete `apps/assets/management/commands/seed_assets.py` with idempotent demo data
+- [x] Add `LIVE_LINKS["11.1"]` in `apps/core/navigation.py`:
   - `"Purchase Requisition & Approval"`: `assets:asset_requisition_list`
   - `"Vendor Selection & RFQ"`: `assets:asset_requisition_list`
   - `"Purchase Order & Receipt"`: `assets:asset_acquisition_receipt_list`
@@ -322,37 +322,49 @@
     - `"Acquisition Receipts"`: `assets:asset_acquisition_receipt_list`
     - `"Capitalizations"`: `assets:asset_capitalization_list`
     - `"Asset Tags"`: `assets:asset_tag_list`
-- [ ] Run `makemigrations assets` (generating `0001_initial.py`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (generating `0001_initial.py`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_1.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
+- [x] Create `temp/smoke_11_1.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.1.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.1.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Shared fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_assetprocurement_models.py`
-- [ ] `test_assetprocurement_forms.py`
-- [ ] `test_assetprocurement_views.py`
-- [ ] `test_assetprocurement_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+- [x] Shared fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_assetprocurement_models.py`
+- [x] `test_assetprocurement_forms.py`
+- [x] `test_assetprocurement_views.py`
+- [x] `test_assetprocurement_security.py`
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/`
 
 ### Phase 7: Skill & Close-Out
-- [ ] Create dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.1 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Create dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.1 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+
+### Close-out & Review Summary — Sub-module 11.1 Asset Procurement & Acquisition (2026-11-08)
+- **Status:** Complete (Phases 0 through 7 all verified)
+- **BASE Commit:** `bc6237b0a0cb658deeb38bad07eb93981df3cc42`
+- **Models:** `AssetRequisition` [AREQ-], `AssetAcquisitionReceipt` [ARCV-], `AssetCapitalization` [ACAP-], `AssetTag` [ATAG-]
+- **Migrations:** `0001_initial.py`, `0002_assetacquisitionreceipt_idx_arcv_ten_rcvdate.py`, `0003_assettag_idx_atag_ten_ver.py`
+- **Seeder:** `seed_assets` idempotent double-run verified across all tenants
+- **Navigation:** `LIVE_LINKS["11.1"]` (10 entries registered)
+- **Review Wave:** 6 serial reviewers run; all 27 findings (5 Critical, 10 Important, 12 Minor) documented in `.claude/tasks/review-assets-11.1.md` and resolved by `code-fixer`.
+- **Test Suite:** 189 tests across 4 test modules (`models`, `forms`, `views`, `security`) — 100% green unfiltered on SQLite in-memory (`apps/assets/tests/`).
+- **Skill:** Created `.claude/skills/assets/SKILL.md`.
+- **Gaps:** None (declared in `.claude/tasks/review-assets-11.1.md` and `todo.md`).
 
 ---
 
