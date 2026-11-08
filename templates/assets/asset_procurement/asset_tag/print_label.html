@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Print Asset Label — {{ tag.tag_code }}</title>
+    <style>
+        @page {
+            size: 4in 2.5in;
+            margin: 0.1in;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f1f5f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .no-print {
+            margin-bottom: 20px;
+        }
+        .btn-print {
+            background-color: #2563eb;
+            color: #ffffff;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+        }
+        .label-container {
+            width: 3.8in;
+            height: 2.3in;
+            background: #ffffff;
+            border: 2px solid #0f172a;
+            border-radius: 8px;
+            padding: 12px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .label-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 6px;
+        }
+        .org-name {
+            font-size: 13px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #0f172a;
+        }
+        .tag-format {
+            font-size: 10px;
+            font-weight: 700;
+            background: #e2e8f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+        .label-body {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 0;
+        }
+        .barcode-box {
+            width: 80px;
+            height: 80px;
+            background: #ffffff;
+            border: 1.5px solid #0f172a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 4px;
+            box-sizing: border-box;
+        }
+        .barcode-matrix {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 2px;
+            width: 60px;
+            height: 60px;
+        }
+        .matrix-cell-dark {
+            background: #0f172a;
+        }
+        .matrix-cell-light {
+            background: #ffffff;
+        }
+        .asset-info {
+            flex: 1;
+        }
+        .asset-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.2;
+        }
+        .asset-meta {
+            font-size: 10px;
+            color: #475569;
+            margin-top: 4px;
+        }
+        .label-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-top: 1.5px solid #e2e8f0;
+            padding-top: 4px;
+        }
+        .tag-code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            color: #0f172a;
+        }
+        .warning-text {
+            font-size: 8px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+        @media print {
+            body {
+                background: none;
+                padding: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            .label-container {
+                box-shadow: none;
+                border: 2px solid #000000;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <button onclick="window.print()" class="btn-print">Print Asset Label</button>
+    </div>
+
+    <div class="label-container">
+        <div class="label-header">
+            <span class="org-name">NavERP · PROPERTY OF ENTERPRISE</span>
+            <span class="tag-format">{{ tag.get_tag_format_display }}</span>
+        </div>
+
+        <div class="label-body">
+            <div class="barcode-box">
+                <div class="barcode-matrix">
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-dark"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-light"></div>
+                    <div class="matrix-cell-dark"></div>
+                </div>
+            </div>
+
+            <div class="asset-info">
+                <div class="asset-title">
+                    {% if tag.operational_asset %}
+                        {{ tag.operational_asset.name }}
+                    {% elif tag.capitalization %}
+                        {{ tag.capitalization.asset_name }}
+                    {% else %}
+                        Unassigned Capital Equipment
+                    {% endif %}
+                </div>
+                <div class="asset-meta">
+                    {% if tag.operational_asset %}
+                        Asset #: {{ tag.operational_asset.number }}<br>
+                        Location: {{ tag.operational_asset.location.name|default:"Plant Floor" }}
+                    {% elif tag.capitalization %}
+                        Cap Event: {{ tag.capitalization.number }}<br>
+                        Service Date: {{ tag.capitalization.in_service_date|date:"Y-m-d" }}
+                    {% else %}
+                        Registered in Workspace Registry
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="label-footer">
+            <span class="tag-code">{{ tag.tag_code }}</span>
+            <span class="warning-text">DO NOT REMOVE</span>
+        </div>
+    </div>
+</body>
+</html>
