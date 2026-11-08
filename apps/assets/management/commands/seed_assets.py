@@ -56,7 +56,7 @@ class Command(BaseCommand):
         self.stdout.write(f"[{tenant.name}] Seeding Asset Management System...")
 
         user = User.objects.filter(tenant=tenant).first()
-        currency = Currency.objects.filter(tenant=tenant, is_active=True).first()
+        currency = Currency.objects.filter(is_active=True).first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
         location = Location.objects.filter(tenant=tenant).first()
         vendor = Party.objects.filter(tenant=tenant, roles__role_type__in=["vendor", "supplier"]).first()
