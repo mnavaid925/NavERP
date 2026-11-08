@@ -15,6 +15,10 @@ from apps.bi.models.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAna
 from apps.bi.models.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplay
 from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
 from apps.bi.models.EmbeddedMobileBi.EmbedApiTokens import EmbedApiToken
+from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspace
+from apps.bi.models.CollaborationStorytelling.BiDataStories import BiDataStory
+from apps.bi.models.CollaborationStorytelling.BiVisualComments import BiVisualComment
+from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLog
 
 from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
 from apps.bi.models.DataIntegration.DataSourceConnectors import DataSourceConnector
@@ -4470,6 +4474,211 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Embedded & Mobile BI for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Embedded & Mobile BI already seeded for tenant: {tenant.name}")
+
+            # -------------------------------------------------------------
+            # Sub-module 10.18: Collaboration & Data Storytelling
+            # -------------------------------------------------------------
+            if not BiSharedWorkspace.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    admin_user = (
+                        get_user_model().objects.filter(tenant=tenant, is_staff=True).first()
+                        or get_user_model().objects.filter(tenant=tenant).first()
+                    )
+                    dept = OrgUnit.objects.filter(tenant=tenant).first()
+                    dash = BiDashboard.objects.filter(tenant=tenant).first()
+                    widget = BiDashboardWidget.objects.filter(dashboard__tenant=tenant).first()
+                    kpi = KpiDefinition.objects.filter(tenant=tenant).first()
+
+                    # 1. Shared Workspaces
+                    wspc1, _ = BiSharedWorkspace.objects.get_or_create(
+                        tenant=tenant,
+                        name="Executive Strategy & Analytics Workspace",
+                        defaults={
+                            "description": "Cross-functional collaborative space for executive OKRs, strategy decks, and Board reviews.",
+                            "department": dept,
+                            "owner": admin_user,
+                            "default_access_level": "member",
+                            "status": "active",
+                            "is_public": True,
+                            "is_favorite": True,
+                            "color": "#3b82f6",
+                            "icon": "folder-kanban",
+                            "members_json": [{"username": admin_user.username if admin_user else "admin", "role": "admin"}],
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    wspc2, _ = BiSharedWorkspace.objects.get_or_create(
+                        tenant=tenant,
+                        name="Revenue Operations & Sales Pipeline Hub",
+                        defaults={
+                            "description": "Collaborative analysis of weekly pipeline pacing, win rates, and territory quotas.",
+                            "department": dept,
+                            "owner": admin_user,
+                            "default_access_level": "contributor",
+                            "status": "active",
+                            "is_public": False,
+                            "is_favorite": False,
+                            "color": "#10b981",
+                            "icon": "trending-up",
+                            "members_json": [{"username": admin_user.username if admin_user else "admin", "role": "contributor"}],
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 2. Data Stories
+                    story1, _ = BiDataStory.objects.get_or_create(
+                        tenant=tenant,
+                        title="FY2026 Strategic Business Review & Growth Trajectory",
+                        defaults={
+                            "summary": "Quarterly executive narrative presenting enterprise revenue growth, unit economics expansion, and supply chain resiliency.",
+                            "workspace": wspc1,
+                            "story_type": "narrative_deck",
+                            "status": "published",
+                            "theme": "light_executive",
+                            "author": admin_user,
+                            "allow_live_drilldown": True,
+                            "slides_data": [
+                                {
+                                    "slide_num": 1,
+                                    "title": "Macro Performance & ARR Acceleration",
+                                    "narrative": "Enterprise recurring revenue surged 28% year-over-year, outperforming baseline forecasts across mid-market and enterprise accounts.",
+                                    "visual_type": "kpi_card",
+                                    "filter_state": {"fiscal_year": "2026", "segment": "Enterprise"},
+                                    "notes": "Highlight customer expansion vs new logos on slide 2.",
+                                },
+                                {
+                                    "slide_num": 2,
+                                    "title": "Margin Optimization & Cost of Goods",
+                                    "narrative": "Strategic supplier consolidation and automated inventory reordering reduced supply chain variance by $1.4M.",
+                                    "visual_type": "trend_chart",
+                                    "filter_state": {"department": "Supply Chain"},
+                                    "notes": "Reference SCM contract renegotiations completed in Q2.",
+                                },
+                            ],
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    story2, _ = BiDataStory.objects.get_or_create(
+                        tenant=tenant,
+                        title="Operational Supply Chain & Delivery Diagnostics",
+                        defaults={
+                            "summary": "Walkthrough presentation analyzing on-time fulfillment rates, warehouse turnaround times, and carrier performance.",
+                            "workspace": wspc2,
+                            "story_type": "annotated_walkthrough",
+                            "status": "draft",
+                            "theme": "dark_boardroom",
+                            "author": admin_user,
+                            "allow_live_drilldown": True,
+                            "slides_data": [
+                                {
+                                    "slide_num": 1,
+                                    "title": "OTIF Delivery Bottlenecks Analysis",
+                                    "narrative": "Regional logistics hubs in Eastern territory observed an 8-hour shipping dwell delay during peak promo weeks.",
+                                    "visual_type": "bar_breakdown",
+                                    "filter_state": {"region": "East", "priority": "High"},
+                                },
+                            ],
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 3. Contextual Visual Comments
+                    comment1, _ = BiVisualComment.objects.get_or_create(
+                        tenant=tenant,
+                        content="Q3 gross margin dip appears correlated with expedited freight charges. Suggest reviewing carrier contract tiers.",
+                        defaults={
+                            "target_type": "dashboard",
+                            "dashboard": dash,
+                            "widget": widget,
+                            "status": "open",
+                            "priority": "high",
+                            "filter_snapshot": {"quarter": "Q3", "region": "North America"},
+                            "coordinate_x": 42.5,
+                            "coordinate_y": 68.0,
+                            "author": admin_user,
+                        },
+                    )
+
+                    BiVisualComment.objects.get_or_create(
+                        tenant=tenant,
+                        parent_comment=comment1,
+                        defaults={
+                            "target_type": "dashboard",
+                            "dashboard": dash,
+                            "widget": widget,
+                            "content": "Agreed. SCM team has shifted 40% of expedited freight volume back to primary intermodal routes as of October 1st.",
+                            "status": "resolved",
+                            "priority": "medium",
+                            "author": admin_user,
+                            "resolved_by": admin_user,
+                            "resolved_at": timezone.now(),
+                        },
+                    )
+
+                    BiVisualComment.objects.get_or_create(
+                        tenant=tenant,
+                        content="Can we drill down into enterprise vs mid-market churn on slide 1 during the board meeting?",
+                        defaults={
+                            "target_type": "story",
+                            "story": story1,
+                            "slide_id": "1",
+                            "status": "acknowledged",
+                            "priority": "medium",
+                            "author": admin_user,
+                        },
+                    )
+
+                    # 4. Decisions & Rationale Log
+                    BiDecisionLog.objects.get_or_create(
+                        tenant=tenant,
+                        title="Authorized Dual-Sourcing Strategy for High-Velocity Inventory SKUs",
+                        defaults={
+                            "category": "inventory",
+                            "status": "approved",
+                            "decision_date": timezone.now().date(),
+                            "problem_statement": "Single-supplier dependencies triggered stockouts during supplier maintenance windows in Q1.",
+                            "rationale": "Secondary supplier contract enacted with pre-negotiated tier pricing to eliminate stockout risks while preserving 32% gross margins.",
+                            "alternatives_considered": "Buffer safety stock holding in regional 3PL warehouse (rejected due to 18% higher holding cost).",
+                            "expected_impact": "99.4% SKU fulfillment availability; stockout risk decreased to zero.",
+                            "actual_outcome": "Fulfillment hit 99.6% over the last 60 days.",
+                            "workspace": wspc1,
+                            "dashboard": dash,
+                            "widget": widget,
+                            "kpi": kpi,
+                            "decision_maker": admin_user,
+                            "show_on_charts": True,
+                            "marker_style": "vertical_line_event",
+                            "marker_color": "#10b981",
+                            "review_date": timezone.now().date() + datetime.timedelta(days=90),
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    BiDecisionLog.objects.get_or_create(
+                        tenant=tenant,
+                        title="Adopted Unified Tier-1 Enterprise Pricing Schedule",
+                        defaults={
+                            "category": "pricing",
+                            "status": "approved",
+                            "decision_date": timezone.now().date() - datetime.timedelta(days=30),
+                            "problem_statement": "Inconsistent discount structures across sales territories reduced average deal ARR by 6%.",
+                            "rationale": "Instituted standard non-negotiable discounting bands approved by CRO, protecting ARR expansion.",
+                            "alternatives_considered": "Case-by-case deal desk approvals (rejected due to sales cycle latency).",
+                            "expected_impact": "Stabilize enterprise ASP and increase gross retention.",
+                            "workspace": wspc2,
+                            "decision_maker": admin_user,
+                            "show_on_charts": True,
+                            "marker_style": "pin_flag",
+                            "marker_color": "#3b82f6",
+                            "created_by": admin_user,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Collaboration & Data Storytelling for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Collaboration & Data Storytelling already seeded for tenant: {tenant.name}")
 
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
