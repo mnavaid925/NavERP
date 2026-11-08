@@ -71,15 +71,15 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label class="form-label text-xs">Search</label>
+                <label for="id_q" class="form-label text-xs">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, slug..." class="form-input text-sm pl-9 w-full">
-                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, slug..." class="form-input text-sm ps-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute start-3 top-2.5"></i>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="id_status" class="form-label text-xs">Status</label>
+                <select id="id_status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -87,8 +87,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Access Level</label>
-                <select name="access_level" class="form-select text-sm">
+                <label for="id_access_level" class="form-label text-xs">Access Level</label>
+                <select id="id_access_level" name="access_level" class="form-select text-sm">
                     <option value="">All Access Levels</option>
                     {% for val, label in access_level_choices %}
                     <option value="{{ val }}" {% if request.GET.access_level == val %}selected{% endif %}>{{ label }}</option>
@@ -96,8 +96,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Department</label>
-                <select name="department" class="form-select text-sm">
+                <label for="id_department" class="form-label text-xs">Department</label>
+                <select id="id_department" name="department" class="form-select text-sm">
                     <option value="">All Departments</option>
                     {% for dept in departments %}
                     <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
