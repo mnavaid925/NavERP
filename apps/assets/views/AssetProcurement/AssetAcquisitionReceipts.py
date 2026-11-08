@@ -92,10 +92,11 @@ def asset_acquisition_receipt_create(request):
             rcv.tenant = request.tenant
             rcv.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=rcv,
-                details=f"Received asset shipment {rcv.number} ({rcv.title}), serial: {rcv.serial_number}",
+                request.user,
+                rcv,
+                "create",
+                changes={"details": f"Received asset shipment {rcv.number} ({rcv.title}), serial: {rcv.serial_number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Receipt {rcv.number} logged successfully.")
             return redirect("assets:asset_acquisition_receipt_detail", pk=rcv.pk)
@@ -119,10 +120,11 @@ def asset_acquisition_receipt_edit(request, pk):
         if form.is_valid():
             rcv = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=rcv,
-                details=f"Updated asset receipt {rcv.number}",
+                request.user,
+                rcv,
+                "update",
+                changes={"details": f"Updated asset receipt {rcv.number}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Receipt {rcv.number} updated successfully.")
             return redirect("assets:asset_acquisition_receipt_detail", pk=rcv.pk)
@@ -143,10 +145,11 @@ def asset_acquisition_receipt_delete(request, pk):
     receipt = assets_object(request, AssetAcquisitionReceipt, pk)
     number = receipt.number
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=receipt,
-        details=f"Deleted asset receipt {number}",
+        request.user,
+        receipt,
+        "delete",
+        changes={"details": f"Deleted asset receipt {number}"},
+        tenant=request.tenant,
     )
     receipt.delete()
     messages.success(request, f"Asset Receipt {number} was deleted.")
@@ -173,10 +176,11 @@ def asset_acquisition_receipt_inspect(request, pk):
     receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="inspect_accept",
-        instance=receipt,
-        details=f"Inspected and accepted asset receipt {receipt.number}",
+        request.user,
+        receipt,
+        "update",
+        changes={"action": "inspect_accept", "details": f"Inspected and accepted asset receipt {receipt.number}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Receipt {receipt.number} inspected and accepted.")
     return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
@@ -201,10 +205,11 @@ def asset_acquisition_receipt_quarantine(request, pk):
     receipt.save(update_fields=["status", "inspected_by", "inspected_at", "inspection_notes", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="quarantine",
-        instance=receipt,
-        details=f"Quarantined asset receipt {receipt.number}: {reason}",
+        request.user,
+        receipt,
+        "update",
+        changes={"action": "quarantine", "details": f"Quarantined asset receipt {receipt.number}: {reason}"},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Asset Receipt {receipt.number} placed in quarantine.")
     return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
