@@ -101,6 +101,7 @@ class AssetTag(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_atag_ten_stat"),
+            models.Index(fields=["tenant", "is_verified"], name="idx_atag_ten_ver"),
             models.Index(fields=["tenant", "tag_format"], name="idx_atag_ten_fmt"),
             models.Index(fields=["tenant", "created_at"], name="idx_atag_ten_created"),
         ]
