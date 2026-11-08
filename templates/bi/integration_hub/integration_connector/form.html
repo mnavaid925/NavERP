@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}New Integration Connector{% else %}Edit {{ connector.name }}{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:integration_connector_list' %}">Integration Connectors</a>
+            <span class="sep">/</span>
+            <span>{% if is_create %}Create{% else %}Edit {{ connector.number }}{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_create %}Create Integration Connector{% else %}Edit {{ connector.name }}{% endif %}</h1>
+        <p class="text-muted text-sm">Configure reverse ETL sync channels to operational modules or streaming broker topics</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Connector Parameters</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Connector Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug (optional)</label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Auto-generated from name if left empty</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Description</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector_type.id_for_label }}">Connector Type *</label>
+                    {{ form.connector_type }}
+                    {% if form.connector_type.errors %}<div class="form-error">{{ form.connector_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_system.id_for_label }}">Target System *</label>
+                    {{ form.target_system }}
+                    {% if form.target_system.errors %}<div class="form-error">{{ form.target_system.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_direction.id_for_label }}">Sync Direction *</label>
+                    {{ form.sync_direction }}
+                    {% if form.sync_direction.errors %}<div class="form-error">{{ form.sync_direction.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.auth_type.id_for_label }}">Authentication Type *</label>
+                    {{ form.auth_type }}
+                    {% if form.auth_type.errors %}<div class="form-error">{{ form.auth_type.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.message_format.id_for_label }}">Message Format *</label>
+                    {{ form.message_format }}
+                    {% if form.message_format.errors %}<div class="form-error">{{ form.message_format.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_interval.id_for_label }}">Sync Cadence *</label>
+                    {{ form.sync_interval }}
+                    {% if form.sync_interval.errors %}<div class="form-error">{{ form.sync_interval.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.connection_config_raw.id_for_label }}">{{ form.connection_config_raw.label }}</label>
+                {{ form.connection_config_raw }}
+                <span class="text-xs text-muted">{{ form.connection_config_raw.help_text }}</span>
+                {% if form.connection_config_raw.errors %}<div class="form-error">{{ form.connection_config_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.auth_credentials_raw.id_for_label }}">{{ form.auth_credentials_raw.label }}</label>
+                {{ form.auth_credentials_raw }}
+                <span class="text-xs text-muted">{{ form.auth_credentials_raw.help_text }}</span>
+                {% if form.auth_credentials_raw.errors %}<div class="form-error">{{ form.auth_credentials_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Operational Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group pt-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_enabled }}
+                        <span class="text-sm font-medium">Connector Enabled</span>
+                    </label>
+                    <span class="text-xs text-muted">Administrative toggle for automated triggers</span>
+                    {% if form.is_enabled.errors %}<div class="form-error">{{ form.is_enabled.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_create %}{% url 'bi:integration_connector_list' %}{% else %}{% url 'bi:integration_connector_detail' connector.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>{% if is_create %}Create Connector{% else %}Save Changes{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
