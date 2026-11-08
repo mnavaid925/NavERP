@@ -75,7 +75,7 @@ class AssetMovementLogForm(TenantUniqueMixin, forms.ModelForm):
             org_units = OrgUnit.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["from_org_unit"].queryset = org_units
             self.fields["to_org_unit"].queryset = org_units
-            custodians = Party.objects.filter(tenant=self.tenant, is_active=True).order_by("name")
+            custodians = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["from_custodian"].queryset = custodians
             self.fields["to_custodian"].queryset = custodians
 
