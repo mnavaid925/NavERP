@@ -75,7 +75,6 @@ class BiExtensionPluginForm(TenantUniqueMixin, TenantModelForm):
             "repository_url",
             "license",
             "status",
-            "is_verified",
         ]
         widgets = {
             "name": forms.TextInput(
@@ -105,7 +104,6 @@ class BiExtensionPluginForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input font-mono", "placeholder": "MIT"}
             ),
             "status": forms.Select(attrs={"class": "form-select"}),
-            "is_verified": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
         }
 
     def __init__(self, *args, **kwargs):
