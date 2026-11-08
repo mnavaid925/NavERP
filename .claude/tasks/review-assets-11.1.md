@@ -50,3 +50,21 @@ Base changeset: `bc6237b0a0cb658deeb38bad07eb93981df3cc42...HEAD`
 4. `apps/assets/forms/AssetProcurement/AssetRequisitions.py:51` — `self.fields["proposed_vendor"].queryset` filters `roles__role__in=["vendor", "supplier"]` without checking `roles__status="active"`. Inactive or archived supplier profiles could be selected. Fix: Add `roles__status="active"` to the queryset filter.
 
 ---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+None.
+
+### Important
+1. `templates/assets/asset_procurement/asset_requisition/list.html:27` — `<select name="category">` dropdown filter is missing from the filter form, and pagination links do not preserve `&category={{ request.GET.category }}`. Fix: Add category dropdown populated from `category_choices` to filter form and append parameter to pagination links.
+2. `templates/assets/asset_procurement/asset_acquisition_receipt/list.html:27` — `<select name="location">` dropdown filter is missing from the filter form, and pagination links do not preserve `&location={{ request.GET.location }}`. Fix: Add location filter dropdown using `|stringformat:"d"` for PK comparison, and preserve parameter in pagination links.
+3. `templates/assets/asset_procurement/asset_capitalization/list.html:27` — `<select name="method">` dropdown filter is missing from the filter form, and pagination links do not preserve `&method={{ request.GET.method }}`. Fix: Add depreciation method dropdown populated from `method_choices`, and preserve parameter in pagination links.
+4. `templates/assets/asset_procurement/asset_tag/list.html:27` — `<select name="format">` dropdown is missing from the filter form. Fix: Add technology format dropdown populated from `format_choices`.
+
+### Minor
+1. `templates/assets/asset_procurement/asset_requisition/detail.html:48` (and receipt, cap, tag detail views) — Icon-only Delete buttons lack `title="Delete"` and `aria-label="Delete"`. Fix: Add accessibility labels.
+2. `templates/assets/asset_procurement/asset_requisition/list.html:29` (and list filter cards) — Filter labels not explicitly linked to inputs with `for` and `id`. Fix: Add `for` and matching `id` attributes.
+3. `templates/assets/asset_procurement/asset_requisition/detail.html:135` — `requisition.purchase_order.vendor.name` accessed without checking if `vendor` is non-null. Fix: Guard with `{% if requisition.purchase_order.vendor %}`.
+
+---
