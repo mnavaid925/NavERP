@@ -1,5 +1,11 @@
 """Forms package for apps.assets."""
 from apps.assets.forms._common import TenantUniqueMixin, reject_foreign
+from apps.assets.forms.AssetClassification import (
+    AssetCategoryForm,
+    AssetCriticalityAssessmentForm,
+    AssetModelForm,
+    AssetSpecificationTemplateForm,
+)
 from apps.assets.forms.AssetInventoryTracking import (
     AssetAuditForm,
     AssetCustodyLogForm,
@@ -24,4 +30,8 @@ __all__ = [
     "AssetMovementLogForm",
     "AssetCustodyLogForm",
     "AssetIncidentReportForm",
+    "AssetCategoryForm",
+    "AssetModelForm",
+    "AssetCriticalityAssessmentForm",
+    "AssetSpecificationTemplateForm",
 ]
