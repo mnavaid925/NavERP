@@ -10,10 +10,14 @@ from apps.assets.models import (
     AssetAcquisitionReceipt,
     AssetAudit,
     AssetCapitalization,
+    AssetCategory,
+    AssetCriticalityAssessment,
     AssetCustodyLog,
     AssetIncidentReport,
+    AssetModel,
     AssetMovementLog,
     AssetRequisition,
+    AssetSpecificationTemplate,
     AssetTag,
 )
 from apps.core.models import OrgUnit, Party, Tenant
@@ -35,6 +39,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetSpecificationTemplate.objects.all().delete()
+            AssetCriticalityAssessment.objects.all().delete()
+            AssetModel.objects.all().delete()
+            AssetCategory.objects.all().delete()
             AssetIncidentReport.objects.all().delete()
             AssetCustodyLog.objects.all().delete()
             AssetMovementLog.objects.all().delete()
@@ -53,6 +61,7 @@ class Command(BaseCommand):
         for tenant in tenants:
             self._seed_tenant_11_1(tenant)
             self._seed_tenant_11_2(tenant)
+            self._seed_tenant_11_3(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -486,3 +495,296 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.2 Seeding complete (3 audits, 2 movements, 2 custody loans, 2 incident reports).")
+
+    def _seed_tenant_11_3(self, tenant):
+        # Idempotency guard for 11.3
+        if AssetCategory.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.3 Classification data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.3 Asset Classification & Categorization...")
+
+        user = User.objects.filter(tenant=tenant).order_by("pk").first()
+        vendor = (
+            Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).order_by("pk").first()
+            or Party.objects.filter(tenant=tenant).order_by("pk").first()
+        )
+        assets = list(Asset.objects.filter(tenant=tenant).order_by("pk")[:5])
+
+        with transaction.atomic():
+            # 1. Taxonomy Root Categories
+            cat_fac = AssetCategory.objects.create(
+                tenant=tenant,
+                code="FAC-PLANT",
+                name="Plant & Infrastructure",
+                category_type="facility",
+                default_depreciation_method="straight_line",
+                default_useful_life_months=240,
+                default_maintenance_strategy="preventive_calendar",
+                default_criticality="high",
+                description="Central plant structures, building management systems, HVAC utilities, and physical infrastructure.",
+                display_order=10,
+                is_active=True,
+            )
+
+            cat_mach = AssetCategory.objects.create(
+                tenant=tenant,
+                code="MFG-MACH",
+                name="Production Machinery & Machine Tools",
+                category_type="machinery",
+                default_depreciation_method="double_declining",
+                default_useful_life_months=120,
+                default_maintenance_strategy="predictive",
+                default_criticality="critical",
+                description="Heavy manufacturing CNC cells, stamping presses, automated assembly conveyors, and industrial tooling.",
+                display_order=20,
+                is_active=True,
+            )
+
+            cat_fleet = AssetCategory.objects.create(
+                tenant=tenant,
+                code="FLEET-MOBILE",
+                name="Mobile Equipment & Fleet",
+                category_type="vehicle",
+                default_depreciation_method="declining_balance",
+                default_useful_life_months=84,
+                default_maintenance_strategy="preventive_meter",
+                default_criticality="medium",
+                description="Forklifts, electric pallet jacks, yard hostlers, and earthmoving machinery.",
+                display_order=30,
+                is_active=True,
+            )
+
+            # 2. Child Sub-Categories
+            sub_chl = AssetCategory.objects.create(
+                tenant=tenant,
+                code="HVAC-CHL",
+                name="Central Water Chillers",
+                parent=cat_fac,
+                category_type="facility",
+                unspsc_code="40101701",
+                unspsc_title="Chillers and chiller parts",
+                default_depreciation_method="straight_line",
+                default_useful_life_months=240,
+                default_maintenance_strategy="condition_based",
+                default_criticality="critical",
+                description="Centrifugal and screw liquid chillers providing facility comfort and process cooling.",
+                display_order=11,
+                is_active=True,
+            )
+
+            sub_cnc = AssetCategory.objects.create(
+                tenant=tenant,
+                code="CNC-MILL",
+                name="CNC Milling Centers",
+                parent=cat_mach,
+                category_type="machinery",
+                unspsc_code="23101504",
+                unspsc_title="Milling machines",
+                default_depreciation_method="double_declining",
+                default_useful_life_months=120,
+                default_maintenance_strategy="predictive",
+                default_criticality="critical",
+                description="Multi-axis high-speed vertical and horizontal CNC milling centers.",
+                display_order=21,
+                is_active=True,
+            )
+
+            sub_pump = AssetCategory.objects.create(
+                tenant=tenant,
+                code="PUMP-CENT",
+                name="Centrifugal Process Pumps",
+                parent=cat_mach,
+                category_type="machinery",
+                unspsc_code="40151503",
+                unspsc_title="Centrifugal pumps",
+                default_depreciation_method="straight_line",
+                default_useful_life_months=96,
+                default_maintenance_strategy="condition_based",
+                default_criticality="high",
+                description="ANSI end-suction and horizontal split-case centrifugal water/slurry pumps.",
+                display_order=22,
+                is_active=True,
+            )
+
+            # 3. Equipment Models
+            mod_excavator = AssetModel.objects.create(
+                tenant=tenant,
+                model_number="CAT-320GC",
+                name="320 GC Hydraulic Excavator",
+                category=cat_fleet,
+                manufacturer=vendor,
+                manufacturer_name_fallback="Caterpillar Inc.",
+                description="Medium hydraulic excavator designed for bulk earthmoving, pipe laying, and construction site utility work.",
+                standard_warranty_months=24,
+                warranty_coverage_type="powertrain_only",
+                expected_useful_life_months=84,
+                default_meter_name="Operating Hours",
+                default_meter_unit="h",
+                estimated_replacement_cost=Decimal("210000.00"),
+                model_status="active",
+                technical_specifications="Net Power: 107 kW (143 hp)\nOperating Weight: 20,500 kg (45,200 lb)\nMax Digging Depth: 6,720 mm (22.0 ft)\nBucket Capacity: 1.0 m3",
+                is_active=True,
+            )
+
+            mod_haas = AssetModel.objects.create(
+                tenant=tenant,
+                model_number="HAAS-VF4SS",
+                name="VF-4SS Super-Speed Vertical Machining Center",
+                category=sub_cnc,
+                manufacturer=vendor,
+                manufacturer_name_fallback="Haas Automation Inc.",
+                description="High-performance 50\" x 20\" x 25\" vertical machining center with inline direct-drive spindle and 30+1 tool changer.",
+                standard_warranty_months=12,
+                warranty_coverage_type="full_parts_labor",
+                expected_useful_life_months=120,
+                default_meter_name="Spindle Run Hours",
+                default_meter_unit="h",
+                estimated_replacement_cost=Decimal("148500.00"),
+                model_status="active",
+                technical_specifications="Travels: 50\" x 20\" x 25\"\nSpindle: 12,000 RPM inline direct-drive, 30 hp vector drive\nTool Changer: 30+1 side-mount high-speed\nRapid Traverse: 1,400 ipm (35.6 m/min)",
+                is_active=True,
+            )
+
+            mod_trane = AssetModel.objects.create(
+                tenant=tenant,
+                model_number="TRANE-CVHE500",
+                name="CenTraVac 500-Ton Water-Cooled Centrifugal Chiller",
+                category=sub_chl,
+                manufacturer=vendor,
+                manufacturer_name_fallback="Trane Commercial",
+                description="Direct-drive multi-stage centrifugal liquid chiller for central plant cooling with next-generation low-GWP refrigerant.",
+                standard_warranty_months=36,
+                warranty_coverage_type="limited",
+                expected_useful_life_months=240,
+                default_meter_name="Compressor Run Hours",
+                default_meter_unit="h",
+                estimated_replacement_cost=Decimal("295000.00"),
+                model_status="active",
+                technical_specifications="Cooling Capacity: 500 Tons (1,758 kW)\nRefrigerant: R-1233zd(E) (ASHRAE A1, non-toxic, non-flammable)\nFull-load Efficiency: 0.520 kW/ton\nEvaporator Flow Rate: 1,200 GPM",
+                is_active=True,
+            )
+
+            # 4. Specification Templates
+            AssetSpecificationTemplate.objects.create(
+                tenant=tenant,
+                attribute_key="cooling_capacity_tons",
+                display_name="Rated Cooling Capacity",
+                category=sub_chl,
+                data_type="number",
+                unit_of_measure="ton",
+                min_numeric_value=Decimal("50.000"),
+                max_numeric_value=Decimal("2500.000"),
+                is_required=True,
+                is_filterable=True,
+                display_order=10,
+                help_text="Design refrigeration cooling tonnage at ARI standard conditions",
+            )
+
+            AssetSpecificationTemplate.objects.create(
+                tenant=tenant,
+                attribute_key="refrigerant_chemical_code",
+                display_name="Refrigerant Type",
+                category=sub_chl,
+                data_type="select",
+                dropdown_options="R-1233zd(E), R-514A, R-134a, R-513A, R-1234ze",
+                default_value="R-1233zd(E)",
+                is_required=True,
+                is_filterable=True,
+                display_order=20,
+                help_text="Chemical safety and GWP classification of working charge",
+            )
+
+            AssetSpecificationTemplate.objects.create(
+                tenant=tenant,
+                attribute_key="spindle_max_rpm",
+                display_name="Maximum Spindle Speed",
+                category=sub_cnc,
+                data_type="number",
+                unit_of_measure="RPM",
+                min_numeric_value=Decimal("1000.000"),
+                max_numeric_value=Decimal("35000.000"),
+                is_required=True,
+                is_filterable=True,
+                display_order=10,
+                help_text="Top rotational speed of main cutting spindle",
+            )
+
+            AssetSpecificationTemplate.objects.create(
+                tenant=tenant,
+                attribute_key="operating_voltage_vac",
+                display_name="Supply Voltage Specification",
+                category=cat_mach,
+                data_type="select",
+                dropdown_options="208V 3-Phase, 240V 3-Phase, 480V 3-Phase, 600V 3-Phase",
+                default_value="480V 3-Phase",
+                is_required=True,
+                is_filterable=True,
+                display_order=5,
+                help_text="Required 3-phase AC line supply voltage",
+            )
+
+            AssetSpecificationTemplate.objects.create(
+                tenant=tenant,
+                attribute_key="max_dig_depth_mm",
+                display_name="Maximum Digging Depth",
+                model=mod_excavator,
+                data_type="number",
+                unit_of_measure="mm",
+                min_numeric_value=Decimal("4000.000"),
+                max_numeric_value=Decimal("12000.000"),
+                is_required=False,
+                is_filterable=True,
+                display_order=15,
+                help_text="Maximum vertical digging depth at standard boom reach",
+            )
+
+            # 5. Criticality Consequence Assessments
+            if assets:
+                asset_primary = assets[0]
+                asmt1 = AssetCriticalityAssessment.objects.create(
+                    tenant=tenant,
+                    title=f"Annual RCM Criticality Assessment - {asset_primary.name}",
+                    asset=asset_primary,
+                    assessor=vendor,
+                    assessment_date=timezone.now().date() - timezone.timedelta(days=15),
+                    safety_impact=4,
+                    environmental_impact=2,
+                    operational_downtime_impact=5,
+                    financial_impact=4,
+                    regulatory_compliance_impact=3,
+                    is_single_point_of_failure=True,
+                    recommended_strategy="rcm_predictive",
+                    review_cycle_months=6,
+                    next_assessment_due=timezone.now().date() + timezone.timedelta(days=165),
+                    findings_and_mitigation="Mission-critical production asset. Failure halts main assembly line. Single point of failure; vibration telemetry and daily acoustic thermography mandated.",
+                    assessment_status="approved",
+                    approved_by=user,
+                    approved_at=timezone.now() - timezone.timedelta(days=12),
+                )
+                asset_primary.criticality = "critical"
+                asset_primary.save(update_fields=["criticality"])
+
+                if len(assets) > 1:
+                    asset_secondary = assets[1]
+                    AssetCriticalityAssessment.objects.create(
+                        tenant=tenant,
+                        title=f"Cyclical Risk Evaluation - {asset_secondary.name}",
+                        asset=asset_secondary,
+                        assessor=vendor,
+                        assessment_date=timezone.now().date() - timezone.timedelta(days=5),
+                        safety_impact=2,
+                        environmental_impact=1,
+                        operational_downtime_impact=2,
+                        financial_impact=2,
+                        regulatory_compliance_impact=1,
+                        is_single_point_of_failure=False,
+                        recommended_strategy="standard_pm",
+                        review_cycle_months=12,
+                        next_assessment_due=timezone.now().date() + timezone.timedelta(days=360),
+                        findings_and_mitigation="Support equipment with hot standby available in yard staging. Routine quarterly PM sufficient.",
+                        assessment_status="reviewed",
+                    )
+
+        self.stdout.write(f"[{tenant.name}] 11.3 Seeding complete (6 categories, 3 models, 5 spec templates, 2 risk assessments).")
+
