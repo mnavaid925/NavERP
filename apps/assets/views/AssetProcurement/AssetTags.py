@@ -76,9 +76,9 @@ def asset_tag_detail(request, pk):
 def asset_tag_create(request):
     """Issue a new machine-readable asset tag."""
     initial = {}
-    cap_pk = request.GET.get("capitalization")
-    if cap_pk:
-        cap = assets_scope(AssetCapitalization.objects.all(), request).filter(pk=cap_pk).first()
+    cap_pk = request.GET.get("capitalization", "").strip()
+    if cap_pk and cap_pk.isdigit():
+        cap = assets_scope(AssetCapitalization.objects.all(), request).filter(pk=int(cap_pk)).first()
         if cap:
             initial["capitalization"] = cap
             if cap.operational_asset:
