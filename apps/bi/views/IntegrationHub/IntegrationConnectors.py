@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -188,8 +188,18 @@ def integration_connector_ping(request, pk):
     connector.health_status = "healthy"
     connector.status = "active"
     connector.error_message = ""
-    connector.total_messages_processed += 1
-    connector.save(update_fields=["last_heartbeat_at", "health_status", "status", "error_message", "total_messages_processed"])
+    connector.total_messages_processed = F("total_messages_processed") + 1
+    connector.updated_at = timezone.now()
+    connector.save(
+        update_fields=[
+            "last_heartbeat_at",
+            "health_status",
+            "status",
+            "error_message",
+            "total_messages_processed",
+            "updated_at",
+        ]
+    )
 
     write_audit_log(
         request.user,
