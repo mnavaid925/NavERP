@@ -12,6 +12,7 @@ from apps.assets.forms.AssetProcurement.AssetCapitalizations import AssetCapital
 from apps.assets.models.AssetProcurement.AssetAcquisitionReceipts import AssetAcquisitionReceipt
 from apps.assets.models.AssetProcurement.AssetCapitalizations import AssetCapitalization
 from apps.assets.views._common import assets_object, assets_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -175,6 +176,7 @@ def asset_capitalization_delete(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_capitalization_execute(request, pk):
     """Execute formal asset capitalization: initializes FixedAsset and updates status."""
     with transaction.atomic():
@@ -228,6 +230,7 @@ def asset_capitalization_execute(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_capitalization_reverse(request, pk):
     """Reverse an executed capitalization event."""
     capitalization = assets_object(request, AssetCapitalization, pk)
