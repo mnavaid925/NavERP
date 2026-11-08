@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Assessment: {{ assessment.number }} — NavERP{% else %}New Criticality Assessment — NavERP{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_criticality_assessment_list' %}">Criticality Assessments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ assessment.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Criticality Assessment: {{ assessment.number }}{% else %}Conduct Asset Criticality Assessment{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_criticality_assessment_detail' assessment.pk %}{% else %}{% url 'assets:asset_criticality_assessment_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">
+            {% if is_edit %}Update Consequence Scoring{% else %}Multi-Factor Consequence Risk Analysis{% endif %}
+        </h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Assessment Scope -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Audit Scope & Target Physical Asset
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">
+                            Assessment Title <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.asset.id_for_label }}" class="form-label">
+                            Operational Target Asset <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.asset }}
+                        {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.assessor.id_for_label }}" class="form-label">Lead Reliability Assessor</label>
+                        {{ form.assessor }}
+                        {% if form.assessor.errors %}<div class="form-error">{{ form.assessor.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.assessment_date.id_for_label }}" class="form-label">Assessment Date</label>
+                        {{ form.assessment_date }}
+                        {% if form.assessment_date.errors %}<div class="form-error">{{ form.assessment_date.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.recommended_strategy.id_for_label }}" class="form-label">Recommended Maintenance Strategy</label>
+                        {{ form.recommended_strategy }}
+                        {% if form.recommended_strategy.errors %}<div class="form-error">{{ form.recommended_strategy.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Five Consequence Dimensions -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Consequence Dimensions (1 = Negligible, 5 = Catastrophic)
+                </h3>
+                <div class="space-y-4">
+                    <div class="form-group">
+                        <label for="{{ form.safety_impact.id_for_label }}" class="form-label">
+                            Personnel Safety & Health Consequence (1 to 5)
+                        </label>
+                        {{ form.safety_impact }}
+                        {% if form.safety_impact.errors %}<div class="form-error">{{ form.safety_impact.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.environmental_impact.id_for_label }}" class="form-label">
+                            Environmental & Hazardous Release Consequence (1 to 5)
+                        </label>
+                        {{ form.environmental_impact }}
+                        {% if form.environmental_impact.errors %}<div class="form-error">{{ form.environmental_impact.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.operational_downtime_impact.id_for_label }}" class="form-label">
+                            Production Downtime & Throughput Loss Consequence (1 to 5)
+                        </label>
+                        {{ form.operational_downtime_impact }}
+                        {% if form.operational_downtime_impact.errors %}<div class="form-error">{{ form.operational_downtime_impact.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.financial_impact.id_for_label }}" class="form-label">
+                            Direct Financial Repair & Interruption Exposure (1 to 5)
+                        </label>
+                        {{ form.financial_impact }}
+                        {% if form.financial_impact.errors %}<div class="form-error">{{ form.financial_impact.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.regulatory_compliance_impact.id_for_label }}" class="form-label">
+                            Regulatory Compliance & Statutory Mandates (1 to 5)
+                        </label>
+                        {{ form.regulatory_compliance_impact }}
+                        {% if form.regulatory_compliance_impact.errors %}<div class="form-error">{{ form.regulatory_compliance_impact.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+
+                <!-- SPOF Checkbox -->
+                <div class="p-4 bg-slate-50 border border-slate-200 rounded-md mt-4">
+                    <label class="flex items-start gap-3 cursor-pointer">
+                        {{ form.is_single_point_of_failure }}
+                        <div>
+                            <span class="text-sm font-bold text-slate-900">Single Point of Failure (SPOF)</span>
+                            <p class="text-xs text-muted">Check if no standby, duty-share, or bypass unit exists. Automatically adds a +5 consequence penalty and escalates critical failure modes.</p>
+                        </div>
+                    </label>
+                    {% if form.is_single_point_of_failure.errors %}<div class="form-error">{{ form.is_single_point_of_failure.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Review Cadence & Findings -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Review Cadence & Findings Documentation
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="{{ form.review_cycle_months.id_for_label }}" class="form-label">Review Cycle (Months)</label>
+                        {{ form.review_cycle_months }}
+                        {% if form.review_cycle_months.errors %}<div class="form-error">{{ form.review_cycle_months.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Recommended: Class A (6 mos), Class B (12 mos), Class C (24 mos)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.next_assessment_due.id_for_label }}" class="form-label">Next Assessment Due</label>
+                        {{ form.next_assessment_due }}
+                        {% if form.next_assessment_due.errors %}<div class="form-error">{{ form.next_assessment_due.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.findings_and_mitigation.id_for_label }}" class="form-label">Failure Mode Findings & Mitigation Plan</label>
+                    {{ form.findings_and_mitigation }}
+                    {% if form.findings_and_mitigation.errors %}<div class="form-error">{{ form.findings_and_mitigation.errors.0 }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'assets:asset_criticality_assessment_detail' assessment.pk %}{% else %}{% url 'assets:asset_criticality_assessment_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Record Assessment{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
