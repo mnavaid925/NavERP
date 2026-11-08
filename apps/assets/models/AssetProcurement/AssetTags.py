@@ -121,3 +121,9 @@ class AssetTag(TenantNumbered):
 
     def can_verify(self):
         return self.status == "affixed" and not self.is_verified
+
+    def can_affix_tag(self):
+        return self.can_affix()
+
+    def can_verify_tag(self):
+        return self.can_verify()
