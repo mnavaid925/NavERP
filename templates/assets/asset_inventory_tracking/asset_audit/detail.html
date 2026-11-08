@@ -52,7 +52,7 @@
         </form>
         {% endif %}
 
-        {% if audit.status == 'completed' %}
+        {% if audit.status == 'completed' and request.user.is_superuser or audit.status == 'completed' and request.user.is_tenant_admin %}
         <button type="button" onclick="document.getElementById('reconcile-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
             <i data-lucide="shield-check" class="w-4 h-4 mr-1"></i> Reconcile Discrepancies
         </button>
