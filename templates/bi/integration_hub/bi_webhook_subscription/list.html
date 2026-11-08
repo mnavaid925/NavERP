@@ -174,19 +174,19 @@
                         <div class="table-actions">
                             <form method="post" action="{% url 'bi:bi_webhook_subscription_ping' w.pk %}" class="inline">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Dispatch Test Ping">
+                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Dispatch Test Ping" aria-label="Dispatch Test Ping">
                                     <i data-lucide="send"></i>
                                 </button>
                             </form>
-                            <a href="{% url 'bi:bi_webhook_subscription_detail' w.pk %}" class="btn btn-icon" title="View details">
+                            <a href="{% url 'bi:bi_webhook_subscription_detail' w.pk %}" class="btn btn-icon" title="View details" aria-label="View details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:bi_webhook_subscription_edit' w.pk %}" class="btn btn-icon" title="Edit webhook">
+                            <a href="{% url 'bi:bi_webhook_subscription_edit' w.pk %}" class="btn btn-icon" title="Edit webhook" aria-label="Edit webhook">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'bi:bi_webhook_subscription_delete' w.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete webhook {{ w.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete webhook">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete webhook" aria-label="Delete webhook">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
