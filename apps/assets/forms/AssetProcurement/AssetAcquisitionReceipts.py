@@ -43,7 +43,7 @@ class AssetAcquisitionReceiptForm(TenantUniqueMixin, forms.ModelForm):
 
         if self.tenant:
             self.fields["requisition"].queryset = AssetRequisition.objects.filter(tenant=self.tenant)
-            self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(tenant=self.tenant)
+            self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(tenant=self.tenant).select_related("vendor")
             self.fields["vendor"].queryset = Party.objects.filter(
                 tenant=self.tenant, roles__role__in=["vendor", "supplier"]
             ).distinct()
