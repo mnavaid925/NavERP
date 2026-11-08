@@ -16,6 +16,7 @@ class AssetCapitalizationForm(TenantUniqueMixin, forms.ModelForm):
         exclude = [
             "tenant",
             "number",
+            "status",
             "created_at",
             "updated_at",
             "total_cost_basis",
@@ -41,7 +42,6 @@ class AssetCapitalizationForm(TenantUniqueMixin, forms.ModelForm):
             "in_service_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "fixed_asset": forms.Select(attrs={"class": "form-select"}),
             "operational_asset": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
