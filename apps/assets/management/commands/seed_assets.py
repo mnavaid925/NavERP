@@ -46,6 +46,7 @@ class Command(BaseCommand):
             self._seed_tenant(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
+        self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
 
     def _seed_tenant(self, tenant):
         # Idempotency guard: if data exists for this tenant, skip creation
