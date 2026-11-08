@@ -51,11 +51,13 @@ def asset_custody_log_list(request):
 
     # Auto-flag overdue loans
     today = timezone.now().date()
-    AssetCustodyLog.objects.filter(
+    overdue_qs = AssetCustodyLog.objects.filter(
         tenant=request.tenant,
         status="active_loan",
         expected_return_date__lt=today,
-    ).update(status="overdue")
+    )
+    if overdue_qs.exists():
+        overdue_qs.update(status="overdue")
 
     all_tenant_logs = AssetCustodyLog.objects.filter(tenant=request.tenant)
     counts = all_tenant_logs.aggregate(
