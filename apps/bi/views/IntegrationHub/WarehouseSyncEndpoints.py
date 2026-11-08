@@ -14,9 +14,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def warehouse_sync_endpoint_list(request):
-    qs = bi_scope(WarehouseSyncEndpoint.objects.all(), request).select_related(
-        "semantic_model", "data_mart", "owner"
-    )
+    qs = bi_scope(WarehouseSyncEndpoint.objects.all(), request)
 
     counts = qs.aggregate(
         total=Count("id"),
@@ -51,6 +49,7 @@ def warehouse_sync_endpoint_list(request):
     if status:
         qs = qs.filter(status=status)
 
+    qs = qs.select_related("semantic_model", "data_mart")
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
