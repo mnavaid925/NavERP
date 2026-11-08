@@ -3138,6 +3138,19 @@ LIVE_LINKS = {
         "Extension Plugins": "bi:bi_extension_plugin_list",
         "API & Integration Hub": "bi:integration_connector_list",
     },
+    "11.1": {
+        "Purchase Requisition & Approval": "assets:asset_requisition_list",
+        "Vendor Selection & RFQ": "assets:asset_requisition_list",
+        "Purchase Order & Receipt": "assets:asset_acquisition_receipt_list",
+        "Asset Capitalization & Depreciation Setup": "assets:asset_capitalization_list",
+        "Asset Tagging & Registration": "assets:asset_tag_list",
+        # Plural and convenience aliases
+        "Asset Requisitions": "assets:asset_requisition_list",
+        "Acquisition Receipts": "assets:asset_acquisition_receipt_list",
+        "Capitalizations": "assets:asset_capitalization_list",
+        "Asset Tags": "assets:asset_tag_list",
+        "Asset Procurement Hub": "assets:overview",
+    },
 
 
 
