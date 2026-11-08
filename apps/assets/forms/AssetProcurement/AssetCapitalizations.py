@@ -77,6 +77,16 @@ class AssetCapitalizationForm(TenantUniqueMixin, forms.ModelForm):
             if val is not None and val < Decimal("0.00"):
                 self.add_error(field, f"{field.replace('_', ' ').capitalize()} cannot be negative.")
 
+        purchase = cleaned_data.get("purchase_cost") or Decimal("0.00")
+        freight = cleaned_data.get("freight_cost") or Decimal("0.00")
+        installation = cleaned_data.get("installation_cost") or Decimal("0.00")
+        customs = cleaned_data.get("customs_duties_cost") or Decimal("0.00")
+        other = cleaned_data.get("other_initial_costs") or Decimal("0.00")
+        total_basis = purchase + freight + installation + customs + other
+        salvage = cleaned_data.get("salvage_value")
+        if salvage is not None and salvage > total_basis:
+            self.add_error("salvage_value", "Salvage value cannot exceed total capitalized cost basis.")
+
         if self.tenant:
             reject_foreign(
                 self,
