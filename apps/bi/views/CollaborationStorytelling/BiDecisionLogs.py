@@ -61,7 +61,7 @@ def bi_decision_log_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant).order_by("name")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant).order_by("title")
     workspaces = BiSharedWorkspace.objects.filter(tenant=request.tenant).order_by("name")
 
     context = {
