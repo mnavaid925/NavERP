@@ -5,7 +5,7 @@ from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLo
 from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspace
 from apps.bi.models.Dashboards.BiDashboards import BiDashboard
 from apps.bi.models.Dashboards.BiDashboardWidgets import BiDashboardWidget
-from apps.bi.models.KpiScorecards.KpiDefinitions import KpiDefinition
+from apps.bi.models.PerformanceScorecards.KpiDefinitions import KpiDefinition
 from apps.core.forms import TenantModelForm
 
 
