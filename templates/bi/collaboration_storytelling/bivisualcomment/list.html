@@ -69,7 +69,7 @@
 <!-- Filter Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <div class="relative">
@@ -113,7 +113,16 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="md:col-span-5 flex justify-end gap-2">
+            <div>
+                <label class="form-label text-xs">Story</label>
+                <select name="story" class="form-select text-sm">
+                    <option value="">All Stories</option>
+                    {% for s in stories %}
+                    <option value="{{ s.pk }}" {% if request.GET.story == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 lg:col-span-6 flex justify-end gap-2">
                 <a href="{% url 'bi:bi_visual_comment_list' %}" class="btn btn-outline btn-sm">Reset</a>
                 <button type="submit" class="btn btn-primary btn-sm">Filter</button>
             </div>
@@ -241,7 +250,7 @@
         </div>
         <div class="pagination-links">
             {% if comments.has_previous %}
-            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            <a href="?page={{ comments.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}{% if request.GET.story %}&story={{ request.GET.story }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
             {% else %}
             <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
             {% endif %}
@@ -249,7 +258,7 @@
             <span class="text-sm text-muted px-2">Page {{ comments.number }} of {{ comments.paginator.num_pages }}</span>
 
             {% if comments.has_next %}
-            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            <a href="?page={{ comments.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.target_type %}&target_type={{ request.GET.target_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.dashboard %}&dashboard={{ request.GET.dashboard }}{% endif %}{% if request.GET.story %}&story={{ request.GET.story }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
             {% else %}
             <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
             {% endif %}
