@@ -74,6 +74,10 @@ from apps.bi.models import (
     ReportSubscription,
     DistributionBurstRun,
     BiNotificationItem,
+    BiSharedWorkspace,
+    BiDataStory,
+    BiVisualComment,
+    BiDecisionLog,
 )
 
 
@@ -2637,5 +2641,163 @@ def bi_notification_item_b(db, tenant_b, admin_user_b, bi_alert_rule_b):
         recipient=admin_user_b,
         status="unread",
     )
+
+
+# --- 10.18 Collaboration & Data Storytelling Fixtures ---
+
+
+@pytest.fixture
+def bi_shared_workspace_a(db, tenant_a, admin_user):
+    return BiSharedWorkspace.objects.create(
+        tenant=tenant_a,
+        number="WSPC-00001",
+        name="Executive Analytics Hub",
+        code="EXEC-ANALYTICS",
+        workspace_type="executive",
+        default_access_level="editor",
+        color="#2563eb",
+        owner=admin_user,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_shared_workspace_b(db, tenant_b, admin_user_b):
+    return BiSharedWorkspace.objects.create(
+        tenant=tenant_b,
+        number="WSPC-00002",
+        name="Globex Commercial Workspace",
+        code="GLOBEX-COMM",
+        workspace_type="commercial",
+        default_access_level="viewer",
+        color="#dc2626",
+        owner=admin_user_b,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_data_story_a(db, tenant_a, admin_user, bi_shared_workspace_a):
+    return BiDataStory.objects.create(
+        tenant=tenant_a,
+        number="DSTY-00001",
+        title="Q3 Operational Performance Walkthrough",
+        story_type="executive_brief",
+        target_audience="board",
+        status="published",
+        workspace=bi_shared_workspace_a,
+        author=admin_user,
+        created_by=admin_user,
+        office_embed_token="token_office_embed_12345",
+        slides_data=[
+            {
+                "slide_number": 1,
+                "title": "Macro Overview",
+                "narrative": "Key trends and quarterly growth summary.",
+                "drilldown_path": "/bi/dashboards/",
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def bi_data_story_b(db, tenant_b, admin_user_b, bi_shared_workspace_b):
+    return BiDataStory.objects.create(
+        tenant=tenant_b,
+        number="DSTY-00002",
+        title="Globex Q3 Regional Variance",
+        story_type="deep_dive",
+        target_audience="executives",
+        status="draft",
+        workspace=bi_shared_workspace_b,
+        author=admin_user_b,
+        created_by=admin_user_b,
+        office_embed_token="token_office_embed_globex_999",
+        slides_data=[
+            {
+                "slide_number": 1,
+                "title": "Regional Variance",
+                "narrative": "APAC regional divergence metrics.",
+                "drilldown_path": "/bi/dashboards/",
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def bi_visual_comment_a(db, tenant_a, admin_user, bi_dashboard_a, bi_data_story_a):
+    return BiVisualComment.objects.create(
+        tenant=tenant_a,
+        number="VCOM-00001",
+        target_type="dashboard",
+        dashboard=bi_dashboard_a,
+        story=bi_data_story_a,
+        coordinate_x=25.5,
+        coordinate_y=42.0,
+        comment_text="Revenue spike anomaly identified in Q2 cohort.",
+        priority="high",
+        status="open",
+        author=admin_user,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_visual_comment_b(db, tenant_b, admin_user_b, bi_dashboard_b, bi_data_story_b):
+    return BiVisualComment.objects.create(
+        tenant=tenant_b,
+        number="VCOM-00002",
+        target_type="dashboard",
+        dashboard=bi_dashboard_b,
+        story=bi_data_story_b,
+        coordinate_x=50.0,
+        coordinate_y=60.0,
+        comment_text="Globex cost allocation divergence noted.",
+        priority="medium",
+        status="open",
+        author=admin_user_b,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_decision_log_a(db, tenant_a, admin_user, bi_shared_workspace_a, bi_dashboard_a, kpi_definition_a):
+    return BiDecisionLog.objects.create(
+        tenant=tenant_a,
+        number="DLOG-00001",
+        title="Approved Expansion Budget Allocation",
+        problem_statement="Marketing spend efficiency reached ceiling in Region East.",
+        decision_rationale="Reallocate 15% budget to Western enterprise campaigns based on KPI analysis.",
+        impact_assessment="Projected 22% ARR lift in Q4.",
+        category="budget",
+        status="approved",
+        workspace=bi_shared_workspace_a,
+        dashboard=bi_dashboard_a,
+        kpi=kpi_definition_a,
+        decision_maker=admin_user,
+        created_by=admin_user,
+        marker_color="#10b981",
+    )
+
+
+@pytest.fixture
+def bi_decision_log_b(db, tenant_b, admin_user_b, bi_shared_workspace_b, bi_dashboard_b, kpi_definition_b):
+    return BiDecisionLog.objects.create(
+        tenant=tenant_b,
+        number="DLOG-00002",
+        title="Globex Supply Chain Optimization",
+        problem_statement="Supplier lead time increased by 4 days.",
+        decision_rationale="Authorize multi-sourcing contracts for tier-1 components.",
+        impact_assessment="Lead time buffer stabilized at 2 days.",
+        category="operational",
+        status="proposed",
+        workspace=bi_shared_workspace_b,
+        dashboard=bi_dashboard_b,
+        kpi=kpi_definition_b,
+        decision_maker=admin_user_b,
+        created_by=admin_user_b,
+        marker_color="#f59e0b",
+    )
+
 
 
