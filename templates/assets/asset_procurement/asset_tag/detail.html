@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tag.tag_code }} — Asset Tag Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_tag_list' %}">Tags & Labels</a>
+            <span>/</span>
+            <span>{{ tag.tag_code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title font-mono">{{ tag.tag_code }}</h1>
+            <span class="badge {{ tag.status_css }}">{{ tag.get_status_display }}</span>
+            {% if tag.is_verified %}
+            <span class="badge badge-green">
+                <i data-lucide="check" class="w-3 h-3 mr-0.5 inline"></i> Scanner Verified
+            </span>
+            {% else %}
+            <span class="badge badge-muted">Unverified</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_tag_print_label' tag.pk %}" target="_blank" class="btn btn-primary">
+            <i data-lucide="printer" class="w-4 h-4 mr-1"></i> Print Label
+        </a>
+
+        {% if tag.can_mark_printed %}
+        <form method="post" action="{% url 'assets:asset_tag_mark_printed' tag.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600">
+                <i data-lucide="check" class="w-4 h-4 mr-1"></i> Mark Printed
+            </button>
+        </form>
+        {% endif %}
+
+        {% if tag.can_affix %}
+        <button type="button" onclick="document.getElementById('affix-modal').classList.remove('hidden')" class="btn btn-outline text-amber-600">
+            <i data-lucide="pin" class="w-4 h-4 mr-1"></i> Confirm Affixed
+        </button>
+        {% endif %}
+
+        {% if tag.can_verify %}
+        <button type="button" onclick="document.getElementById('verify-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="scan-barcode" class="w-4 h-4 mr-1"></i> Scanner Verify
+        </button>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_tag_edit' tag.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_tag_delete' tag.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this asset tag?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Machine-Readable Data & Target Equipment -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Machine-Readable Visual Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Machine-Readable Label Data</h3>
+            </div>
+            <div class="card-body">
+                <div class="flex flex-col md:flex-row items-center gap-6 p-6 bg-slate-50 border border-slate-200 rounded-xl">
+                    <!-- High-contrast simulated QR/Barcode box -->
+                    <div class="w-36 h-36 bg-white border-2 border-slate-800 rounded-lg p-2 flex flex-col items-center justify-center shadow-inner">
+                        <div class="grid grid-cols-6 gap-1 w-24 h-24 p-1 bg-slate-100 border border-slate-300">
+                            <div class="bg-slate-900 col-span-2 row-span-2"></div>
+                            <div class="bg-white col-span-2"></div>
+                            <div class="bg-slate-900 col-span-2 row-span-2"></div>
+                            <div class="bg-slate-900 col-span-1"></div>
+                            <div class="bg-white col-span-1"></div>
+                            <div class="bg-slate-900 col-span-2 row-span-2"></div>
+                            <div class="bg-white col-span-2"></div>
+                            <div class="bg-slate-900 col-span-2"></div>
+                        </div>
+                        <span class="font-mono text-[10px] text-slate-700 font-bold mt-1 tracking-tight">{{ tag.tag_format|upper }}</span>
+                    </div>
+
+                    <div class="flex-1 space-y-2">
+                        <div class="text-xs text-slate-500 uppercase tracking-wide font-semibold">Decoded Payload / EPC Tag Code</div>
+                        <div class="font-mono text-2xl font-bold text-slate-900 select-all">{{ tag.tag_code }}</div>
+                        <div class="text-sm text-slate-600">
+                            Format: <span class="font-medium text-slate-800">{{ tag.get_tag_format_display }}</span>
+                        </div>
+                        <div class="text-xs text-slate-400 font-mono">Registry ID: {{ tag.number }}</div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Physical Mounting Location on Equipment</div>
+                    <div class="text-sm text-slate-800">
+                        {{ tag.physical_placement|default:"No physical placement described yet. Use 'Confirm Affixed' to record location." }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Linked Equipment -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Target Physical Asset Association</h3>
+            </div>
+            <div class="card-body">
+                {% if tag.operational_asset %}
+                <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Operational Asset Master (SCM)</div>
+                    <div class="font-medium text-base text-slate-900 mt-1">{{ tag.operational_asset.name }}</div>
+                    <div class="text-sm font-mono text-blue-600 mt-0.5">{{ tag.operational_asset.number }} · Type: {{ tag.operational_asset.get_asset_type_display }}</div>
+                    <div class="text-xs text-slate-500 mt-1">Status: {{ tag.operational_asset.get_status_display }} · Criticality: {{ tag.operational_asset.get_criticality_display }}</div>
+                </div>
+                {% elif tag.capitalization %}
+                <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Capitalization Event Link</div>
+                    <div class="font-medium text-base text-slate-900 mt-1">{{ tag.capitalization.asset_name }}</div>
+                    <div class="text-sm font-mono text-blue-600 mt-0.5">
+                        <a href="{% url 'assets:asset_capitalization_detail' tag.capitalization.pk %}" class="hover:underline">
+                            {{ tag.capitalization.number }}
+                        </a>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1">Cost Basis: ${{ tag.capitalization.total_cost_basis|floatformat:2 }}</div>
+                </div>
+                {% else %}
+                <div class="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    This tag is in the unassigned pool and not yet bound to an operational machine.
+                </div>
+                {% endif %}
+
+                {% if tag.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <div class="text-xs font-semibold text-slate-500 uppercase mb-1">Administrative Notes</div>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ tag.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Column: Affixation & Scanner Audit -->
+    <div class="space-y-6">
+        <!-- Field Scanner Verification -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Scanner Verification Audit</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-500">Scanner Verified</span>
+                    {% if tag.is_verified %}
+                    <span class="badge badge-green">Verified</span>
+                    {% else %}
+                    <span class="badge badge-muted">Pending Audit</span>
+                    {% endif %}
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Auditor</span>
+                    <span class="font-medium text-slate-800">{{ tag.verified_by.username|default:"—" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Verified Timestamp</span>
+                    <span class="text-slate-700">{{ tag.verified_at|date:"M d, Y H:i"|default:"—" }}</span>
+                </div>
+                {% if tag.scanner_device_id %}
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Terminal ID</span>
+                    <span class="font-mono text-xs font-semibold text-slate-800">{{ tag.scanner_device_id }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Physical Affixation Audit -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Physical Affixation</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Affixed By</span>
+                    <span class="font-medium text-slate-800">{{ tag.affixed_by.username|default:"—" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Affixed Date</span>
+                    <span class="text-slate-700">{{ tag.affixed_at|date:"M d, Y H:i"|default:"—" }}</span>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-slate-400 space-y-1">
+                    <div>Created: {{ tag.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ tag.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Affix Modal -->
+<div id="affix-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-2">Confirm Physical Affixation</h3>
+        <p class="text-sm text-slate-500 mb-4">Confirm that this physical nameplate or barcode label has been affixed to the machine.</p>
+        <form method="post" action="{% url 'assets:asset_tag_affix' tag.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label text-xs">Physical Mounting Placement *</label>
+                <input type="text" name="physical_placement" class="form-input" required value="{{ tag.physical_placement }}" placeholder="e.g. Front chassis frame next to manufacturer plate">
+            </div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" onclick="document.getElementById('affix-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Affixation</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Verify Scanner Modal -->
+<div id="verify-modal" class="fixed inset-0 bg-slate-900 bg-opacity-50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold text-slate-900 mb-2">Scanner Verification Audit</h3>
+        <p class="text-sm text-slate-500 mb-4">Simulate or record an optical barcode/RFID scan audit confirming the tag is readable in the field.</p>
+        <form method="post" action="{% url 'assets:asset_tag_verify' tag.pk %}">
+            {% csrf_token %}
+            <div class="form-group">
+                <label class="form-label text-xs">Handheld Scanner / Device ID</label>
+                <input type="text" name="scanner_device_id" class="form-input" value="{{ tag.scanner_device_id|default:'ZEBRA-TC52-01' }}" placeholder="e.g. ZEBRA-TC52-01">
+            </div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" onclick="document.getElementById('verify-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">Record Verification</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
