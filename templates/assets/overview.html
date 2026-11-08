@@ -16,6 +16,9 @@
         <a href="{% url 'assets:asset_requisition_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New CapEx Request
         </a>
+        <a href="{% url 'assets:asset_audit_create' %}" class="btn btn-outline">
+            <i data-lucide="clipboard-check" class="w-4 h-4 mr-1"></i> New Audit
+        </a>
         <a href="{% url 'assets:asset_acquisition_receipt_create' %}" class="btn btn-outline">
             <i data-lucide="truck" class="w-4 h-4 mr-1"></i> Log Dock Receipt
         </a>
@@ -77,6 +80,61 @@
     </div>
 </div>
 
+<!-- 11.2 Asset Inventory & Tracking KPI Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Physical Audits</p>
+                <h3 class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_audits }}</h3>
+            </div>
+            <div class="stat-icon blue">
+                <i data-lucide="clipboard-check" class="w-6 h-6"></i>
+            </div>
+        </div>
+        <p class="text-xs text-blue-600 mt-2 font-medium">{{ kpis.active_audits }} active or scheduled</p>
+    </div>
+
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Transfers in Transit</p>
+                <h3 class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.in_transit_movements }}</h3>
+            </div>
+            <div class="stat-icon orange">
+                <i data-lucide="truck" class="w-6 h-6"></i>
+            </div>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">Across {{ kpis.total_movements }} total movements</p>
+    </div>
+
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Custody Loans</p>
+                <h3 class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.active_custody_loans }}</h3>
+            </div>
+            <div class="stat-icon purple">
+                <i data-lucide="wrench" class="w-6 h-6"></i>
+            </div>
+        </div>
+        <p class="text-xs {% if kpis.overdue_custody_loans %}text-red-600 font-semibold{% else %}text-emerald-600 font-medium{% endif %} mt-2">{{ kpis.overdue_custody_loans }} overdue for checkin</p>
+    </div>
+
+    <div class="stat-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Incident Reports</p>
+                <h3 class="text-2xl font-bold text-slate-900 mt-1">{{ kpis.total_incidents }}</h3>
+            </div>
+            <div class="stat-icon slate">
+                <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+            </div>
+        </div>
+        <p class="text-xs text-amber-600 mt-2 font-medium">{{ kpis.open_incidents }} open / investigating</p>
+    </div>
+</div>
+
 <!-- Quick Navigation Cards -->
 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
     <a href="{% url 'assets:asset_requisition_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-blue-500">
@@ -106,6 +164,38 @@
             <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 group-hover:text-purple-600"></i>
         </div>
         <p class="text-xs text-slate-500 mt-1">QR, Barcode & RFID registry</p>
+    </a>
+</div>
+
+<!-- Sub-module 11.2 Tracking Quick Navigation Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+    <a href="{% url 'assets:asset_audit_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-blue-400">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 group-hover:text-blue-600">Physical Audits</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 group-hover:text-blue-600"></i>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Wall-to-wall counts & reconciliation</p>
+    </a>
+    <a href="{% url 'assets:asset_movement_log_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-purple-400">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 group-hover:text-purple-600">Asset Transfers</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 group-hover:text-purple-600"></i>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Inter-facility relocation & dispatch</p>
+    </a>
+    <a href="{% url 'assets:asset_custody_log_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-emerald-400">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 group-hover:text-emerald-600">Tool Crib Loans</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 group-hover:text-emerald-600"></i>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Lending, returns & custody tracking</p>
+    </a>
+    <a href="{% url 'assets:asset_incident_report_list' %}" class="card p-4 hover:shadow-md transition-shadow group border-l-4 border-l-rose-400">
+        <div class="flex items-center justify-between">
+            <span class="text-sm font-semibold text-slate-800 group-hover:text-rose-600">Loss & Incidents</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-slate-400 group-hover:text-rose-600"></i>
+        </div>
+        <p class="text-xs text-slate-500 mt-1">Theft, damage, police & insurance</p>
     </a>
 </div>
 
