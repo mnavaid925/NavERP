@@ -61,8 +61,8 @@ class Command(BaseCommand):
         location = Location.objects.filter(tenant=tenant).first()
         vendor = Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first() or Party.objects.filter(tenant=tenant).first()
         po = PurchaseOrder.objects.filter(tenant=tenant).first()
-        asset_account = GLAccount.objects.filter(tenant=tenant, type="asset").first()
-        cip_account = GLAccount.objects.filter(tenant=tenant, type="asset").last()
+        asset_account = GLAccount.objects.filter(tenant=tenant, account_type="asset").first() or GLAccount.objects.filter(tenant=tenant).first()
+        cip_account = GLAccount.objects.filter(tenant=tenant, account_type="asset").last() or GLAccount.objects.filter(tenant=tenant).last()
         existing_operational_asset = Asset.objects.filter(tenant=tenant).first()
 
         with transaction.atomic():
