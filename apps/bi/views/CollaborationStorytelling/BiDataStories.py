@@ -1,3 +1,5 @@
+import secrets
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -222,6 +224,9 @@ def bi_data_story_presentation(request, pk):
 def bi_data_story_export_office(request, pk):
     story = bi_object(request, BiDataStory, pk)
     token = request.GET.get("token", "").strip()
+    if story.office_embed_token:
+        if not token or not secrets.compare_digest(token, story.office_embed_token):
+            return JsonResponse({"error": "Invalid or missing embed token"}, status=403)
 
     payload = {
         "story_number": story.number,
