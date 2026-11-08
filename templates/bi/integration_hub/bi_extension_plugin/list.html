@@ -181,25 +181,25 @@
                             <form method="post" action="{% url 'bi:bi_extension_plugin_toggle' p.pk %}" class="inline">
                                 {% csrf_token %}
                                 {% if p.status == 'enabled' %}
-                                <button type="submit" class="btn btn-icon text-amber-600 hover:text-amber-700" title="Disable plugin">
+                                <button type="submit" class="btn btn-icon text-amber-600 hover:text-amber-700" title="Disable plugin" aria-label="Disable plugin">
                                     <i data-lucide="pause"></i>
                                 </button>
                                 {% else %}
-                                <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-700" title="Enable plugin">
+                                <button type="submit" class="btn btn-icon text-emerald-600 hover:text-emerald-700" title="Enable plugin" aria-label="Enable plugin">
                                     <i data-lucide="play"></i>
                                 </button>
                                 {% endif %}
                             </form>
-                            <a href="{% url 'bi:bi_extension_plugin_detail' p.pk %}" class="btn btn-icon" title="View details">
+                            <a href="{% url 'bi:bi_extension_plugin_detail' p.pk %}" class="btn btn-icon" title="View details" aria-label="View details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'bi:bi_extension_plugin_edit' p.pk %}" class="btn btn-icon" title="Edit extension">
+                            <a href="{% url 'bi:bi_extension_plugin_edit' p.pk %}" class="btn btn-icon" title="Edit extension" aria-label="Edit extension">
                                 <i data-lucide="pencil"></i>
                             </a>
                             {% if not p.is_system_plugin %}
                             <form method="post" action="{% url 'bi:bi_extension_plugin_delete' p.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to uninstall extension {{ p.name }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Uninstall extension">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Uninstall extension" aria-label="Uninstall extension">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
