@@ -36,8 +36,6 @@ class AssetIncidentReportForm(TenantUniqueMixin, forms.ModelForm):
             "insurance_settled_amount",
             "incident_description",
             "investigation_findings",
-            "resolution_action",
-            "write_off_notes",
         ]
         exclude = [
             "tenant",
@@ -48,6 +46,8 @@ class AssetIncidentReportForm(TenantUniqueMixin, forms.ModelForm):
             "reported_by",
             "write_off_authorized_by",
             "write_off_date",
+            "resolution_action",
+            "write_off_notes",
         ]
         widgets = {
             "title": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Stolen Fluke Thermal Imager from Van #12"}),
@@ -71,8 +71,6 @@ class AssetIncidentReportForm(TenantUniqueMixin, forms.ModelForm):
             "insurance_settled_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0"}),
             "incident_description": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Detailed circumstances, witness statements, time discovered..."}),
             "investigation_findings": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Internal investigation summary, security camera footage review..."}),
-            "resolution_action": forms.Select(attrs={"class": "form-select"}),
-            "write_off_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 2, "placeholder": "Write-off recommendation, disposal authorization justification..."}),
         }
 
     def __init__(self, *args, **kwargs):
