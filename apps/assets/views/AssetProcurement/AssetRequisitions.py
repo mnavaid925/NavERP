@@ -191,6 +191,10 @@ def asset_requisition_approve(request, pk):
         messages.error(request, f"Requisition {requisition.number} cannot be approved in state '{requisition.get_status_display()}'.")
         return redirect("assets:asset_requisition_detail", pk=requisition.pk)
 
+    if requisition.submitted_by_id and requisition.submitted_by_id == request.user.pk:
+        messages.error(request, "Segregation of Duties violation: You cannot approve a requisition you submitted.")
+        return redirect("assets:asset_requisition_detail", pk=requisition.pk)
+
     requisition.status = "approved"
     requisition.approved_by = request.user
     requisition.approved_at = timezone.now()
