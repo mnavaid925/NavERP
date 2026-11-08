@@ -197,7 +197,9 @@ def asset_incident_report_investigate(request, pk):
 @login_required
 @require_POST
 def asset_incident_report_resolve_recovered(request, pk):
-    incident = get_object_or_404(AssetIncidentReport, pk=pk, tenant=request.tenant)
+    incident = get_object_or_404(
+        AssetIncidentReport.objects.select_related("asset"), pk=pk, tenant=request.tenant
+    )
     if incident.status in ("written_off", "closed"):
         messages.error(request, f"Cannot recover asset from '{incident.get_status_display()}' incident.")
         return redirect("assets:asset_incident_report_detail", pk=incident.pk)
