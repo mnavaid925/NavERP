@@ -119,6 +119,7 @@ class AssetAcquisitionReceipt(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_arcv_ten_stat"),
+            models.Index(fields=["tenant", "received_date"], name="idx_arcv_ten_rcvdate"),
             models.Index(fields=["tenant", "condition_on_arrival"], name="idx_arcv_ten_cond"),
             models.Index(fields=["tenant", "serial_number"], name="idx_arcv_ten_ser"),
             models.Index(fields=["tenant", "created_at"], name="idx_arcv_ten_created"),
