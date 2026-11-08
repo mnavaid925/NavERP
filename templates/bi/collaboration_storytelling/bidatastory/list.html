@@ -184,7 +184,7 @@
                             <a href="{% url 'bi:bi_data_story_edit' item.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            <form method="post" action="{% url 'bi:bi_data_story_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete data story {{ item.title }}?');">
+                            <form method="post" action="{% url 'bi:bi_data_story_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete data story {{ item.title|escapejs }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
                                     <i data-lucide="trash-2"></i>
