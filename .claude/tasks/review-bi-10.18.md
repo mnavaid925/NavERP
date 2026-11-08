@@ -39,3 +39,22 @@
 1. `apps/bi/views/CollaborationStorytelling/BiVisualComments.py:105-113` — `bi_visual_comment_create` omits `report` and `widget` from `initial` dict when replying to a parent comment (`?parent=<pk>`). When parent comment was attached to a report or widget, `initial["report"]` and `initial["widget"]` are left empty. Fix: Add `initial["report"] = p.report` and `initial["widget"] = p.widget`.
 2. `templates/bi/collaboration_storytelling/bidecisionlog/detail.html:95-141` — Template omits rendering of linked `decision.widget` in "Linked Analytical Assets" section, even though widget is present on the model and configurable in the form. Fix: Add grid entry for Linked Widget.
 3. Non-rendered JSON fields excluded from forms differ slightly from Pre-build Contract `Meta.fields` (`supporting_documents`, `filter_snapshot`, `mentions_json`, `excel_export_settings`). Handled appropriately via exclusion or custom textareas, but worth documenting.
+
+---
+
+## 3. `frontend-reviewer` Findings
+
+### Critical
+*None.*
+
+### Important
+1. `templates/bi/collaboration_storytelling/bisharedworkspace/list.html:193`, `bidatastory/list.html:187`, `bidecisionlog/list.html:192` — Delete confirmation scripts interpolate unescaped model titles/names into single-quoted JS strings (`onsubmit="return confirm('... {{ item.name }}?');"`). If a name/title contains an apostrophe, it throws a JS `SyntaxError` and blocks deletion. Fix: Apply `|escapejs` (e.g. `{{ item.name|escapejs }}`).
+2. `templates/bi/collaboration_storytelling/bidatastory/presentation.html:39, 53, 88`, `bidatastory/detail.html:57, 106, 143`, `bisharedworkspace/detail.html:60`, `bivisualcomment/detail.html:63, 103, 124`, `bidecisionlog/detail.html:50, 58, 66, 75, 81`, and `*/form.html:29` — Custom surface and card containers use hardcoded Tailwind classes (`bg-white`, `bg-slate-50`, `border-slate-200`, `text-slate-800`, `bg-red-50`) without `dark:` variants, causing bright white/gray boxes when switching to dark theme. Fix: Pair surfaces with dark variants (`dark:bg-slate-800/60`, `dark:bg-slate-900`, `dark:border-slate-700`, `dark:text-slate-200`).
+3. `templates/bi/collaboration_storytelling/bidatastory/presentation.html:131-137` — Keydown handler tests `e.key === 'Space'` which is non-standard (DOM standard is `e.key === ' '` or `e.code === 'Space'`), failing across browsers and causing default window scroll. Fix: Check `e.code === 'Space' || e.key === ' '` and call `e.preventDefault()`.
+
+### Minor
+1. `templates/bi/collaboration_storytelling/bisharedworkspace/list.html:74-106`, `bidatastory/list.html:74-106`, `bivisualcomment/list.html:74-115`, `bidecisionlog/list.html:74-115` — Filter cards feature `<label>` elements without `for=""` attributes and controls without matching `id=""`. Fix: Add matching `id` and `for` attributes for screen reader accessibility.
+2. `templates/bi/collaboration_storytelling/bidatastory/detail.html:183` — Office link `<a href="{{ office_link }}" target="_blank">` lacks `rel="noopener noreferrer"`. Fix: Add `rel="noopener noreferrer"`.
+3. `templates/bi/collaboration_storytelling/bidatastory/detail.html:151` & `bisharedworkspace/detail.html:180` — Sub-table status badges use binary fallback instead of canonical color mapping (`badge-info` for `in_review`/`acknowledged`, `badge-amber` for `proposed`, `badge-red` for `revoked`). Fix: Align badge classes with status choices.
+4. `templates/bi/collaboration_storytelling/*/list.html:76-77` — Search input relative wrappers use physical `pl-9` and `left-3` instead of RTL-safe logical utilities `ps-9` and `start-3`. Fix: Replace with logical positioning.
+5. `templates/bi/collaboration_storytelling/bidatastory/presentation.html:23, 27` — `<button id="prevBtn">` and `<button id="nextBtn">` lack explicit `type="button"`. Fix: Add `type="button"`.
