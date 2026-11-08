@@ -13,7 +13,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def bi_extension_plugin_list(request):
-    qs = bi_scope(BiExtensionPlugin.objects.all(), request).select_related("installed_by")
+    qs = bi_scope(BiExtensionPlugin.objects.all(), request)
 
     counts = qs.aggregate(
         total=Count("id"),
