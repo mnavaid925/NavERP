@@ -3166,6 +3166,19 @@ LIVE_LINKS = {
         "Incident & Loss Reports": "assets:asset_incident_report_list",
         "Asset Incident Reports": "assets:asset_incident_report_list",
     },
+    "11.3": {
+        "Asset Hierarchy & Taxonomy": "assets:asset_category_list",
+        "Asset Type & Model Management": "assets:asset_model_list",
+        "Criticality & Risk Classification": "assets:asset_criticality_assessment_list",
+        "Asset Lifecycle Stage Tracking": "assets:asset_model_list",
+        "Custom Attributes & Specifications": "assets:asset_specification_template_list",
+        # Plural and convenience aliases
+        "Asset Categories": "assets:asset_category_list",
+        "Asset Models": "assets:asset_model_list",
+        "Criticality Assessments": "assets:asset_criticality_assessment_list",
+        "Specification Templates": "assets:asset_specification_template_list",
+        "Taxonomy & Classification": "assets:asset_category_list",
+    },
 
 
 
