@@ -125,6 +125,9 @@ def asset_capitalization_create(request):
 def asset_capitalization_edit(request, pk):
     """Update details of an asset capitalization event."""
     capitalization = assets_object(request, AssetCapitalization, pk)
+    if capitalization.status == "capitalized":
+        messages.error(request, f"Capitalization {capitalization.number} cannot be edited because it is already capitalized into the fixed asset ledger.")
+        return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
 
     if request.method == "POST":
         form = AssetCapitalizationForm(request.POST, instance=capitalization, tenant=request.tenant)
