@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_decision_log_list' %}">Decision Log</a>
+            <span class="sep">/</span>
+            <span>{% if is_edit %}Edit Decision{% else %}New Decision{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p class="text-muted text-sm">Capture strategic business choices, justifications, and configure chart event milestone markers</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Decision Details & Milestone Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Decision Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug (optional)</label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Auto-generated from title if blank</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Category *</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.decision_date.id_for_label }}">Effective Date *</label>
+                    {{ form.decision_date }}
+                    {% if form.decision_date.errors %}<div class="form-error">{{ form.decision_date.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.problem_statement.id_for_label }}">Problem Statement / Context</label>
+                {{ form.problem_statement }}
+                {% if form.problem_statement.errors %}<div class="form-error">{{ form.problem_statement.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rationale.id_for_label }}">Decision Rationale & Logic *</label>
+                {{ form.rationale }}
+                {% if form.rationale.errors %}<div class="form-error">{{ form.rationale.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.alternatives_considered.id_for_label }}">Alternatives Considered</label>
+                {{ form.alternatives_considered }}
+                {% if form.alternatives_considered.errors %}<div class="form-error">{{ form.alternatives_considered.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expected_impact.id_for_label }}">Targeted Expected Impact</label>
+                    {{ form.expected_impact }}
+                    {% if form.expected_impact.errors %}<div class="form-error">{{ form.expected_impact.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.actual_outcome.id_for_label }}">Actual Outcome (Post-Mortem)</label>
+                    {{ form.actual_outcome }}
+                    {% if form.actual_outcome.errors %}<div class="form-error">{{ form.actual_outcome.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.workspace.id_for_label }}">Workspace</label>
+                    {{ form.workspace }}
+                    {% if form.workspace.errors %}<div class="form-error">{{ form.workspace.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.decision_maker.id_for_label }}">Decision Authority / Sponsor</label>
+                    {{ form.decision_maker }}
+                    {% if form.decision_maker.errors %}<div class="form-error">{{ form.decision_maker.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.dashboard.id_for_label }}">Target Dashboard</label>
+                    {{ form.dashboard }}
+                    {% if form.dashboard.errors %}<div class="form-error">{{ form.dashboard.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.widget.id_for_label }}">Target Widget</label>
+                    {{ form.widget }}
+                    {% if form.widget.errors %}<div class="form-error">{{ form.widget.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.kpi.id_for_label }}">Target KPI</label>
+                    {{ form.kpi }}
+                    {% if form.kpi.errors %}<div class="form-error">{{ form.kpi.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Chart Marker Settings -->
+            <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-4">
+                <div class="font-semibold text-sm text-slate-800">Chart Event Marker Projection</div>
+                <div class="flex items-center gap-3">
+                    {{ form.show_on_charts }}
+                    <label class="text-sm font-medium text-slate-800" for="{{ form.show_on_charts.id_for_label }}">
+                        Show Marker on Analytics Trend Charts
+                    </label>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.marker_style.id_for_label }}">Marker Style</label>
+                        {{ form.marker_style }}
+                        {% if form.marker_style.errors %}<div class="form-error">{{ form.marker_style.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.marker_color.id_for_label }}">Marker Color</label>
+                        <div class="flex items-center gap-3">
+                            {{ form.marker_color }}
+                            <span class="text-xs text-muted">Pin color</span>
+                        </div>
+                        {% if form.marker_color.errors %}<div class="form-error">{{ form.marker_color.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.review_date.id_for_label }}">Scheduled Review Date</label>
+                        {{ form.review_date }}
+                        {% if form.review_date.errors %}<div class="form-error">{{ form.review_date.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <a href="{% url 'bi:bi_decision_log_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>Log Decision</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
