@@ -50,7 +50,7 @@ def bi_shared_workspace_list(request):
     if department_id and department_id.isdigit():
         qs = qs.filter(department_id=int(department_id))
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
