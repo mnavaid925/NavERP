@@ -24,20 +24,29 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div class="form-group mb-0 md:col-span-2">
-                <label class="form-label text-xs">Search</label>
+                <label class="form-label text-xs" for="filter-q">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Tag code, #, placement, scanner ID..." class="form-input pl-9 text-sm">
+                    <input type="text" id="filter-q" name="q" value="{{ request.GET.q }}" placeholder="Tag code, #, placement, scanner ID..." class="form-input pl-9 text-sm">
                     <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
                 </div>
             </div>
             <div class="form-group mb-0">
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label class="form-label text-xs" for="filter-status">Status</label>
+                <select id="filter-status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs" for="filter-format">Format</label>
+                <select id="filter-format" name="format" class="form-select text-sm">
+                    <option value="">All Formats</option>
+                    {% for val, label in format_choices %}
+                    <option value="{{ val }}" {% if request.GET.format == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
