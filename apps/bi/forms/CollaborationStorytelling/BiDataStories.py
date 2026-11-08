@@ -1,12 +1,15 @@
 import json
 
 from django import forms
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
 from apps.bi.forms._common import TenantUniqueMixin, reject_foreign
 from apps.bi.models.CollaborationStorytelling.BiDataStories import BiDataStory
 from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspace
 from apps.core.forms import TenantModelForm
+
+User = get_user_model()
 
 
 class BiDataStoryForm(TenantUniqueMixin, TenantModelForm):
@@ -46,13 +49,18 @@ class BiDataStoryForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if self.tenant:
             self.fields["workspace"].queryset = BiSharedWorkspace.objects.filter(tenant=self.tenant)
+            self.fields["author"].queryset = User.objects.filter(tenant=self.tenant).order_by("username")
+        else:
+            self.fields["workspace"].queryset = BiSharedWorkspace.objects.none()
+            self.fields["author"].queryset = User.objects.none()
         if self.instance and self.instance.pk:
             if self.instance.slides_data:
                 self.fields["slides_data_raw"].initial = json.dumps(self.instance.slides_data, indent=2)
 
-    def clean_workspace(self):
-        wspc = self.cleaned_data.get("workspace")
-        return reject_foreign(wspc, self.tenant, "Workspace")
+    def clean(self):
+        cleaned = super().clean()
+        reject_foreign(self, cleaned, ["workspace", "author"])
+        return cleaned
 
     def clean_slides_data_raw(self):
         raw = self.cleaned_data.get("slides_data_raw", "").strip()
