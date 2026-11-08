@@ -1,8 +1,14 @@
 from django.conf import settings
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.text import slugify
 
 from apps.bi.models._base import TenantNumbered
+
+HEX_COLOR_VALIDATOR = RegexValidator(
+    r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+    "Enter a valid hex color, e.g. #3b82f6",
+)
 
 
 class BiDecisionLog(TenantNumbered):
@@ -101,7 +107,7 @@ class BiDecisionLog(TenantNumbered):
         choices=MARKER_STYLE_CHOICES,
         default="pin_flag",
     )
-    marker_color = models.CharField(max_length=20, default="#10b981")
+    marker_color = models.CharField(max_length=20, default="#10b981", validators=[HEX_COLOR_VALIDATOR])
 
     supporting_documents = models.JSONField(
         default=list,
@@ -130,6 +136,7 @@ class BiDecisionLog(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "slug"], name="bi_dlog_ten_slug_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "workspace"], name="idx_dlog_ten_wspc"),
             models.Index(fields=["tenant", "status"], name="idx_dlog_ten_stat"),
             models.Index(fields=["tenant", "category"], name="idx_dlog_ten_cat"),
             models.Index(fields=["tenant", "decision_date"], name="idx_dlog_ten_date"),
