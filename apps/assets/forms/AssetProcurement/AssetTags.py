@@ -13,6 +13,8 @@ class AssetTagForm(TenantUniqueMixin, forms.ModelForm):
             "tenant",
             "number",
             "status",
+            "is_verified",
+            "scanner_device_id",
             "created_at",
             "updated_at",
             "affixed_by",
@@ -26,7 +28,6 @@ class AssetTagForm(TenantUniqueMixin, forms.ModelForm):
             "operational_asset": forms.Select(attrs={"class": "form-select"}),
             "capitalization": forms.Select(attrs={"class": "form-select"}),
             "physical_placement": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Upper-left bezel near motor switch"}),
-            "scanner_device_id": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. ZEBRA-TC52-DOCK-1"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
