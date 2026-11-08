@@ -86,7 +86,7 @@ class AssetIncidentReportForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         if self.tenant:
-            reject_foreign(self, cleaned_data, ["asset", "last_known_location", "custodian_at_loss"])
+            reject_foreign(self, cleaned_data, ["asset", "last_known_location", "custodian_at_loss", "investigator"])
 
         # Amounts >= 0
         for field in ["estimated_loss_value", "insurance_claimed_amount", "insurance_settled_amount"]:
