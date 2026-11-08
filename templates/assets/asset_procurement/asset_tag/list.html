@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Tags — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Procurement</span>
+            <span>/</span>
+            <span>Tags & Labels</span>
+        </div>
+        <h1 class="page-title">Physical Asset Tags & RFID Registry</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_tag_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Issue Asset Tag
+        </a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Tag code, #, placement, scanner ID..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.format %}
+                <a href="{% url 'assets:asset_tag_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tags Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Tag Code</th>
+                    <th>Technology Format</th>
+                    <th>Linked Equipment</th>
+                    <th>Physical Placement</th>
+                    <th>Verified</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for tag in tags %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_tag_detail' tag.pk %}" class="text-blue-600 hover:underline">
+                            {{ tag.tag_code }}
+                        </a>
+                        <div class="text-xs text-slate-400 font-mono">{{ tag.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800 text-sm">{{ tag.get_tag_format_display }}</div>
+                    </td>
+                    <td>
+                        {% if tag.operational_asset %}
+                        <div class="text-sm font-medium text-slate-900">{{ tag.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ tag.operational_asset.number }}</div>
+                        {% elif tag.capitalization %}
+                        <div class="text-sm font-medium text-slate-900">{{ tag.capitalization.asset_name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">Cap: {{ tag.capitalization.number }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-xs">Unassigned Pool</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-700">
+                        {{ tag.physical_placement|default:"— Not recorded —" }}
+                    </td>
+                    <td>
+                        {% if tag.is_verified %}
+                        <span class="badge badge-green">
+                            <i data-lucide="check" class="w-3 h-3 mr-0.5 inline"></i> Verified
+                        </span>
+                        {% else %}
+                        <span class="badge badge-muted">Unverified</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ tag.status_css }}">{{ tag.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_tag_print_label' tag.pk %}" target="_blank" class="btn btn-icon text-blue-600" title="Print Tag Label">
+                                <i data-lucide="printer" class="w-4 h-4"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_tag_detail' tag.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_tag_edit' tag.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_tag_delete' tag.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete tag {{ tag.tag_code }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="qr-code" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-700">No Asset Tags Registered</h3>
+                            <p class="text-sm text-slate-500 mt-1">Generate QR codes, barcodes, or RFID tags to label physical machinery and tools.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'assets:asset_tag_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Issue Asset Tag
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.format %}&format={{ request.GET.format }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.format %}&format={{ request.GET.format }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
