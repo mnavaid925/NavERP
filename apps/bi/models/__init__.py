@@ -55,6 +55,10 @@ from apps.bi.models.EmbeddedMobileBi.EmbeddedAnalyticsConfigs import EmbeddedAna
 from apps.bi.models.EmbeddedMobileBi.KioskWallboardDisplays import KioskWallboardDisplay
 from apps.bi.models.EmbeddedMobileBi.MobileBiConfigurations import MobileBiConfiguration
 from apps.bi.models.EmbeddedMobileBi.EmbedApiTokens import EmbedApiToken
+from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiSharedWorkspace
+from apps.bi.models.CollaborationStorytelling.BiDataStories import BiDataStory
+from apps.bi.models.CollaborationStorytelling.BiVisualComments import BiVisualComment
+from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLog
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -143,4 +147,8 @@ __all__ = [
     "KioskWallboardDisplay",
     "MobileBiConfiguration",
     "EmbedApiToken",
+    "BiSharedWorkspace",
+    "BiDataStory",
+    "BiVisualComment",
+    "BiDecisionLog",
 ]
