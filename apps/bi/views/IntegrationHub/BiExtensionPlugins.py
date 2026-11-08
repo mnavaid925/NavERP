@@ -103,13 +103,10 @@ def bi_extension_plugin_create(request):
             plugin.save()
 
             write_audit_log(
+                request.user,
+                plugin,
+                "create",
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="BiExtensionPlugin",
-                object_id=str(plugin.pk),
-                object_repr=str(plugin),
-                changes={},
             )
             messages.success(
                 request,
@@ -143,13 +140,10 @@ def bi_extension_plugin_edit(request, pk):
         if form.is_valid():
             plugin = form.save()
             write_audit_log(
+                request.user,
+                plugin,
+                "update",
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="BiExtensionPlugin",
-                object_id=str(plugin.pk),
-                object_repr=str(plugin),
-                changes={},
             )
             messages.success(
                 request,
@@ -183,17 +177,14 @@ def bi_extension_plugin_delete(request, pk):
         return redirect("bi:bi_extension_plugin_detail", pk=plugin.pk)
 
     name = plugin.name
+    write_audit_log(
+        request.user,
+        plugin,
+        "delete",
+        tenant=request.tenant,
+    )
     plugin.delete()
 
-    write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="BiExtensionPlugin",
-        object_id=str(pk),
-        object_repr=name,
-        changes={},
-    )
     messages.success(request, f"Extension plugin '{name}' uninstalled successfully.")
     return redirect("bi:bi_extension_plugin_list")
 
@@ -209,13 +200,11 @@ def bi_extension_plugin_toggle(request, pk):
     plugin.save(update_fields=["status"])
 
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="action",
-        model_name="BiExtensionPlugin",
-        object_id=str(plugin.pk),
-        object_repr=f"Toggle {plugin.name} -> {plugin.status}",
+        request.user,
+        plugin,
+        "action",
         changes={"status": plugin.status},
+        tenant=request.tenant,
     )
     messages.success(
         request,
