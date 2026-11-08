@@ -28,7 +28,7 @@ def vendor_party_a(db, tenant_a):
     party = Party.objects.create(
         tenant=tenant_a,
         name="Apex Industrial Machinery",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_a,
@@ -44,7 +44,7 @@ def vendor_party_b(db, tenant_b):
     party = Party.objects.create(
         tenant=tenant_b,
         name="Globex Heavy Supply",
-        party_type="organization",
+        kind="organization",
     )
     PartyRole.objects.create(
         tenant=tenant_b,
