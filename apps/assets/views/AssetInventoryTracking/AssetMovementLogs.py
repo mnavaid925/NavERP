@@ -183,7 +183,9 @@ def asset_movement_log_delete(request, pk):
 @login_required
 @require_POST
 def asset_movement_log_dispatch(request, pk):
-    movement = get_object_or_404(AssetMovementLog, pk=pk, tenant=request.tenant)
+    movement = get_object_or_404(
+        AssetMovementLog.objects.select_related("asset"), pk=pk, tenant=request.tenant
+    )
     if movement.status not in ("draft", "requested"):
         messages.error(request, f"Cannot dispatch transfer in '{movement.get_status_display()}' state.")
         return redirect("assets:asset_movement_log_detail", pk=movement.pk)
@@ -202,7 +204,9 @@ def asset_movement_log_dispatch(request, pk):
 @login_required
 @require_POST
 def asset_movement_log_receive(request, pk):
-    movement = get_object_or_404(AssetMovementLog.objects.select_related("asset"), pk=pk, tenant=request.tenant)
+    movement = get_object_or_404(
+        AssetMovementLog.objects.select_related("asset", "to_location"), pk=pk, tenant=request.tenant
+    )
     if movement.status not in ("dispatched", "in_transit"):
         messages.error(request, f"Cannot receive transfer in '{movement.get_status_display()}' state. Must be dispatched first.")
         return redirect("assets:asset_movement_log_detail", pk=movement.pk)
