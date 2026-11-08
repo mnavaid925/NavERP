@@ -111,7 +111,7 @@
                         <div class="text-sm font-semibold mt-1">
                             {% if decision.dashboard %}
                             <a href="{% url 'bi:bi_dashboard_detail' decision.dashboard.pk %}" class="text-primary-600 hover:underline">
-                                {{ decision.dashboard.name }}
+                                {{ decision.dashboard.title }}
                             </a>
                             {% else %}
                             <span class="text-muted">None</span>
