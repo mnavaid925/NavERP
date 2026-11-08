@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}{{ movement.number }} — Asset Transfer Log — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_movement_log_list' %}">Movement Logs</a>
+            <span>/</span>
+            <span>{{ movement.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ movement.number }} · {{ movement.title }}</h1>
+            {% if movement.status == 'draft' %}
+                <span class="badge badge-slate">{{ movement.get_status_display }}</span>
+            {% elif movement.status == 'requested' %}
+                <span class="badge badge-info">{{ movement.get_status_display }}</span>
+            {% elif movement.status in 'dispatched in_transit' %}
+                <span class="badge badge-amber">{{ movement.get_status_display }}</span>
+            {% elif movement.status == 'received' %}
+                <span class="badge badge-green">{{ movement.get_status_display }}</span>
+            {% elif movement.status == 'rejected' %}
+                <span class="badge badge-red">{{ movement.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-muted">{{ movement.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-muted">{{ movement.get_movement_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if movement.status in 'draft requested' %}
+        <form method="post" action="{% url 'assets:asset_movement_log_dispatch' movement.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700">
+                <i data-lucide="send" class="w-4 h-4 mr-1"></i> Mark Dispatched / In Transit
+            </button>
+        </form>
+        {% endif %}
+
+        {% if movement.status in 'dispatched in_transit' %}
+        <button type="button" onclick="document.getElementById('receive-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Confirm Receipt at Destination
+        </button>
+        {% endif %}
+
+        {% if movement.status not in 'received cancelled' %}
+        <a href="{% url 'assets:asset_movement_log_edit' movement.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_movement_log_cancel' movement.pk %}" class="inline" onsubmit="return confirm('Cancel this asset transfer?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600">
+                <i data-lucide="slash" class="w-4 h-4 mr-1"></i> Cancel
+            </button>
+        </form>
+        {% endif %}
+
+        {% if movement.status in 'draft cancelled' %}
+        <form method="post" action="{% url 'assets:asset_movement_log_delete' movement.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete movement {{ movement.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Transfer Details & Spatial Data -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Relocation Route Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Transfer Route & Spatial Hierarchy</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl mb-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Source Origin</div>
+                        <div class="text-base font-bold text-slate-900">{{ movement.from_location.name|default:"Unspecified Site" }}</div>
+                        {% if movement.from_location %}
+                        <div class="text-xs text-muted">{{ movement.from_location.code }} • {{ movement.from_location.location_type }}</div>
+                        {% endif %}
+                        <div class="mt-2 text-sm text-slate-700">
+                            <div><span class="text-muted text-xs">Department:</span> {{ movement.from_org_unit.name|default:"—" }}</div>
+                            <div><span class="text-muted text-xs">Room / Bin:</span> {{ movement.from_room_bin|default:"—" }}</div>
+                            <div><span class="text-muted text-xs">Custodian:</span> {{ movement.from_custodian.name|default:"—" }}</div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-2">Destination Target</div>
+                        <div class="text-base font-bold text-slate-900">{{ movement.to_location.name|default:"Unspecified Site" }}</div>
+                        {% if movement.to_location %}
+                        <div class="text-xs text-muted">{{ movement.to_location.code }} • {{ movement.to_location.location_type }}</div>
+                        {% endif %}
+                        <div class="mt-2 text-sm text-slate-700">
+                            <div><span class="text-muted text-xs">Department:</span> {{ movement.to_org_unit.name|default:"—" }}</div>
+                            <div><span class="text-muted text-xs">Room / Bin:</span> {{ movement.to_room_bin|default:"—" }}</div>
+                            <div><span class="text-muted text-xs">Custodian:</span> {{ movement.to_custodian.name|default:"—" }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Operational Asset</dt>
+                        <dd>
+                            <span class="font-mono font-semibold text-slate-900">{{ movement.asset.number }}</span> — {{ movement.asset.name }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Asset Category</dt>
+                        <dd>{{ movement.asset.asset_type|default:"Capital Asset" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Carrier / Fleet</dt>
+                        <dd>{{ movement.carrier_name|default:"Internal Plant Logistics" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Tracking / Waybill</dt>
+                        <dd class="font-mono">{{ movement.tracking_number|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Condition on Receipt</dt>
+                        <dd>
+                            {% if movement.status == 'received' %}
+                                {% if movement.condition_on_receipt == 'good' %}
+                                    <span class="badge badge-green">{{ movement.get_condition_on_receipt_display }}</span>
+                                {% elif movement.condition_on_receipt == 'fair' %}
+                                    <span class="badge badge-amber">{{ movement.get_condition_on_receipt_display }}</span>
+                                {% else %}
+                                    <span class="badge badge-red">{{ movement.get_condition_on_receipt_display }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Pending Delivery</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if movement.gps_latitude and movement.gps_longitude or movement.gps_address %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-brand"></i> Geolocation Coordinates (GPS)
+                    </h4>
+                    <div class="p-3 bg-slate-50 rounded-lg text-sm">
+                        {% if movement.gps_latitude and movement.gps_longitude %}
+                        <div class="font-mono text-slate-900 font-medium">
+                            Lat: {{ movement.gps_latitude }}°, Lon: {{ movement.gps_longitude }}°
+                        </div>
+                        {% endif %}
+                        {% if movement.gps_address %}
+                        <div class="text-xs text-muted mt-1">{{ movement.gps_address }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if movement.reason %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Transfer Justification</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ movement.reason }}</div>
+                </div>
+                {% endif %}
+
+                {% if movement.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Handling & Rigging Notes</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ movement.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Logistics & Timeline -->
+    <div class="space-y-6">
+        <!-- Custody Hand-off Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Custody Chain Verification</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted">Dispatched By</div>
+                    <div class="font-medium text-slate-900">{{ movement.dispatched_by.get_full_name|default:movement.dispatched_by.username|default:"Pending Dispatch" }}</div>
+                    {% if movement.dispatch_date %}
+                    <div class="text-xs text-muted">{{ movement.dispatch_date|date:"Y-m-d H:i" }}</div>
+                    {% endif %}
+                </div>
+                <div class="pt-3 border-t border-slate-200">
+                    <div class="text-xs text-muted">Received By</div>
+                    <div class="font-medium text-slate-900">{{ movement.received_by.get_full_name|default:movement.received_by.username|default:"Pending Receipt" }}</div>
+                    {% if movement.received_date %}
+                    <div class="text-xs text-muted">{{ movement.received_date|date:"Y-m-d H:i" }}</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Transfer Chronology</h3>
+            </div>
+            <div class="card-body">
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Requested Date</dt>
+                        <dd class="font-medium text-slate-900">{{ movement.created_at|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Dispatch Timestamp</dt>
+                        <dd class="font-medium text-slate-900">{{ movement.dispatch_date|date:"Y-m-d H:i"|default:"Not Dispatched" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Receipt Timestamp</dt>
+                        <dd class="font-medium text-slate-900">{{ movement.received_date|date:"Y-m-d H:i"|default:"Not Received" }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receive Modal -->
+<div id="receive-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-slate-900">Confirm Physical Asset Receipt</h3>
+                <button type="button" onclick="document.getElementById('receive-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="post" action="{% url 'assets:asset_movement_log_receive' movement.pk %}">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label" for="receive-condition">Physical Condition on Receipt</label>
+                        <select id="receive-condition" name="condition_on_receipt" class="form-select">
+                            <option value="good">Good / Undamaged</option>
+                            <option value="fair">Fair / Minor Transit Wear</option>
+                            <option value="damaged">Damaged in Transit</option>
+                        </select>
+                    </div>
+                    <div class="p-3 bg-blue-50 text-blue-800 rounded-lg text-xs">
+                        Confirming receipt will automatically update asset <strong>{{ movement.asset.number }}</strong>'s current operational location to <strong>{{ movement.to_location.name|default:"destination facility" }}</strong>.
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="document.getElementById('receive-modal').classList.add('hidden')" class="btn btn-outline">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                        Confirm Receipt & Update Asset
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
