@@ -51,7 +51,7 @@
                         </div>
 
                         <div class="prose max-w-none text-slate-800 text-lg leading-relaxed bg-slate-50 p-6 rounded-xl border border-slate-100 mb-6">
-                            {{ slide.narrative|default:slide.content|default:story.summary|linebreaksbr }}
+                            {% if slide.narrative %}{{ slide.narrative|linebreaksbr }}{% else %}{{ story.summary|default:"Executive slide overview"|linebreaksbr }}{% endif %}
                         </div>
 
                         {% if slide.filter_state %}
