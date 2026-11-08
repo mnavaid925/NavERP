@@ -141,8 +141,8 @@ def asset_movement_log_create(request):
 @login_required
 def asset_movement_log_edit(request, pk):
     movement = get_object_or_404(AssetMovementLog, pk=pk, tenant=request.tenant)
-    if movement.status in ("received", "cancelled"):
-        messages.error(request, f"Transfer {movement.number} is {movement.get_status_display()} and cannot be edited.")
+    if movement.status not in ("draft", "requested"):
+        messages.error(request, f"Transfer {movement.number} is in status '{movement.get_status_display()}' and cannot be edited.")
         return redirect("assets:asset_movement_log_detail", pk=movement.pk)
 
     if request.method == "POST":
