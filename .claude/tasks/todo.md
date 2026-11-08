@@ -74,65 +74,65 @@
 ---
 
 ## 11.2-0 - Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO direct socket connections to industrial fixed RFID gate readers** — Scanning operates via mobile/handheld barcode/QR inputs and web forms.
-- [ ] **NO background cellular GPS streaming / continuous telemetry daemon** — Geolocation is captured point-in-time upon dispatch, transfer, or audit scan.
-- [ ] **NO automated police department CAD / NCIC electronic interchange** — Captures report numbers, filing dates, and precinct details without external API dependencies.
-- [ ] **NO direct electronic insurance carrier claims EDI (ACORD XML)** — Manages claim metadata, policy references, claimed values, and settlement amounts internally.
-- [ ] **NO duplicate operational asset master** — Assets are anchored to `scm.Asset` [AST-] from SCM 4.13.
-- [ ] **NO duplicate employee/custodian master** — Custodians and borrowers reuse `core.Party` and `core.PartyRole`.
+- [x] **NO direct socket connections to industrial fixed RFID gate readers** — Scanning operates via mobile/handheld barcode/QR inputs and web forms.
+- [x] **NO background cellular GPS streaming / continuous telemetry daemon** — Geolocation is captured point-in-time upon dispatch, transfer, or audit scan.
+- [x] **NO automated police department CAD / NCIC electronic interchange** — Captures report numbers, filing dates, and precinct details without external API dependencies.
+- [x] **NO direct electronic insurance carrier claims EDI (ACORD XML)** — Manages claim metadata, policy references, claimed values, and settlement amounts internally.
+- [x] **NO duplicate operational asset master** — Assets are anchored to `scm.Asset` [AST-] from SCM 4.13.
+- [x] **NO duplicate employee/custodian master** — Custodians and borrowers reuse `core.Party` and `core.PartyRole`.
 
 ---
 
 ## Sub-module 11.2 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.2.md` with exact model fields, forms, url names, context keys, and choices
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.2.md` with exact model fields, forms, url names, context keys, and choices
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
 - [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetAudit (`AAUD`)**
-  - [ ] `apps/assets/models/AssetInventoryTracking/AssetAudits.py`
-  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetAudits.py`
-  - [ ] `apps/assets/views/AssetInventoryTracking/AssetAudits.py` (CRUD + start + complete + reconcile + cancel)
-  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetAudits.py`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/list.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/detail.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_audit/form.html`
-- [ ] **Entity 2: AssetMovementLog (`AMOV`)**
-  - [ ] `apps/assets/models/AssetInventoryTracking/AssetMovementLogs.py`
-  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetMovementLogs.py`
-  - [ ] `apps/assets/views/AssetInventoryTracking/AssetMovementLogs.py` (CRUD + dispatch + receive + cancel)
-  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetMovementLogs.py`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/list.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/detail.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_movement_log/form.html`
-- [ ] **Entity 3: AssetCustodyLog (`ACHK`)**
-  - [ ] `apps/assets/models/AssetInventoryTracking/AssetCustodyLogs.py`
-  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetCustodyLogs.py`
-  - [ ] `apps/assets/views/AssetInventoryTracking/AssetCustodyLogs.py` (CRUD + checkin + extend + mark_lost)
-  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetCustodyLogs.py`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/list.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/detail.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_custody_log/form.html`
-- [ ] **Entity 4: AssetIncidentReport (`AINC`)**
-  - [ ] `apps/assets/models/AssetInventoryTracking/AssetIncidentReports.py`
-  - [ ] `apps/assets/forms/AssetInventoryTracking/AssetIncidentReports.py`
-  - [ ] `apps/assets/views/AssetInventoryTracking/AssetIncidentReports.py` (CRUD + investigate + resolve_recovered + authorize_write_off + close)
-  - [ ] `apps/assets/urls/AssetInventoryTracking/AssetIncidentReports.py`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/list.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/detail.html`
-  - [ ] `templates/assets/asset_inventory_tracking/asset_incident_report/form.html`
+- [x] **Entity 1: AssetAudit (`AAUD`)**
+  - [x] `apps/assets/models/AssetInventoryTracking/AssetAudits.py`
+  - [x] `apps/assets/forms/AssetInventoryTracking/AssetAudits.py`
+  - [x] `apps/assets/views/AssetInventoryTracking/AssetAudits.py` (CRUD + start + complete + reconcile + cancel)
+  - [x] `apps/assets/urls/AssetInventoryTracking/AssetAudits.py`
+  - [x] `templates/assets/asset_inventory_tracking/asset_audit/list.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_audit/detail.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_audit/form.html`
+- [x] **Entity 2: AssetMovementLog (`AMOV`)**
+  - [x] `apps/assets/models/AssetInventoryTracking/AssetMovementLogs.py`
+  - [x] `apps/assets/forms/AssetInventoryTracking/AssetMovementLogs.py`
+  - [x] `apps/assets/views/AssetInventoryTracking/AssetMovementLogs.py` (CRUD + dispatch + receive + cancel)
+  - [x] `apps/assets/urls/AssetInventoryTracking/AssetMovementLogs.py`
+  - [x] `templates/assets/asset_inventory_tracking/asset_movement_log/list.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_movement_log/detail.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_movement_log/form.html`
+- [x] **Entity 3: AssetCustodyLog (`ACHK`)**
+  - [x] `apps/assets/models/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [x] `apps/assets/forms/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [x] `apps/assets/views/AssetInventoryTracking/AssetCustodyLogs.py` (CRUD + checkin + extend + mark_lost)
+  - [x] `apps/assets/urls/AssetInventoryTracking/AssetCustodyLogs.py`
+  - [x] `templates/assets/asset_inventory_tracking/asset_custody_log/list.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_custody_log/detail.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_custody_log/form.html`
+- [x] **Entity 4: AssetIncidentReport (`AINC`)**
+  - [x] `apps/assets/models/AssetInventoryTracking/AssetIncidentReports.py`
+  - [x] `apps/assets/forms/AssetInventoryTracking/AssetIncidentReports.py`
+  - [x] `apps/assets/views/AssetInventoryTracking/AssetIncidentReports.py` (CRUD + investigate + resolve_recovered + authorize_write_off + close)
+  - [x] `apps/assets/urls/AssetInventoryTracking/AssetIncidentReports.py`
+  - [x] `templates/assets/asset_inventory_tracking/asset_incident_report/list.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_incident_report/detail.html`
+  - [x] `templates/assets/asset_inventory_tracking/asset_incident_report/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all models in `apps/assets/models/AssetInventoryTracking/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all forms in `apps/assets/forms/AssetInventoryTracking/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetInventoryTracking/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetInventoryTracking/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.2 models
-- [ ] Add `LIVE_LINKS["11.2"]` in `apps/core/navigation.py`:
+- [x] Re-export all models in `apps/assets/models/AssetInventoryTracking/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all forms in `apps/assets/forms/AssetInventoryTracking/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetInventoryTracking/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetInventoryTracking/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.2 models
+- [x] Add `LIVE_LINKS["11.2"]` in `apps/core/navigation.py`:
   - `"Asset Register & Master Data"`: `assets:asset_audit_list`
   - `"Physical Verification & Audits"`: `assets:asset_audit_list`
   - `"Location & Movement Tracking"`: `assets:asset_movement_log_list`
@@ -145,37 +145,57 @@
     - `"Tool Crib Loans"`: `assets:asset_custody_log_list`
     - `"Incident Reports"`: `assets:asset_incident_report_list`
     - `"Asset Tracking"`: `assets:asset_movement_log_list`
-- [ ] Run `makemigrations assets` (generating `0002_...`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (generating `0004_...`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_2.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
+- [x] Create `temp/smoke_11_2.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.2.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.2.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_assetinventorytracking_models.py`
-- [ ] `test_assetinventorytracking_forms.py`
-- [ ] `test_assetinventorytracking_views.py`
-- [ ] `test_assetinventorytracking_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_assetinventorytracking_models.py`
+- [x] `test_assetinventorytracking_forms.py`
+- [x] `test_assetinventorytracking_views.py`
+- [x] `test_assetinventorytracking_security.py`
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/` (238 passed in 40.48s, 100% green)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.2 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.2 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+
+### Sub-module 11.2: Asset Inventory & Tracking — Review & Close-Out (2026-11-08)
+- **Delivered Models**:
+  - `AssetAudit` (`AAUD-`): Scheduled wall-to-wall counts, cycle counts, spot checks, blind counting flag, discrepancy calculation, supervisor reconciliation workflow, and audit logging.
+  - `AssetMovementLog` (`AMOV-`): Inter-facility, room/bin spatial transfers, carrier tracking, GPS coordinates, dispatch/receipt verification, and operational asset location updates on `scm.Asset`.
+  - `AssetCustodyLog` (`ACHK-`): Tool crib equipment lending, borrower e-signatures, checkout/return condition inspections, overdue detection, and status-based delete protection.
+  - `AssetIncidentReport` (`AINC-`): Lost/stolen/damaged-beyond-repair incidents, investigation findings, police & insurance tracking, and loss write-off authorization decommissioning assets to `disposed`.
+- **Database & Seeder**:
+  - Migration: `apps/assets/migrations/0004_assetaudit_assetcustodylog_assetincidentreport_and_more.py`.
+  - Seeder: `apps/assets/management/commands/seed_assets.py` extended with comprehensive demo data and verified idempotent across all tenants.
+- **Navigation**:
+  - Registered `LIVE_LINKS["11.2"]` in `apps/core/navigation.py` for all 5 NavERP feature bullets and convenience aliases.
+- **Review Passes (Phases 4 & 5)**:
+  - 6 serial reviews completed: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`.
+  - Consolidated into `.claude/tasks/review-assets-11.2.md`: 20 findings (3 Critical, 9 Important, 8 Minor).
+  - Phase 5 `code-fixer` resolved 100% of findings (`[x] fixed`), committed one file per commit, leaving 0 open findings.
+- **Test Suite (Phase 6)**:
+  - Test modules added: `test_assetinventorytracking_models.py`, `test_assetinventorytracking_forms.py`, `test_assetinventorytracking_views.py`, `test_assetinventorytracking_security.py`.
+  - Full unfiltered suite execution: `pytest apps/assets/tests/` -> **238 passed** in 40.48s (100% green).
+- **Gaps**: None (all features, choices, routes, and review findings resolved; zero open items).
 
 ---
 
