@@ -3151,6 +3151,22 @@ LIVE_LINKS = {
         "Asset Tags": "assets:asset_tag_list",
         "Asset Procurement Hub": "assets:overview",
     },
+    "11.2": {
+        "Asset Register & Master Data": "assets:overview",
+        "Physical Verification & Audits": "assets:asset_audit_list",
+        "Location & Movement Tracking": "assets:asset_movement_log_list",
+        "Check-in/Check-out Management": "assets:asset_custody_log_list",
+        "Lost, Stolen & Missing Asset Handling": "assets:asset_incident_report_list",
+        # Plural and convenience aliases
+        "Asset Audits": "assets:asset_audit_list",
+        "Movement Logs": "assets:asset_movement_log_list",
+        "Asset Movement Logs": "assets:asset_movement_log_list",
+        "Tool Crib & Custody": "assets:asset_custody_log_list",
+        "Asset Custody Logs": "assets:asset_custody_log_list",
+        "Incident & Loss Reports": "assets:asset_incident_report_list",
+        "Asset Incident Reports": "assets:asset_incident_report_list",
+    },
+
 
 
 
