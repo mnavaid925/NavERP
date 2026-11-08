@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}{{ model.model_number }} — {{ model.name }} — Model Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_model_list' %}">Equipment Models</a>
+            <span>/</span>
+            <span>{{ model.model_number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ model.model_number }} — {{ model.name }}</h1>
+            <span class="badge {{ model.status_css }}">{{ model.get_model_status_display }}</span>
+        </div>
+        <p class="text-sm text-muted mt-1">Taxonomy Category: <a href="{% url 'assets:asset_category_detail' model.category.pk %}" class="font-medium text-brand hover:underline">{{ model.category.code }} ({{ model.category.name }})</a></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_model_edit' model.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Model
+        </a>
+        <form method="post" action="{% url 'assets:asset_model_delete' model.pk %}" class="inline" onsubmit="return confirm('Delete model {{ model.model_number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_model_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Main Specifications Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="cpu" class="w-4 h-4 text-brand"></i> Engineering Blueprint & Specifications
+            </h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Model Number</label>
+                    <div class="text-base font-mono font-bold text-slate-900">{{ model.model_number }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Original Manufacturer (OEM)</label>
+                    <div class="text-sm font-medium text-slate-800">{{ model.display_manufacturer }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Standard Warranty</label>
+                    <div class="text-sm font-medium text-slate-800">{{ model.standard_warranty_months }} Months ({{ model.get_warranty_coverage_type_display }})</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Expected Useful Life</label>
+                    <div class="text-sm font-medium text-slate-800">{{ model.expected_useful_life_months }} Months ({{ model.expected_useful_life_months|floatformat:0 }} mos)</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Estimated Replacement Cost</label>
+                    <div class="text-base font-semibold text-slate-900">${{ model.estimated_replacement_cost|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Default Operational Meter</label>
+                    <div class="text-sm text-slate-800">
+                        {% if model.default_meter_name %}
+                        <span class="font-medium">{{ model.default_meter_name }}</span> ({{ model.default_meter_unit }})
+                        {% else %}
+                        <span class="text-muted">No Default Meter</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if model.technical_specifications %}
+            <hr class="my-4 border-slate-200">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Technical Specifications Summary</label>
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-800 font-mono whitespace-pre-line mt-1">
+                    {{ model.technical_specifications }}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if model.description %}
+            <hr class="my-4 border-slate-200">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Model Description & Operational Scope</label>
+                <p class="text-sm text-slate-700 whitespace-pre-line mt-1">{{ model.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Metadata Side Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-brand"></i> Deployment Statistics
+            </h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">System Model Record</span>
+                <span class="text-xs font-mono text-slate-700">{{ model.number }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Physical Assets Deployed</span>
+                <span class="text-base font-bold text-brand">{{ deployed_count }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Model Specifications Configured</span>
+                <span class="text-sm font-semibold text-slate-900">{{ spec_templates|length }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Production Status</span>
+                <span class="badge {{ model.status_css }}">{{ model.get_model_status_display }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">Registered On</span>
+                <span class="text-xs text-muted">{{ model.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deployed Assets Table -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="box" class="w-4 h-4 text-brand"></i> Registered Assets Using This Model ({{ deployed_count }})
+        </h2>
+        <span class="text-xs text-muted">Showing latest {{ deployed_assets|length }} registered units</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Asset Tag / Number</th>
+                    <th>Asset Name</th>
+                    <th>Serial Number</th>
+                    <th>Location</th>
+                    <th>Custodian</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ast in deployed_assets %}
+                <tr>
+                    <td>
+                        <span class="font-medium text-slate-900">{{ ast.tag_code|default:ast.number }}</span>
+                    </td>
+                    <td>{{ ast.name }}</td>
+                    <td><code class="text-xs font-mono">{{ ast.serial_number|default:"—" }}</code></td>
+                    <td>{{ ast.location.name|default:"—" }}</td>
+                    <td>{{ ast.custodian.name|default:"—" }}</td>
+                    <td><span class="badge {{ ast.status_css }}">{{ ast.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-6 text-sm text-muted">
+                        No physical assets registered with model number <code>{{ model.model_number }}</code> yet.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Model-Specific Specification Templates -->
+{% if spec_templates %}
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-brand"></i> Model Specification Schema ({{ spec_templates|length }})
+        </h2>
+        <a href="{% url 'assets:asset_specification_template_create' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Add Spec Attribute
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Attribute Key</th>
+                    <th>Display Name</th>
+                    <th>Data Type</th>
+                    <th>Unit of Measure</th>
+                    <th>Required</th>
+                    <th>Filterable</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for spec in spec_templates %}
+                <tr>
+                    <td><code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-800">{{ spec.attribute_key }}</code></td>
+                    <td class="font-medium">{{ spec.display_name }}</td>
+                    <td><span class="badge {{ spec.data_type_css }}">{{ spec.get_data_type_display }}</span></td>
+                    <td>{{ spec.unit_of_measure|default:"—" }}</td>
+                    <td>{% if spec.is_required %}<span class="text-red font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+                    <td>{% if spec.is_filterable %}<span class="text-green font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_specification_template_detail' spec.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
