@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Acquisition Receipts — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Procurement</span>
+            <span>/</span>
+            <span>Receipts</span>
+        </div>
+        <h1 class="page-title">Asset Acquisition & Dock Receipts</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_acquisition_receipt_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Log Asset Receipt
+        </a>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="form-group mb-0 md:col-span-2">
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Receipt #, title, serial #, carrier..." class="form-input pl-9 text-sm">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0">
+                <label class="form-label text-xs">Condition</label>
+                <select name="condition" class="form-select text-sm">
+                    <option value="">All Conditions</option>
+                    {% for val, label in condition_choices %}
+                    <option value="{{ val }}" {% if request.GET.condition == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group mb-0 flex items-end gap-2">
+                <button type="submit" class="btn btn-primary text-sm flex-1">Filter</button>
+                {% if request.GET.q or request.GET.status or request.GET.condition or request.GET.location %}
+                <a href="{% url 'assets:asset_acquisition_receipt_list' %}" class="btn btn-outline text-sm" title="Clear Filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Receipts Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Shipment Description</th>
+                    <th>Serial / Model</th>
+                    <th>Vendor & PO</th>
+                    <th>Received Date</th>
+                    <th>Condition</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rcv in receipts %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_acquisition_receipt_detail' rcv.pk %}" class="text-blue-600 hover:underline">
+                            {{ rcv.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-800">{{ rcv.title }}</div>
+                        <div class="text-xs text-slate-500">Qty: {{ rcv.quantity_received }} {% if rcv.receiving_location %}· Staging: {{ rcv.receiving_location.name }}{% endif %}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-800 font-semibold">{{ rcv.serial_number|default:"No Serial Stamped" }}</div>
+                        <div class="text-xs text-slate-500">{{ rcv.manufacturer }} {{ rcv.model_number }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium text-slate-800">{% if rcv.vendor %}{{ rcv.vendor.name }}{% else %}<span class="text-slate-400">—</span>{% endif %}</div>
+                        {% if rcv.purchase_order %}
+                        <div class="text-xs text-slate-500 font-mono">PO: {{ rcv.purchase_order.number }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm text-slate-700">
+                        {{ rcv.received_date|date:"M d, Y" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ rcv.condition_css }}">{{ rcv.get_condition_on_arrival_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ rcv.status_css }}">{{ rcv.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_acquisition_receipt_detail' rcv.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_acquisition_receipt_edit' rcv.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil" class="w-4 h-4 text-slate-500"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_acquisition_receipt_delete' rcv.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete receipt {{ rcv.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="truck" class="w-12 h-12 text-slate-400 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-700">No Asset Receipts Found</h3>
+                            <p class="text-sm text-slate-500 mt-1">Log physical dock arrivals to begin asset intake and quality inspection.</p>
+                            <div class="mt-4">
+                                <a href="{% url 'assets:asset_acquisition_receipt_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Log Asset Receipt
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="p-4 border-t border-slate-200">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.condition %}&condition={{ request.GET.condition }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">
+                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+            </span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.condition %}&condition={{ request.GET.condition }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
