@@ -19,6 +19,10 @@ from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiShared
 from apps.bi.models.CollaborationStorytelling.BiDataStories import BiDataStory
 from apps.bi.models.CollaborationStorytelling.BiVisualComments import BiVisualComment
 from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLog
+from apps.bi.models.IntegrationHub.IntegrationConnectors import IntegrationConnector
+from apps.bi.models.IntegrationHub.WarehouseSyncEndpoints import WarehouseSyncEndpoint
+from apps.bi.models.IntegrationHub.BiWebhookSubscriptions import BiWebhookSubscription
+from apps.bi.models.IntegrationHub.BiExtensionPlugins import BiExtensionPlugin
 
 from apps.bi.models.DataIntegration.CdcSyncConfigs import CdcSyncConfig
 from apps.bi.models.DataIntegration.DataSourceConnectors import DataSourceConnector
@@ -4684,6 +4688,202 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Collaboration & Data Storytelling for tenant: {tenant.name}"))
             else:
                 self.stdout.write(f"  Collaboration & Data Storytelling already seeded for tenant: {tenant.name}")
+
+            # -------------------------------------------------------------
+            # Sub-module 10.19: Integration & API Hub
+            # -------------------------------------------------------------
+            if not IntegrationConnector.objects.filter(tenant=tenant).exists():
+                with transaction.atomic():
+                    admin_user = (
+                        get_user_model().objects.filter(tenant=tenant, is_staff=True).first()
+                        or get_user_model().objects.filter(tenant=tenant).first()
+                    )
+                    sm_model = SemanticModel.objects.filter(tenant=tenant).first()
+                    mart = DataMart.objects.filter(tenant=tenant).first()
+
+                    # 1. Integration Connectors
+                    conn1, _ = IntegrationConnector.objects.get_or_create(
+                        tenant=tenant,
+                        name="Finance GL Closed-Loop Sync",
+                        defaults={
+                            "slug": "finance-gl-closed-loop-sync",
+                            "description": "Bidirectional Reverse ETL pushing variance KPI adjustments directly into accounting journal drafts.",
+                            "connector_type": "internal_erp",
+                            "target_system": "erp_accounting",
+                            "sync_direction": "outbound",
+                            "connection_config": {"module_slug": "accounting", "auto_post": False, "batch_size": 250},
+                            "auth_type": "internal_session",
+                            "message_format": "json",
+                            "sync_interval": "realtime_event",
+                            "status": "active",
+                            "health_status": "healthy",
+                            "total_messages_processed": 1420,
+                            "is_enabled": True,
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    conn2, _ = IntegrationConnector.objects.get_or_create(
+                        tenant=tenant,
+                        name="Production Kafka Event Stream",
+                        defaults={
+                            "slug": "production-kafka-event-stream",
+                            "description": "High-throughput streaming message bus for real-time telemetry and order dispatch tracking.",
+                            "connector_type": "message_broker",
+                            "target_system": "kafka",
+                            "sync_direction": "inbound",
+                            "connection_config": {"bootstrap_servers": "kafka.internal.naverp.io:9092", "topic": "erp.events.telemetry", "consumer_group": "bi_ingestion_cg"},
+                            "auth_type": "api_key",
+                            "auth_credentials": {"api_key": "sec_live_kafka_prod_9918"},
+                            "message_format": "cloudevents",
+                            "sync_interval": "every_minute",
+                            "status": "active",
+                            "health_status": "healthy",
+                            "total_messages_processed": 48200,
+                            "is_enabled": True,
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 2. Warehouse Sync Endpoints
+                    sync1, _ = WarehouseSyncEndpoint.objects.get_or_create(
+                        tenant=tenant,
+                        name="Snowflake Finance Mart Sync",
+                        defaults={
+                            "slug": "snowflake-finance-mart-sync",
+                            "target_warehouse": "snowflake",
+                            "sync_mode": "incremental_merge",
+                            "semantic_model": sm_model,
+                            "data_mart": mart,
+                            "destination_database": "NAVERP_ANALYTICS",
+                            "destination_schema": "FINANCE",
+                            "destination_table": "DIM_FINANCIAL_METRICS",
+                            "connection_config": {"account": "xy12345.us-east-1", "warehouse": "COMPUTE_WH", "role": "DATA_ANALYST"},
+                            "auth_method": "service_account_key",
+                            "sync_schedule": "daily",
+                            "status": "success",
+                            "last_sync_duration_ms": 1380,
+                            "last_rows_synced": 3400,
+                            "total_rows_synced": 45200,
+                            "is_active": True,
+                            "owner": admin_user,
+                        },
+                    )
+
+                    sync2, _ = WarehouseSyncEndpoint.objects.get_or_create(
+                        tenant=tenant,
+                        name="Power BI Executive Dataset Push",
+                        defaults={
+                            "slug": "power-bi-executive-dataset-push",
+                            "target_warehouse": "power_bi_semantic_model",
+                            "sync_mode": "full_refresh",
+                            "semantic_model": sm_model,
+                            "destination_database": "EXECUTIVE_WORKSPACE",
+                            "destination_table": "EXECUTIVE_KPI_DATASET",
+                            "connection_config": {"tenant_id": "ms-tenant-uuid-1", "workspace_id": "powerbi-ws-uuid-44"},
+                            "auth_method": "oauth2_token",
+                            "sync_schedule": "hourly",
+                            "status": "success",
+                            "last_sync_duration_ms": 840,
+                            "last_rows_synced": 1250,
+                            "total_rows_synced": 19500,
+                            "is_active": True,
+                            "owner": admin_user,
+                        },
+                    )
+
+                    # 3. Webhook Subscriptions
+                    wh1, _ = BiWebhookSubscription.objects.get_or_create(
+                        tenant=tenant,
+                        name="Slack Real-Time Incident Alerts",
+                        defaults={
+                            "endpoint_url": "https://hooks.slack.com/services/T00/B00/secincident9918",
+                            "secret_token": "whsec_89adfcb92138127391823791283719283",
+                            "event_types": ["kpi.threshold_breached", "anomaly.detected", "data_quality.exception_raised"],
+                            "payload_format": "slack_compatible",
+                            "custom_headers": {"X-NavERP-Environment": "production"},
+                            "max_retries": 3,
+                            "timeout_seconds": 10,
+                            "status": "active",
+                            "last_response_code": 200,
+                            "last_response_time_ms": 112,
+                            "total_deliveries": 342,
+                            "is_active": True,
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    wh2, _ = BiWebhookSubscription.objects.get_or_create(
+                        tenant=tenant,
+                        name="Make.com Automation Pipeline",
+                        defaults={
+                            "endpoint_url": "https://hook.integromat.com/xyz123makebiwebhook",
+                            "secret_token": "whsec_219381203981029381029381029381029",
+                            "event_types": ["report.execution_completed", "warehouse_sync.completed"],
+                            "payload_format": "standard_json",
+                            "max_retries": 5,
+                            "timeout_seconds": 15,
+                            "status": "active",
+                            "last_response_code": 200,
+                            "last_response_time_ms": 185,
+                            "total_deliveries": 88,
+                            "is_active": True,
+                            "created_by": admin_user,
+                        },
+                    )
+
+                    # 4. Extension Plugins
+                    plug1, _ = BiExtensionPlugin.objects.get_or_create(
+                        tenant=tenant,
+                        plugin_identifier="io.naverp.visuals.sankey-pro",
+                        defaults={
+                            "name": "ECharts Sankey Diagram Pro",
+                            "version": "1.2.0",
+                            "plugin_type": "custom_visual",
+                            "category": "visualization",
+                            "description": "High-performance multi-level Sankey flow diagrams visualizing revenue streams and cost attribution.",
+                            "author_name": "NavERP Analytics Labs",
+                            "homepage_url": "https://naverp.io/marketplace/plugins/sankey-pro",
+                            "repository_url": "https://github.com/naverp/plugins-sankey-pro",
+                            "license": "MIT",
+                            "manifest_metadata": {"entrypoint_js": "/static/bi/plugins/sankey.min.js", "icon": "git-merge", "min_naverp_version": "1.0.0"},
+                            "config_schema": {"type": "object", "properties": {"node_width": {"type": "integer", "default": 20}, "color_theme": {"type": "string", "default": "modern"}}},
+                            "current_config": {"node_width": 24, "color_theme": "modern"},
+                            "permissions_required": ["read_semantic_layer", "render_canvas_ui"],
+                            "status": "enabled",
+                            "is_verified": True,
+                            "is_system_plugin": False,
+                            "installed_by": admin_user,
+                        },
+                    )
+
+                    plug2, _ = BiExtensionPlugin.objects.get_or_create(
+                        tenant=tenant,
+                        plugin_identifier="io.naverp.connectors.shopify",
+                        defaults={
+                            "name": "Shopify Analytics Ingestion Plug-in",
+                            "version": "2.0.1",
+                            "plugin_type": "connector_plugin",
+                            "category": "data_integration",
+                            "description": "Automated ingestion connector for eCommerce orders, abandoned carts, and refunds.",
+                            "author_name": "NavERP Community Ecosystem",
+                            "homepage_url": "https://naverp.io/marketplace/plugins/shopify-connector",
+                            "repository_url": "https://github.com/naverp/plugins-shopify-connector",
+                            "license": "Apache-2.0",
+                            "manifest_metadata": {"entrypoint_js": "/static/bi/plugins/shopify.min.js", "icon": "shopping-bag", "min_naverp_version": "1.0.0"},
+                            "config_schema": {"type": "object", "properties": {"shop_url": {"type": "string"}, "sync_interval_mins": {"type": "integer"}}},
+                            "current_config": {"shop_url": "mystore.myshopify.com", "sync_interval_mins": 15},
+                            "permissions_required": ["network_egress", "write_staging_table"],
+                            "status": "installed",
+                            "is_verified": True,
+                            "is_system_plugin": False,
+                            "installed_by": admin_user,
+                        },
+                    )
+
+                self.stdout.write(self.style.SUCCESS(f"  Successfully seeded Integration & API Hub for tenant: {tenant.name}"))
+            else:
+                self.stdout.write(f"  Integration & API Hub already seeded for tenant: {tenant.name}")
 
 
         self.stdout.write(self.style.SUCCESS("Business Intelligence seeding finished."))
