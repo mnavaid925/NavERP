@@ -103,10 +103,11 @@ def asset_capitalization_create(request):
             cap.tenant = request.tenant
             cap.save()
             write_audit_log(
-                request=request,
-                action="create",
-                instance=cap,
-                details=f"Created capitalization event {cap.number} for {cap.asset_name} (Cost: {cap.total_cost_basis})",
+                request.user,
+                cap,
+                "create",
+                changes={"details": f"Created capitalization event {cap.number} for {cap.asset_name} (Cost: {cap.total_cost_basis})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Capitalization {cap.number} created successfully.")
             return redirect("assets:asset_capitalization_detail", pk=cap.pk)
@@ -130,10 +131,11 @@ def asset_capitalization_edit(request, pk):
         if form.is_valid():
             cap = form.save()
             write_audit_log(
-                request=request,
-                action="update",
-                instance=cap,
-                details=f"Updated capitalization {cap.number} (Cost: {cap.total_cost_basis})",
+                request.user,
+                cap,
+                "update",
+                changes={"details": f"Updated capitalization {cap.number} (Cost: {cap.total_cost_basis})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Asset Capitalization {cap.number} updated successfully.")
             return redirect("assets:asset_capitalization_detail", pk=cap.pk)
@@ -154,10 +156,11 @@ def asset_capitalization_delete(request, pk):
     capitalization = assets_object(request, AssetCapitalization, pk)
     number = capitalization.number
     write_audit_log(
-        request=request,
-        action="delete",
-        instance=capitalization,
-        details=f"Deleted capitalization {number}",
+        request.user,
+        capitalization,
+        "delete",
+        changes={"details": f"Deleted capitalization {number}"},
+        tenant=request.tenant,
     )
     capitalization.delete()
     messages.success(request, f"Asset Capitalization {number} was deleted.")
@@ -204,10 +207,11 @@ def asset_capitalization_execute(request, pk):
         capitalization.save(update_fields=["status", "fixed_asset", "capitalized_by", "capitalized_at", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="execute_capitalization",
-        instance=capitalization,
-        details=f"Executed capitalization {capitalization.number} into Fixed Asset {capitalization.fixed_asset.number if capitalization.fixed_asset else ''}",
+        request.user,
+        capitalization,
+        "update",
+        changes={"action": "execute_capitalization", "details": f"Executed capitalization {capitalization.number} into Fixed Asset {capitalization.fixed_asset.number if capitalization.fixed_asset else ''}"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Asset Capitalization {capitalization.number} successfully completed and capitalized into Fixed Assets.")
     return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
@@ -226,10 +230,11 @@ def asset_capitalization_reverse(request, pk):
     capitalization.save(update_fields=["status", "updated_at"])
 
     write_audit_log(
-        request=request,
-        action="reverse_capitalization",
-        instance=capitalization,
-        details=f"Reversed capitalization {capitalization.number}",
+        request.user,
+        capitalization,
+        "update",
+        changes={"action": "reverse_capitalization", "details": f"Reversed capitalization {capitalization.number}"},
+        tenant=request.tenant,
     )
     messages.warning(request, f"Asset Capitalization {capitalization.number} has been reversed.")
     return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
