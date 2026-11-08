@@ -143,6 +143,9 @@ def asset_tag_edit(request, pk):
 def asset_tag_delete(request, pk):
     """Delete an asset tag record."""
     tag = assets_object(request, AssetTag, pk)
+    if tag.status not in ("pending_print", "printed", "damaged_reissued"):
+        messages.error(request, f"Tag {tag.tag_code} cannot be deleted in status '{tag.get_status_display()}'.")
+        return redirect("assets:asset_tag_detail", pk=tag.pk)
     code = tag.tag_code
     write_audit_log(
         request.user,
