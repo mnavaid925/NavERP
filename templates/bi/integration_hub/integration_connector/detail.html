@@ -31,7 +31,7 @@
             {% elif connector.health_status == 'unreachable' %}
             <span class="badge badge-red">Unreachable</span>
             {% else %}
-            <span class="badge badge-slate">Untested</span>
+            <span class="badge badge-slate">{{ connector.get_health_status_display }}</span>
             {% endif %}
         </div>
         <p class="text-muted text-sm mt-1">{{ connector.number }} • {{ connector.slug }}</p>
