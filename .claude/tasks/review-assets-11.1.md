@@ -88,3 +88,18 @@ None.
 4. `apps/assets/admin.py:11-36` — ModelAdmins lack `list_select_related = ("tenant",)`. Fix: Add `list_select_related`.
 
 ---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+1. `apps/assets/views/AssetProcurement/*.py` (all 22 mutation views) — Incompatible `write_audit_log()` call signature: views call `write_audit_log(request=request, action="...", instance=..., details=...)` but `apps.core.utils.write_audit_log` defines `(user, obj, action, changes=None, tenant=None)`. Passing `request` causes a runtime `TypeError: write_audit_log() got an unexpected keyword argument 'request'`, crashing any form save, update, delete, approval, rejection, inspection, capitalization execution, or tag verification with HTTP 500. Additionally, `AuditLog.action` has `max_length=10` (`"create"`, `"update"`, `"delete"`), so long custom strings cause truncation. Fix: Update all 22 calls to `write_audit_log(request.user, instance, "update", changes={...}, tenant=request.tenant)`.
+
+### Important
+1. `apps/assets/views/AssetProcurement/AssetAcquisitionReceipts.py:43-46` — Unhandled `ValueError` when filtering `location` with non-digit query parameters (`?location=bad`), raising an unhandled HTTP 500. Fix: Guard with `if location_id and location_id.isdigit():`.
+2. `apps/assets/views/AssetProcurement/AssetCapitalizations.py:88-91` and `AssetTags.py:79-82` — Unhandled `ValueError` on non-numeric initial query parameters in Create views (`?receipt=bad`, `?capitalization=bad`), crashing with HTTP 500. Fix: Check `.isdigit()` before querying.
+3. `templates/assets/asset_procurement/*/*.html` — Filter dropdowns omitted from list templates (`category`, `location`, `method`, `format`). Fix: Add missing `<select>` dropdown controls to all 4 list templates.
+
+### Minor
+None.
+
+---
