@@ -71,15 +71,15 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <div>
-                <label class="form-label text-xs">Search</label>
+                <label for="id_q" class="form-label text-xs">Search</label>
                 <div class="relative">
-                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search comment text..." class="form-input text-sm pl-9 w-full">
-                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Search comment text..." class="form-input text-sm ps-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute start-3 top-2.5"></i>
                 </div>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select text-sm">
+                <label for="id_status" class="form-label text-xs">Status</label>
+                <select id="id_status" name="status" class="form-select text-sm">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -87,8 +87,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Target Type</label>
-                <select name="target_type" class="form-select text-sm">
+                <label for="id_target_type" class="form-label text-xs">Target Type</label>
+                <select id="id_target_type" name="target_type" class="form-select text-sm">
                     <option value="">All Targets</option>
                     {% for val, label in target_type_choices %}
                     <option value="{{ val }}" {% if request.GET.target_type == val %}selected{% endif %}>{{ label }}</option>
@@ -96,8 +96,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Priority</label>
-                <select name="priority" class="form-select text-sm">
+                <label for="id_priority" class="form-label text-xs">Priority</label>
+                <select id="id_priority" name="priority" class="form-select text-sm">
                     <option value="">All Priorities</option>
                     {% for val, label in priority_choices %}
                     <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
@@ -105,8 +105,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Dashboard</label>
-                <select name="dashboard" class="form-select text-sm">
+                <label for="id_dashboard" class="form-label text-xs">Dashboard</label>
+                <select id="id_dashboard" name="dashboard" class="form-select text-sm">
                     <option value="">All Dashboards</option>
                     {% for d in dashboards %}
                     <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.title }}</option>
@@ -114,8 +114,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Story</label>
-                <select name="story" class="form-select text-sm">
+                <label for="id_story" class="form-label text-xs">Story</label>
+                <select id="id_story" name="story" class="form-select text-sm">
                     <option value="">All Stories</option>
                     {% for s in stories %}
                     <option value="{{ s.pk }}" {% if request.GET.story == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.title }}</option>
