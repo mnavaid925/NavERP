@@ -1523,3 +1523,86 @@ All routes under `bi:` namespace:
 - **Audit Logging**: `write_audit_log(request.user, obj, action, tenant=request.tenant)` invoked across create, edit, delete, and resolve operations.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.18"]`.
 
+
+
+---
+
+## Sub-module 10.19: Integration & API Hub
+
+### Overview
+Enterprise Integration & API Hub for NavERP Business Intelligence (`apps/bi/models/IntegrationHub/`). Provides unified connectivity between internal ERP data marts, cloud data warehouses, real-time message streaming buses, bi-directional webhook dispatchers, and modular analytics extension plugins.
+
+### Models
+1. **`IntegrationConnector`** (`apps/bi/models/IntegrationHub/IntegrationConnectors.py`)
+   - Table: `bi_integration_connector`, Prefix: `BINT` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `connector_type` (`rest_api`, `graphql`, `grpc`, `jdbc`, `odbc`, `webhook`, `kafka`, `eventbridge`), `target_system` (`kafka`, `salesforce`, `hubspot`, `stripe`, `netsuite`, `shopify`, `snowflake`, `bigquery`, `databricks`, `s3`, `custom`), `base_url`, `auth_type` (`none`, `basic`, `bearer_token`, `api_key`, `oauth2`, `mtls`), `auth_credentials` (JSONField, encrypted/masked), `connection_config` (JSONField), `sync_interval` (`realtime`, `every_minute`, `every_5m`, `every_15m`, `hourly`, `daily`, `manual`), `status` (`draft`, `active`, `paused`, `error`, `deprecated`), `health_status` (`untested`, `healthy`, `degraded`, `unreachable`), `last_heartbeat_at`, `last_error_message`, `total_messages_processed`, `is_enabled`, `created_by` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes on `(tenant, status)`, `(tenant, connector_type)`, `(tenant, health_status)`, `(tenant, sync_interval)`, `(tenant, is_enabled)`.
+
+2. **`WarehouseSyncEndpoint`** (`apps/bi/models/IntegrationHub/WarehouseSyncEndpoints.py`)
+   - Table: `bi_warehouse_sync_endpoint`, Prefix: `BSNC` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `target_warehouse` (`snowflake`, `bigquery`, `redshift`, `databricks`, `synapse`, `clickhouse`, `duckdb`), `sync_mode` (`batch`, `micro_batch`, `cdc`, `full_refresh`, `streaming`), `sync_schedule` (`continuous`, `every_15m`, `hourly`, `daily`, `weekly`, `manual`), `destination_schema`, `destination_table`, `semantic_model` (FK `SemanticModel`, nullable), `data_mart` (FK `DataMart`, nullable), `connection_config` (JSONField), `status` (`idle`, `syncing`, `success`, `error`, `disabled`), `last_sync_at`, `last_sync_duration_ms`, `last_rows_synced`, `total_rows_synced`, `last_error_message`, `is_active`, `owner` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes on `(tenant, status)`, `(tenant, target_warehouse)`, `(tenant, sync_mode)`, `(tenant, sync_schedule)`, `(tenant, is_active)`.
+
+3. **`BiWebhookSubscription`** (`apps/bi/models/IntegrationHub/BiWebhookSubscriptions.py`)
+   - Table: `bi_webhook_subscription`, Prefix: `BWHK` (`TenantNumbered`).
+   - Fields: `name`, `endpoint_url`, `secret_token` (auto-generated HMAC secret `whsec_...`), `events` (JSONField), `payload_format` (`json`, `cloudevents`, `xml`), `custom_headers` (JSONField), `max_retries` (default 3), `timeout_seconds` (default 10), `status` (`active`, `failing`, `suspended`, `disabled`), `is_active`, `consecutive_failures`, `total_deliveries`, `last_triggered_at`, `last_response_code`, `last_response_time_ms`, `last_error_message`, `created_by` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, status)`, `(tenant, payload_format)`, `(tenant, is_active)`.
+
+4. **`BiExtensionPlugin`** (`apps/bi/models/IntegrationHub/BiExtensionPlugins.py`)
+   - Table: `bi_extension_plugin`, Prefix: `BEXT` (`TenantNumbered`).
+   - Fields: `name`, `plugin_identifier`, `plugin_type` (`custom_visual`, `transform_hook`, `data_source`, `export_format`, `ai_agent`, `theme_pack`), `category` (`visualization`, `integration`, `governance`, `ml_ai`, `utility`), `version`, `author_name`, `homepage_url`, `repository_url`, `manifest_metadata` (JSONField), `config_schema` (JSONField), `current_config` (JSONField), `permissions_required` (JSONField), `status` (`installed`, `enabled`, `disabled`, `deprecated`, `quarantined`), `is_system_plugin` (boolean), `is_verified` (boolean), `installed_by` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, plugin_identifier)`, composite indexes on `(tenant, status)`, `(tenant, plugin_type)`, `(tenant, category)`, `(tenant, is_verified)`.
+
+### URLs & Routes
+All routes under `bi:` namespace:
+- **Integration Connectors**:
+  - `bi:integration_connector_list` (`/bi/integrations/connectors/`)
+  - `bi:integration_connector_create` (`/bi/integrations/connectors/create/`)
+  - `bi:integration_connector_detail` (`/bi/integrations/connectors/<int:pk>/`)
+  - `bi:integration_connector_edit` (`/bi/integrations/connectors/<int:pk>/edit/`)
+  - `bi:integration_connector_delete` (`/bi/integrations/connectors/<int:pk>/delete/` - `@require_POST`)
+  - `bi:integration_connector_ping` (`/bi/integrations/connectors/<int:pk>/ping/` - `@require_POST`)
+- **Warehouse Sync Endpoints**:
+  - `bi:warehouse_sync_endpoint_list` (`/bi/integrations/warehouse-syncs/`)
+  - `bi:warehouse_sync_endpoint_create` (`/bi/integrations/warehouse-syncs/create/`)
+  - `bi:warehouse_sync_endpoint_detail` (`/bi/integrations/warehouse-syncs/<int:pk>/`)
+  - `bi:warehouse_sync_endpoint_edit` (`/bi/integrations/warehouse-syncs/<int:pk>/edit/`)
+  - `bi:warehouse_sync_endpoint_delete` (`/bi/integrations/warehouse-syncs/<int:pk>/delete/` - `@require_POST`)
+  - `bi:warehouse_sync_endpoint_trigger` (`/bi/integrations/warehouse-syncs/<int:pk>/trigger/` - `@require_POST`)
+- **Bi Webhook Subscriptions**:
+  - `bi:bi_webhook_subscription_list` (`/bi/integrations/webhooks/`)
+  - `bi:bi_webhook_subscription_create` (`/bi/integrations/webhooks/create/`)
+  - `bi:bi_webhook_subscription_detail` (`/bi/integrations/webhooks/<int:pk>/`)
+  - `bi:bi_webhook_subscription_edit` (`/bi/integrations/webhooks/<int:pk>/edit/`)
+  - `bi:bi_webhook_subscription_delete` (`/bi/integrations/webhooks/<int:pk>/delete/` - `@require_POST`)
+  - `bi:bi_webhook_subscription_ping` (`/bi/integrations/webhooks/<int:pk>/ping/` - `@require_POST`)
+- **BI Extension Plugins**:
+  - `bi:bi_extension_plugin_list` (`/bi/integrations/plugins/`)
+  - `bi:bi_extension_plugin_create` (`/bi/integrations/plugins/create/`)
+  - `bi:bi_extension_plugin_detail` (`/bi/integrations/plugins/<int:pk>/`)
+  - `bi:bi_extension_plugin_edit` (`/bi/integrations/plugins/<int:pk>/edit/` - system plugins protected)
+  - `bi:bi_extension_plugin_delete` (`/bi/integrations/plugins/<int:pk>/delete/` - system plugins protected, `@require_POST`)
+  - `bi:bi_extension_plugin_toggle` (`/bi/integrations/plugins/<int:pk>/toggle/` - `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/integration_hub/`:
+  - `integration_connector/`: `list.html`, `detail.html`, `form.html`
+  - `warehouse_sync_endpoint/`: `list.html`, `detail.html`, `form.html`
+  - `bi_webhook_subscription/`: `list.html`, `detail.html`, `form.html`
+  - `bi_extension_plugin/`: `list.html`, `detail.html`, `form.html`
+- Strict compliance with `theme.css`: Fixed colour badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat cards, full dark-mode styling, semantic `<nav class="pagination" aria-label="Pagination">`, accessible action button `aria-label` tags, and null-safe user foreign key guards (`{% if obj.fk %}`).
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Integration Hub records:
+  - Connectors: Enterprise Kafka Stream, Salesforce Analytics Ingress, Stripe Billing Pipeline.
+  - Warehouse Syncs: Snowflake Nightly Sync, BigQuery Streaming Pipeline, Databricks Delta Sync.
+  - Webhooks: Alert Notification Webhook, Pipeline Failure Dispatcher, Incident Management Webhook.
+  - Plugins: Sankey Diagram Visualizer, dbt Core Transformation Runner, DuckDB In-Memory Query Accelerator.
+- `--flush` support: Full cleanup of 10.19 models in atomic transaction prepended to delete cascade.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. Form foreign keys verified with `reject_foreign(self, cleaned, ["semantic_model", "data_mart"])`.
+- **Secret Handling (Rule L20)**: `secret_token` strictly excluded from form `Meta.fields` and never prepopulated in HTML form inputs. Edit form textarea does not prepopulate cleartext credentials and only overwrites existing credentials when new replacement JSON is supplied. Webhook detail page masks secret token.
+- **System Plugin Tamper Protection**: System plugins cannot be modified via edit endpoint or deleted via delete endpoint.
+- **Audit Logging**: `write_audit_log(request.user, obj, action, changes=None, tenant=request.tenant)` invoked across create, edit, delete, and action operations.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.19"]`.
