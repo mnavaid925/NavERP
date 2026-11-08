@@ -1265,6 +1265,99 @@ Natural Language & Conversational BI brings search-first and conversation-first 
 
 ---
 
+## Sub-module 10.16: Alerts, Subscriptions & Distribution
+
+Proactive anomaly detection, threshold-driven automated alerting, scheduled report subscriptions, multi-format distribution bursting, multi-channel delivery (in-app, email, webhooks), and an interactive Notification Center incident triage workspace.
+
+### Models
+1. **`BiAlertRule`** (`apps/bi/models/AlertsSubscriptions/BiAlertRules.py`)
+   - Table: `bi_alert_rule`, Prefix: `BALR` (`TenantNumbered`).
+   - Fields: `name`, `description`, `alert_type` (`kpi_threshold`, `statistical_anomaly`, `forecast_breach`, `data_freshness_sla`, `composite_rule`), `kpi_definition` (FK `KpiDefinition`), `anomaly_detection` (FK `StatisticalAnomaly`), `condition_operator` (`gt`, `lt`, `gte`, `lte`, `eq`, `outside_range`, `pct_change_gt`, `anomaly_flagged`), `threshold_value` (Decimal), `secondary_threshold_value` (Decimal), `severity` (`critical`, `warning`, `info`, `cosmetic`), `evaluation_cadence` (`realtime_event`, `every_15_min`, `hourly`, `daily`, `weekly`), `trigger_frequency` (`every_time`, `once_until_resolved`, `max_daily_once`), `delivery_channel` (`in_app_only`, `in_app_email`, `email_only`, `webhook_slack_teams`), `recipient_users` (M2M `auth.User`), `notification_email_list` (TextField), `webhook_url` (URLField), `downstream_workflow` (`none`, `create_task`, `request_approval`, `trigger_webhook`), `status` (`active`, `paused`, `tripped`, `archived`), `last_evaluated_at`, `last_triggered_at`, `trigger_count`, `last_trigger_value`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite index on `(tenant, -created_at)` (`idx_balr_ten_created`), indexes on `(tenant, alert_type)`, `(tenant, severity)`, `(tenant, status)`.
+   - Properties: `severity_badge_class`, `status_badge_class`, `is_tripped`.
+   - Methods: `evaluate_condition(current_value, anomaly_flag=False)`, `record_evaluation(...)`.
+
+2. **`ReportSubscription`** (`apps/bi/models/AlertsSubscriptions/ReportSubscriptions.py`)
+   - Table: `bi_report_subscription`, Prefix: `BSUB` (`TenantNumbered`).
+   - Fields: `name`, `target_asset_type` (`dashboard`, `report`), `dashboard` (FK `BiDashboard`), `report` (FK `ReportDefinition`), `cadence` (`daily`, `weekly`, `monthly`, `quarterly`, `custom_cron`), `scheduled_time` (TimeField), `cron_expression` (CharField), `export_format` (`pdf`, `excel`, `csv`, `html_inline`), `burst_mode` (`broadcast`, `sliced_per_recipient`), `subscriber_users` (M2M `auth.User`), `subscriber_org_units` (M2M `core.OrgUnit`), `external_recipient_emails` (TextField), `filter_overrides` (JSONField), `include_cover_page` (bool), `skip_if_empty` (bool), `status` (`active`, `paused`, `failing`, `archived`), `last_run_at`, `next_run_at`, `run_count`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite index on `(tenant, -created_at)` (`idx_bsub_ten_created`), indexes on `(tenant, cadence)`, `(tenant, export_format)`, `(tenant, status)`.
+   - Properties: `status_badge_class`, `format_badge_class`.
+   - Methods: `record_run(success=True)`.
+
+3. **`DistributionBurstRun`** (`apps/bi/models/AlertsSubscriptions/DistributionBurstRuns.py`)
+   - Table: `bi_distribution_burst_run`, Prefix: `BBRS` (`TenantNumbered`).
+   - Fields: `subscription` (FK `ReportSubscription`), `alert_rule` (FK `BiAlertRule`), `run_trigger` (`scheduled_subscription`, `alert_trigger`, `ad_hoc_manual`, `api_burst`), `delivery_channel` (`email`, `in_app`, `webhook`, `sftp`), `status` (`queued`, `processing`, `completed`, `partially_delivered`, `failed`), `recipient_count`, `delivered_count`, `failed_count`, `execution_duration_ms`, `generated_file_name`, `file_size_bytes`, `burst_slicing_metadata` (JSONField), `error_summary`, `executed_by` (FK `auth.User`), `started_at`, `completed_at`.
+   - Constraints & Indexes: unique on `(tenant, number)`, indexes on `(tenant, run_trigger)`, `(tenant, status)`, `(tenant, started_at)`.
+   - Properties: `success_rate`, `status_badge_class`, `channel_badge_class`.
+   - Methods: `mark_completed(...)`, `mark_failed(...)`.
+
+4. **`BiNotificationItem`** (`apps/bi/models/AlertsSubscriptions/BiNotificationItems.py`)
+   - Table: `bi_notification_item`, Prefix: `BNTF` (`TenantNumbered`).
+   - Fields: `recipient` (FK `auth.User`), `title`, `message`, `severity` (`critical`, `warning`, `info`, `low`), `category` (`kpi_alert`, `statistical_anomaly`, `subscription_digest`, `workflow_trigger`, `system_event`), `alert_rule` (FK `BiAlertRule`), `burst_run` (FK `DistributionBurstRun`), `action_url` (CharField relative/http), `status` (`unread`, `read`, `acknowledged`, `snoozed`, `escalated`, `dismissed`), `read_at`, `acknowledged_at`, `acknowledged_by` (FK `auth.User`), `acknowledgment_notes`, `snoozed_until`, `escalation_level` (SmallIntegerField 0-3), `escalated_to` (FK `auth.User`), `workflow_converted` (bool), `workflow_reference`.
+   - Constraints & Indexes: unique on `(tenant, number)`, composite index on `(tenant, created_at)` (`idx_bntf_ten_created`), indexes on `(tenant, recipient, status)`, `(tenant, severity)`, `(tenant, category)`.
+   - Properties: `severity_badge_class`, `status_badge_class`, `category_badge_class`, `is_snoozed_active`.
+   - Methods: `mark_read()`, `acknowledge(user, notes)`, `snooze(until_dt)`, `escalate(user)`.
+
+### URLs & Routes
+- Master Command Center / Workspace: `bi:notification_center` (`/bi/notifications/center/`)
+- Alert Rules:
+  - `bi:bi_alert_rule_list` / `bi:alert_rule_list` (`/bi/alerts/`)
+  - `bi:bi_alert_rule_create` / `bi:alert_rule_create` (`/bi/alerts/create/`)
+  - `bi:bi_alert_rule_detail` / `bi:alert_rule_detail` (`/bi/alerts/<int:pk>/`)
+  - `bi:bi_alert_rule_edit` / `bi:alert_rule_edit` (`/bi/alerts/<int:pk>/edit/`)
+  - `bi:bi_alert_rule_delete` / `bi:alert_rule_delete` (`/bi/alerts/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:bi_alert_rule_test_evaluate` / `bi:alert_rule_test_evaluate` (`/bi/alerts/<int:pk>/evaluate/` - `@require_POST`)
+- Report Subscriptions:
+  - `bi:report_subscription_list` (`/bi/subscriptions/`)
+  - `bi:report_subscription_create` (`/bi/subscriptions/create/`)
+  - `bi:report_subscription_detail` (`/bi/subscriptions/<int:pk>/`)
+  - `bi:report_subscription_edit` (`/bi/subscriptions/<int:pk>/edit/`)
+  - `bi:report_subscription_delete` (`/bi/subscriptions/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+  - `bi:report_subscription_run_now` (`/bi/subscriptions/<int:pk>/run-now/` - `@require_POST`)
+- Distribution Burst Runs:
+  - `bi:distribution_burst_run_list` (`/bi/burst-runs/`)
+  - `bi:distribution_burst_run_create` (`/bi/burst-runs/create/`)
+  - `bi:distribution_burst_run_detail` (`/bi/burst-runs/<int:pk>/`)
+  - `bi:distribution_burst_run_edit` (`/bi/burst-runs/<int:pk>/edit/`)
+  - `bi:distribution_burst_run_delete` (`/bi/burst-runs/<int:pk>/delete/` - `@tenant_admin_required`, `@require_POST`)
+- Notifications:
+  - `bi:bi_notification_item_list` / `bi:notification_item_list` (`/bi/notifications/`)
+  - `bi:bi_notification_item_create` / `bi:notification_item_create` (`/bi/notifications/create/`)
+  - `bi:bi_notification_item_detail` / `bi:notification_item_detail` (`/bi/notifications/<int:pk>/` - auto-marks read)
+  - `bi:bi_notification_item_edit` / `bi:notification_item_edit` (`/bi/notifications/<int:pk>/edit/`)
+  - `bi:bi_notification_item_delete` / `bi:notification_item_delete` (`/bi/notifications/<int:pk>/delete/` - `@require_POST`)
+  - `bi:notification_mark_read` (`/bi/notifications/<int:pk>/mark-read/` - `@require_POST`)
+  - `bi:notification_acknowledge` (`/bi/notifications/<int:pk>/acknowledge/` - `@require_POST`)
+  - `bi:notification_snooze` (`/bi/notifications/<int:pk>/snooze/` - `@require_POST`)
+  - `bi:notification_escalate` (`/bi/notifications/<int:pk>/escalate/` - `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/alerts_subscriptions/`:
+  - `bi_alert_rule/` (`list.html`, `detail.html`, `form.html`).
+  - `report_subscription/` (`list.html`, `detail.html`, `form.html`).
+  - `distribution_burst_run/` (`list.html`, `detail.html`, `form.html`).
+  - `bi_notification_item/` (`list.html`, `detail.html`, `form.html`).
+  - `notification_center.html` (interactive operational triage workspace with status filter tabs, inline quick actions, and critical counters).
+- Design system: Colour-named badge modifiers (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`), stat-card icons (`blue`, `green`, `orange`, `purple`), accessible `<table class="table">` in `.table-wrap`.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Alerts, Subscriptions & Distribution demo records:
+  - Alert Rules: Operating Margin Threshold Alert (`BALR-00001`), Freight Cost Spike Anomaly (`BALR-00002`).
+  - Report Subscriptions: Weekly Executive KPI Digest (`BSUB-00001`), Monthly Financial Statements Pack (`BSUB-00002`).
+  - Distribution Burst Runs: Scheduled Monday Morning Burst (`BBRS-00001`), Ad-hoc Board Pack Burst (`BBRS-00002`).
+  - Notification Items: Revenue Target Breach Incident (`BNTF-00001`), Freight Anomaly Warning (`BNTF-00002`).
+- 100% idempotent with `--flush` cleanup across all 10.16 tables.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. All foreign keys in forms validated with `reject_foreign`.
+- **Role-Based Authorization**: `@tenant_admin_required` strictly enforced on all delete views (`bi_alert_rule_delete`, `report_subscription_delete`, `distribution_burst_run_delete`).
+- **Open Redirect Protection**: `_safe_redirect()` uses `url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()})` on post-action transitions.
+- **Stored XSS Prevention**: `clean_action_url()` validates relative `/` or `http://`/`https://` paths and strictly rejects `javascript:`, `data:`, `vbscript:`.
+- **Numeric Input Hardening (Lesson L35)**: Hand-parsed snooze `hours` input is validated within allowed range `(1, 4, 24, 72)` with error fallback.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.16"]`.
+
+---
+
 ## Sub-module 10.17: Embedded & Mobile BI
 
 Comprehensive embedded analytics, mobile business intelligence (PWA / offline-ready / touch-optimized), developer APIs & SDKs, kiosk/wallboard display modes, and SSO row-level context passthrough.
