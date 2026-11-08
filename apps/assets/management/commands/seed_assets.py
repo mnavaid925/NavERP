@@ -59,7 +59,7 @@ class Command(BaseCommand):
         currency = Currency.objects.filter(is_active=True).first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
         location = Location.objects.filter(tenant=tenant).first()
-        vendor = Party.objects.filter(tenant=tenant, roles__role_type__in=["vendor", "supplier"]).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first() or Party.objects.filter(tenant=tenant).first()
         po = PurchaseOrder.objects.filter(tenant=tenant).first()
         asset_account = GLAccount.objects.filter(tenant=tenant, type="asset").first()
         cip_account = GLAccount.objects.filter(tenant=tenant, type="asset").last()
