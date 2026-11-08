@@ -296,7 +296,7 @@
             {% csrf_token %}
             <div class="card-header flex items-center justify-between">
                 <h3 class="text-base font-semibold text-slate-900">Mark Asset as Recovered</h3>
-                <button type="button" onclick="document.getElementById('recover-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <button type="button" onclick="document.getElementById('recover-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600" aria-label="Close">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -324,7 +324,7 @@
             {% csrf_token %}
             <div class="card-header bg-rose-50 flex items-center justify-between">
                 <h3 class="text-base font-semibold text-rose-900">Authorize Asset Loss Write-Off</h3>
-                <button type="button" onclick="document.getElementById('write-off-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <button type="button" onclick="document.getElementById('write-off-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600" aria-label="Close">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
