@@ -14,7 +14,7 @@ from apps.core.utils import write_audit_log
 
 @login_required
 def integration_connector_list(request):
-    qs = bi_scope(IntegrationConnector.objects.all(), request).select_related("created_by")
+    qs = bi_scope(IntegrationConnector.objects.all(), request)
 
     counts = qs.aggregate(
         total=Count("id"),
