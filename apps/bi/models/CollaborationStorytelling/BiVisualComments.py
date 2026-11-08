@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -102,11 +103,13 @@ class BiVisualComment(TenantNumbered):
     coordinate_x = models.FloatField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
         help_text="X-coordinate percentage (0-100) on visual canvas pin",
     )
     coordinate_y = models.FloatField(
         null=True,
         blank=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
         help_text="Y-coordinate percentage (0-100) on visual canvas pin",
     )
 
@@ -140,6 +143,7 @@ class BiVisualComment(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_vcom_ten_stat"),
+            models.Index(fields=["tenant", "priority"], name="idx_vcom_ten_prio"),
             models.Index(fields=["tenant", "target_type"], name="idx_vcom_ten_type"),
             models.Index(fields=["tenant", "dashboard"], name="idx_vcom_ten_dash"),
             models.Index(fields=["tenant", "story"], name="idx_vcom_ten_story"),
