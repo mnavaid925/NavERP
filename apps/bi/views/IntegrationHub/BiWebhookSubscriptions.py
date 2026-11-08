@@ -97,13 +97,10 @@ def bi_webhook_subscription_create(request):
             webhook.save()
 
             write_audit_log(
+                request.user,
+                webhook,
+                "create",
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="BiWebhookSubscription",
-                object_id=str(webhook.pk),
-                object_repr=str(webhook),
-                changes={},
             )
             messages.success(
                 request,
@@ -137,13 +134,10 @@ def bi_webhook_subscription_edit(request, pk):
         if form.is_valid():
             webhook = form.save()
             write_audit_log(
+                request.user,
+                webhook,
+                "update",
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="BiWebhookSubscription",
-                object_id=str(webhook.pk),
-                object_repr=str(webhook),
-                changes={},
             )
             messages.success(
                 request,
@@ -173,17 +167,14 @@ def bi_webhook_subscription_edit(request, pk):
 def bi_webhook_subscription_delete(request, pk):
     webhook = bi_object(request, BiWebhookSubscription, pk)
     name = webhook.name
+    write_audit_log(
+        request.user,
+        webhook,
+        "delete",
+        tenant=request.tenant,
+    )
     webhook.delete()
 
-    write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="BiWebhookSubscription",
-        object_id=str(pk),
-        object_repr=name,
-        changes={},
-    )
     messages.success(request, f"Webhook subscription '{name}' deleted successfully.")
     return redirect("bi:bi_webhook_subscription_list")
 
@@ -212,13 +203,11 @@ def bi_webhook_subscription_ping(request, pk):
     )
 
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="action",
-        model_name="BiWebhookSubscription",
-        object_id=str(webhook.pk),
-        object_repr=f"Test Ping {webhook.name}",
+        request.user,
+        webhook,
+        "action",
         changes={"response_code": 200, "latency_ms": 145},
+        tenant=request.tenant,
     )
     messages.success(
         request,
