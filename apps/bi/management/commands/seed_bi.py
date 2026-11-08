@@ -105,6 +105,10 @@ class Command(BaseCommand):
         if flush:
             self.stdout.write("Flushing existing BI data...")
             with transaction.atomic():
+                BiExtensionPlugin.objects.all().delete()
+                BiWebhookSubscription.objects.all().delete()
+                WarehouseSyncEndpoint.objects.all().delete()
+                IntegrationConnector.objects.all().delete()
                 BiDecisionLog.objects.all().delete()
                 BiVisualComment.objects.all().delete()
                 BiDataStory.objects.all().delete()
