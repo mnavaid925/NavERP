@@ -156,11 +156,12 @@
                         {{ form.purchase_order }}
                         {% if form.purchase_order.errors %}<div class="form-error">{{ form.purchase_order.errors.0 }}</div>{% endif %}
                     </div>
-                    {% if is_edit %}
+                    {% if is_edit and requisition.rejection_reason %}
                     <div class="form-group md:col-span-2">
-                        <label class="form-label" for="{{ form.rejection_reason.id_for_label }}">Rejection / Workflow Notes</label>
-                        {{ form.rejection_reason }}
-                        {% if form.rejection_reason.errors %}<div class="form-error">{{ form.rejection_reason.errors.0 }}</div>{% endif %}
+                        <label class="form-label">Rejection / Workflow Notes</label>
+                        <div class="p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                            {{ requisition.rejection_reason }}
+                        </div>
                     </div>
                     {% endif %}
                 </div>
