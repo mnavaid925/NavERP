@@ -168,7 +168,7 @@
                 <h2 class="card-title">Installation Audit</h2>
             </div>
             <div class="card-body text-xs text-muted space-y-2">
-                <div>Installed By: <span class="font-medium text-slate-800">{{ plugin.installed_by.get_full_name|default:plugin.installed_by.username|default:"System" }}</span></div>
+                <div>Installed By: <span class="font-medium text-slate-800">{% if plugin.installed_by %}{{ plugin.installed_by.get_full_name|default:plugin.installed_by.username }}{% else %}System{% endif %}</span></div>
                 <div>Installed At: <span class="font-mono text-slate-800">{{ plugin.installed_at|date:"Y-m-d H:i" }}</span></div>
                 <div>Updated At: <span class="font-mono text-slate-800">{{ plugin.updated_at|date:"Y-m-d H:i" }}</span></div>
             </div>
