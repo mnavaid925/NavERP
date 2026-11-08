@@ -68,3 +68,23 @@ None.
 3. `templates/assets/asset_procurement/asset_requisition/detail.html:135` — `requisition.purchase_order.vendor.name` accessed without checking if `vendor` is non-null. Fix: Guard with `{% if requisition.purchase_order.vendor %}`.
 
 ---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+None.
+
+### Important
+1. `apps/assets/forms/AssetProcurement/AssetRequisitions.py:56` and `AssetAcquisitionReceipts.py:46` — Form dropdown N+1 via `PurchaseOrder.__str__` which references `self.vendor`. Fix: Add `.select_related("vendor")` to `purchase_order` form field queryset.
+2. `apps/assets/views/overview.py:22-33` — Overview executes 8 separate DB count/sum queries. Fix: Combine queries using conditional aggregation (`Count("id", filter=Q(...))`, `Sum("total_cost_basis", filter=Q(...))`) into 4 queries.
+3. `apps/assets/models/AssetProcurement/AssetAcquisitionReceipts.py:116` — Missing index for default sort order `(tenant, received_date)`. Fix: Add `models.Index(fields=["tenant", "received_date"], name="idx_arcv_ten_rcvdate")`.
+4. `apps/assets/views/AssetProcurement/AssetCapitalizations.py:169-205` — Missing concurrency row lock in `asset_capitalization_execute`. Double-clicks can create duplicate `FixedAsset` ledger instances. Fix: Use `select_for_update()` inside `transaction.atomic()`.
+5. `apps/assets/views/AssetProcurement/*.py` — State mutation workflow endpoints lack `with transaction.atomic():` surrounding status changes and audit log writes. Fix: Wrap in atomic transactions.
+
+### Minor
+1. `apps/assets/views/AssetProcurement/AssetRequisitions.py:62` — Requisition detail does not select `"purchase_order__vendor"`. Fix: Add to `select_related`.
+2. `apps/assets/views/AssetProcurement/AssetTags.py:236` — Tag print label view accesses `operational_asset.location.name` without `"operational_asset__location"`. Fix: Add to `select_related`.
+3. `apps/assets/models/AssetProcurement/AssetTags.py:102` — Missing index on `(tenant, is_verified)`. Fix: Add `models.Index(fields=["tenant", "is_verified"], name="idx_atag_ten_ver")`.
+4. `apps/assets/admin.py:11-36` — ModelAdmins lack `list_select_related = ("tenant",)`. Fix: Add `list_select_related`.
+
+---
