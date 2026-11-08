@@ -107,7 +107,7 @@ class AssetCriticalityAssessmentForm(TenantUniqueMixin, forms.ModelForm):
                 tenant=self.tenant, is_active=True
             ).select_related("location").order_by("number")
             self.fields["assessor"].queryset = Party.objects.filter(
-                tenant=self.tenant, is_active=True
+                tenant=self.tenant
             ).order_by("name")
 
     def clean(self):
