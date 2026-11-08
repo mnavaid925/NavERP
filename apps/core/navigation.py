@@ -3113,6 +3113,18 @@ LIVE_LINKS = {
         "TV Wallboards & Kiosks": "bi:kiosk_wallboard_display_list",
         "Embed API Tokens": "bi:embed_api_token_list",
     },
+    "10.18": {
+        "Data Stories & Presentations": "bi:bi_data_story_list",
+        "Comments & Discussions": "bi:bi_visual_comment_list",
+        "Shared Workspaces": "bi:bi_shared_workspace_list",
+        "Annotations & Decision Logging": "bi:bi_decision_log_list",
+        "Export & Embed to Office": "bi:bi_data_story_list",
+        # Plural and convenience aliases
+        "Data Stories": "bi:bi_data_story_list",
+        "Discussions": "bi:bi_visual_comment_list",
+        "Workspaces": "bi:bi_shared_workspace_list",
+        "Decision Log": "bi:bi_decision_log_list",
+    },
 
 
 
