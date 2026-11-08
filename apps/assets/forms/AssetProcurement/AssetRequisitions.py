@@ -53,7 +53,7 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
             ).distinct()
             self.fields["target_org_unit"].queryset = OrgUnit.objects.filter(tenant=self.tenant)
             self.fields["target_location"].queryset = Location.objects.filter(tenant=self.tenant, is_active=True)
-            self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(tenant=self.tenant)
+            self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(tenant=self.tenant).select_related("vendor")
 
     def clean_estimated_cost(self):
         cost = self.cleaned_data.get("estimated_cost")
