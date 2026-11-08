@@ -1,11 +1,11 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, requisitions, intake receipts, capitalization & depreciation setup, asset tagging & barcode registration). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1+), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
 
-Comprehensive enterprise physical asset lifecycle and Enterprise Asset Management (EAM), spanning capital acquisition, physical intake inspection, balance sheet capitalization, barcode/RFID tracking, and depreciation setup. Reuses the core spine (`accounting.FixedAsset`, `accounting.GLAccount`, `accounting.Currency`, `scm.PurchaseOrder`, `scm.Location`, `scm.Asset`, `core.Party`, `core.OrgUnit`).
+Comprehensive enterprise physical asset lifecycle and Enterprise Asset Management (EAM), spanning capital acquisition, physical intake inspection, balance sheet capitalization, barcode/RFID tracking, physical cycle count verification, room/bin/facility spatial movements, tool crib custody check-in/out lending, and loss/theft incident reporting with write-off authorization. Reuses the core spine (`accounting.FixedAsset`, `accounting.GLAccount`, `accounting.Currency`, `scm.PurchaseOrder`, `scm.Location`, `scm.Asset`, `core.Party`, `core.OrgUnit`).
 
 - **App path:** `apps/assets/`
 - **Templates:** `templates/assets/`
@@ -17,10 +17,11 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 ## Sub-modules Overview
 
 - **11.1 Asset Procurement & Acquisition**: Capital expenditure requisitions, dock intake inspection receipts, asset capitalization & CIP clearing, physical asset tagging & thermal barcode printing.
-- **11.2 Asset Inventory & Tracking**: Physical inventory counts, audits & reconciliations, location & movement tracking, check-in/check-out custody logs, and lost/stolen incident reports.
-- **11.3 Asset Operations & Maintenance**: Work orders, preventive maintenance schedules, meter readings, spare parts allocation.
+- **11.2 Asset Inventory & Tracking**: Scheduled cycle counts, wall-to-wall physical audits, discrepancy reconciliation, facility/room/bin spatial relocations, tool crib equipment check-in/out lending with electronic signatures, and lost/stolen incident reporting with loss write-offs.
+- **11.3 Asset Classification & Categorization**: Hierarchies, UNSPSC taxonomy, manufacturer model specs, criticality scoring.
 - **11.4 Asset Depreciation & Accounting**: Depreciation runs, revaluations, impairment testing, salvage adjustments (interconnected with Module 2 ledger).
-- **11.5 Asset Disposal & Decommissioning**: Asset retirement, scrap, auctions, trade-ins, write-offs, gain/loss calculation.
+- **11.5 Asset Maintenance & Repair**: Work orders, preventive maintenance calendars, meter readings, spare parts allocation.
+- **11.6 Asset Disposal & Decommissioning**: Asset retirement, scrap, auctions, trade-ins, write-offs, gain/loss calculation.
 
 ---
 
@@ -37,6 +38,11 @@ apps/assets/
       AssetAcquisitionReceipts.py             <- AssetAcquisitionReceipt [ARCV-]
       AssetCapitalizations.py                 <- AssetCapitalization [ACAP-]
       AssetTags.py                            <- AssetTag [ATAG-]
+    AssetInventoryTracking/                   <- Sub-module 11.2 models
+      AssetAudits.py                          <- AssetAudit [AAUD-]
+      AssetMovementLogs.py                    <- AssetMovementLog [AMOV-]
+      AssetCustodyLogs.py                     <- AssetCustodyLog [ACHK-]
+      AssetIncidentReports.py                 <- AssetIncidentReport [AINC-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -45,6 +51,11 @@ apps/assets/
       AssetAcquisitionReceipts.py             <- AssetAcquisitionReceiptForm
       AssetCapitalizations.py                 <- AssetCapitalizationForm
       AssetTags.py                            <- AssetTagForm
+    AssetInventoryTracking/                   <- Sub-module 11.2 forms
+      AssetAudits.py                          <- AssetAuditForm
+      AssetMovementLogs.py                    <- AssetMovementLogForm
+      AssetCustodyLogs.py                     <- AssetCustodyLogForm
+      AssetIncidentReports.py                 <- AssetIncidentReportForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -54,6 +65,11 @@ apps/assets/
       AssetAcquisitionReceipts.py             <- Receipt CRUD + inspect, quarantine
       AssetCapitalizations.py                 <- Capitalization CRUD + execute, reverse
       AssetTags.py                            <- Tag CRUD + mark_printed, affix, verify, print_label
+    AssetInventoryTracking/                   <- Sub-module 11.2 views
+      AssetAudits.py                          <- Audit CRUD + start, complete, reconcile, cancel
+      AssetMovementLogs.py                    <- Movement CRUD + dispatch, receive, cancel
+      AssetCustodyLogs.py                     <- Custody CRUD + checkin, extend, mark_lost
+      AssetIncidentReports.py                 <- Incident CRUD + investigate, resolve_recovered, authorize_write_off, close
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -61,82 +77,93 @@ apps/assets/
       AssetAcquisitionReceipts.py
       AssetCapitalizations.py
       AssetTags.py
+    AssetInventoryTracking/                   <- Sub-module 11.2 URL route definitions
+      AssetAudits.py
+      AssetMovementLogs.py
+      AssetCustodyLogs.py
+      AssetIncidentReports.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1 & 11.2)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations)
-    test_assetprocurement_models.py           <- Model invariants, methods, auto-numbering, constraints
-    test_assetprocurement_forms.py            <- Form validation, clean rules, mass-assignment exclusion
-    test_assetprocurement_views.py            <- View responses, filtering, guards, actions, execution
-    test_assetprocurement_security.py         <- IDOR (404), RBAC (403), method restriction (405)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets)
+    test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
+    test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
+    test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
+    test_assetprocurement_security.py         <- 11.1 IDOR (404), RBAC (403), method restriction (405)
+    test_assetinventorytracking_models.py     <- 11.2 Model invariants, sequences, status badges, constraints
+    test_assetinventorytracking_forms.py      <- 11.2 Form validation, system field exclusion, reject_foreign
+    test_assetinventorytracking_views.py      <- 11.2 View context contracts, filters, lifecycle actions
+    test_assetinventorytracking_security.py   <- 11.2 IDOR (404), RBAC admin gates (403), method safety (405)
 ```
 
 ---
 
-## Models & Data Dictionary (11.1)
+## Models & Data Dictionary (11.1 & 11.2)
 
-### 1. `AssetRequisition` (`assets_requisition`)
-- **Prefix:** `AREQ-YYYYMM-XXXX`
-- **Fields:** `number`, `title`, `description`, `business_justification`, `asset_category` (`machinery`, `vehicle`, `it_hardware`, `office_equipment`, `facility`, `tooling`), `priority` (`low`, `medium`, `high`, `urgent`), `estimated_cost`, `currency` (FK `accounting.Currency`), `budget_code`, `proposed_vendor` (FK `core.Party`), `proposed_manufacturer`, `proposed_model`, `required_delivery_date`, `target_org_unit` (FK `core.OrgUnit`), `target_location` (FK `scm.Location`), `status` (`draft`, `pending_approval`, `approved`, `rejected`, `ordered`, `received`, `cancelled`), `submitted_by` / `submitted_at`, `approved_by` / `approved_at`, `rejection_reason`, `purchase_order` (FK `scm.PurchaseOrder`).
-- **Invariants:** Submitter cannot approve their own requisition (Segregation of Duties). Edits and deletes are blocked once in `approved`, `ordered`, or `received` status.
+### 11.1 Asset Procurement
+1. **`AssetRequisition`** (`AREQ-`): CapEx purchase requests with budget codes, segregation of duties approval, and PO conversion.
+2. **`AssetAcquisitionReceipt`** (`ARCV-`): Dock receiving and condition inspection logging.
+3. **`AssetCapitalization`** (`ACAP-`): CapEx capitalization event allocating purchase/freight/install costs into accounting FixedAsset.
+4. **`AssetTag`** (`ATAG-`): Barcode/RFID physical asset tags with verification scanners.
 
-### 2. `AssetAcquisitionReceipt` (`assets_acquisition_receipt`)
-- **Prefix:** `ARCV-YYYYMM-XXXX`
-- **Fields:** `number`, `title`, `requisition` (FK `assets.AssetRequisition`), `purchase_order` (FK `scm.PurchaseOrder`), `vendor` (FK `core.Party`), `manufacturer`, `model_number`, `serial_number`, `quantity_received`, `received_date`, `carrier_name`, `tracking_number`, `bill_of_lading`, `receiving_location` (FK `scm.Location`), `condition_on_arrival` (`intact`, `damaged_outer`, `damaged_internal`, `wrong_item`, `shortage`), `inspection_notes`, `status` (`pending_inspection`, `accepted`, `quarantined`, `capitalized`, `rejected`).
-- **Invariants:** Delete blocked if `accepted` or `capitalized`. Edit blocked if `capitalized`.
-
-### 3. `AssetCapitalization` (`assets_capitalization`)
-- **Prefix:** `ACAP-YYYYMM-XXXX`
-- **Fields:** `number`, `asset_name`, `receipt` (FK `assets.AssetAcquisitionReceipt`), `asset_category`, `purchase_cost`, `freight_cost`, `installation_cost`, `customs_duties_cost`, `other_initial_costs`, `total_cost_basis` (auto-computed sum), `salvage_value`, `useful_life_months`, `depreciation_method` (`straight_line`, `declining_balance`, `double_declining`, `units_of_production`, `sum_of_years`), `in_service_date`, `cip_gl_account` (FK `accounting.GLAccount`), `asset_gl_account` (FK `accounting.GLAccount`), `fixed_asset` (FK `accounting.FixedAsset`), `status` (`draft`, `pending_review`, `capitalized`, `reversed`), `capitalized_by` / `capitalized_at`.
-- **Invariants:** Execution requires `@tenant_admin_required`, acquires row lock with `select_for_update()`, creates financial ledger `FixedAsset` record in `apps.accounting`, sets upstream receipt status to `capitalized`. Delete blocked when `capitalized`. Edit blocked when `capitalized`.
-
-### 4. `AssetTag` (`assets_tag`)
-- **Prefix:** `ATAG-YYYYMM-XXXX`
-- **Fields:** `number`, `tag_code` (unique per tenant), `tag_format` (`qr_code`, `barcode_128`, `datamatrix`, `rfid_epc`, `nfc_ntag`), `operational_asset` (FK `scm.Asset`), `capitalization` (FK `assets.AssetCapitalization`), `physical_placement`, `is_verified` (Boolean), `scanner_device_id`, `status` (`pending_print`, `printed`, `affixed`, `verified`, `damaged_reissued`).
-- **Invariants:** Tag code unique per tenant. Delete blocked once `affixed` or `verified`.
+### 11.2 Asset Inventory & Tracking
+1. **`AssetAudit`** (`AAUD-`):
+   - **Fields:** `number`, `title`, `audit_type` (`wall_to_wall`, `cycle_count`, `spot_check`, `annual`), `target_location` (FK `scm.Location`), `target_org_unit` (FK `core.OrgUnit`), `asset_category`, `lead_auditor` / `supervisor` (FK `User`), `scheduled_date`, `is_blind_count` (Bool), `expected_asset_count`, `scanned_asset_count`, `matched_asset_count`, `missing_asset_count`, `discrepancy_count`, `discrepancy_notes`, `reconciliation_action` (`pending_review`, `no_action_needed`, `location_updated`, `incident_initiated`, `custodian_reassigned`), `status` (`scheduled`, `in_progress`, `completed`, `reconciled`, `cancelled`).
+   - **Invariants:** Discrepancy reconciliation requires `@tenant_admin_required`. Deletion restricted to uncommitted audits.
+2. **`AssetMovementLog`** (`AMOV-`):
+   - **Fields:** `number`, `title`, `asset` (FK `scm.Asset`), `movement_type` (`inter_facility_transfer`, `room_relocation`, `department_transfer`, `offsite_maintenance`), `from_location` / `to_location` (FK `scm.Location`), `from_org_unit` / `to_org_unit` (FK `core.OrgUnit`), `from_room_bin` / `to_room_bin`, `from_custodian` / `to_custodian` (FK `core.Party`), `gps_latitude`, `gps_longitude`, `gps_address`, `carrier_name`, `tracking_number`, `status` (`draft`, `requested`, `dispatched`, `received`, `cancelled`), `dispatch_date` / `dispatched_by`, `received_date` / `received_by`, `condition_on_receipt`.
+   - **Invariants:** Receiving updates operational `scm.Asset.location` atomically. Editing restricted to `draft` and `requested` status.
+3. **`AssetCustodyLog`** (`ACHK-`):
+   - **Fields:** `number`, `asset` (FK `scm.Asset`), `action_type` (`checkout`, `checkin`, `permanent_assignment`, `reassignment`), `borrower` (FK `core.Party`), `borrower_name`, `crib_attendant` (FK `User`), `purpose`, `work_order_reference`, `project_reference`, `checkout_date`, `expected_return_date`, `actual_return_date`, `checkout_condition`, `return_condition`, `condition_notes`, `borrower_signature_acknowledged` (Bool), `status` (`active_loan`, `returned`, `overdue`, `damaged_returned`, `unreturned_lost`).
+   - **Invariants:** View-level delete guard blocks deletion of active loans. Overdue loans auto-detected on list view with `.exists()` check.
+4. **`AssetIncidentReport`** (`AINC-`):
+   - **Fields:** `number`, `title`, `asset` (FK `scm.Asset`), `incident_type` (`lost`, `stolen`, `damaged_beyond_repair`, `missing_in_audit`, `vandalism`, `natural_disaster`), `severity` (`low`, `medium`, `high`, `critical`), `status` (`reported`, `under_investigation`, `confirmed_lost`, `recovered`, `write_off_pending`, `written_off`, `closed`), `resolution_action` (`pending`, `recovered`, `replacement_sourced`, `written_off`, `unresolved_closed`), `incident_date`, `last_known_location` (FK `scm.Location`), `custodian_at_loss` (FK `core.Party`), `investigator` (FK `User`), `police_report_filed`, `police_report_number`, `police_precinct`, `police_filing_date`, `insurance_claim_filed`, `insurance_carrier`, `insurance_claim_number`, `estimated_loss_value`, `insurance_claimed_amount`, `insurance_settled_amount`, `incident_description`, `investigation_findings`, `write_off_authorized_by`, `write_off_date`, `write_off_notes`.
+   - **Invariants:** Write-off authorization requires `@tenant_admin_required`, sets operational `scm.Asset.status = 'disposed'`, and is guarded in UI via `request.user.is_tenant_admin`.
 
 ---
 
-## Key URLs & Routes
+## Key URLs & Routes (11.2)
 
 Namespace: `assets:`
-- **Overview:** `assets:overview` (`/assets/`)
-- **Requisitions:**
-  - `assets:asset_requisition_list` (`/assets/requisitions/`)
-  - `assets:asset_requisition_create` (`/assets/requisitions/create/`)
-  - `assets:asset_requisition_detail` (`/assets/requisitions/<pk>/`)
-  - `assets:asset_requisition_edit` (`/assets/requisitions/<pk>/edit/`)
-  - `assets:asset_requisition_delete` (`/assets/requisitions/<pk>/delete/`) [POST]
-  - `assets:asset_requisition_submit` (`/assets/requisitions/<pk>/submit/`) [POST]
-  - `assets:asset_requisition_approve` (`/assets/requisitions/<pk>/approve/`) [POST]
-  - `assets:asset_requisition_reject` (`/assets/requisitions/<pk>/reject/`) [POST]
-- **Receipts:**
-  - `assets:asset_acquisition_receipt_list` (`/assets/receipts/`)
-  - `assets:asset_acquisition_receipt_create` (`/assets/receipts/create/`)
-  - `assets:asset_acquisition_receipt_detail` (`/assets/receipts/<pk>/`)
-  - `assets:asset_acquisition_receipt_edit` (`/assets/receipts/<pk>/edit/`)
-  - `assets:asset_acquisition_receipt_delete` (`/assets/receipts/<pk>/delete/`) [POST]
-  - `assets:asset_acquisition_receipt_inspect` (`/assets/receipts/<pk>/inspect/`) [POST]
-  - `assets:asset_acquisition_receipt_quarantine` (`/assets/receipts/<pk>/quarantine/`) [POST]
-- **Capitalizations:**
-  - `assets:asset_capitalization_list` (`/assets/capitalizations/`)
-  - `assets:asset_capitalization_create` (`/assets/capitalizations/create/`)
-  - `assets:asset_capitalization_detail` (`/assets/capitalizations/<pk>/`)
-  - `assets:asset_capitalization_edit` (`/assets/capitalizations/<pk>/edit/`)
-  - `assets:asset_capitalization_delete` (`/assets/capitalizations/<pk>/delete/`) [POST]
-  - `assets:asset_capitalization_execute` (`/assets/capitalizations/<pk>/execute/`) [POST, Admin]
-  - `assets:asset_capitalization_reverse` (`/assets/capitalizations/<pk>/reverse/`) [POST, Admin]
-- **Tags:**
-  - `assets:asset_tag_list` (`/assets/tags/`)
-  - `assets:asset_tag_create` (`/assets/tags/create/`)
-  - `assets:asset_tag_detail` (`/assets/tags/<pk>/`)
-  - `assets:asset_tag_edit` (`/assets/tags/<pk>/edit/`)
-  - `assets:asset_tag_delete` (`/assets/tags/<pk>/delete/`) [POST]
-  - `assets:asset_tag_mark_printed` (`/assets/tags/<pk>/mark-printed/`) [POST]
-  - `assets:asset_tag_affix` (`/assets/tags/<pk>/affix/`) [POST]
-  - `assets:asset_tag_verify` (`/assets/tags/<pk>/verify/`) [POST]
-  - `assets:asset_tag_print_label` (`/assets/tags/<pk>/print/`) [GET]
+- **Audits:**
+  - `assets:asset_audit_list`: `/assets/inventory-tracking/audits/`
+  - `assets:asset_audit_create`: `/assets/inventory-tracking/audits/create/`
+  - `assets:asset_audit_detail`: `/assets/inventory-tracking/audits/<pk>/`
+  - `assets:asset_audit_edit`: `/assets/inventory-tracking/audits/<pk>/edit/`
+  - `assets:asset_audit_delete`: `/assets/inventory-tracking/audits/<pk>/delete/` [POST]
+  - `assets:asset_audit_start`: `/assets/inventory-tracking/audits/<pk>/start/` [POST]
+  - `assets:asset_audit_complete`: `/assets/inventory-tracking/audits/<pk>/complete/` [POST]
+  - `assets:asset_audit_reconcile`: `/assets/inventory-tracking/audits/<pk>/reconcile/` [POST, Admin]
+  - `assets:asset_audit_cancel`: `/assets/inventory-tracking/audits/<pk>/cancel/` [POST]
+- **Movements:**
+  - `assets:asset_movement_log_list`: `/assets/inventory-tracking/movements/`
+  - `assets:asset_movement_log_create`: `/assets/inventory-tracking/movements/create/`
+  - `assets:asset_movement_log_detail`: `/assets/inventory-tracking/movements/<pk>/`
+  - `assets:asset_movement_log_edit`: `/assets/inventory-tracking/movements/<pk>/edit/`
+  - `assets:asset_movement_log_delete`: `/assets/inventory-tracking/movements/<pk>/delete/` [POST]
+  - `assets:asset_movement_log_dispatch`: `/assets/inventory-tracking/movements/<pk>/dispatch/` [POST]
+  - `assets:asset_movement_log_receive`: `/assets/inventory-tracking/movements/<pk>/receive/` [POST]
+  - `assets:asset_movement_log_cancel`: `/assets/inventory-tracking/movements/<pk>/cancel/` [POST]
+- **Custody Lending:**
+  - `assets:asset_custody_log_list`: `/assets/inventory-tracking/custody/`
+  - `assets:asset_custody_log_create`: `/assets/inventory-tracking/custody/create/`
+  - `assets:asset_custody_log_detail`: `/assets/inventory-tracking/custody/<pk>/`
+  - `assets:asset_custody_log_edit`: `/assets/inventory-tracking/custody/<pk>/edit/`
+  - `assets:asset_custody_log_delete`: `/assets/inventory-tracking/custody/<pk>/delete/` [POST]
+  - `assets:asset_custody_log_checkin`: `/assets/inventory-tracking/custody/<pk>/checkin/` [POST]
+  - `assets:asset_custody_log_extend`: `/assets/inventory-tracking/custody/<pk>/extend/` [POST]
+  - `assets:asset_custody_log_mark_lost`: `/assets/inventory-tracking/custody/<pk>/mark-lost/` [POST]
+- **Incident Reports:**
+  - `assets:asset_incident_report_list`: `/assets/inventory-tracking/incidents/`
+  - `assets:asset_incident_report_create`: `/assets/inventory-tracking/incidents/create/`
+  - `assets:asset_incident_report_detail`: `/assets/inventory-tracking/incidents/<pk>/`
+  - `assets:asset_incident_report_edit`: `/assets/inventory-tracking/incidents/<pk>/edit/`
+  - `assets:asset_incident_report_delete`: `/assets/inventory-tracking/incidents/<pk>/delete/` [POST]
+  - `assets:asset_incident_report_investigate`: `/assets/inventory-tracking/incidents/<pk>/investigate/` [POST]
+  - `assets:asset_incident_report_resolve_recovered`: `/assets/inventory-tracking/incidents/<pk>/resolve-recovered/` [POST]
+  - `assets:asset_incident_report_authorize_write_off`: `/assets/inventory-tracking/incidents/<pk>/authorize-write-off/` [POST, Admin]
+  - `assets:asset_incident_report_close`: `/assets/inventory-tracking/incidents/<pk>/close/` [POST]
 
 ---
 
@@ -144,25 +171,19 @@ Namespace: `assets:`
 
 1. **Multi-Tenancy**:
    - All models inherit from `TenantNumbered` (`TenantOwned`).
-   - Every view must use `assets_scope(queryset, request)` and `assets_object(Model, pk, request)`.
-   - Every ModelForm uses `reject_foreign(self, cleaned_data, [...])`.
+   - Every view must filter `tenant=request.tenant`.
+   - Every ModelForm uses `reject_foreign(self, cleaned_data, [...])` including user ForeignKeys.
 2. **Audit Logging Signature**:
-   - `write_audit_log` from `apps.core.utils` takes:
-     `write_audit_log(request.user, instance, action, changes={...}, tenant=request.tenant)`
-   - `action` is <= 10 characters (`"create"`, `"update"`, `"delete"`). Never pass `request=request`.
-3. **Segregation of Duties (SoD)**:
-   - Self-approval on CapEx requisitions is prohibited at the view layer: `requisition.submitted_by_id == request.user.pk` raises a user-facing error.
-4. **Financial Ledger Guard & Row Lock**:
-   - Capitalization execution creates a permanent `FixedAsset` in Module 2 `accounting`.
-   - Must use `select_for_update()` inside `transaction.atomic()` to prevent concurrent double-capitalizations.
-   - Guarded with `@tenant_admin_required`.
-5. **Theme CSS Classes**:
-   - Colour-named badges only: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`. Semantic variants (`badge-success`, etc.) DO NOT EXIST.
-   - Stat-icons: `blue`, `green`, `orange`, `purple`, `slate`.
-6. **Form Fields Exclusion**:
-   - Never expose `status`, `number`, `tenant`, `is_verified`, `scanner_device_id`, or `rejection_reason` in ModelForm inputs.
-7. **Filter Preserving Pagination**:
-   - All filter parameters (`?q=`, `?status=`, `?category=`, `?location=`, `?method=`, `?format=`) must be preserved across pagination links.
+   - `write_audit_log(request.user, instance, action, changes={...}, tenant=request.tenant)`.
+3. **Operational Spine**:
+   - Assets are tracked on `scm.Asset`. Movement receipts update `asset.location`. Loss write-offs update `asset.status = 'disposed'`. Do not create redundant asset tables.
+4. **Theme CSS Classes**:
+   - Badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`.
+   - Component classes: `.table-wrap`, `.text-brand`, `.empty-state`, `.pagination`.
+5. **RBAC & Privilege Separation**:
+   - Audit variance reconciliation and write-off authorizations require `@tenant_admin_required`. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+6. **Filter-Preserving Pagination**:
+   - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`) are strictly preserved in pagination links.
 
 ---
 
@@ -178,4 +199,4 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database.
+Unfiltered run on SQLite in-memory test database (238 passing tests).
