@@ -109,7 +109,7 @@
                 <select name="dashboard" class="form-select text-sm">
                     <option value="">All Dashboards</option>
                     {% for d in dashboards %}
-                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.name }}</option>
+                    <option value="{{ d.pk }}" {% if request.GET.dashboard == d.pk|stringformat:"d" %}selected{% endif %}>{{ d.title }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -161,7 +161,7 @@
                         <span class="badge badge-slate">{{ item.get_target_type_display }}</span>
                         <div class="text-xs text-muted mt-0.5">
                             {% if item.dashboard %}
-                                {{ item.dashboard.name }}
+                                {{ item.dashboard.title }}
                             {% elif item.story %}
                                 {{ item.story.title }}
                             {% elif item.report %}
