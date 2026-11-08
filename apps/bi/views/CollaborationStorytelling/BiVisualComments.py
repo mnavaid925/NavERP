@@ -59,12 +59,12 @@ def bi_visual_comment_list(request):
     if story_id and story_id.isdigit():
         qs = qs.filter(story_id=int(story_id))
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    dashboards = BiDashboard.objects.filter(tenant=request.tenant).order_by("title")
-    stories = BiDataStory.objects.filter(tenant=request.tenant).order_by("title")
+    dashboards = BiDashboard.objects.filter(tenant=request.tenant).only("id", "title").order_by("title")
+    stories = BiDataStory.objects.filter(tenant=request.tenant).only("id", "title").order_by("title")
 
     context = {
         "comments": page_obj,
@@ -109,6 +109,8 @@ def bi_visual_comment_create(request):
             initial["parent_comment"] = p
             initial["target_type"] = p.target_type
             initial["dashboard"] = p.dashboard
+            initial["widget"] = p.widget
+            initial["report"] = p.report
             initial["story"] = p.story
 
     if request.method == "POST":
