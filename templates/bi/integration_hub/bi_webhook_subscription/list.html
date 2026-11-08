@@ -151,7 +151,7 @@
                         {% elif w.status == 'suspended' %}
                         <span class="badge badge-red">Suspended</span>
                         {% else %}
-                        <span class="badge badge-slate">Disabled</span>
+                        <span class="badge badge-slate">{{ w.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="font-mono text-xs">
