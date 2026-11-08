@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}New Warehouse Sync Endpoint{% else %}Edit {{ sync_endpoint.name }}{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:warehouse_sync_endpoint_list' %}">Warehouse Syncs</a>
+            <span class="sep">/</span>
+            <span>{% if is_create %}Create{% else %}Edit {{ sync_endpoint.number }}{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_create %}Create Warehouse Sync Endpoint{% else %}Edit {{ sync_endpoint.name }}{% endif %}</h1>
+        <p class="text-muted text-sm">Configure outbound synchronization pipeline to cloud warehouses or external BI semantic models</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Endpoint Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Endpoint Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.slug.id_for_label }}">Slug (optional)</label>
+                    {{ form.slug }}
+                    <span class="text-xs text-muted">Auto-generated from name if left empty</span>
+                    {% if form.slug.errors %}<div class="form-error">{{ form.slug.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_warehouse.id_for_label }}">Target Cloud Warehouse *</label>
+                    {{ form.target_warehouse }}
+                    {% if form.target_warehouse.errors %}<div class="form-error">{{ form.target_warehouse.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_mode.id_for_label }}">Synchronization Mode *</label>
+                    {{ form.sync_mode }}
+                    {% if form.sync_mode.errors %}<div class="form-error">{{ form.sync_mode.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.semantic_model.id_for_label }}">Source Semantic Model</label>
+                    {{ form.semantic_model }}
+                    <span class="text-xs text-muted">Optional: Export governed semantic model metrics</span>
+                    {% if form.semantic_model.errors %}<div class="form-error">{{ form.semantic_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.data_mart.id_for_label }}">Source Data Mart</label>
+                    {{ form.data_mart }}
+                    <span class="text-xs text-muted">Optional: Export analytical data mart tables</span>
+                    {% if form.data_mart.errors %}<div class="form-error">{{ form.data_mart.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.destination_database.id_for_label }}">Destination Database</label>
+                    {{ form.destination_database }}
+                    {% if form.destination_database.errors %}<div class="form-error">{{ form.destination_database.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.destination_schema.id_for_label }}">Destination Schema</label>
+                    {{ form.destination_schema }}
+                    {% if form.destination_schema.errors %}<div class="form-error">{{ form.destination_schema.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.destination_table.id_for_label }}">Destination Table *</label>
+                    {{ form.destination_table }}
+                    {% if form.destination_table.errors %}<div class="form-error">{{ form.destination_table.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.connection_config_raw.id_for_label }}">{{ form.connection_config_raw.label }}</label>
+                {{ form.connection_config_raw }}
+                <span class="text-xs text-muted">{{ form.connection_config_raw.help_text }}</span>
+                {% if form.connection_config_raw.errors %}<div class="form-error">{{ form.connection_config_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.auth_method.id_for_label }}">Authentication Method *</label>
+                    {{ form.auth_method }}
+                    {% if form.auth_method.errors %}<div class="form-error">{{ form.auth_method.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_schedule.id_for_label }}">Execution Schedule *</label>
+                    {{ form.sync_schedule }}
+                    {% if form.sync_schedule.errors %}<div class="form-error">{{ form.sync_schedule.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group pt-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium">Schedule Active</span>
+                    </label>
+                    <span class="text-xs text-muted">Enable automated batch sync runs</span>
+                    {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_create %}{% url 'bi:warehouse_sync_endpoint_list' %}{% else %}{% url 'bi:warehouse_sync_endpoint_detail' sync_endpoint.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>{% if is_create %}Create Endpoint{% else %}Save Changes{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
