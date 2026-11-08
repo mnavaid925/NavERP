@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}{{ story.title }} — Data Story — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_data_story_list' %}">Data Stories</a>
+            <span class="sep">/</span>
+            <span>{{ story.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ story.title }}</h1>
+            <span class="badge {% if story.status == 'published' %}badge-green{% elif story.status == 'draft' %}badge-amber{% else %}badge-slate{% endif %}">
+                {{ story.get_status_display }}
+            </span>
+            <span class="badge badge-slate">{{ story.get_story_type_display }}</span>
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ story.number }} • {{ story.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_data_story_presentation' story.pk %}" class="btn btn-primary">
+            <i data-lucide="play"></i>
+            <span>Present Boardroom Mode</span>
+        </a>
+        <a href="{% url 'bi:bi_visual_comment_create' %}?story={{ story.pk }}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>Add Comment</span>
+        </a>
+        <a href="{% url 'bi:bi_data_story_edit' story.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil"></i>
+            <span>Edit Story</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_data_story_delete' story.pk %}" class="inline" onsubmit="return confirm('Delete this story?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Story Summary & Narrative Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Executive Narrative</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Executive Summary</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 rounded p-4 border border-slate-200 leading-relaxed">
+                        {{ story.summary|default:"No executive summary provided for this story."|linebreaksbr }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Presentation Theme</div>
+                        <div class="text-sm font-semibold mt-1">{{ story.get_theme_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Interactive Drilldown</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if story.allow_live_drilldown %}
+                            <span class="badge badge-green">Enabled</span>
+                            {% else %}
+                            <span class="badge badge-slate">Static Snapshot</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Workspace</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if story.workspace %}
+                            <a href="{% url 'bi:bi_shared_workspace_detail' story.workspace.pk %}" class="text-primary-600 hover:underline">
+                                {{ story.workspace.name }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">Personal / Unassigned</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slides Overview Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Story Slides ({{ story.slides_count }})</h2>
+                <a href="{% url 'bi:bi_data_story_presentation' story.pk %}" class="btn btn-outline btn-sm">
+                    <i data-lucide="monitor"></i>
+                    <span>Preview Deck</span>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if story.slides_data %}
+                <div class="space-y-3">
+                    {% for slide in story.slides_data %}
+                    <div class="p-4 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-primary-300 transition-colors">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs">
+                                    {{ forloop.counter }}
+                                </span>
+                                <div>
+                                    <h3 class="font-semibold text-sm text-slate-900">{{ slide.title|default:"Untitled Slide" }}</h3>
+                                    <p class="text-xs text-muted mt-0.5">{{ slide.narrative|default:slide.content|default:"No speaker notes."|truncatewords:20 }}</p>
+                                </div>
+                            </div>
+                            <span class="badge badge-slate text-[11px]">{{ slide.visual_type|default:"visual_card" }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state py-6">
+                    <p class="text-muted text-sm">No slides added to this data story yet. Edit the story to add slide definitions.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Threaded Comments Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Contextual Discussions</h2>
+                <a href="{% url 'bi:bi_visual_comment_create' %}?story={{ story.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Comment</span>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if comments %}
+                <div class="space-y-4">
+                    {% for c in comments %}
+                    <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-medium text-xs text-slate-800">
+                                    {% if c.author %}{{ c.author.get_full_name|default:c.author.username }}{% else %}Anonymous{% endif %}
+                                </span>
+                                <span class="text-muted text-[11px]">{{ c.created_at|date:"M d, Y H:i" }}</span>
+                            </div>
+                            <span class="badge {% if c.status == 'open' %}badge-amber{% else %}badge-green{% endif %}">
+                                {{ c.get_status_display }}
+                            </span>
+                        </div>
+                        <div class="text-sm text-slate-700 leading-normal">{{ c.content|linebreaksbr }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted text-sm py-4">
+                    No discussions recorded on this data story yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar Metadata Card -->
+    <div class="space-y-6">
+        <!-- Live Office & PowerPoint Integration Card -->
+        <div class="card">
+            <div class="card-header flex items-center gap-2">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-600"></i>
+                <h2 class="text-base font-semibold">Office & Embed Hub</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <p class="text-xs text-muted">Connect live, refreshable data slides directly into PowerPoint or Excel via secure API link.</p>
+                <div>
+                    <label class="form-label text-xs">Live Office Endpoint</label>
+                    <input type="text" readonly value="{{ office_link }}" class="form-input text-xs font-mono bg-slate-50 select-all w-full">
+                </div>
+                <div class="pt-2">
+                    <a href="{{ office_link }}" target="_blank" class="btn btn-outline btn-sm w-full text-center">
+                        <i data-lucide="download"></i>
+                        <span>Download Office Payload (JSON)</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Story Metadata</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase">Author</div>
+                    <div class="text-sm font-medium mt-0.5">
+                        {% if story.author %}{{ story.author.get_full_name|default:story.author.username }}{% else %}Unassigned{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Telemetry</div>
+                    <div class="text-sm font-medium mt-0.5">{{ story.view_count }} boardroom presentations</div>
+                    <div class="text-xs text-muted">
+                        {% if story.last_presented_at %}Last presented {{ story.last_presented_at|date:"M d, Y H:i" }}{% else %}Never presented{% endif %}
+                    </div>
+                </div>
+
+                <div class="border-t pt-3">
+                    <div class="text-xs text-muted uppercase">Created By</div>
+                    <div class="text-xs font-medium text-slate-700 mt-0.5">
+                        {% if story.created_by %}{{ story.created_by.get_full_name|default:story.created_by.username }}{% else %}System{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Created At</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ story.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Last Updated</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ story.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
