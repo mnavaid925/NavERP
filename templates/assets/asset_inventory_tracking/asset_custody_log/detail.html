@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block title %}{{ custody_log.number }} — Tool Crib & Custody Loan — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_custody_log_list' %}">Tool Crib & Custody</a>
+            <span>/</span>
+            <span>{{ custody_log.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ custody_log.number }} · {{ custody_log.asset.number }}</h1>
+            {% if custody_log.status == 'active_loan' %}
+                <span class="badge badge-amber">{{ custody_log.get_status_display }}</span>
+            {% elif custody_log.status == 'returned' %}
+                <span class="badge badge-green">{{ custody_log.get_status_display }}</span>
+            {% elif custody_log.status == 'overdue' %}
+                <span class="badge badge-red font-semibold">{{ custody_log.get_status_display }}</span>
+            {% elif custody_log.status == 'damaged_returned' %}
+                <span class="badge badge-red">{{ custody_log.get_status_display }}</span>
+            {% else %}
+                <span class="badge badge-muted">{{ custody_log.get_status_display }}</span>
+            {% endif %}
+            <span class="badge badge-muted">{{ custody_log.get_action_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if custody_log.status in 'active_loan overdue' %}
+        <button type="button" onclick="document.getElementById('checkin-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Return & Check In
+        </button>
+        <button type="button" onclick="document.getElementById('extend-modal').classList.remove('hidden')" class="btn btn-outline text-brand">
+            <i data-lucide="calendar-plus" class="w-4 h-4 mr-1"></i> Extend Due Date
+        </button>
+        <form method="post" action="{% url 'assets:asset_custody_log_mark_lost' custody_log.pk %}" class="inline" onsubmit="return confirm('Flag this equipment as unreturned / lost?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600">
+                <i data-lucide="help-circle" class="w-4 h-4 mr-1"></i> Mark Lost
+            </button>
+        </form>
+        {% endif %}
+
+        {% if custody_log.status != 'returned' %}
+        <a href="{% url 'assets:asset_custody_log_edit' custody_log.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        {% endif %}
+
+        {% if custody_log.status in 'active_loan returned' %}
+        <form method="post" action="{% url 'assets:asset_custody_log_delete' custody_log.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete custody record {{ custody_log.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50" title="Delete" aria-label="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Asset & Loan Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Custody Lending Information</h3>
+            </div>
+            <div class="card-body">
+                <dl class="detail-grid">
+                    <div class="detail-item">
+                        <dt>Operational Asset Lent</dt>
+                        <dd>
+                            <span class="font-mono font-semibold text-slate-900">{{ custody_log.asset.number }}</span> — {{ custody_log.asset.name }}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Asset Category</dt>
+                        <dd>{{ custody_log.asset.asset_type|default:"Tool / Equipment" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Borrower (Accountable Party)</dt>
+                        <dd>
+                            {% if custody_log.borrower %}
+                                <span class="font-semibold text-slate-900">{{ custody_log.borrower.name }}</span>
+                            {% else %}
+                                <span class="font-semibold text-slate-900">{{ custody_log.borrower_name|default:"Unrecorded Borrower" }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Tool Crib Attendant</dt>
+                        <dd>
+                            {% if custody_log.crib_attendant %}
+                                {{ custody_log.crib_attendant.get_full_name|default:custody_log.crib_attendant.username }}
+                            {% else %}
+                                <span class="text-muted">Unrecorded</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Work Order Reference</dt>
+                        <dd>
+                            {% if custody_log.work_order_reference %}
+                                <span class="badge badge-slate font-mono">{{ custody_log.work_order_reference }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Capital Project / Cost Center</dt>
+                        <dd>{{ custody_log.project_reference|default:"—" }}</dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Checkout Condition</dt>
+                        <dd>
+                            {% if custody_log.checkout_condition == 'excellent' %}
+                                <span class="badge badge-green">{{ custody_log.get_checkout_condition_display }}</span>
+                            {% elif custody_log.checkout_condition == 'good' %}
+                                <span class="badge badge-info">{{ custody_log.get_checkout_condition_display }}</span>
+                            {% else %}
+                                <span class="badge badge-amber">{{ custody_log.get_checkout_condition_display }}</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div class="detail-item">
+                        <dt>Return Condition</dt>
+                        <dd>
+                            {% if custody_log.return_condition %}
+                                {% if custody_log.return_condition in 'excellent good' %}
+                                    <span class="badge badge-green">{{ custody_log.get_return_condition_display }}</span>
+                                {% elif custody_log.return_condition == 'fair' %}
+                                    <span class="badge badge-amber">{{ custody_log.get_return_condition_display }}</span>
+                                {% else %}
+                                    <span class="badge badge-red">{{ custody_log.get_return_condition_display }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">Pending Return</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+
+                {% if custody_log.purpose %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Loan Purpose & Scope</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ custody_log.purpose }}</div>
+                </div>
+                {% endif %}
+
+                {% if custody_log.condition_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Pre/Post Inspection Notes</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-lg">{{ custody_log.condition_notes }}</div>
+                </div>
+                {% endif %}
+
+                {% if custody_log.notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Special Handling Instructions</h4>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ custody_log.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar: Custody Agreement & Due Dates -->
+    <div class="space-y-6">
+        <!-- Due Date Status Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Return Due Date & Schedule</h3>
+            </div>
+            <div class="card-body">
+                <div class="mb-4 text-center p-4 rounded-xl {% if custody_log.status == 'overdue' %}bg-red-50 text-red-900{% elif custody_log.status == 'returned' %}bg-emerald-50 text-emerald-900{% else %}bg-slate-50 text-slate-900{% endif %}">
+                    <div class="text-xs text-muted mb-1 uppercase font-semibold">Expected Return Date</div>
+                    <div class="text-2xl font-bold font-mono">
+                        {{ custody_log.expected_return_date|date:"Y-m-d"|default:"Indefinite" }}
+                    </div>
+                    {% if custody_log.status == 'overdue' %}
+                    <div class="text-xs font-semibold text-red-600 mt-1">This loan is overdue for return!</div>
+                    {% endif %}
+                </div>
+
+                <dl class="space-y-3 text-sm">
+                    <div>
+                        <dt class="text-xs text-muted">Checked Out Timestamp</dt>
+                        <dd class="font-medium text-slate-900">{{ custody_log.checkout_date|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs text-muted">Actual Return Timestamp</dt>
+                        <dd class="font-medium text-slate-900">{{ custody_log.actual_return_date|date:"Y-m-d H:i"|default:"Not Returned" }}</dd>
+                    </div>
+                    <div class="pt-3 border-t border-slate-200">
+                        <dt class="text-xs text-muted">Borrower Liability Acknowledgment</dt>
+                        <dd class="text-xs mt-1">
+                            {% if custody_log.borrower_signature_acknowledged %}
+                                <span class="badge badge-green">Electronic Signature Acknowledged</span>
+                            {% else %}
+                                <span class="badge badge-amber">Unacknowledged</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Return & Check In Modal -->
+<div id="checkin-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-slate-900">Equipment Return & Check In</h3>
+                <button type="button" onclick="document.getElementById('checkin-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="post" action="{% url 'assets:asset_custody_log_checkin' custody_log.pk %}">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label" for="checkin-condition">Condition on Return *</label>
+                        <select id="checkin-condition" name="return_condition" class="form-select">
+                            <option value="excellent">Excellent (Like New)</option>
+                            <option value="good" selected>Good (Standard Wear)</option>
+                            <option value="fair">Fair (Operational Wear)</option>
+                            <option value="damaged">Damaged (Requires Repair)</option>
+                            <option value="inoperable">Inoperable / Broken</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label" for="checkin-notes">Inspection Notes</label>
+                        <textarea id="checkin-notes" name="condition_notes" rows="3" class="form-textarea" placeholder="Detail any scratches, missing drill bits, calibration errors..."></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="document.getElementById('checkin-modal').classList.add('hidden')" class="btn btn-outline">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                        Confirm Check In
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Extend Loan Modal -->
+<div id="extend-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+        <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-semibold text-slate-900">Extend Loan Due Date</h3>
+                <button type="button" onclick="document.getElementById('extend-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <form method="post" action="{% url 'assets:asset_custody_log_extend' custody_log.pk %}">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div>
+                        <label class="form-label" for="extend-days">Extend By (Days)</label>
+                        <select id="extend-days" name="extension_days" class="form-select">
+                            <option value="3">+3 Days</option>
+                            <option value="7" selected>+7 Days (1 Week)</option>
+                            <option value="14">+14 Days (2 Weeks)</option>
+                            <option value="30">+30 Days (1 Month)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" onclick="document.getElementById('extend-modal').classList.add('hidden')" class="btn btn-outline">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Authorize Extension
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
