@@ -78,6 +78,10 @@ from apps.bi.models import (
     BiDataStory,
     BiVisualComment,
     BiDecisionLog,
+    IntegrationConnector,
+    WarehouseSyncEndpoint,
+    BiWebhookSubscription,
+    BiExtensionPlugin,
 )
 
 
@@ -2797,3 +2801,143 @@ def bi_decision_log_b(db, tenant_b, admin_user_b, bi_shared_workspace_b, bi_dash
 
 
 
+
+
+@pytest.fixture
+def integration_connector_a(db, tenant_a, admin_user):
+    return IntegrationConnector.objects.create(
+        tenant=tenant_a,
+        number="BINT-00001",
+        name="Enterprise Kafka Stream",
+        slug="enterprise-kafka-stream",
+        connector_type="rest_api",
+        target_system="kafka",
+        base_url="https://api.kafka.example.com",
+        auth_type="api_key",
+        auth_credentials={"api_key": "sec_test_key_123"},
+        connection_config={"timeout": 30},
+        health_status="healthy",
+        is_enabled=True,
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def integration_connector_b(db, tenant_b, admin_user_b):
+    return IntegrationConnector.objects.create(
+        tenant=tenant_b,
+        number="BINT-00002",
+        name="Globex Salesforce Ingress",
+        slug="globex-salesforce-ingress",
+        connector_type="webhook",
+        target_system="salesforce",
+        base_url="https://globex.salesforce.example.com",
+        auth_type="bearer_token",
+        auth_credentials={"bearer_token": "sec_globex_token_456"},
+        connection_config={"timeout": 60},
+        health_status="healthy",
+        is_enabled=True,
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def warehouse_sync_endpoint_a(db, tenant_a, admin_user):
+    return WarehouseSyncEndpoint.objects.create(
+        tenant=tenant_a,
+        number="BSNC-00001",
+        name="Snowflake Nightly Sync",
+        slug="snowflake-nightly-sync",
+        target_warehouse="snowflake",
+        sync_mode="batch",
+        sync_schedule="daily",
+        destination_schema="analytics_prod",
+        destination_table="fct_orders",
+        status="idle",
+        is_active=True,
+        owner=admin_user,
+    )
+
+
+@pytest.fixture
+def warehouse_sync_endpoint_b(db, tenant_b, admin_user_b):
+    return WarehouseSyncEndpoint.objects.create(
+        tenant=tenant_b,
+        number="BSNC-00002",
+        name="BigQuery Streaming Ingestion",
+        slug="bigquery-streaming-ingestion",
+        target_warehouse="bigquery",
+        sync_mode="cdc",
+        sync_schedule="hourly",
+        destination_schema="globex_marts",
+        destination_table="fct_clickstream",
+        status="idle",
+        is_active=True,
+        owner=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_webhook_subscription_a(db, tenant_a, admin_user):
+    return BiWebhookSubscription.objects.create(
+        tenant=tenant_a,
+        number="BWHK-00001",
+        name="Alert Dispatch Webhook",
+        endpoint_url="https://hooks.example.com/alerts",
+        payload_format="json",
+        events=["alert.triggered", "sync.completed"],
+        is_active=True,
+        status="active",
+        created_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_webhook_subscription_b(db, tenant_b, admin_user_b):
+    return BiWebhookSubscription.objects.create(
+        tenant=tenant_b,
+        number="BWHK-00002",
+        name="Globex Incident Webhook",
+        endpoint_url="https://hooks.globex.example.com/incident",
+        payload_format="json",
+        events=["alert.triggered", "pipeline.failed"],
+        is_active=True,
+        status="active",
+        created_by=admin_user_b,
+    )
+
+
+@pytest.fixture
+def bi_extension_plugin_a(db, tenant_a, admin_user):
+    return BiExtensionPlugin.objects.create(
+        tenant=tenant_a,
+        number="BEXT-00001",
+        name="Sankey Visualizer Plugin",
+        plugin_identifier="com.naverp.visual.sankey",
+        plugin_type="custom_visual",
+        category="visualization",
+        version="1.0.0",
+        author_name="DataViz Lab",
+        status="enabled",
+        is_system_plugin=False,
+        is_verified=True,
+        installed_by=admin_user,
+    )
+
+
+@pytest.fixture
+def bi_extension_plugin_b(db, tenant_b, admin_user_b):
+    return BiExtensionPlugin.objects.create(
+        tenant=tenant_b,
+        number="BEXT-00002",
+        name="Globex Python Transform Hook",
+        plugin_identifier="com.globex.bi.pytransform",
+        plugin_type="transform_hook",
+        category="transformation",
+        version="2.1.0",
+        author_name="Globex Engineering",
+        status="enabled",
+        is_system_plugin=False,
+        is_verified=True,
+        installed_by=admin_user_b,
+    )
