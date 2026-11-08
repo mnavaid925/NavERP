@@ -47,7 +47,7 @@
                 {% if decision.problem_statement %}
                 <div>
                     <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Problem Statement / Context</div>
-                    <div class="text-sm text-slate-800 bg-slate-50 rounded p-4 border border-slate-200">
+                    <div class="text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded p-4 border border-slate-200 dark:border-slate-700">
                         {{ decision.problem_statement|linebreaksbr }}
                     </div>
                 </div>
@@ -55,7 +55,7 @@
 
                 <div>
                     <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Decision Rationale & Logic</div>
-                    <div class="text-sm text-slate-800 bg-emerald-50 rounded p-4 border border-emerald-100 leading-relaxed font-medium">
+                    <div class="text-sm text-slate-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 rounded p-4 border border-emerald-100 dark:border-emerald-800 leading-relaxed font-medium">
                         {{ decision.rationale|linebreaksbr }}
                     </div>
                 </div>
@@ -63,7 +63,7 @@
                 {% if decision.alternatives_considered %}
                 <div>
                     <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Alternatives Evaluated & Rejected</div>
-                    <div class="text-sm text-slate-700 bg-slate-50 rounded p-4 border border-slate-200">
+                    <div class="text-sm text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded p-4 border border-slate-200 dark:border-slate-700">
                         {{ decision.alternatives_considered|linebreaksbr }}
                     </div>
                 </div>
@@ -72,13 +72,13 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                     <div>
                         <div class="text-xs font-medium text-muted uppercase">Targeted Expected Impact</div>
-                        <div class="text-sm text-slate-700 mt-1 bg-slate-50 p-3 rounded">
+                        <div class="text-sm text-slate-700 dark:text-slate-200 mt-1 bg-slate-50 dark:bg-slate-800/60 p-3 rounded border border-transparent dark:border-slate-700">
                             {{ decision.expected_impact|default:"Not specified." }}
                         </div>
                     </div>
                     <div>
                         <div class="text-xs font-medium text-muted uppercase">Actual Outcome / Post-Mortem</div>
-                        <div class="text-sm text-slate-700 mt-1 bg-slate-50 p-3 rounded">
+                        <div class="text-sm text-slate-700 dark:text-slate-200 mt-1 bg-slate-50 dark:bg-slate-800/60 p-3 rounded border border-transparent dark:border-slate-700">
                             {{ decision.actual_outcome|default:"Pending review date." }}
                         </div>
                     </div>
@@ -115,6 +115,18 @@
                             </a>
                             {% else %}
                             <span class="text-muted">None</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase">Target Widget</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if decision.widget %}
+                            <span class="text-slate-800 dark:text-slate-200">{{ decision.widget.title }}</span>
+                            <span class="text-xs text-muted font-mono ml-1">({{ decision.widget.number }})</span>
+                            {% else %}
+                            <span class="text-muted">None (Dashboard-wide)</span>
                             {% endif %}
                         </div>
                     </div>
