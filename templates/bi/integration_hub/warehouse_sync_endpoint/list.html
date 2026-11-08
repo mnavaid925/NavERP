@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}External BI & Warehouse Syncs — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Integration & API Hub</span>
+            <span class="sep">/</span>
+            <span>Warehouse Syncs</span>
+        </div>
+        <h1 class="page-title">External BI & Warehouse Syncs</h1>
+        <p class="text-muted text-sm">Synchronize governed semantic models and data marts to Snowflake, BigQuery, Redshift, Databricks, and Power BI</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:integration_connector_list' %}" class="btn btn-outline">
+            <i data-lucide="layers"></i>
+            <span>Connectors</span>
+        </a>
+        <a href="{% url 'bi:bi_webhook_subscription_list' %}" class="btn btn-outline">
+            <i data-lucide="webhook"></i>
+            <span>Webhooks</span>
+        </a>
+        <a href="{% url 'bi:bi_extension_plugin_list' %}" class="btn btn-outline">
+            <i data-lucide="puzzle"></i>
+            <span>Extensions</span>
+        </a>
+        <a href="{% url 'bi:warehouse_sync_endpoint_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Warehouse Sync</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="database"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Endpoints</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Successful Syncs</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ success_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-circle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Sync Errors</div>
+            <div class="text-2xl font-bold text-amber-600">{{ error_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="id_q" class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, table, database..." class="form-input text-sm ps-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute start-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label for="id_target_warehouse" class="form-label text-xs">Target Warehouse</label>
+                <select id="id_target_warehouse" name="target_warehouse" class="form-select text-sm">
+                    <option value="">All Warehouses</option>
+                    {% for val, label in warehouse_choices %}
+                    <option value="{{ val }}" {% if request.GET.target_warehouse == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_sync_mode" class="form-label text-xs">Sync Mode</label>
+                <select id="id_sync_mode" name="sync_mode" class="form-select text-sm">
+                    <option value="">All Modes</option>
+                    {% for val, label in mode_choices %}
+                    <option value="{{ val }}" {% if request.GET.sync_mode == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label text-xs">Status</label>
+                <select id="id_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'bi:warehouse_sync_endpoint_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Sync Name</th>
+                    <th>Target Warehouse</th>
+                    <th>Source Model</th>
+                    <th>Destination Table</th>
+                    <th>Schedule</th>
+                    <th>Status</th>
+                    <th>Last Sync</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in sync_endpoints %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:warehouse_sync_endpoint_detail' s.pk %}" class="text-blue-600 hover:underline">
+                                {{ s.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ s.number }} • {{ s.slug }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ s.get_target_warehouse_display }}</span>
+                        <div class="text-xs text-muted mt-1">{{ s.get_sync_mode_display }}</div>
+                    </td>
+                    <td>
+                        {% if s.semantic_model %}
+                        <div class="text-sm font-medium">{{ s.semantic_model.name }}</div>
+                        <div class="text-xs text-muted">Semantic Model</div>
+                        {% elif s.data_mart %}
+                        <div class="text-sm font-medium">{{ s.data_mart.name }}</div>
+                        <div class="text-xs text-muted">Data Mart</div>
+                        {% else %}
+                        <span class="text-muted text-xs">Direct Query View</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-800">
+                            {% if s.destination_database %}{{ s.destination_database }}.{% endif %}{% if s.destination_schema %}{{ s.destination_schema }}.{% endif %}{{ s.destination_table }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ s.get_sync_schedule_display }}</span>
+                    </td>
+                    <td>
+                        {% if s.status == 'success' %}
+                        <span class="badge badge-green">Success</span>
+                        {% elif s.status == 'syncing' %}
+                        <span class="badge badge-info">Syncing</span>
+                        {% elif s.status == 'error' %}
+                        <span class="badge badge-red">Error</span>
+                        {% elif s.status == 'disabled' %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% else %}
+                        <span class="badge badge-slate">Idle</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-muted">
+                        {% if s.last_sync_at %}
+                        <div>{{ s.last_sync_at|date:"Y-m-d H:i" }}</div>
+                        <div class="font-mono">{{ s.last_rows_synced }} rows ({{ s.last_sync_duration_ms }}ms)</div>
+                        {% else %}
+                        <span>Never synced</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <form method="post" action="{% url 'bi:warehouse_sync_endpoint_trigger' s.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Trigger Sync Now">
+                                    <i data-lucide="play"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:warehouse_sync_endpoint_detail' s.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:warehouse_sync_endpoint_edit' s.pk %}" class="btn btn-icon" title="Edit sync">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:warehouse_sync_endpoint_delete' s.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete sync endpoint {{ s.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete sync">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="database" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Warehouse Sync Endpoints Configured</div>
+                            <div class="empty-state-text">Publish governed datasets to external cloud data warehouses and modern BI feeds.</div>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:warehouse_sync_endpoint_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Create First Sync Endpoint</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} sync endpoints
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.target_warehouse %}&target_warehouse={{ request.GET.target_warehouse }}{% endif %}{% if request.GET.sync_mode %}&sync_mode={{ request.GET.sync_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.target_warehouse %}&target_warehouse={{ request.GET.target_warehouse }}{% endif %}{% if request.GET.sync_mode %}&sync_mode={{ request.GET.sync_mode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
