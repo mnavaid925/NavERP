@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assessment.number }} — Criticality Assessment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_criticality_assessment_list' %}">Criticality Assessments</a>
+            <span>/</span>
+            <span>{{ assessment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ assessment.number }} — {{ assessment.title }}</h1>
+            <span class="badge {{ assessment.status_css }}">{{ assessment.get_assessment_status_display }}</span>
+            <span class="badge {{ assessment.abc_css }} font-bold text-sm">Class {{ assessment.abc_rating }} ({{ assessment.get_abc_rating_display }})</span>
+        </div>
+        <p class="text-sm text-muted mt-1">
+            Target Asset: <span class="font-medium text-slate-800">{{ assessment.asset.name }}</span>
+            <span class="font-mono text-xs">({{ assessment.asset.tag_code|default:assessment.asset.number }})</span>
+        </p>
+    </div>
+    <div class="page-actions">
+        {% if assessment.assessment_status != "approved" and assessment.assessment_status != "superseded" %}
+        <form method="post" action="{% url 'assets:asset_criticality_assessment_approve' assessment.pk %}" class="inline" onsubmit="return confirm('Authorize and approve this criticality assessment? Operational criticality for asset {{ assessment.asset.number }} will be updated.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle-2" class="w-4 h-4 mr-1"></i> Approve & Sync to Asset
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_criticality_assessment_edit' assessment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        {% endif %}
+        <form method="post" action="{% url 'assets:asset_criticality_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Delete assessment {{ assessment.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_criticality_assessment_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Risk & Consequence Scoring Breakdown -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-brand"></i> Consequence & Failure Impact Analysis
+            </h2>
+            <div class="flex items-center gap-2">
+                <span class="text-xs uppercase text-muted font-bold">Composite Score:</span>
+                <span class="text-lg font-black text-slate-900">{{ assessment.composite_score }}</span>
+                <span class="text-xs text-muted">/ 30</span>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- 5 Consequence Dimensions Progress Cards -->
+            <div class="space-y-4 mb-6">
+                <!-- Safety -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-800">Personnel Safety & Health Impact</span>
+                        <span class="text-sm font-bold text-slate-900">{{ assessment.safety_impact }} / 5</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if assessment.safety_impact >= 4 %}bg-red-500{% elif assessment.safety_impact >= 3 %}bg-amber-500{% else %}bg-blue-500{% endif %}" style="width: {% widthratio assessment.safety_impact 5 100 %}%;"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">
+                        {% if assessment.safety_impact == 5 %}Catastrophic: Potential fatality or irreversible permanent disability
+                        {% elif assessment.safety_impact == 4 %}Severe: Major lost-time injury / hospitalization
+                        {% elif assessment.safety_impact == 3 %}Moderate: Reversible injury requiring medical treatment
+                        {% elif assessment.safety_impact == 2 %}Minor: First aid treatment required on site
+                        {% else %}Negligible: No personal safety impact{% endif %}
+                    </div>
+                </div>
+
+                <!-- Environmental -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-800">Environmental & Hazardous Release</span>
+                        <span class="text-sm font-bold text-slate-900">{{ assessment.environmental_impact }} / 5</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if assessment.environmental_impact >= 4 %}bg-red-500{% elif assessment.environmental_impact >= 3 %}bg-amber-500{% else %}bg-blue-500{% endif %}" style="width: {% widthratio assessment.environmental_impact 5 100 %}%;"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">
+                        {% if assessment.environmental_impact == 5 %}Catastrophic: Major offsite ecological disaster / toxic chemical emission
+                        {% elif assessment.environmental_impact == 4 %}Major: Reportable regulatory spill exceeding threshold
+                        {% elif assessment.environmental_impact == 3 %}Moderate: Contained plant spill requiring hazardous response team
+                        {% elif assessment.environmental_impact == 2 %}Minor: Contained nuisance leak remediated immediately
+                        {% else %}Negligible: Zero environmental release{% endif %}
+                    </div>
+                </div>
+
+                <!-- Operational Downtime -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-800">Production Downtime & Throughput Bottleneck</span>
+                        <span class="text-sm font-bold text-slate-900">{{ assessment.operational_downtime_impact }} / 5</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if assessment.operational_downtime_impact >= 4 %}bg-red-500{% elif assessment.operational_downtime_impact >= 3 %}bg-amber-500{% else %}bg-blue-500{% endif %}" style="width: {% widthratio assessment.operational_downtime_impact 5 100 %}%;"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">
+                        {% if assessment.operational_downtime_impact == 5 %}Total Plant Stoppage: Full shutdown of primary manufacturing stream
+                        {% elif assessment.operational_downtime_impact == 4 %}Severe Outage: Bottleneck line idle >8 hours
+                        {% elif assessment.operational_downtime_impact == 3 %}Moderate Slowdown: Buffer stock drained / partial throttling
+                        {% elif assessment.operational_downtime_impact == 2 %}Minor Delay: <2h recovery absorbed by operational float
+                        {% else %}Zero Impact: Fully buffered by active parallel redundancy{% endif %}
+                    </div>
+                </div>
+
+                <!-- Financial -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-800">Financial Repair & Replacement Exposure</span>
+                        <span class="text-sm font-bold text-slate-900">{{ assessment.financial_impact }} / 5</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if assessment.financial_impact >= 4 %}bg-red-500{% elif assessment.financial_impact >= 3 %}bg-amber-500{% else %}bg-blue-500{% endif %}" style="width: {% widthratio assessment.financial_impact 5 100 %}%;"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">
+                        {% if assessment.financial_impact == 5 %}>$250,000 catastrophic capital loss
+                        {% elif assessment.financial_impact == 4 %}$50,000 to $250,000 major sub-system rebuild
+                        {% elif assessment.financial_impact == 3 %}$10,000 to $50,000 component replacement
+                        {% elif assessment.financial_impact == 2 %}$1,000 to $10,000 minor overhaul
+                        {% else %}<$1,000 routine servicing{% endif %}
+                    </div>
+                </div>
+
+                <!-- Regulatory Compliance -->
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-slate-800">Regulatory Compliance & Statutory Mandates</span>
+                        <span class="text-sm font-bold text-slate-900">{{ assessment.regulatory_compliance_impact }} / 5</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if assessment.regulatory_compliance_impact >= 4 %}bg-red-500{% elif assessment.regulatory_compliance_impact >= 3 %}bg-amber-500{% else %}bg-blue-500{% endif %}" style="width: {% widthratio assessment.regulatory_compliance_impact 5 100 %}%;"></div>
+                    </div>
+                    <div class="text-xs text-muted mt-1">
+                        {% if assessment.regulatory_compliance_impact == 5 %}Revocation of license to operate / criminal liability
+                        {% elif assessment.regulatory_compliance_impact == 4 %}Statutory stop-work order / major regulatory sanction
+                        {% elif assessment.regulatory_compliance_impact == 3 %}Official citation / regulatory monetary fine
+                        {% elif assessment.regulatory_compliance_impact == 2 %}Notice of Non-Conformance (internal/external audit)
+                        {% else %}Minor internal observation{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Single Point of Failure Banner -->
+            {% if assessment.is_single_point_of_failure %}
+            <div class="p-3 bg-red-50 border border-red-200 rounded-md flex items-start gap-3 mb-4">
+                <i data-lucide="alert-octagon" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
+                <div>
+                    <div class="text-sm font-bold text-red-900">Single Point of Failure (SPOF) Identified</div>
+                    <div class="text-xs text-red-700">No active or standby redundancy exists for this unit in the plant network. A +5 consequence penalty was factored into the composite score.</div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if assessment.findings_and_mitigation %}
+            <hr class="my-4 border-slate-200">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Reliability Findings & Risk Mitigation Action Plan</label>
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-md text-sm text-slate-800 whitespace-pre-line mt-1">
+                    {{ assessment.findings_and_mitigation }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Governance & Lifecycle Side Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="check-square" class="w-4 h-4 text-brand"></i> Governance & Sign-off
+            </h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Derived Criticality Tier</label>
+                <div class="mt-1">
+                    <span class="badge {{ assessment.abc_css }} text-sm font-bold">Class {{ assessment.abc_rating }}</span>
+                    <div class="text-xs text-slate-700 mt-1">{{ assessment.get_abc_rating_display }}</div>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <label class="text-xs font-semibold uppercase text-muted">Recommended Maintenance Strategy</label>
+                <div class="text-sm font-semibold text-slate-900 mt-1">{{ assessment.get_recommended_strategy_display }}</div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <label class="text-xs font-semibold uppercase text-muted">Lead Reliability Assessor</label>
+                <div class="text-sm text-slate-800 mt-1">{{ assessment.assessor.name|default:"—" }}</div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <label class="text-xs font-semibold uppercase text-muted">Assessment Timeline</label>
+                <div class="text-xs text-slate-700 mt-1 space-y-1">
+                    <div>Audited: <strong>{{ assessment.assessment_date|date:"Y-m-d" }}</strong></div>
+                    <div>Review Cycle: <strong>Every {{ assessment.review_cycle_months }} months</strong></div>
+                    {% if assessment.next_assessment_due %}
+                    <div>Next Due: <strong>{{ assessment.next_assessment_due|date:"Y-m-d" }}</strong></div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if assessment.approved_by %}
+            <div class="pt-3 border-t border-slate-100">
+                <label class="text-xs font-semibold uppercase text-muted">Approval Sign-Off</label>
+                <div class="text-xs text-slate-800 mt-1">
+                    <div>Authorized By: <strong>{{ assessment.approved_by.username }}</strong></div>
+                    <div>Timestamp: <strong>{{ assessment.approved_at|date:"Y-m-d H:i" }}</strong></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
