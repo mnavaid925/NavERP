@@ -152,6 +152,9 @@ class WarehouseSyncEndpoint(TenantNumbered):
             models.Index(fields=["tenant", "target_warehouse"], name="idx_bsnc_ten_wh"),
             models.Index(fields=["tenant", "semantic_model"], name="idx_bsnc_ten_sem"),
             models.Index(fields=["tenant", "data_mart"], name="idx_bsnc_ten_mart"),
+            models.Index(fields=["tenant", "sync_mode"], name="idx_bsnc_ten_mode"),
+            models.Index(fields=["tenant", "sync_schedule"], name="idx_bsnc_ten_sched"),
+            models.Index(fields=["tenant", "is_active"], name="idx_bsnc_ten_act"),
             models.Index(fields=["tenant", "created_at"], name="idx_bsnc_ten_created"),
         ]
 
