@@ -1,0 +1,280 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.code }} — {{ category.name }} — Category Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_category_list' %}">Categories</a>
+            <span>/</span>
+            <span>{{ category.code }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ category.name }}</h1>
+            <span class="badge {{ category.status_css }}">
+                {% if category.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+            <span class="badge {{ category.criticality_css }}">{{ category.get_default_criticality_display }}</span>
+        </div>
+        <p class="text-sm text-muted mt-1">Taxonomy Path: <span class="font-mono text-slate-700">{{ category.full_path }}</span></p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_category_edit' category.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Category
+        </a>
+        <form method="post" action="{% url 'assets:asset_category_delete' category.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete category {{ category.code }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_category_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- General Info Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="info" class="w-4 h-4 text-brand"></i> Category Specifications & Governance
+            </h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Category Code</label>
+                    <div class="text-base font-mono font-bold text-slate-900">{{ category.code }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Category Type</label>
+                    <div class="text-sm font-medium text-slate-800">{{ category.get_category_type_display }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Parent Group Node</label>
+                    <div class="text-sm text-slate-800">
+                        {% if category.parent %}
+                        <a href="{% url 'assets:asset_category_detail' category.parent.pk %}" class="text-brand hover:underline font-medium">
+                            {{ category.parent.code }} — {{ category.parent.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted">None (Top-Level Root Group)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">System Record Identifier</label>
+                    <div class="text-sm font-mono text-slate-700">{{ category.number }}</div>
+                </div>
+            </div>
+
+            <hr class="my-4 border-slate-200">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">UNSPSC Commodity Code</label>
+                    <div class="text-sm">
+                        {% if category.unspsc_code %}
+                        <code class="font-mono bg-slate-100 px-2 py-0.5 rounded text-slate-800 font-semibold">{{ category.unspsc_code }}</code>
+                        {% if category.unspsc_title %}<div class="text-xs text-muted mt-1">{{ category.unspsc_title }}</div>{% endif %}
+                        {% else %}
+                        <span class="text-muted">Not Classified</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Default Useful Life</label>
+                    <div class="text-sm font-medium text-slate-800">{{ category.default_useful_life_months }} Months ({{ category.default_useful_life_months|floatformat:0 }} mos)</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Default Book Depreciation</label>
+                    <div class="text-sm font-medium text-slate-800">{{ category.get_default_depreciation_method_display }}</div>
+                </div>
+                <div>
+                    <label class="text-xs font-semibold uppercase text-muted">Default Maintenance Strategy</label>
+                    <div class="text-sm font-medium text-slate-800">{{ category.get_default_maintenance_strategy_display }}</div>
+                </div>
+            </div>
+
+            {% if category.description %}
+            <hr class="my-4 border-slate-200">
+            <div>
+                <label class="text-xs font-semibold uppercase text-muted">Scope & Operational Guidelines</label>
+                <p class="text-sm text-slate-700 whitespace-pre-line mt-1">{{ category.description }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Metadata Side Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <i data-lucide="layers" class="w-4 h-4 text-brand"></i> Sub-Tree Summary
+            </h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Child Categories</span>
+                <span class="text-sm font-semibold text-slate-900">{{ children|length }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Standard Equipment Models</span>
+                <span class="text-sm font-semibold text-slate-900">{{ models|length }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Specification Templates</span>
+                <span class="text-sm font-semibold text-slate-900">{{ spec_templates|length }}</span>
+            </div>
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <span class="text-sm text-muted">Display Priority Order</span>
+                <span class="text-sm font-semibold text-slate-900">{{ category.display_order }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-muted">Created</span>
+                <span class="text-xs text-muted">{{ category.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Child Categories Section -->
+{% if children %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="git-branch" class="w-4 h-4 text-brand"></i> Immediate Sub-Categories ({{ children|length }})
+        </h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>UNSPSC</th>
+                    <th>Criticality</th>
+                    <th>Status</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for child in children %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_category_detail' child.pk %}" class="font-medium text-brand hover:underline">
+                            {{ child.code }}
+                        </a>
+                    </td>
+                    <td>{{ child.name }}</td>
+                    <td><span class="badge badge-info">{{ child.get_category_type_display }}</span></td>
+                    <td><code class="text-xs font-mono">{{ child.unspsc_code|default:"—" }}</code></td>
+                    <td><span class="badge {{ child.criticality_css }}">{{ child.get_default_criticality_display }}</span></td>
+                    <td><span class="badge {{ child.status_css }}">{% if child.is_active %}Active{% else %}Inactive{% endif %}</span></td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_category_detail' child.pk %}" class="btn btn-icon" title="View Detail"><i data-lucide="eye"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Equipment Models Section -->
+{% if models %}
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="cpu" class="w-4 h-4 text-brand"></i> Equipment Models in this Category ({{ models|length }})
+        </h2>
+        <a href="{% url 'assets:asset_model_create' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Add Model
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Model Number</th>
+                    <th>Model Name</th>
+                    <th>Manufacturer</th>
+                    <th>Warranty</th>
+                    <th>Status</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mod in models %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_model_detail' mod.pk %}" class="font-medium text-brand hover:underline">
+                            {{ mod.model_number }}
+                        </a>
+                    </td>
+                    <td>{{ mod.name }}</td>
+                    <td>{{ mod.manufacturer.name|default:mod.manufacturer_name_fallback|default:"—" }}</td>
+                    <td>{{ mod.standard_warranty_months }} mos</td>
+                    <td><span class="badge {{ mod.status_css }}">{{ mod.get_model_status_display }}</span></td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_model_detail' mod.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Technical Specification Templates -->
+{% if spec_templates %}
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-900 flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-brand"></i> Inherited Specification Attributes ({{ spec_templates|length }})
+        </h2>
+        <a href="{% url 'assets:asset_specification_template_create' %}" class="btn btn-sm btn-outline">
+            <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Add Spec Attribute
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Attribute Key</th>
+                    <th>Display Name</th>
+                    <th>Data Type</th>
+                    <th>Unit of Measure</th>
+                    <th>Required</th>
+                    <th>Filterable</th>
+                    <th class="text-right">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for spec in spec_templates %}
+                <tr>
+                    <td><code class="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-800">{{ spec.attribute_key }}</code></td>
+                    <td class="font-medium">{{ spec.display_name }}</td>
+                    <td><span class="badge {{ spec.data_type_css }}">{{ spec.get_data_type_display }}</span></td>
+                    <td>{{ spec.unit_of_measure|default:"—" }}</td>
+                    <td>{% if spec.is_required %}<span class="text-red font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+                    <td>{% if spec.is_filterable %}<span class="text-green font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_specification_template_detail' spec.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
