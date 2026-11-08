@@ -46,7 +46,7 @@
         </button>
         {% endif %}
 
-        {% if movement.status not in 'received cancelled' %}
+        {% if movement.status == 'draft' or movement.status == 'requested' %}
         <a href="{% url 'assets:asset_movement_log_edit' movement.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
         </a>
