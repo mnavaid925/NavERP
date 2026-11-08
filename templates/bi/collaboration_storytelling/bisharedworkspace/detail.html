@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workspace.name }} — Shared Workspace — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_shared_workspace_list' %}">Workspaces</a>
+            <span class="sep">/</span>
+            <span>{{ workspace.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="w-4 h-4 rounded-full flex-shrink-0" style="background-color: {{ workspace.color }};"></span>
+            <h1 class="page-title">{{ workspace.name }}</h1>
+            <span class="badge {% if workspace.status == 'active' %}badge-green{% else %}badge-slate{% endif %}">
+                {{ workspace.get_status_display }}
+            </span>
+            {% if workspace.is_favorite %}
+            <span class="text-amber-500 text-sm font-semibold">★ Favorite</span>
+            {% endif %}
+        </div>
+        <p class="text-muted text-sm font-mono mt-1">{{ workspace.number }} • {{ workspace.slug }}</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_data_story_create' %}?workspace={{ workspace.pk }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Add Story</span>
+        </a>
+        <a href="{% url 'bi:bi_decision_log_create' %}?workspace={{ workspace.pk }}" class="btn btn-outline">
+            <i data-lucide="plus"></i>
+            <span>Log Decision</span>
+        </a>
+        <a href="{% url 'bi:bi_shared_workspace_edit' workspace.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil"></i>
+            <span>Edit Workspace</span>
+        </a>
+        <form method="post" action="{% url 'bi:bi_shared_workspace_delete' workspace.pk %}" class="inline" onsubmit="return confirm('Delete this workspace?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2"></i>
+                <span>Delete</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Main Info Card -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Workspace Overview</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-medium text-muted uppercase tracking-wider mb-1">Description</div>
+                    <div class="text-sm text-slate-700 bg-slate-50 rounded p-3">
+                        {{ workspace.description|default:"No description provided for this workspace."|linebreaksbr }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase tracking-wider">Default Access Level</div>
+                        <div class="text-sm font-semibold mt-1">
+                            <span class="badge badge-slate">{{ workspace.get_default_access_level_display }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-medium text-muted uppercase tracking-wider">Tenant Visibility</div>
+                        <div class="text-sm font-semibold mt-1">
+                            {% if workspace.is_public %}
+                            <span class="badge badge-info">Public Tenant Access</span>
+                            {% else %}
+                            <span class="badge badge-muted">Restricted Members Only</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Stories in this Workspace -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Data Stories & Presentations</h2>
+                <a href="{% url 'bi:bi_data_story_create' %}?workspace={{ workspace.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Create Story</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Story Title</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Slides</th>
+                            <th>Author</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for story in stories %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'bi:bi_data_story_detail' story.pk %}" class="font-medium text-primary-600 hover:underline">
+                                    {{ story.title }}
+                                </a>
+                                <div class="text-xs text-muted font-mono">{{ story.number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate">{{ story.get_story_type_display }}</span>
+                            </td>
+                            <td>
+                                <span class="badge {% if story.status == 'published' %}badge-green{% elif story.status == 'draft' %}badge-amber{% else %}badge-slate{% endif %}">
+                                    {{ story.get_status_display }}
+                                </span>
+                            </td>
+                            <td>{{ story.slides_count }}</td>
+                            <td>
+                                <span class="text-xs">{% if story.author %}{{ story.author.get_full_name|default:story.author.username }}{% else %}—{% endif %}</span>
+                            </td>
+                            <td class="text-right">
+                                <a href="{% url 'bi:bi_data_story_presentation' story.pk %}" class="btn btn-outline btn-sm" title="Present">
+                                    <i data-lucide="play"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted text-sm py-6">
+                                No data stories authored in this workspace yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Decision Logs in this Workspace -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold">Decisions & Rationale Log</h2>
+                <a href="{% url 'bi:bi_decision_log_create' %}?workspace={{ workspace.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus"></i>
+                    <span>Log Decision</span>
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Decision</th>
+                            <th>Category</th>
+                            <th>Date</th>
+                            <th>Status</th>
+                            <th>Decision Maker</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in decision_logs %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'bi:bi_decision_log_detail' d.pk %}" class="font-medium text-primary-600 hover:underline">
+                                    {{ d.title }}
+                                </a>
+                                <div class="text-xs text-muted font-mono">{{ d.number }}</div>
+                            </td>
+                            <td>
+                                <span class="badge badge-slate">{{ d.get_category_display }}</span>
+                            </td>
+                            <td>{{ d.decision_date }}</td>
+                            <td>
+                                <span class="badge {% if d.status == 'approved' %}badge-green{% else %}badge-slate{% endif %}">
+                                    {{ d.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="text-xs">{% if d.decision_maker %}{{ d.decision_maker.get_full_name|default:d.decision_maker.username }}{% else %}—{% endif %}</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted text-sm py-6">
+                                No decisions logged in this workspace yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Meta Card -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold">Governance & Identity</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted uppercase">Department / Org Unit</div>
+                    <div class="text-sm font-medium mt-0.5">
+                        {% if workspace.department %}{{ workspace.department.name }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Workspace Lead / Owner</div>
+                    <div class="text-sm font-medium mt-0.5">
+                        {% if workspace.owner %}{{ workspace.owner.get_full_name|default:workspace.owner.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}
+                    </div>
+                </div>
+
+                <div class="border-t pt-3">
+                    <div class="text-xs text-muted uppercase">Created By</div>
+                    <div class="text-xs font-medium text-slate-700 mt-0.5">
+                        {% if workspace.created_by %}{{ workspace.created_by.get_full_name|default:workspace.created_by.username }}{% else %}System{% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Created At</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ workspace.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-muted uppercase">Last Updated</div>
+                    <div class="text-xs text-slate-600 mt-0.5">{{ workspace.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
