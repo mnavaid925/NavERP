@@ -82,7 +82,7 @@ class AssetIncidentReportForm(TenantUniqueMixin, forms.ModelForm):
         if self.tenant:
             self.fields["asset"].queryset = Asset.objects.filter(tenant=self.tenant).order_by("number")
             self.fields["last_known_location"].queryset = Location.objects.filter(tenant=self.tenant, is_active=True).order_by("name")
-            self.fields["custodian_at_loss"].queryset = Party.objects.filter(tenant=self.tenant, is_active=True).order_by("name")
+            self.fields["custodian_at_loss"].queryset = Party.objects.filter(tenant=self.tenant).order_by("name")
             self.fields["investigator"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
     def clean(self):
