@@ -75,3 +75,20 @@
 2. `apps/bi/views/CollaborationStorytelling/BiVisualComments.py:67` — In `bi_visual_comment_list`, dropdown queryset for `stories` pulls full models with large JSON text fields into memory. Fix: Add `.only("id", "title")` to filter dropdown querysets.
 3. `apps/bi/views/CollaborationStorytelling/*.py` — List views use `Paginator(qs, 20)` instead of the default NavERP standard of 15 items per page (`Paginator(qs, 15)`). Fix: Update to `per_page=15`.
 4. `apps/bi/models/CollaborationStorytelling/BiVisualComments.py:141` & `BiSharedWorkspaces.py:99` — Missing composite indexes for filtered status/choice columns `(tenant, priority)` and `(tenant, default_access_level)`. Fix: Add composite indexes to Meta.
+
+---
+
+## 5. `qa-smoke-tester` Findings
+
+### Critical
+1. `apps/bi/forms/CollaborationStorytelling/*.py` (all 4 forms: `BiSharedWorkspaceForm:59`, `BiDataStoryForm:55`, `BiVisualCommentForm:55-67`, `BiDecisionLogForm:68-76`) — Submitting any create or edit form via POST crashes with HTTP 500 (`AttributeError: 'Tenant' object has no attribute 'get'`) inside `reject_foreign`. Fix: Implement form-level `clean()` calling `reject_foreign(self, cleaned, [fields])`.
+
+### Important
+1. `apps/bi/views/CollaborationStorytelling/BiDataStories.py:224` — Calling `GET /bi/stories/<pk>/export-office/?token=WRONG` returns HTTP 200 without validating the embed token. Fix: Validate `if story.office_embed_token and token != story.office_embed_token: return JsonResponse({"error": "Invalid embed token"}, status=403)`.
+2. `apps/bi/views/CollaborationStorytelling/BiVisualComments.py:80` & `templates/bi/collaboration_storytelling/bivisualcomment/list.html` — Filter & pagination desynchronization: `?story=` is accepted in the view but omitted from the template filter card and pagination links. Fix: Add Story `<select>` to filter card and preserve `&story=` in pagination links.
+3. `apps/bi/management/commands/seed_bi.py:104-167` — The `--flush` command leaves orphaned records because the 4 new 10.18 models are omitted from the flush atomic block. Fix: Add the 4 models to the flush delete block.
+
+### Minor
+1. `templates/bi/collaboration_storytelling/*/list.html` — Unescaped dynamic variables in `onsubmit="return confirm(...)"` cause JS syntax errors on single quotes. Fix: Apply `|escapejs`.
+2. `apps/bi/forms/CollaborationStorytelling/BiVisualComments.py:51` — `parent_comment` choices do not exclude `self.instance.pk`, allowing self-parent cycles. Fix: Exclude `self.instance.pk` in `__init__` and validate in `clean()`.
+3. `templates/bi/collaboration_storytelling/*/detail.html` & `presentation.html` — Missing dark mode variants for hardcoded background and text classes. Fix: Add paired `dark:` utility classes.
