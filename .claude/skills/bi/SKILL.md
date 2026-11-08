@@ -1444,3 +1444,82 @@ All routes under `bi:` namespace:
 - **Stored XSS Prevention**: `custom_css` stripped/rejected of `<style>` and `<script>`, playlist JSON interpolated safely via `json_script`.
 - **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.17"]`.
 
+---
+
+## Sub-module 10.18: Collaboration & Data Storytelling
+
+### Models
+1. **`BiSharedWorkspace`** (`apps/bi/models/CollaborationStorytelling/BiSharedWorkspaces.py`)
+   - Table: `bi_shared_workspace`, Prefix: `WSPC` (`TenantNumbered`).
+   - Fields: `name`, `slug`, `description`, `department` (FK `core.OrgUnit`, nullable), `owner` (FK `auth.User`, nullable), `default_access_level` (`viewer`, `contributor`, `editor`, `admin`), `status` (`active`, `archived`), `is_public` (bool), `is_favorite` (bool), `color` (CharField, hex validated `#3b82f6`), `icon` (CharField), `pinned_dashboard_ids` (JSONField), `pinned_report_ids` (JSONField), `pinned_story_ids` (JSONField), `members_json` (JSONField list of member roles), `created_by` (FK `auth.User`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes on `(tenant, status)`, `(tenant, default_access_level)`, `(tenant, department)`, `(tenant, owner)`.
+
+2. **`BiDataStory`** (`apps/bi/models/CollaborationStorytelling/BiDataStories.py`)
+   - Table: `bi_data_story`, Prefix: `DSTY` (`TenantNumbered`).
+   - Fields: `title`, `slug`, `story_type` (`executive_brief`, `operational_review`, `deep_dive`, `scenario_planning`, `board_deck`), `target_audience` (`executives`, `board`, `operational_team`, `external_stakeholders`), `status` (`draft`, `published`, `archived`), `workspace` (FK `BiSharedWorkspace`), `author` (FK `auth.User`), `created_by` (FK `auth.User`), `summary` (TextField), `presentation_theme` (`light`, `dark_boardroom`, `contrast_executive`), `slides_count` (IntegerField, computed from slides_data), `view_count` (IntegerField, incremented on presentation), `last_presented_at` (DateTimeField), `slides_data` (JSONField list of slide dicts with narrative and drilldown paths), `excel_export_settings` (JSONField), `office_embed_token` (CharField, 48-char random token).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes on `(tenant, status)`, `(tenant, story_type)`, `(tenant, workspace)`, `(tenant, author)`.
+
+3. **`BiVisualComment`** (`apps/bi/models/CollaborationStorytelling/BiVisualComments.py`)
+   - Table: `bi_visual_comment`, Prefix: `VCOM` (`TenantNumbered`).
+   - Fields: `target_type` (`dashboard`, `widget`, `report`, `story`), `dashboard` (FK `BiDashboard`, nullable), `widget` (FK `BiDashboardWidget`, nullable), `report` (FK `ReportDefinition`, nullable), `story` (FK `BiDataStory`, nullable), `slide_id` (CharField), `parent_comment` (FK `self`, nullable, related_name `replies`), `content` (TextField), `status` (`open`, `in_review`, `acknowledged`, `resolved`), `priority` (`low`, `medium`, `high`, `urgent`), `filter_snapshot` (JSONField), `coordinate_x` (FloatField, 0.0-100.0 percentage), `coordinate_y` (FloatField, 0.0-100.0 percentage), `mentions_json` (JSONField), `author` (FK `auth.User`), `resolved_by` (FK `auth.User`, nullable), `resolved_at` (DateTimeField, nullable).
+   - Constraints & Indexes: unique on `(tenant, number)`, composite indexes on `(tenant, status)`, `(tenant, priority)`, `(tenant, target_type)`, `(tenant, dashboard)`, `(tenant, story)`.
+
+4. **`BiDecisionLog`** (`apps/bi/models/CollaborationStorytelling/BiDecisionLogs.py`)
+   - Table: `bi_decision_log`, Prefix: `DLOG` (`TenantNumbered`).
+   - Fields: `title`, `slug`, `problem_statement` (TextField), `decision_rationale` (TextField), `impact_assessment` (TextField), `category` (`budget`, `strategic`, `operational`, `compliance`, `product`), `status` (`proposed`, `approved`, `implemented`, `revoked`, `superseded`), `decision_date` (DateField), `review_date` (DateField, nullable), `workspace` (FK `BiSharedWorkspace`, nullable), `dashboard` (FK `BiDashboard`, nullable), `widget` (FK `BiDashboardWidget`, nullable), `kpi` (FK `KpiDefinition`, nullable), `decision_maker` (FK `auth.User`, nullable), `created_by` (FK `auth.User`, nullable), `marker_color` (CharField, hex validated `#10b981`), `marker_style` (`flag`, `badge`, `milestone`, `alert`).
+   - Constraints & Indexes: unique on `(tenant, number)`, `(tenant, slug)`, composite indexes on `(tenant, workspace)`, `(tenant, status)`, `(tenant, category)`, `(tenant, decision_date)`.
+
+### URLs & Routes
+All routes under `bi:` namespace:
+- **Shared Workspaces**:
+  - `bi:bi_shared_workspace_list` (`/bi/workspaces/`)
+  - `bi:bi_shared_workspace_create` (`/bi/workspaces/create/`)
+  - `bi:bi_shared_workspace_detail` (`/bi/workspaces/<int:pk>/`)
+  - `bi:bi_shared_workspace_edit` (`/bi/workspaces/<int:pk>/edit/`)
+  - `bi:bi_shared_workspace_delete` (`/bi/workspaces/<int:pk>/delete/` - `@require_POST`)
+- **Data Stories & Presentations**:
+  - `bi:bi_data_story_list` (`/bi/stories/`)
+  - `bi:bi_data_story_create` (`/bi/stories/create/`)
+  - `bi:bi_data_story_detail` (`/bi/stories/<int:pk>/`)
+  - `bi:bi_data_story_edit` (`/bi/stories/<int:pk>/edit/`)
+  - `bi:bi_data_story_delete` (`/bi/stories/<int:pk>/delete/` - `@require_POST`)
+  - `bi:bi_data_story_presentation` (`/bi/stories/<int:pk>/presentation/` - Executive presentation deck canvas)
+  - `bi:bi_data_story_export_office` (`/bi/stories/<int:pk>/export-office/` - Validated Office JSON embed payload)
+- **Visual Canvas Comments**:
+  - `bi:bi_visual_comment_list` (`/bi/comments/`)
+  - `bi:bi_visual_comment_create` (`/bi/comments/create/`)
+  - `bi:bi_visual_comment_detail` (`/bi/comments/<int:pk>/`)
+  - `bi:bi_visual_comment_edit` (`/bi/comments/<int:pk>/edit/` - Author/admin permission check)
+  - `bi:bi_visual_comment_delete` (`/bi/comments/<int:pk>/delete/` - Author/admin check, `@require_POST`)
+  - `bi:bi_visual_comment_resolve` (`/bi/comments/<int:pk>/resolve/` - `@require_POST`, marks resolved with audit log)
+- **Analytical Decision Logs**:
+  - `bi:bi_decision_log_list` (`/bi/decisions/`)
+  - `bi:bi_decision_log_create` (`/bi/decisions/create/`)
+  - `bi:bi_decision_log_detail` (`/bi/decisions/<int:pk>/`)
+  - `bi:bi_decision_log_edit` (`/bi/decisions/<int:pk>/edit/`)
+  - `bi:bi_decision_log_delete` (`/bi/decisions/<int:pk>/delete/` - `@require_POST`)
+
+### Templates & Design Patterns
+- Templates reside in `templates/bi/collaboration_storytelling/`:
+  - `bisharedworkspace/`: `list.html`, `detail.html`, `form.html`
+  - `bidatastory/`: `list.html`, `detail.html`, `form.html`, `presentation.html` (boardroom executive canvas with keyboard navigation and slide drilldowns)
+  - `bivisualcomment/`: `list.html`, `detail.html`, `form.html`
+  - `bidecisionlog/`: `list.html`, `detail.html`, `form.html`
+- Strict compliance with `theme.css`: Fixed colour badges (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`), stat cards (`blue`, `green`, `orange`, `purple`), full dark-mode surface pairing (`dark:bg-slate-800/60`, `dark:bg-slate-900`), and RTL-safe search inputs.
+
+### Seeder Details
+- `manage.py seed_bi` seeds multi-tenant Collaboration & Data Storytelling records:
+  - Workspaces: Executive Strategy & Analytics Hub, Commercial Operations Workspace.
+  - Data Stories: Q3 Operational Performance Walkthrough, Globex Regional Variance.
+  - Visual Comments: Dashboard revenue spike anomaly discussion with threaded reply.
+  - Decision Logs: Expansion Budget Allocation (Budget), Supply Chain Optimization (Operational).
+- `--flush` support: Full cleanup of 10.18 models in atomic transaction.
+
+### Key Conventions & Security Invariants
+- **Multi-Tenant Isolation**: Scoped by `tenant=request.tenant` via `bi_scope()` and `bi_object()`. Form foreign keys verified with `reject_foreign(self, cleaned, [...])`.
+- **Cross-Record Integrity**: Validates `widget.dashboard_id == dashboard.id` in comment and decision log forms.
+- **Office Embed Security**: Secret tokens verified with constant-time `secrets.compare_digest`.
+- **Comment Access Control**: Non-authors cannot edit or delete discussions unless tenant administrator.
+- **Audit Logging**: `write_audit_log(request.user, obj, action, tenant=request.tenant)` invoked across create, edit, delete, and resolve operations.
+- **Sidebar Wiring**: Registered in `apps/core/navigation.py` under `LIVE_LINKS["10.18"]`.
+
