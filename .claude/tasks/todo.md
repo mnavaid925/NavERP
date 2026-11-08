@@ -7,6 +7,184 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.1: Asset Procurement & Acquisition (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.1.md` (2026-11-08)
+
+> **This plan SCAFFOLDS a brand-new app.** `apps/assets/` is being initialized for Module 11 (Asset Management System).
+> **Scaffold step required.** Wire `config/settings.py` (`apps.assets`) and `config/urls.py` (`path('assets/', include('apps.assets.urls'))`).
+> Migration is **initial**: `0001_initial.py`.
+> Plan written from `.claude/tasks/research-assets-11.1.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetProcurement/`
+> Template folder name: `templates/assets/asset_procurement/{asset_requisition,asset_acquisition_receipt,asset_capitalization,asset_tag}/` + `templates/assets/overview.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Asset Procurement & Acquisition Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetRequisition` -> `NUMBER_PREFIX = "AREQ"` (format: `AREQ-YYYYMM-XXXX`)
+    - `AssetAcquisitionReceipt` -> `NUMBER_PREFIX = "ARCV"` (format: `ARCV-YYYYMM-XXXX`)
+    - `AssetCapitalization` -> `NUMBER_PREFIX = "ACAP"` (format: `ACAP-YYYYMM-XXXX`)
+    - `AssetTag` -> `NUMBER_PREFIX = "ATAG"` (format: `ATAG-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetRequisition` [AREQ-]:
+      - Capital expenditure (CapEx) requisition form, justification, budget validation, and multi-tier approval workflow.
+      - Identity & Justification: `title` (CharField 200), `description` (TextField blank=True), `business_justification` (TextField).
+      - Classification: `asset_category` (CharField 100, e.g. "Production Machinery", "IT Hardware", "Fleet Vehicles", "Office Equipment"), `priority` (`low`, `medium`, `high`, `urgent`, default `medium`), `estimated_cost` (DecimalField 16,2 default=0), `currency` (FK `accounting.Currency`, SET_NULL, null=True, blank=True), `budget_code` (CharField 64 blank=True).
+      - Vendor & Model Preferences: `proposed_vendor` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="proposed_asset_requisitions"), `proposed_manufacturer` (CharField 120 blank=True), `proposed_model` (CharField 100 blank=True), `required_delivery_date` (DateField null=True, blank=True).
+      - Target Assignment: `target_org_unit` (FK `core.OrgUnit`, SET_NULL, null=True, blank=True, related_name="targeted_asset_requisitions"), `target_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="targeted_asset_requisitions").
+      - Status Progression: `status` (`draft`, `pending_approval`, `approved`, `rejected`, `ordered`, `received`, `cancelled`, default `draft`).
+      - Approval Tracking: `submitted_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="submitted_asset_requisitions"), `submitted_at` (DateTimeField null=True, blank=True), `approved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approved_asset_requisitions"), `approved_at` (DateTimeField null=True, blank=True), `rejection_reason` (TextField blank=True).
+      - Procurement Linkage: `purchase_order` (FK `scm.PurchaseOrder`, SET_NULL, null=True, blank=True, related_name="asset_requisitions").
+      - Exclusions: `tenant`, `number`, `created_at`, `updated_at`, `submitted_by`, `submitted_at`, `approved_by`, `approved_at`.
+    - `AssetAcquisitionReceipt` [ARCV-]:
+      - Physical intake inspection, serial/chassis number logging, logistics tracking, and condition grading.
+      - Identity: `title` (CharField 200).
+      - Procurement Links: `requisition` (FK `AssetRequisition`, SET_NULL, null=True, blank=True, related_name="acquisition_receipts"), `purchase_order` (FK `scm.PurchaseOrder`, SET_NULL, null=True, blank=True, related_name="asset_receipts"), `vendor` (FK `core.Party`, SET_NULL, null=True, blank=True, related_name="supplied_asset_receipts").
+      - Identification: `manufacturer` (CharField 120 blank=True), `model_number` (CharField 100 blank=True), `serial_number` (CharField 100 blank=True), `quantity_received` (PositiveIntegerField default=1).
+      - Logistics: `received_date` (DateField default=timezone.now), `carrier_name` (CharField 100 blank=True), `tracking_number` (CharField 100 blank=True), `bill_of_lading` (CharField 100 blank=True), `receiving_location` (FK `scm.Location`, SET_NULL, null=True, blank=True, related_name="asset_receipts").
+      - Condition: `condition_on_arrival` (`excellent`, `good`, `fair`, `damaged`, `defective`, default `good`), `inspection_notes` (TextField blank=True), `inspected_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="inspected_asset_receipts"), `inspected_at` (DateTimeField null=True, blank=True).
+      - Status: `status` (`pending_inspection`, `accepted`, `quarantined`, `rejected`, `capitalized`, default `pending_inspection`).
+      - Exclusions: `tenant`, `number`, `created_at`, `updated_at`, `inspected_by`, `inspected_at`.
+    - `AssetCapitalization` [ACAP-]:
+      - Cost basis buildup (purchase price + freight + installation + duties), CIP clearance, depreciation parameters, and financial FixedAsset creation.
+      - Identity: `title` (CharField 200), `asset_name` (CharField 255).
+      - Sourcing: `acquisition_receipt` (FK `AssetAcquisitionReceipt`, SET_NULL, null=True, blank=True, related_name="capitalization_events"), `requisition` (FK `AssetRequisition`, SET_NULL, null=True, blank=True, related_name="capitalization_events").
+      - Cost Buildup: `purchase_cost` (DecimalField 16,2 default=0), `freight_cost` (DecimalField 16,2 default=0), `installation_cost` (DecimalField 16,2 default=0), `customs_duties_cost` (DecimalField 16,2 default=0), `other_initial_costs` (DecimalField 16,2 default=0), `total_cost_basis` (DecimalField 16,2 default=0).
+      - CIP & Accounting: `is_cip_conversion` (BooleanField default=False), `cip_gl_account` (FK `accounting.GLAccount`, SET_NULL, null=True, blank=True, related_name="asset_cip_clearances"), `asset_gl_account` (FK `accounting.GLAccount`, SET_NULL, null=True, blank=True, related_name="asset_capitalizations").
+      - Depreciation Config: `depreciation_method` (`straight_line`, `declining_balance`, `units_of_production`, default `straight_line`), `useful_life_months` (PositiveIntegerField default=60), `salvage_value` (DecimalField 16,2 default=0), `in_service_date` (DateField default=timezone.now).
+      - Downstream Pointers: `fixed_asset` (FK `accounting.FixedAsset`, SET_NULL, null=True, blank=True, related_name="capitalization_records"), `operational_asset` (FK `scm.Asset`, SET_NULL, null=True, blank=True, related_name="capitalization_records").
+      - Status & Lifecycle: `status` (`draft`, `approved`, `capitalized`, `reversed`, default `draft`), `capitalized_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="capitalized_assets"), `capitalized_at` (DateTimeField null=True, blank=True).
+      - Exclusions: `tenant`, `number`, `created_at`, `updated_at`, `total_cost_basis`, `capitalized_by`, `capitalized_at`.
+    - `AssetTag` [ATAG-]:
+      - Machine-readable identifier (QR, barcode, RFID, NFC), label printing status, physical placement, and scanner verification.
+      - Tag Identity: `tag_code` (CharField 64, unique per tenant), `tag_format` (`qr_code`, `barcode_128`, `rfid_uhf`, `nfc`, `metal_plate`, default `qr_code`).
+      - Asset Pointer: `operational_asset` (FK `scm.Asset`, SET_NULL, null=True, blank=True, related_name="asset_tags"), `capitalization` (FK `AssetCapitalization`, SET_NULL, null=True, blank=True, related_name="asset_tags").
+      - Affixation: `physical_placement` (CharField 255 blank=True), `affixed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="affixed_asset_tags"), `affixed_at` (DateTimeField null=True, blank=True).
+      - Verification: `is_verified` (BooleanField default=False), `verified_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="verified_asset_tags"), `verified_at` (DateTimeField null=True, blank=True), `scanner_device_id` (CharField 64 blank=True).
+      - Status: `status` (`pending_print`, `printed`, `affixed`, `verified`, `damaged_reissued`, `retired`, default `pending_print`), `notes` (TextField blank=True).
+      - Exclusions: `tenant`, `number`, `created_at`, `updated_at`, `affixed_by`, `affixed_at`, `verified_by`, `verified_at`.
+  - Audit logging: All creates, updates, status transitions (approvals, rejections, acceptances, capitalizations, tag verifications) write to `core.AuditLog` via `apps.core.utils.log_action`.
+- **Prefix Collision Sweep**: `AREQ` (AssetRequisition), `ARCV` (AssetAcquisitionReceipt), `ACAP` (AssetCapitalization), `ATAG` (AssetTag) verified 100% collision-free repository-wide.
+
+---
+
+## 11.1-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO direct socket connections to industrial fixed RFID gate readers** — Tag generation and validation operate through standard browser forms and handheld barcode/QR input fields.
+- [ ] **NO direct raw ZPL/EPL network spooler daemons** — Label rendering is accomplished via browser print CSS and high-resolution SVG barcode/QR code presentation.
+- [ ] **NO duplicate fixed asset financial ledger** — Financial asset depreciation and book values are maintained in `accounting.FixedAsset`; 11.1 links to it and initializes it.
+- [ ] **NO duplicate operational asset master** — Plant hierarchy, maintenance work orders, and operational status are maintained in `scm.Asset`; 11.1 links to it and initializes it.
+- [ ] **NO duplicate vendor/employee masters** — Vendors, suppliers, and custodians reuse `core.Party` and `core.PartyRole`.
+
+---
+
+## Sub-module 11.1 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.1.md` with exact model fields, forms, url names, context keys, and choices
+
+### Phase 3.2: Scaffold (Brand-New App)
+- [ ] Create `apps/assets/` structure:
+  - [ ] `apps/assets/__init__.py`
+  - [ ] `apps/assets/apps.py` (AssetsConfig)
+  - [ ] `apps/assets/admin.py`
+  - [ ] `apps/assets/models/__init__.py`, `apps/assets/models/_base.py`
+  - [ ] `apps/assets/forms/__init__.py`, `apps/assets/forms/_common.py`
+  - [ ] `apps/assets/views/__init__.py`, `apps/assets/views/_common.py`, `apps/assets/views/overview.py`
+  - [ ] `apps/assets/urls/__init__.py`
+  - [ ] `apps/assets/management/__init__.py`, `apps/assets/management/commands/__init__.py`, `apps/assets/management/commands/seed_assets.py`
+  - [ ] `apps/assets/tests/__init__.py`
+- [ ] Wire in `config/settings.py` (`INSTALLED_APPS` -> `"apps.assets"`)
+- [ ] Wire in `config/urls.py` (`path("assets/", include("apps.assets.urls"))`)
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetRequisition (`AREQ`)**
+  - [ ] `apps/assets/models/AssetProcurement/AssetRequisitions.py`
+  - [ ] `apps/assets/forms/AssetProcurement/AssetRequisitions.py`
+  - [ ] `apps/assets/views/AssetProcurement/AssetRequisitions.py` (CRUD + submit + approve + reject)
+  - [ ] `apps/assets/urls/AssetProcurement/AssetRequisitions.py`
+  - [ ] `templates/assets/asset_procurement/asset_requisition/list.html`
+  - [ ] `templates/assets/asset_procurement/asset_requisition/detail.html`
+  - [ ] `templates/assets/asset_procurement/asset_requisition/form.html`
+- [ ] **Entity 2: AssetAcquisitionReceipt (`ARCV`)**
+  - [ ] `apps/assets/models/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [ ] `apps/assets/forms/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [ ] `apps/assets/views/AssetProcurement/AssetAcquisitionReceipts.py` (CRUD + inspect_accept + quarantine + reject)
+  - [ ] `apps/assets/urls/AssetProcurement/AssetAcquisitionReceipts.py`
+  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/list.html`
+  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/detail.html`
+  - [ ] `templates/assets/asset_procurement/asset_acquisition_receipt/form.html`
+- [ ] **Entity 3: AssetCapitalization (`ACAP`)**
+  - [ ] `apps/assets/models/AssetProcurement/AssetCapitalizations.py`
+  - [ ] `apps/assets/forms/AssetProcurement/AssetCapitalizations.py`
+  - [ ] `apps/assets/views/AssetProcurement/AssetCapitalizations.py` (CRUD + execute_capitalization + reverse)
+  - [ ] `apps/assets/urls/AssetProcurement/AssetCapitalizations.py`
+  - [ ] `templates/assets/asset_procurement/asset_capitalization/list.html`
+  - [ ] `templates/assets/asset_procurement/asset_capitalization/detail.html`
+  - [ ] `templates/assets/asset_procurement/asset_capitalization/form.html`
+- [ ] **Entity 4: AssetTag (`ATAG`)**
+  - [ ] `apps/assets/models/AssetProcurement/AssetTags.py`
+  - [ ] `apps/assets/forms/AssetProcurement/AssetTags.py`
+  - [ ] `apps/assets/views/AssetProcurement/AssetTags.py` (CRUD + mark_printed + affix + verify_tag + print_label)
+  - [ ] `apps/assets/urls/AssetProcurement/AssetTags.py`
+  - [ ] `templates/assets/asset_procurement/asset_tag/list.html`
+  - [ ] `templates/assets/asset_procurement/asset_tag/detail.html`
+  - [ ] `templates/assets/asset_procurement/asset_tag/form.html`
+  - [ ] `templates/assets/asset_procurement/asset_tag/print_label.html`
+- [ ] **App Overview Landing**
+  - [ ] `templates/assets/overview.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetProcurement/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetProcurement/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetProcurement/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetProcurement/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Complete `apps/assets/management/commands/seed_assets.py` with idempotent demo data
+- [ ] Add `LIVE_LINKS["11.1"]` in `apps/core/navigation.py`:
+  - `"Purchase Requisition & Approval"`: `assets:asset_requisition_list`
+  - `"Vendor Selection & RFQ"`: `assets:asset_requisition_list`
+  - `"Purchase Order & Receipt"`: `assets:asset_acquisition_receipt_list`
+  - `"Asset Capitalization & Depreciation Setup"`: `assets:asset_capitalization_list`
+  - `"Asset Tagging & Registration"`: `assets:asset_tag_list`
+  - Plural aliases:
+    - `"Asset Requisitions"`: `assets:asset_requisition_list`
+    - `"Acquisition Receipts"`: `assets:asset_acquisition_receipt_list`
+    - `"Capitalizations"`: `assets:asset_capitalization_list`
+    - `"Asset Tags"`: `assets:asset_tag_list`
+- [ ] Run `makemigrations assets` (generating `0001_initial.py`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_1.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.1.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Shared fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_assetprocurement_models.py`
+- [ ] `test_assetprocurement_forms.py`
+- [ ] `test_assetprocurement_views.py`
+- [ ] `test_assetprocurement_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Create dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.1 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+
+---
+
+
 # Sub-module 10.16: Alerts, Subscriptions & Distribution (Module 10: Business Intelligence, `bi`) — plan from `research-bi-10.16.md` (2026-11-07)
 
 > **This plan EXTENDS an existing app.** `apps/bi/` is live with Sub-modules 10.1 through 10.15.
