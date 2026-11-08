@@ -232,8 +232,8 @@ def capitalization_a(db, tenant_a, receipt_a, cip_account_a, asset_account_a):
     return AssetCapitalization.objects.create(
         tenant=tenant_a,
         asset_name="Capitalized Trumpf Laser Cutter",
-        receipt=receipt_a,
-        asset_category="machinery",
+        title="Capitalization Trumpf Laser Cutter",
+        acquisition_receipt=receipt_a,
         purchase_cost=Decimal("120000.00"),
         freight_cost=Decimal("3500.00"),
         installation_cost=Decimal("1500.00"),
@@ -252,8 +252,8 @@ def capitalization_b(db, tenant_b, receipt_b):
     return AssetCapitalization.objects.create(
         tenant=tenant_b,
         asset_name="Capitalized Globex Press Brake",
-        receipt=receipt_b,
-        asset_category="machinery",
+        title="Capitalization Globex Press Brake",
+        acquisition_receipt=receipt_b,
         purchase_cost=Decimal("80000.00"),
         salvage_value=Decimal("5000.00"),
         useful_life_months=60,
