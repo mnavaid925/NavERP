@@ -48,6 +48,9 @@ from apps.bi.urls.EmbeddedMobileBi import (
 from apps.bi.urls.CollaborationStorytelling import (
     urlpatterns as collaboration_storytelling_urlpatterns,
 )
+from apps.bi.urls.IntegrationHub import (
+    urlpatterns as integration_hub_urlpatterns,
+)
 from apps.bi.urls.PerformanceScorecards import (
     urlpatterns as performance_scorecards_urlpatterns,
 )
@@ -105,4 +108,5 @@ urlpatterns = (
     + alerts_subscriptions_urlpatterns
     + embedded_mobile_bi_urlpatterns
     + collaboration_storytelling_urlpatterns
+    + integration_hub_urlpatterns
 )
