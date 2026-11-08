@@ -111,7 +111,7 @@
                                 </span>
                                 <div>
                                     <h3 class="font-semibold text-sm text-slate-900">{{ slide.title|default:"Untitled Slide" }}</h3>
-                                    <p class="text-xs text-muted mt-0.5">{{ slide.narrative|default:slide.content|default:"No speaker notes."|truncatewords:20 }}</p>
+                                    <p class="text-xs text-muted mt-0.5">{% if slide.narrative %}{{ slide.narrative|truncatewords:20 }}{% else %}No speaker notes.{% endif %}</p>
                                 </div>
                             </div>
                             <span class="badge badge-slate text-[11px]">{{ slide.visual_type|default:"visual_card" }}</span>
