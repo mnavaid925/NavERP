@@ -39,7 +39,7 @@ Reviewers: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-review
 
 - [x] `M1` — `apps/assets/forms/AssetProcurement/AssetRequisitions.py:15`: Rejection reason mass assignment on `AssetRequisitionForm`. Fix: Add `"rejection_reason"` to `Meta.exclude`.
 - [x] `M2` — `apps/assets/views/AssetProcurement/AssetRequisitions.py:212`: Empty rejection reason allowed in `asset_requisition_reject`. Fix: Validate `if not reason: messages.error(...)`.
-- [ ] `M3` — `apps/assets/models/AssetProcurement/AssetTags.py:102`: Missing index on `(tenant, is_verified)`. Fix: Add `models.Index(fields=["tenant", "is_verified"], name="idx_atag_ten_ver")`.
+- [x] `M3` — `apps/assets/models/AssetProcurement/AssetTags.py:102`: Missing index on `(tenant, is_verified)`. Fix: Add `models.Index(fields=["tenant", "is_verified"], name="idx_atag_ten_ver")`.
 - [ ] `M4` — `apps/assets/views/AssetProcurement/AssetRequisitions.py:62`: Requisition detail view does not eager-load `"purchase_order__vendor"`. Fix: Add to `select_related`.
 - [ ] `M5` — `apps/assets/views/AssetProcurement/AssetTags.py:236`: Tag print label view accesses `operational_asset.location.name` without selecting location. Fix: Add `"operational_asset__location"` to `select_related`.
 - [ ] `M6` — `apps/assets/admin.py:11-36`: ModelAdmins lack `list_select_related = ("tenant",)`. Fix: Add `list_select_related`.
