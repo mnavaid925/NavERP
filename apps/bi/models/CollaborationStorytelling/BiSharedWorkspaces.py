@@ -104,6 +104,7 @@ class BiSharedWorkspace(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_wspc_ten_stat"),
+            models.Index(fields=["tenant", "default_access_level"], name="idx_swsp_ten_dacc"),
             models.Index(fields=["tenant", "department"], name="idx_wspc_ten_dept"),
             models.Index(fields=["tenant", "owner"], name="idx_wspc_ten_owner"),
             models.Index(fields=["tenant", "created_at"], name="idx_wspc_ten_created"),
