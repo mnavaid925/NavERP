@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Data Stories & Presentations — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Collaboration & Storytelling</span>
+            <span class="sep">/</span>
+            <span>Data Stories</span>
+        </div>
+        <h1 class="page-title">Data Stories & Presentations</h1>
+        <p class="text-muted text-sm">Guided visual narratives, slide-style business reviews, and live executive presentation decks with filter state snapshots</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_shared_workspace_list' %}" class="btn btn-outline">
+            <i data-lucide="folder"></i>
+            <span>Workspaces</span>
+        </a>
+        <a href="{% url 'bi:bi_visual_comment_list' %}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>Discussions</span>
+        </a>
+        <a href="{% url 'bi:bi_decision_log_list' %}" class="btn btn-outline">
+            <i data-lucide="git-commit"></i>
+            <span>Decision Log</span>
+        </a>
+        <a href="{% url 'bi:bi_data_story_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Data Story</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="presentation"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Stories</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Published Decks</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ published_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="file-edit"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Draft Stories</div>
+            <div class="text-2xl font-bold text-amber-600">{{ draft_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by title, number, summary..." class="form-input text-sm pl-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Story Type</label>
+                <select name="story_type" class="form-select text-sm">
+                    <option value="">All Story Types</option>
+                    {% for val, label in story_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.story_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Workspace</label>
+                <select name="workspace" class="form-select text-sm">
+                    <option value="">All Workspaces</option>
+                    {% for wspc in workspaces %}
+                    <option value="{{ wspc.pk }}" {% if request.GET.workspace == wspc.pk|stringformat:"d" %}selected{% endif %}>{{ wspc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'bi:bi_data_story_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Narrative Presentations & Decks</h2>
+        <span class="text-xs text-muted">{{ stories.paginator.count }} total records</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Story Title</th>
+                    <th>Type & Theme</th>
+                    <th>Workspace</th>
+                    <th>Author</th>
+                    <th>Status</th>
+                    <th>Slides & Views</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in stories %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:bi_data_story_detail' item.pk %}" class="hover:text-primary-600">
+                                {{ item.title }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono flex items-center gap-2">
+                            <span>{{ item.number }}</span>
+                            <span>•</span>
+                            <span>{{ item.slug }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">{{ item.get_story_type_display }}</span>
+                        <div class="text-xs text-muted mt-0.5">{{ item.get_theme_display }}</div>
+                    </td>
+                    <td>
+                        {% if item.workspace %}
+                        <a href="{% url 'bi:bi_shared_workspace_detail' item.workspace.pk %}" class="text-sm font-medium hover:underline text-slate-800">
+                            {{ item.workspace.name }}
+                        </a>
+                        {% else %}
+                        <span class="text-muted text-xs">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-xs font-medium">
+                            {% if item.author %}{{ item.author.get_full_name|default:item.author.username }}{% else %}Unassigned{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'published' %}badge-green{% elif item.status == 'draft' %}badge-amber{% else %}badge-slate{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-xs font-semibold">{{ item.slides_count }} slides</div>
+                        <div class="text-xs text-muted">{{ item.view_count }} presentations</div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'bi:bi_data_story_presentation' item.pk %}" class="btn btn-icon text-indigo-600 hover:text-indigo-800" title="Start Boardroom Presentation">
+                                <i data-lucide="play"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_data_story_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_data_story_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:bi_data_story_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete data story {{ item.title }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="presentation" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Data Stories Found</div>
+                            <div class="empty-state-desc">Author your first interactive data story or executive briefing deck.</div>
+                            <a href="{% url 'bi:bi_data_story_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create Data Story</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if stories.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ stories.start_index }} to {{ stories.end_index }} of {{ stories.paginator.count }} stories
+        </div>
+        <div class="pagination-links">
+            {% if stories.has_previous %}
+            <a href="?page={{ stories.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.story_type %}&story_type={{ request.GET.story_type }}{% endif %}{% if request.GET.workspace %}&workspace={{ request.GET.workspace }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ stories.number }} of {{ stories.paginator.num_pages }}</span>
+
+            {% if stories.has_next %}
+            <a href="?page={{ stories.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.story_type %}&story_type={{ request.GET.story_type }}{% endif %}{% if request.GET.workspace %}&workspace={{ request.GET.workspace }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
