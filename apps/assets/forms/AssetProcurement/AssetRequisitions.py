@@ -47,7 +47,7 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         if self.tenant:
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant, is_active=True)
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["proposed_vendor"].queryset = Party.objects.filter(
                 tenant=self.tenant, roles__role_type__in=["vendor", "supplier"]
             ).distinct()
@@ -67,6 +67,6 @@ class AssetRequisitionForm(TenantUniqueMixin, forms.ModelForm):
             reject_foreign(
                 self,
                 cleaned_data,
-                ["proposed_vendor", "currency", "target_org_unit", "target_location", "purchase_order"],
+                ["proposed_vendor", "target_org_unit", "target_location", "purchase_order"],
             )
         return cleaned_data
