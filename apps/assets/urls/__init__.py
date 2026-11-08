@@ -1,5 +1,8 @@
 from django.urls import path
 
+from apps.assets.urls.AssetClassification import (
+    urlpatterns as asset_classification_urlpatterns,
+)
 from apps.assets.urls.AssetInventoryTracking import (
     urlpatterns as asset_inventory_tracking_urlpatterns,
 )
@@ -12,4 +15,4 @@ app_name = "assets"
 
 urlpatterns = [
     path("", overview, name="overview"),
-] + asset_procurement_urlpatterns + asset_inventory_tracking_urlpatterns
+] + asset_procurement_urlpatterns + asset_inventory_tracking_urlpatterns + asset_classification_urlpatterns
