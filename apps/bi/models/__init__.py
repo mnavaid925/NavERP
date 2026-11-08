@@ -59,6 +59,10 @@ from apps.bi.models.CollaborationStorytelling.BiSharedWorkspaces import BiShared
 from apps.bi.models.CollaborationStorytelling.BiDataStories import BiDataStory
 from apps.bi.models.CollaborationStorytelling.BiVisualComments import BiVisualComment
 from apps.bi.models.CollaborationStorytelling.BiDecisionLogs import BiDecisionLog
+from apps.bi.models.IntegrationHub.IntegrationConnectors import IntegrationConnector
+from apps.bi.models.IntegrationHub.WarehouseSyncEndpoints import WarehouseSyncEndpoint
+from apps.bi.models.IntegrationHub.BiWebhookSubscriptions import BiWebhookSubscription
+from apps.bi.models.IntegrationHub.BiExtensionPlugins import BiExtensionPlugin
 from apps.bi.models.OperationalReporting.ReportDefinitions import ReportDefinition
 from apps.bi.models.OperationalReporting.ReportDrillPaths import ReportDrillPath
 from apps.bi.models.OperationalReporting.ReportExecutions import ReportExecution
@@ -151,4 +155,8 @@ __all__ = [
     "BiDataStory",
     "BiVisualComment",
     "BiDecisionLog",
+    "IntegrationConnector",
+    "WarehouseSyncEndpoint",
+    "BiWebhookSubscription",
+    "BiExtensionPlugin",
 ]
