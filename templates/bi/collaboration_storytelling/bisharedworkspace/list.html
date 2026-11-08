@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Shared Workspaces — Collaboration & Storytelling — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Collaboration & Storytelling</span>
+            <span class="sep">/</span>
+            <span>Workspaces</span>
+        </div>
+        <h1 class="page-title">Shared Workspaces</h1>
+        <p class="text-muted text-sm">Curated departmental and project collaboration workspaces for shared dashboards, reports, and analytical narratives</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:bi_data_story_list' %}" class="btn btn-outline">
+            <i data-lucide="presentation"></i>
+            <span>Data Stories</span>
+        </a>
+        <a href="{% url 'bi:bi_visual_comment_list' %}" class="btn btn-outline">
+            <i data-lucide="message-square"></i>
+            <span>Discussions</span>
+        </a>
+        <a href="{% url 'bi:bi_decision_log_list' %}" class="btn btn-outline">
+            <i data-lucide="git-commit"></i>
+            <span>Decision Log</span>
+        </a>
+        <a href="{% url 'bi:bi_shared_workspace_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Workspace</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="folder"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Workspaces</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Workspaces</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple">
+            <i data-lucide="globe"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Public Workspaces</div>
+            <div class="text-2xl font-bold text-indigo-600">{{ public_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, slug..." class="form-input text-sm pl-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Access Level</label>
+                <select name="access_level" class="form-select text-sm">
+                    <option value="">All Access Levels</option>
+                    {% for val, label in access_level_choices %}
+                    <option value="{{ val }}" {% if request.GET.access_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Department</label>
+                <select name="department" class="form-select text-sm">
+                    <option value="">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.pk }}" {% if request.GET.department == dept.pk|stringformat:"d" %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'bi:bi_shared_workspace_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="text-base font-semibold">Workspace Directory</h2>
+        <span class="text-xs text-muted">{{ workspaces.paginator.count }} total records</span>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Workspace</th>
+                    <th>Department & Owner</th>
+                    <th>Default Access</th>
+                    <th>Visibility</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in workspaces %}
+                <tr>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full flex-shrink-0" style="background-color: {{ item.color }};"></span>
+                            <div>
+                                <div class="font-medium text-slate-900">
+                                    <a href="{% url 'bi:bi_shared_workspace_detail' item.pk %}" class="hover:text-primary-600">
+                                        {{ item.name }}
+                                    </a>
+                                    {% if item.is_favorite %}
+                                    <span class="text-amber-500 text-xs ml-1" title="Favorite Workspace">★</span>
+                                    {% endif %}
+                                </div>
+                                <div class="text-xs text-muted font-mono flex items-center gap-2">
+                                    <span>{{ item.number }}</span>
+                                    <span>•</span>
+                                    <span>{{ item.slug }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">
+                            {% if item.department %}{{ item.department.name }}{% else %}<span class="text-muted">—</span>{% endif %}
+                        </div>
+                        <div class="text-xs text-muted">
+                            Lead: {% if item.owner %}{{ item.owner.get_full_name|default:item.owner.username }}{% else %}Unassigned{% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-slate">
+                            {{ item.get_default_access_level_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if item.is_public %}
+                        <span class="badge badge-info">Public Tenant</span>
+                        {% else %}
+                        <span class="badge badge-muted">Restricted</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {% if item.status == 'active' %}badge-green{% else %}badge-slate{% endif %}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-muted">{{ item.created_at|date:"M d, Y" }}</div>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'bi:bi_shared_workspace_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_shared_workspace_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:bi_shared_workspace_delete' item.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete workspace {{ item.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="empty-state">
+                            <i data-lucide="folder" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Shared Workspaces Found</div>
+                            <div class="empty-state-desc">Create your first collaborative team workspace to share dashboards, reports, and narratives.</div>
+                            <a href="{% url 'bi:bi_shared_workspace_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus"></i>
+                                <span>Create Workspace</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if workspaces.paginator.num_pages > 1 %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ workspaces.start_index }} to {{ workspaces.end_index }} of {{ workspaces.paginator.count }} workspaces
+        </div>
+        <div class="pagination-links">
+            {% if workspaces.has_previous %}
+            <a href="?page={{ workspaces.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.access_level %}&access_level={{ request.GET.access_level }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ workspaces.number }} of {{ workspaces.paginator.num_pages }}</span>
+
+            {% if workspaces.has_next %}
+            <a href="?page={{ workspaces.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.access_level %}&access_level={{ request.GET.access_level }}{% endif %}{% if request.GET.department %}&department={{ request.GET.department }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
