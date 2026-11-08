@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}{{ capitalization.number }} — Capitalization Detail — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_capitalization_list' %}">Capitalizations</a>
+            <span>/</span>
+            <span>{{ capitalization.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ capitalization.number }} · {{ capitalization.asset_name }}</h1>
+            <span class="badge {{ capitalization.status_css }}">{{ capitalization.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if capitalization.can_execute_capitalization %}
+        <form method="post" action="{% url 'assets:asset_capitalization_execute' capitalization.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700" onclick="return confirm('Execute formal asset capitalization? This will create a Fixed Asset in the financial ledger.');">
+                <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Post Capitalization
+            </button>
+        </form>
+        {% endif %}
+
+        {% if capitalization.can_reverse %}
+        <form method="post" action="{% url 'assets:asset_capitalization_reverse' capitalization.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50" onclick="return confirm('Are you sure you want to reverse this capitalization?');">
+                <i data-lucide="rotate-ccw" class="w-4 h-4 mr-1"></i> Reverse
+            </button>
+        </form>
+        {% endif %}
+
+        {% if capitalization.status == 'capitalized' %}
+        <a href="{% url 'assets:asset_tag_create' %}?capitalization={{ capitalization.pk }}" class="btn btn-primary">
+            <i data-lucide="tag" class="w-4 h-4 mr-1"></i> Issue Asset Tag
+        </a>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_capitalization_edit' capitalization.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_capitalization_delete' capitalization.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete this capitalization event?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Column: Cost Basis Breakdown & Depreciation -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Itemized Cost Basis Buildup -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Itemized Capitalized Cost Basis (GAAP / IFRS)</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Cost Component</th>
+                            <th>Description</th>
+                            <th class="text-right">Capitalized Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="font-medium text-slate-800">Base Purchase Price</td>
+                            <td class="text-xs text-slate-500">Base invoice equipment acquisition cost</td>
+                            <td class="text-right font-mono text-slate-900 font-semibold">${{ capitalization.purchase_cost|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium text-slate-800">Freight & Transportation</td>
+                            <td class="text-xs text-slate-500">Ocean, rail, air, or ground transit charges</td>
+                            <td class="text-right font-mono text-slate-900">${{ capitalization.freight_cost|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium text-slate-800">Installation & Rigging</td>
+                            <td class="text-xs text-slate-500">Electrical, plumbing, anchoring, and calibration</td>
+                            <td class="text-right font-mono text-slate-900">${{ capitalization.installation_cost|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium text-slate-800">Customs, Duties & Tariffs</td>
+                            <td class="text-xs text-slate-500">Import border taxes, tariffs, and customs clearance</td>
+                            <td class="text-right font-mono text-slate-900">${{ capitalization.customs_duties_cost|floatformat:2 }}</td>
+                        </tr>
+                        <tr>
+                            <td class="font-medium text-slate-800">Initial Commissioning & Testing</td>
+                            <td class="text-xs text-slate-500">Trial runs and pre-operational safety testing</td>
+                            <td class="text-right font-mono text-slate-900">${{ capitalization.other_initial_costs|floatformat:2 }}</td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr class="bg-slate-50 font-bold border-t-2 border-slate-300">
+                            <td colspan="2" class="text-slate-900 uppercase tracking-wider text-xs">Total Capitalized Cost Basis</td>
+                            <td class="text-right font-mono text-xl text-blue-700">${{ capitalization.total_cost_basis|floatformat:2 }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Depreciation Profile & Ledger Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Depreciation Profile & Ledger Placement</h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500">Depreciation Method</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ capitalization.get_depreciation_method_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Useful Life</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ capitalization.useful_life_months }} months</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Salvage Value</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-0.5">${{ capitalization.salvage_value|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">In-Service Date</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ capitalization.in_service_date|date:"M d, Y" }}</div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500">Target Balance Sheet Asset Account</div>
+                        <div class="text-sm font-medium text-slate-800 mt-0.5">
+                            {% if capitalization.asset_gl_account %}
+                            {{ capitalization.asset_gl_account.code }} · {{ capitalization.asset_gl_account.name }}
+                            {% else %}<span class="text-slate-400">Default Fixed Asset Account</span>{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Construction-in-Progress (CIP) Clearing Account</div>
+                        <div class="text-sm font-medium text-slate-800 mt-0.5">
+                            {% if capitalization.is_cip_conversion %}
+                                <span class="badge badge-amber text-xs mr-1">CIP Conversion</span>
+                                {% if capitalization.cip_gl_account %}{{ capitalization.cip_gl_account.code }} · {{ capitalization.cip_gl_account.name }}{% endif %}
+                            {% else %}
+                                <span class="text-slate-500">Direct Capitalization (Not CIP)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Column: Master Record Bridges & Execution Audit -->
+    <div class="space-y-6">
+        <!-- Downstream Linked Masters -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Enterprise Asset Anchors</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase">Module 2 Financial Fixed Asset</div>
+                    {% if capitalization.fixed_asset %}
+                    <div class="mt-1 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div class="font-mono text-sm font-bold text-blue-800">{{ capitalization.fixed_asset.number }}</div>
+                        <div class="text-sm text-blue-900 font-medium">{{ capitalization.fixed_asset.name }}</div>
+                        <div class="text-xs text-blue-700 mt-1">Book Value: ${{ capitalization.fixed_asset.book_value|floatformat:2 }}</div>
+                    </div>
+                    {% else %}
+                    <div class="text-sm text-slate-400 mt-1">None linked — will generate on capitalization</div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase">SCM Plant Equipment Master</div>
+                    {% if capitalization.operational_asset %}
+                    <div class="mt-1 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div class="font-mono text-sm font-bold text-slate-800">{{ capitalization.operational_asset.number }}</div>
+                        <div class="text-sm text-slate-900 font-medium">{{ capitalization.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-600 mt-1">Tag: {{ capitalization.operational_asset.tag_code|default:"Unassigned" }}</div>
+                    </div>
+                    {% else %}
+                    <div class="text-sm text-slate-400 mt-1">No operational plant asset linked</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Upstream Sourcing -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Upstream Intake Sources</h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 text-xs block">Physical Dock Receipt</span>
+                    {% if capitalization.acquisition_receipt %}
+                    <a href="{% url 'assets:asset_acquisition_receipt_detail' capitalization.acquisition_receipt.pk %}" class="text-blue-600 hover:underline font-mono font-medium">
+                        {{ capitalization.acquisition_receipt.number }} · {{ capitalization.acquisition_receipt.title }}
+                    </a>
+                    {% else %}<span class="text-slate-400">—</span>{% endif %}
+                </div>
+                <div>
+                    <span class="text-slate-500 text-xs block">Originating CapEx Requisition</span>
+                    {% if capitalization.requisition %}
+                    <a href="{% url 'assets:asset_requisition_detail' capitalization.requisition.pk %}" class="text-blue-600 hover:underline font-mono font-medium">
+                        {{ capitalization.requisition.number }} · {{ capitalization.requisition.title }}
+                    </a>
+                    {% else %}<span class="text-slate-400">—</span>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Execution Audit -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wide">Execution Audit</h3>
+            </div>
+            <div class="card-body space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Capitalized By</span>
+                    <span class="font-medium text-slate-800">{{ capitalization.capitalized_by.username|default:"Pending" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Capitalized At</span>
+                    <span class="text-slate-700">{{ capitalization.capitalized_at|date:"M d, Y H:i"|default:"Pending" }}</span>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-slate-400 space-y-1">
+                    <div>Created: {{ capitalization.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Updated: {{ capitalization.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
