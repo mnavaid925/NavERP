@@ -1,5 +1,11 @@
 """Models package for apps.assets."""
 from apps.assets.models._base import TenantNumbered, TenantOwned
+from apps.assets.models.AssetInventoryTracking import (
+    AssetAudit,
+    AssetCustodyLog,
+    AssetIncidentReport,
+    AssetMovementLog,
+)
 from apps.assets.models.AssetProcurement import (
     AssetAcquisitionReceipt,
     AssetCapitalization,
@@ -14,4 +20,8 @@ __all__ = [
     "AssetAcquisitionReceipt",
     "AssetCapitalization",
     "AssetTag",
+    "AssetAudit",
+    "AssetMovementLog",
+    "AssetCustodyLog",
+    "AssetIncidentReport",
 ]
