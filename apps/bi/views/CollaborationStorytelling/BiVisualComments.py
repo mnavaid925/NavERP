@@ -17,7 +17,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def bi_visual_comment_list(request):
     qs = bi_scope(BiVisualComment.objects.all(), request).select_related(
-        "dashboard", "widget", "report", "story", "author", "resolved_by"
+        "dashboard", "widget", "report", "story", "author", "resolved_by", "parent_comment"
     )
 
     counts = qs.aggregate(
