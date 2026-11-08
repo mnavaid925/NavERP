@@ -58,3 +58,20 @@
 3. `templates/bi/collaboration_storytelling/bidatastory/detail.html:151` & `bisharedworkspace/detail.html:180` — Sub-table status badges use binary fallback instead of canonical color mapping (`badge-info` for `in_review`/`acknowledged`, `badge-amber` for `proposed`, `badge-red` for `revoked`). Fix: Align badge classes with status choices.
 4. `templates/bi/collaboration_storytelling/*/list.html:76-77` — Search input relative wrappers use physical `pl-9` and `left-3` instead of RTL-safe logical utilities `ps-9` and `start-3`. Fix: Replace with logical positioning.
 5. `templates/bi/collaboration_storytelling/bidatastory/presentation.html:23, 27` — `<button id="prevBtn">` and `<button id="nextBtn">` lack explicit `type="button"`. Fix: Add `type="button"`.
+
+---
+
+## 4. `performance-reviewer` Findings
+
+### Critical
+*None.*
+
+### Important
+1. `apps/bi/views/CollaborationStorytelling/BiVisualComments.py:19-21` & `templates/bi/collaboration_storytelling/bivisualcomment/list.html:154-157` — N+1 query in `BiVisualComment` list view on `parent_comment`. Row template accesses `item.parent_comment.number`, but `"parent_comment"` is missing from `.select_related(...)`. Fix: Add `"parent_comment"` to `select_related("dashboard", "widget", "report", "story", "parent_comment", "author", "resolved_by")`.
+2. `apps/bi/models/CollaborationStorytelling/BiDecisionLogs.py:132-139` — Missing composite index on `(tenant, workspace)` in `BiDecisionLog`. Workspace is filtered in list view and queried via reverse relation in `bi_shared_workspace_detail`. Fix: Add `models.Index(fields=["tenant", "workspace"], name="idx_dlog_ten_wspc")` to `BiDecisionLog.Meta.indexes`.
+
+### Minor
+1. `templates/bi/collaboration_storytelling/bivisualcomment/detail.html:114` — `{{ replies.count }}` triggers an extra SQL `SELECT COUNT(*)` on an unevaluated queryset that is evaluated right after in lines 121-123. Fix: Use `{{ replies|length }}` or pass evaluated list from view.
+2. `apps/bi/views/CollaborationStorytelling/BiVisualComments.py:67` — In `bi_visual_comment_list`, dropdown queryset for `stories` pulls full models with large JSON text fields into memory. Fix: Add `.only("id", "title")` to filter dropdown querysets.
+3. `apps/bi/views/CollaborationStorytelling/*.py` — List views use `Paginator(qs, 20)` instead of the default NavERP standard of 15 items per page (`Paginator(qs, 15)`). Fix: Update to `per_page=15`.
+4. `apps/bi/models/CollaborationStorytelling/BiVisualComments.py:141` & `BiSharedWorkspaces.py:99` — Missing composite indexes for filtered status/choice columns `(tenant, priority)` and `(tenant, default_access_level)`. Fix: Add composite indexes to Meta.
