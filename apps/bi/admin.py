@@ -69,6 +69,10 @@ from apps.bi.models import (
     KioskWallboardDisplay,
     MobileBiConfiguration,
     EmbedApiToken,
+    BiSharedWorkspace,
+    BiDataStory,
+    BiVisualComment,
+    BiDecisionLog,
 )
 
 
@@ -675,4 +679,41 @@ class EmbedApiTokenAdmin(admin.ModelAdmin):
     list_filter = ("status", "tenant")
     search_fields = ("number", "name", "token_prefix")
     readonly_fields = ("number", "tenant", "created_at", "updated_at", "token_hash", "last_used_at", "total_requests_count")
+
+
+@admin.register(BiSharedWorkspace)
+class BiSharedWorkspaceAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "department", "owner", "default_access_level", "is_public", "status", "tenant")
+    list_select_related = ("tenant", "department", "owner", "created_by")
+    list_filter = ("status", "default_access_level", "is_public", "is_favorite", "tenant")
+    search_fields = ("number", "name", "slug", "description")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
+
+@admin.register(BiDataStory)
+class BiDataStoryAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "story_type", "status", "theme", "author", "slides_count", "view_count", "tenant")
+    list_select_related = ("tenant", "workspace", "author", "created_by")
+    list_filter = ("status", "story_type", "theme", "allow_live_drilldown", "tenant")
+    search_fields = ("number", "title", "slug", "summary")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "slides_count", "view_count", "office_embed_token", "last_presented_at")
+
+
+@admin.register(BiVisualComment)
+class BiVisualCommentAdmin(admin.ModelAdmin):
+    list_display = ("number", "target_type", "priority", "status", "author", "resolved_by", "created_at", "tenant")
+    list_select_related = ("tenant", "dashboard", "story", "report", "author", "resolved_by")
+    list_filter = ("status", "priority", "target_type", "tenant")
+    search_fields = ("number", "content")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at", "resolved_at")
+
+
+@admin.register(BiDecisionLog)
+class BiDecisionLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "category", "status", "decision_date", "decision_maker", "show_on_charts", "tenant")
+    list_select_related = ("tenant", "workspace", "dashboard", "kpi", "decision_maker", "created_by")
+    list_filter = ("status", "category", "show_on_charts", "marker_style", "tenant")
+    search_fields = ("number", "title", "slug", "problem_statement", "rationale")
+    readonly_fields = ("number", "tenant", "created_at", "updated_at")
+
 
