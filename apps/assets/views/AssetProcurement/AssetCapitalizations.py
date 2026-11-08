@@ -212,13 +212,13 @@ def asset_capitalization_execute(request, pk):
         capitalization.capitalized_at = timezone.now()
         capitalization.save(update_fields=["status", "fixed_asset", "capitalized_by", "capitalized_at", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        capitalization,
-        "update",
-        changes={"action": "execute_capitalization", "details": f"Executed capitalization {capitalization.number} into Fixed Asset {capitalization.fixed_asset.number if capitalization.fixed_asset else ''}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            capitalization,
+            "update",
+            changes={"action": "execute_capitalization", "details": f"Executed capitalization {capitalization.number} into Fixed Asset {capitalization.fixed_asset.number if capitalization.fixed_asset else ''}"},
+            tenant=request.tenant,
+        )
     messages.success(request, f"Asset Capitalization {capitalization.number} successfully completed and capitalized into Fixed Assets.")
     return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
 
@@ -232,15 +232,16 @@ def asset_capitalization_reverse(request, pk):
         messages.error(request, f"Capitalization {capitalization.number} cannot be reversed in state '{capitalization.get_status_display()}'.")
         return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
 
-    capitalization.status = "reversed"
-    capitalization.save(update_fields=["status", "updated_at"])
+    with transaction.atomic():
+        capitalization.status = "reversed"
+        capitalization.save(update_fields=["status", "updated_at"])
 
-    write_audit_log(
-        request.user,
-        capitalization,
-        "update",
-        changes={"action": "reverse_capitalization", "details": f"Reversed capitalization {capitalization.number}"},
-        tenant=request.tenant,
-    )
+        write_audit_log(
+            request.user,
+            capitalization,
+            "update",
+            changes={"action": "reverse_capitalization", "details": f"Reversed capitalization {capitalization.number}"},
+            tenant=request.tenant,
+        )
     messages.warning(request, f"Asset Capitalization {capitalization.number} has been reversed.")
     return redirect("assets:asset_capitalization_detail", pk=capitalization.pk)
