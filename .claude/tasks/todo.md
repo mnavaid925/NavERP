@@ -27508,7 +27508,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Models (from research — 1–4)
 
-- [ ] `IntegrationConnector` [BINT-] — Operational ERP & streaming broker connector managing bidirectional Reverse ETL metric pushbacks, closed-loop triggers, and real-time event-bus pub/sub.
+- [x] `IntegrationConnector` [BINT-] — Operational ERP & streaming broker connector managing bidirectional Reverse ETL metric pushbacks, closed-loop triggers, and real-time event-bus pub/sub.
   - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BINT-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
   - **Fields:**
     - `name`: `CharField(max_length=200)` — Connector display name (e.g., "Finance GL Closed-Loop Sync", "Production Kafka Event Bus").
@@ -27534,7 +27534,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `settings.AUTH_USER_MODEL` (`accounts.User`).
   - **Form Excludes:** `tenant`, `number`, `health_status`, `last_heartbeat_at`, `last_sync_at`, `total_messages_processed`, `error_message`, `created_by`, `created_at`, `updated_at`.
 
-- [ ] `WarehouseSyncEndpoint` [BSNC-] — Reverse ETL and replication feeds pushing governed semantic models and data marts to external cloud warehouses (Snowflake, BigQuery, Redshift, Databricks) and BI tools (Power BI, Tableau, Looker).
+- [x] `WarehouseSyncEndpoint` [BSNC-] — Reverse ETL and replication feeds pushing governed semantic models and data marts to external cloud warehouses (Snowflake, BigQuery, Redshift, Databricks) and BI tools (Power BI, Tableau, Looker).
   - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BSNC-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
   - **Fields:**
     - `name`: `CharField(max_length=200)` — Display title (e.g., "Snowflake Finance Mart Sync", "Power BI Executive Dataset Push").
@@ -27561,7 +27561,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `bi.SemanticModel` (`apps/bi/models/SemanticLayer/SemanticModels.py`), `bi.DataMart` (`apps/bi/models/DataWarehouse/DataMarts.py`), `settings.AUTH_USER_MODEL` (`accounts.User`).
   - **Form Excludes:** `tenant`, `number`, `status`, `last_sync_at`, `last_sync_duration_ms`, `last_rows_synced`, `total_rows_synced`, `last_error_message`, `owner`, `created_at`, `updated_at`.
 
-- [ ] `BiWebhookSubscription` [BWHK-] — Outbound event-driven webhook notification dispatcher with HMAC-SHA256 request signing and exponential retry telemetry.
+- [x] `BiWebhookSubscription` [BWHK-] — Outbound event-driven webhook notification dispatcher with HMAC-SHA256 request signing and exponential retry telemetry.
   - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BWHK-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
   - **Fields:**
     - `name`: `CharField(max_length=200)` — Display title (e.g., "Slack KPI Breach Alerts", "Make.com Automation Pipeline").
@@ -27585,7 +27585,7 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
   - **Verified Spine FKs:** `core.Tenant` (via `TenantNumbered`), `settings.AUTH_USER_MODEL` (`accounts.User`).
   - **Form Excludes:** `tenant`, `number`, `status`, `consecutive_failures`, `last_triggered_at`, `last_response_code`, `last_response_time_ms`, `last_error_log`, `total_deliveries`, `created_by`, `created_at`, `updated_at`.
 
-- [ ] `BiExtensionPlugin` [BEXT-] — Third-party extension and visual component registry governing custom D3/ECharts visuals, ETL transform plugins, and sandboxed dashboard extensions.
+- [x] `BiExtensionPlugin` [BEXT-] — Third-party extension and visual component registry governing custom D3/ECharts visuals, ETL transform plugins, and sandboxed dashboard extensions.
   - **Inherits from:** `apps.bi.models._base.TenantNumbered` (auto-number prefix `BEXT-`, `tenant` FK `core.Tenant`, `created_at`, `updated_at`).
   - **Fields:**
     - `name`: `CharField(max_length=200)` — Extension name (e.g., "ECharts Sankey Diagram Pro", "Shopify Analytics Ingestion Plug-in").
@@ -27615,43 +27615,43 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Backend (`apps/bi/{models,forms,views,urls}/IntegrationHub/`)
 
-- [ ] `apps/bi/models/IntegrationHub/IntegrationConnectors.py` (model `IntegrationConnector` [BINT-])
-- [ ] `apps/bi/models/IntegrationHub/WarehouseSyncEndpoints.py` (model `WarehouseSyncEndpoint` [BSNC-])
-- [ ] `apps/bi/models/IntegrationHub/BiWebhookSubscriptions.py` (model `BiWebhookSubscription` [BWHK-])
-- [ ] `apps/bi/models/IntegrationHub/BiExtensionPlugins.py` (model `BiExtensionPlugin` [BEXT-])
-- [ ] `apps/bi/models/IntegrationHub/__init__.py` (re-export all 4 models)
-- [ ] Re-export all 4 models in `apps/bi/models/__init__.py` and add to `__all__`
+- [x] `apps/bi/models/IntegrationHub/IntegrationConnectors.py` (model `IntegrationConnector` [BINT-])
+- [x] `apps/bi/models/IntegrationHub/WarehouseSyncEndpoints.py` (model `WarehouseSyncEndpoint` [BSNC-])
+- [x] `apps/bi/models/IntegrationHub/BiWebhookSubscriptions.py` (model `BiWebhookSubscription` [BWHK-])
+- [x] `apps/bi/models/IntegrationHub/BiExtensionPlugins.py` (model `BiExtensionPlugin` [BEXT-])
+- [x] `apps/bi/models/IntegrationHub/__init__.py` (re-export all 4 models)
+- [x] Re-export all 4 models in `apps/bi/models/__init__.py` and add to `__all__`
 
-- [ ] `apps/bi/forms/IntegrationHub/IntegrationConnectors.py` (`IntegrationConnectorForm` with JSON validation & credential masking)
-- [ ] `apps/bi/forms/IntegrationHub/WarehouseSyncEndpoints.py` (`WarehouseSyncEndpointForm` with destination validation)
-- [ ] `apps/bi/forms/IntegrationHub/BiWebhookSubscriptions.py` (`BiWebhookSubscriptionForm` with secret token generator & URL validation)
-- [ ] `apps/bi/forms/IntegrationHub/BiExtensionPlugins.py` (`BiExtensionPluginForm` with JSON schema config validation)
-- [ ] `apps/bi/forms/IntegrationHub/__init__.py` (re-export all 4 forms)
-- [ ] Re-export all 4 forms in `apps/bi/forms/__init__.py`
+- [x] `apps/bi/forms/IntegrationHub/IntegrationConnectors.py` (`IntegrationConnectorForm` with JSON validation & credential masking)
+- [x] `apps/bi/forms/IntegrationHub/WarehouseSyncEndpoints.py` (`WarehouseSyncEndpointForm` with destination validation)
+- [x] `apps/bi/forms/IntegrationHub/BiWebhookSubscriptions.py` (`BiWebhookSubscriptionForm` with secret token generator & URL validation)
+- [x] `apps/bi/forms/IntegrationHub/BiExtensionPlugins.py` (`BiExtensionPluginForm` with JSON schema config validation)
+- [x] `apps/bi/forms/IntegrationHub/__init__.py` (re-export all 4 forms)
+- [x] Re-export all 4 forms in `apps/bi/forms/__init__.py`
 
-- [ ] `apps/bi/views/IntegrationHub/IntegrationConnectors.py` (list, create, detail, edit, delete, ping heartbeat action)
-- [ ] `apps/bi/views/IntegrationHub/WarehouseSyncEndpoints.py` (list, create, detail, edit, delete, trigger manual sync action)
-- [ ] `apps/bi/views/IntegrationHub/BiWebhookSubscriptions.py` (list, create, detail, edit, delete, test ping dispatch action)
-- [ ] `apps/bi/views/IntegrationHub/BiExtensionPlugins.py` (list, create, detail, edit, delete, toggle enable/disable action)
-- [ ] `apps/bi/views/IntegrationHub/__init__.py` (re-export all view functions)
-- [ ] Re-export all view functions in `apps/bi/views/__init__.py`
+- [x] `apps/bi/views/IntegrationHub/IntegrationConnectors.py` (list, create, detail, edit, delete, ping heartbeat action)
+- [x] `apps/bi/views/IntegrationHub/WarehouseSyncEndpoints.py` (list, create, detail, edit, delete, trigger manual sync action)
+- [x] `apps/bi/views/IntegrationHub/BiWebhookSubscriptions.py` (list, create, detail, edit, delete, test ping dispatch action)
+- [x] `apps/bi/views/IntegrationHub/BiExtensionPlugins.py` (list, create, detail, edit, delete, toggle enable/disable action)
+- [x] `apps/bi/views/IntegrationHub/__init__.py` (re-export all view functions)
+- [x] Re-export all view functions in `apps/bi/views/__init__.py`
 
-- [ ] `apps/bi/urls/IntegrationHub/IntegrationConnectors.py`
-- [ ] `apps/bi/urls/IntegrationHub/WarehouseSyncEndpoints.py`
-- [ ] `apps/bi/urls/IntegrationHub/BiWebhookSubscriptions.py`
-- [ ] `apps/bi/urls/IntegrationHub/BiExtensionPlugins.py`
-- [ ] `apps/bi/urls/IntegrationHub/__init__.py`
-- [ ] Wire sub-module into `apps/bi/urls/__init__.py` (`integration_hub_urlpatterns`)
+- [x] `apps/bi/urls/IntegrationHub/IntegrationConnectors.py`
+- [x] `apps/bi/urls/IntegrationHub/WarehouseSyncEndpoints.py`
+- [x] `apps/bi/urls/IntegrationHub/BiWebhookSubscriptions.py`
+- [x] `apps/bi/urls/IntegrationHub/BiExtensionPlugins.py`
+- [x] `apps/bi/urls/IntegrationHub/__init__.py`
+- [x] Wire sub-module into `apps/bi/urls/__init__.py` (`integration_hub_urlpatterns`)
 
-- [ ] Register all 4 models in `apps/bi/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields`
-- [ ] Generate incremental migration: `makemigrations bi` (expected `0042_...`)
-- [ ] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo records for Acme Corporation & Globex Corporation
+- [x] Register all 4 models in `apps/bi/admin.py` with `list_display`, `list_filter`, `search_fields`, `readonly_fields`
+- [x] Generate incremental migration: `makemigrations bi` (expected `0042_...`)
+- [x] Extend `apps/bi/management/commands/seed_bi.py` with idempotent demo records for Acme Corporation & Globex Corporation
 
 ---
 
 ## Wire-up
 
-- [ ] `apps/core/navigation.py`: Add `LIVE_LINKS["10.19"]` mapping all 5 NavERP.md feature bullets + aliases:
+- [x] `apps/core/navigation.py`: Add `LIVE_LINKS["10.19"]` mapping all 5 NavERP.md feature bullets + aliases:
   ```python
   "10.19": {
       "ERP & Application Connectors": "bi:integration_connector_list",
@@ -27674,32 +27674,32 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`) strictly (no semantic `-success/-danger` classes, L33).
 
-- [ ] `templates/bi/integration_hub/integration_connector/list.html` (filter bar for connector_type, target_system, status, health_status; search; pagination; health badges; ping action)
-- [ ] `templates/bi/integration_hub/integration_connector/detail.html` (connector overview, configuration parameters, masked credentials, health telemetry, message processing counter, error logs)
-- [ ] `templates/bi/integration_hub/integration_connector/form.html` (name, slug, connector_type, target_system, sync_direction, sync_interval, message_format, connection_config JSON, auth_type, auth_credentials, is_enabled)
+- [x] `templates/bi/integration_hub/integration_connector/list.html` (filter bar for connector_type, target_system, status, health_status; search; pagination; health badges; ping action)
+- [x] `templates/bi/integration_hub/integration_connector/detail.html` (connector overview, configuration parameters, masked credentials, health telemetry, message processing counter, error logs)
+- [x] `templates/bi/integration_hub/integration_connector/form.html` (name, slug, connector_type, target_system, sync_direction, sync_interval, message_format, connection_config JSON, auth_type, auth_credentials, is_enabled)
 
-- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/list.html` (filter bar for target_warehouse, sync_mode, sync_schedule, status; search; pagination; sync now action)
-- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/detail.html` (endpoint parameters, linked semantic model / data mart, sync telemetry, duration stats, last error display)
-- [ ] `templates/bi/integration_hub/warehouse_sync_endpoint/form.html` (name, slug, target_warehouse, sync_mode, semantic_model, data_mart, destination db/schema/table, connection_config JSON, auth_method, sync_schedule, is_active)
+- [x] `templates/bi/integration_hub/warehouse_sync_endpoint/list.html` (filter bar for target_warehouse, sync_mode, sync_schedule, status; search; pagination; sync now action)
+- [x] `templates/bi/integration_hub/warehouse_sync_endpoint/detail.html` (endpoint parameters, linked semantic model / data mart, sync telemetry, duration stats, last error display)
+- [x] `templates/bi/integration_hub/warehouse_sync_endpoint/form.html` (name, slug, target_warehouse, sync_mode, semantic_model, data_mart, destination db/schema/table, connection_config JSON, auth_method, sync_schedule, is_active)
 
-- [ ] `templates/bi/integration_hub/bi_webhook_subscription/list.html` (filter bar for payload_format, status, is_active; search; pagination; response code badges; test ping action)
-- [ ] `templates/bi/integration_hub/bi_webhook_subscription/detail.html` (endpoint URL, secret token display, event subscription badges, headers JSON, retry policy, delivery telemetry & latency)
-- [ ] `templates/bi/integration_hub/bi_webhook_subscription/form.html` (name, endpoint_url, secret_token, event_types multi-select, payload_format, custom_headers JSON, max_retries, timeout_seconds, is_active)
+- [x] `templates/bi/integration_hub/bi_webhook_subscription/list.html` (filter bar for payload_format, status, is_active; search; pagination; response code badges; test ping action)
+- [x] `templates/bi/integration_hub/bi_webhook_subscription/detail.html` (endpoint URL, secret token display, event subscription badges, headers JSON, retry policy, delivery telemetry & latency)
+- [x] `templates/bi/integration_hub/bi_webhook_subscription/form.html` (name, endpoint_url, secret_token, event_types multi-select, payload_format, custom_headers JSON, max_retries, timeout_seconds, is_active)
 
-- [ ] `templates/bi/integration_hub/bi_extension_plugin/list.html` (filter bar for plugin_type, category, status, is_verified; search; gallery card & table views; pagination; toggle action)
-- [ ] `templates/bi/integration_hub/bi_extension_plugin/detail.html` (manifest metadata, author info, repository/docs links, sandboxed permissions, active config JSON, verification badge)
-- [ ] `templates/bi/integration_hub/bi_extension_plugin/form.html` (name, plugin_identifier, version, plugin_type, category, description, author_name, URLs, license, manifest_metadata JSON, config_schema JSON, current_config JSON, permissions_required, is_verified)
+- [x] `templates/bi/integration_hub/bi_extension_plugin/list.html` (filter bar for plugin_type, category, status, is_verified; search; gallery card & table views; pagination; toggle action)
+- [x] `templates/bi/integration_hub/bi_extension_plugin/detail.html` (manifest metadata, author info, repository/docs links, sandboxed permissions, active config JSON, verification badge)
+- [x] `templates/bi/integration_hub/bi_extension_plugin/form.html` (name, plugin_identifier, version, plugin_type, category, description, author_name, URLs, license, manifest_metadata JSON, config_schema JSON, current_config JSON, permissions_required, is_verified)
 
 ---
 
 ## Verify
 
-- [ ] Run `python manage.py makemigrations bi` -> incremental migration `0042_...` generated.
-- [ ] Run `python manage.py migrate`.
-- [ ] Run `python manage.py seed_bi` (Run 1).
-- [ ] Run `python manage.py seed_bi` (Run 2: verify idempotency, zero duplicate errors).
-- [ ] Run `python manage.py check` (0 issues reported).
-- [ ] Run smoke test script in `temp/smoke_bi_10_19.py`:
+- [x] Run `python manage.py makemigrations bi` -> incremental migration `0042_...` generated.
+- [x] Run `python manage.py migrate`.
+- [x] Run `python manage.py seed_bi` (Run 1).
+- [x] Run `python manage.py seed_bi` (Run 2: verify idempotency, zero duplicate errors).
+- [x] Run `python manage.py check` (0 issues reported).
+- [x] Run smoke test script in `temp/smoke_bi_10_19.py`:
   - Authenticate as `admin_acme` / `password`.
   - GET all new 10.19 URLs (list, create, detail, edit for all 4 models, plus ping/test/sync actions) -> verify 200/302 responses.
   - Assert HTML content: page titles, table headers, seeded connectors, sync endpoints, webhooks, and extension plugins; no leaked Django tags (`{#`).
@@ -27712,17 +27712,17 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 
 ## Close-Out Steps
 
-- [ ] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
-- [ ] Append findings to `.claude/tasks/review-bi-10.19.md`.
-- [ ] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
-- [ ] Run Phase 6 automated test suite:
+- [x] Run 6 Phase 4 review agents strictly serially: `code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`.
+- [x] Append findings to `.claude/tasks/review-bi-10.19.md`.
+- [x] Run Phase 5 `code-fixer` agent to resolve all findings in priority order.
+- [x] Run Phase 6 automated test suite:
   - Update `conftest.py` with 10.19 fixtures.
   - Author `test_integrationhub_models.py`
   - Author `test_integrationhub_forms.py`
   - Author `test_integrationhub_views.py`
   - Author `test_integrationhub_security.py`
   - Run full unfiltered test suite: `pytest apps/bi/tests/`
-- [ ] Phase 7 documentation:
+- [x] Phase 7 documentation:
   - Update `.claude/skills/bi/SKILL.md` with 10.19 models, views, and routes.
   - Update `README.md`.
   - Record any deferred items or gaps in `.claude/tasks/gaps-bi-10.19.md` (or declare None).
@@ -27739,4 +27739,28 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
 ---
 
 ## Review & Close-Out Summary (10.19 Integration & API Hub)
-*(To be completed during Phase 4–7 close-out)*
+
+- **Status**: COMPLETE & VERIFIED (100% Green).
+- **Core Entities Delivered**:
+  1. `IntegrationConnector` [BINT-]: Enterprise application & message bus connectors with REST, GraphQL, gRPC, JDBC, Webhook, Kafka, EventBridge adapters, encrypted credentials, health monitoring, and diagnostic ping actions.
+  2. `WarehouseSyncEndpoint` [BSNC-]: Multi-cloud warehouse data synchronization targets (Snowflake, BigQuery, Redshift, Databricks, Synapse, ClickHouse, DuckDB) in batch, micro-batch, and CDC modes with semantic model/data mart links, cadence triggers, and row/duration telemetry.
+  3. `BiWebhookSubscription` [BWHK-]: Real-time outbound webhook dispatchers with server-generated HMAC-SHA256 secret tokens (`whsec_...`), event filtering, retry policies, and test ping action.
+  4. `BiExtensionPlugin` [BEXT-]: Modular analytical extensions (custom visuals, transformation hooks, data sources, export formats, AI agents) with manifest metadata schemas, permission scopes, and tamper-protected system plugin flags.
+- **Routes & Navigation**:
+  - 24 live routes mapped under `/bi/integrations/` namespace.
+  - Sidebar wired in `apps/core/navigation.py` under `LIVE_LINKS["10.19"]` with 5 feature bullets and 5 aliases.
+- **Schema & Migrations**:
+  - Incremental migrations `apps/bi/migrations/0042_biextensionplugin_biwebhooksubscription_and_more.py` and `0043_biextensionplugin_idx_bext_ten_ver_and_more.py`.
+- **Seeder**:
+  - `seed_bi` idempotently seeds Acme and Globex connectors, sync endpoints, webhooks, and extension plugins with full `--flush` wipe support.
+- **Verification & Review**:
+  - 6 serial review passes completed: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`.
+  - All 16 findings (3 Critical, 7 Important, 6 Minor) fully resolved and committed in `.claude/tasks/review-bi-10.19.md`.
+- **Automated Tests**:
+  - 198 dedicated tests passing 100% green:
+    - `apps/bi/tests/test_integrationhub_models.py` (53 tests)
+    - `apps/bi/tests/test_integrationhub_forms.py` (41 tests)
+    - `apps/bi/tests/test_integrationhub_views.py` (52 tests)
+    - `apps/bi/tests/test_integrationhub_security.py` (52 tests)
+  - Full BI app suite: 3,026 tests passing green (0 failures).
+- **Gaps**: None (Documented in `.claude/tasks/gaps-bi-10.19.md`).
