@@ -72,6 +72,7 @@ def asset_requisition_detail(request, pk):
             "submitted_by",
             "approved_by",
             "purchase_order",
+            "purchase_order__vendor",
         ),
     )
     return render(
