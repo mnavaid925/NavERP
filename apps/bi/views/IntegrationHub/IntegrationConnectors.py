@@ -104,13 +104,10 @@ def integration_connector_create(request):
             connector.save()
 
             write_audit_log(
+                request.user,
+                connector,
+                "create",
                 tenant=request.tenant,
-                user=request.user,
-                action="create",
-                model_name="IntegrationConnector",
-                object_id=str(connector.pk),
-                object_repr=str(connector),
-                changes={},
             )
             messages.success(request, f"Integration connector '{connector.name}' created successfully.")
             return redirect("bi:integration_connector_detail", pk=connector.pk)
@@ -141,13 +138,10 @@ def integration_connector_edit(request, pk):
         if form.is_valid():
             connector = form.save()
             write_audit_log(
+                request.user,
+                connector,
+                "update",
                 tenant=request.tenant,
-                user=request.user,
-                action="update",
-                model_name="IntegrationConnector",
-                object_id=str(connector.pk),
-                object_repr=str(connector),
-                changes={},
             )
             messages.success(request, f"Integration connector '{connector.name}' updated successfully.")
             return redirect("bi:integration_connector_detail", pk=connector.pk)
@@ -174,17 +168,14 @@ def integration_connector_edit(request, pk):
 def integration_connector_delete(request, pk):
     connector = bi_object(request, IntegrationConnector, pk)
     name = connector.name
+    write_audit_log(
+        request.user,
+        connector,
+        "delete",
+        tenant=request.tenant,
+    )
     connector.delete()
 
-    write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="delete",
-        model_name="IntegrationConnector",
-        object_id=str(pk),
-        object_repr=name,
-        changes={},
-    )
     messages.success(request, f"Integration connector '{name}' deleted successfully.")
     return redirect("bi:integration_connector_list")
 
@@ -201,13 +192,11 @@ def integration_connector_ping(request, pk):
     connector.save(update_fields=["last_heartbeat_at", "health_status", "status", "error_message", "total_messages_processed"])
 
     write_audit_log(
-        tenant=request.tenant,
-        user=request.user,
-        action="action",
-        model_name="IntegrationConnector",
-        object_id=str(connector.pk),
-        object_repr=f"Heartbeat Ping {connector.name}",
+        request.user,
+        connector,
+        "action",
         changes={"health_status": "healthy"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Heartbeat ping successful for '{connector.name}'. Channel is healthy.")
     return redirect("bi:integration_connector_detail", pk=connector.pk)
