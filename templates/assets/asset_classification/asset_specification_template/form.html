@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}Edit Spec Attribute: {{ template.attribute_key }} — NavERP{% else %}New Specification Attribute — NavERP{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_specification_template_list' %}">Spec Templates</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ template.attribute_key }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">
+            {% if is_edit %}Edit Spec Attribute: {{ template.attribute_key }}{% else %}Define Specification Attribute{% endif %}
+        </h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_specification_template_detail' template.pk %}{% else %}{% url 'assets:asset_specification_template_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl mx-auto">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">
+            {% if is_edit %}Update Attribute Schema{% else %}New Specification Parameter Definition{% endif %}
+        </h2>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-3 mb-6 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Attribute Identity & Typing -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Attribute Identity & Data Type
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.attribute_key.id_for_label }}" class="form-label">
+                            Machine Attribute Key <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.attribute_key }}
+                        {% if form.attribute_key.errors %}<div class="form-error">{{ form.attribute_key.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Lowercase letters and underscores only, e.g. rated_voltage, cooling_capacity_tons</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.display_name.id_for_label }}" class="form-label">
+                            Display Label <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.display_name }}
+                        {% if form.display_name.errors %}<div class="form-error">{{ form.display_name.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.data_type.id_for_label }}" class="form-label">
+                            Data Type <span class="text-red font-bold">*</span>
+                        </label>
+                        {{ form.data_type }}
+                        {% if form.data_type.errors %}<div class="form-error">{{ form.data_type.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.unit_of_measure.id_for_label }}" class="form-label">
+                            Unit of Measure (UOM)
+                        </label>
+                        {{ form.unit_of_measure }}
+                        {% if form.unit_of_measure.errors %}<div class="form-error">{{ form.unit_of_measure.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">e.g. V, kW, PSI, GPM, RPM, ton, degC</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scope Binding -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Scope Association (Assign Category or Model)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="{{ form.category.id_for_label }}" class="form-label">Asset Category</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Applies to all assets in this category (inherited by sub-categories)</div>
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.model.id_for_label }}" class="form-label">Equipment Model</label>
+                        {{ form.model }}
+                        {% if form.model.errors %}<div class="form-error">{{ form.model.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-muted mt-1">Applies to all physical units of this specific model number</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Defaults & Validation Constraints -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Default Values & Validation Bounds
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="{{ form.default_value.id_for_label }}" class="form-label">Default Value</label>
+                        {{ form.default_value }}
+                        {% if form.default_value.errors %}<div class="form-error">{{ form.default_value.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.min_numeric_value.id_for_label }}" class="form-label">Min Numeric Value</label>
+                        {{ form.min_numeric_value }}
+                        {% if form.min_numeric_value.errors %}<div class="form-error">{{ form.min_numeric_value.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.max_numeric_value.id_for_label }}" class="form-label">Max Numeric Value</label>
+                        {{ form.max_numeric_value }}
+                        {% if form.max_numeric_value.errors %}<div class="form-error">{{ form.max_numeric_value.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="form-group mb-4">
+                    <label for="{{ form.dropdown_options.id_for_label }}" class="form-label">Allowed Dropdown Options</label>
+                    {{ form.dropdown_options }}
+                    {% if form.dropdown_options.errors %}<div class="form-error">{{ form.dropdown_options.errors.0 }}</div>{% endif %}
+                    <div class="text-xs text-muted mt-1">Comma-separated choices for 'select' data type, e.g. R-134a, R-410A, R-1234ze</div>
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.validation_regex.id_for_label }}" class="form-label">Validation Regex Pattern</label>
+                    {{ form.validation_regex }}
+                    {% if form.validation_regex.errors %}<div class="form-error">{{ form.validation_regex.errors.0 }}</div>{% endif %}
+                    <div class="text-xs text-muted mt-1">Optional regex pattern, e.g. ^[0-9]{3}-[A-Z]{2}$</div>
+                </div>
+            </div>
+
+            <!-- Display & Behavioral Flags -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase text-slate-500 mb-3 pb-1 border-b border-slate-100">
+                    Form & Inspection Settings
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="form-group">
+                        <label for="{{ form.display_order.id_for_label }}" class="form-label">Display Sequence Priority</label>
+                        {{ form.display_order }}
+                        {% if form.display_order.errors %}<div class="form-error">{{ form.display_order.errors.0 }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ form.help_text.id_for_label }}" class="form-label">Field Guidance / Instructions</label>
+                        {{ form.help_text }}
+                        {% if form.help_text.errors %}<div class="form-error">{{ form.help_text.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-6 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_required }}
+                        <span class="text-sm font-medium text-slate-800">Mandatory (Required Field)</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_filterable }}
+                        <span class="text-sm font-medium text-slate-800">Searchable & Filterable on Register</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if is_edit %}{% url 'assets:asset_specification_template_detail' template.pk %}{% else %}{% url 'assets:asset_specification_template_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 mr-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Save Spec Attribute{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
