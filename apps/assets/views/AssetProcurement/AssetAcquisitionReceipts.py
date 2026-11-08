@@ -143,6 +143,9 @@ def asset_acquisition_receipt_edit(request, pk):
 def asset_acquisition_receipt_delete(request, pk):
     """Delete an asset intake receipt."""
     receipt = assets_object(request, AssetAcquisitionReceipt, pk)
+    if receipt.status in ("accepted", "capitalized"):
+        messages.error(request, f"Receipt {receipt.number} cannot be deleted in status '{receipt.get_status_display()}'.")
+        return redirect("assets:asset_acquisition_receipt_detail", pk=receipt.pk)
     number = receipt.number
     write_audit_log(
         request.user,
