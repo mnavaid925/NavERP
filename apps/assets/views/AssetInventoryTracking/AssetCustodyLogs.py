@@ -69,7 +69,7 @@ def asset_custody_log_list(request):
     page_number = request.GET.get("page", 1)
     page_obj = paginator.get_page(page_number)
 
-    borrowers = Party.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
+    borrowers = Party.objects.filter(tenant=request.tenant).order_by("name")
     assets = Asset.objects.filter(tenant=request.tenant).order_by("number")
 
     context = {
