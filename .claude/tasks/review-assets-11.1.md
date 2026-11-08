@@ -31,7 +31,7 @@ Reviewers: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-review
 - [x] `I7` — `apps/assets/views/overview.py:22-33`: Overview KPIs execute 8 separate round-trip count/sum queries. Fix: Consolidate using conditional aggregation (`Count("id", filter=Q(...))`, `Sum(...)`) into 4 queries.
 - [x] `I8` — `apps/assets/models/AssetProcurement/AssetAcquisitionReceipts.py:116`: Missing index for default sort order `(tenant, received_date)`. Fix: Add `models.Index(fields=["tenant", "received_date"], name="idx_arcv_ten_rcvdate")`.
 - [x] `I9` — `apps/assets/views/AssetProcurement/*.py`: Missing status guards on edit views (`asset_capitalization_edit`, `asset_requisition_edit`, `asset_acquisition_receipt_edit`). Editing capitalized assets desynchronizes financial ledger records; editing approved requisitions alters CapEx without re-approval. Fix: Block edit mode if capitalization is `"capitalized"`, requisition is in `("approved", "ordered", "received")`, or receipt is `"capitalized"`.
-- [ ] `I10` — `apps/assets/views/AssetProcurement/AssetCapitalizations.py:169, 218`: Missing privilege gates on financial ledger mutations (`asset_capitalization_execute`, `asset_capitalization_reverse`). Low-privilege users can create or reverse fixed asset ledger records. Fix: Decorate with `@tenant_admin_required`.
+- [x] `I10` — `apps/assets/views/AssetProcurement/AssetCapitalizations.py:169, 218`: Missing privilege gates on financial ledger mutations (`asset_capitalization_execute`, `asset_capitalization_reverse`). Low-privilege users can create or reverse fixed asset ledger records. Fix: Decorate with `@tenant_admin_required`.
 
 ---
 
