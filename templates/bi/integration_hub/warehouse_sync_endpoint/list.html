@@ -172,7 +172,7 @@
                         {% elif s.status == 'disabled' %}
                         <span class="badge badge-slate">Disabled</span>
                         {% else %}
-                        <span class="badge badge-slate">Idle</span>
+                        <span class="badge badge-slate">{{ s.get_status_display }}</span>
                         {% endif %}
                     </td>
                     <td class="text-xs text-muted">
