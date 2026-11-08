@@ -77,14 +77,10 @@ class IntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
                 self.fields["connection_config_raw"].initial = json.dumps(
                     self.instance.connection_config, indent=2
                 )
-            if self.instance.auth_credentials:
-                # Mask credentials if present for security
-                self.fields["auth_credentials_raw"].initial = json.dumps(
-                    self.instance.auth_credentials, indent=2
-                )
+            # Do NOT populate auth_credentials_raw on edit to prevent exposing cleartext secrets (Rule L20)
 
     def clean_connection_config_raw(self):
-        data = self.cleaned_data.get("connection_config_raw", "").strip()
+        data = (self.cleaned_data.get("connection_config_raw") or "").strip()
         if not data:
             return {}
         try:
@@ -96,9 +92,9 @@ class IntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
             raise ValidationError(f"Invalid JSON syntax in connection configuration: {err}")
 
     def clean_auth_credentials_raw(self):
-        data = self.cleaned_data.get("auth_credentials_raw", "").strip()
+        data = (self.cleaned_data.get("auth_credentials_raw") or "").strip()
         if not data:
-            return {}
+            return None
         try:
             parsed = json.loads(data)
             if not isinstance(parsed, dict):
@@ -110,7 +106,11 @@ class IntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
         instance.connection_config = self.cleaned_data.get("connection_config_raw") or {}
-        instance.auth_credentials = self.cleaned_data.get("auth_credentials_raw") or {}
+        new_creds = self.cleaned_data.get("auth_credentials_raw")
+        if new_creds is not None:
+            instance.auth_credentials = new_creds
+        elif not instance.pk:
+            instance.auth_credentials = {}
         if commit:
             instance.save()
         return instance
