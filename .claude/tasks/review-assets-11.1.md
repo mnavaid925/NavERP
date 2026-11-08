@@ -44,7 +44,7 @@ Reviewers: `code-reviewer`, `explorer`, `frontend-reviewer`, `performance-review
 - [x] `M5` — `apps/assets/views/AssetProcurement/AssetTags.py:236`: Tag print label view accesses `operational_asset.location.name` without selecting location. Fix: Add `"operational_asset__location"` to `select_related`.
 - [x] `M6` — `apps/assets/admin.py:11-36`: ModelAdmins lack `list_select_related = ("tenant",)`. Fix: Add `list_select_related`.
 - [x] `M7` — `templates/assets/asset_procurement/asset_requisition/detail.html:135`: Potential null vendor traversal `requisition.purchase_order.vendor.name`. Fix: Guard with `{% if requisition.purchase_order.vendor %}`.
-- [ ] `M8` — `templates/assets/asset_procurement/*/*detail.html`: Icon-only Delete buttons lack `title="Delete"` and `aria-label="Delete"`. Fix: Add accessibility labels.
+- [x] `M8` — `templates/assets/asset_procurement/*/*detail.html`: Icon-only Delete buttons lack `title="Delete"` and `aria-label="Delete"`. Fix: Add accessibility labels.
 - [ ] `M9` — `templates/assets/asset_procurement/*/*list.html`: Filter labels not explicitly linked with input IDs. Fix: Add `for` and matching `id` attributes.
 - [ ] `M10` — `apps/assets/management/commands/seed_assets.py:48`: Seeder output lacks stdout notice regarding tenant admin login credentials (`admin_acme` / `password`). Fix: Add reminder notice.
 - [ ] `M11` — `apps/assets/forms/AssetProcurement/AssetRequisitions.py:51`: Vendor queryset does not filter `roles__status="active"`. Fix: Add `roles__status="active"`.
