@@ -12,6 +12,7 @@ class AssetTagForm(TenantUniqueMixin, forms.ModelForm):
         exclude = [
             "tenant",
             "number",
+            "status",
             "created_at",
             "updated_at",
             "affixed_by",
@@ -26,7 +27,6 @@ class AssetTagForm(TenantUniqueMixin, forms.ModelForm):
             "capitalization": forms.Select(attrs={"class": "form-select"}),
             "physical_placement": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. Upper-left bezel near motor switch"}),
             "scanner_device_id": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. ZEBRA-TC52-DOCK-1"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 3}),
         }
 
