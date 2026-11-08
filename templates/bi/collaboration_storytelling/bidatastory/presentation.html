@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}Presenting: {{ story.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-4">
+    <!-- Presentation Header Bar -->
+    <div class="flex items-center justify-between bg-slate-900 text-white px-6 py-3 rounded-xl shadow-md">
+        <div class="flex items-center gap-3">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+            <div>
+                <h1 class="text-base font-bold text-white">{{ story.title }}</h1>
+                <div class="text-xs text-slate-400 font-mono flex items-center gap-2">
+                    <span>{{ story.number }}</span>
+                    <span>•</span>
+                    <span>{{ story.get_story_type_display }}</span>
+                    <span>•</span>
+                    <span id="slideIndicator">Slide 1 of {{ slides|length|default:1 }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="prevBtn" class="btn btn-outline btn-sm text-white border-slate-700 hover:bg-slate-800" onclick="prevSlide()">
+                <i data-lucide="chevron-left"></i>
+                <span>Previous</span>
+            </button>
+            <button id="nextBtn" class="btn btn-primary btn-sm" onclick="nextSlide()">
+                <span>Next</span>
+                <i data-lucide="chevron-right"></i>
+            </button>
+            <a href="{% url 'bi:bi_data_story_detail' story.pk %}" class="btn btn-outline btn-sm text-slate-300 border-slate-700 hover:bg-slate-800 ml-2" title="Exit Presentation">
+                <i data-lucide="x"></i>
+                <span>Exit</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Presentation Stage -->
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden min-h-[500px] flex flex-col justify-between">
+        <div class="p-8 space-y-6">
+            <div id="slideContentArea">
+                {% if slides %}
+                    {% for slide in slides %}
+                    <div class="story-slide {% if not forloop.first %}hidden{% endif %}" data-index="{{ forloop.counter0 }}">
+                        <div class="flex items-center justify-between border-b pb-4 mb-6">
+                            <div>
+                                <span class="text-xs font-bold uppercase tracking-wider text-primary-600">Slide {{ forloop.counter }}</span>
+                                <h2 class="text-2xl font-bold text-slate-900 mt-1">{{ slide.title|default:"Executive Overview" }}</h2>
+                            </div>
+                            <span class="badge badge-slate">{{ slide.visual_type|default:"Narrative Insight" }}</span>
+                        </div>
+
+                        <div class="prose max-w-none text-slate-800 text-lg leading-relaxed bg-slate-50 p-6 rounded-xl border border-slate-100 mb-6">
+                            {{ slide.narrative|default:slide.content|default:story.summary|linebreaksbr }}
+                        </div>
+
+                        {% if slide.filter_state %}
+                        <div class="p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                            <div class="text-xs font-bold uppercase tracking-wider text-indigo-700 mb-1">Locked Filter Snapshot</div>
+                            <div class="text-xs font-mono text-indigo-900">
+                                {{ slide.filter_state }}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if slide.notes %}
+                        <div class="mt-4 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-900">
+                            <strong>Speaker Note:</strong> {{ slide.notes }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="story-slide" data-index="0">
+                        <div class="border-b pb-4 mb-6">
+                            <span class="text-xs font-bold uppercase tracking-wider text-primary-600">Executive Overview</span>
+                            <h2 class="text-2xl font-bold text-slate-900 mt-1">{{ story.title }}</h2>
+                        </div>
+                        <div class="prose max-w-none text-slate-800 text-lg leading-relaxed bg-slate-50 p-6 rounded-xl border border-slate-100">
+                            {{ story.summary|default:"Welcome to this executive data story presentation. Use left/right keys to navigate."|linebreaksbr }}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Stage Footer Navigation -->
+        <div class="bg-slate-50 border-t border-slate-200 px-8 py-4 flex items-center justify-between text-xs text-muted">
+            <div>
+                NavERP Boardroom Presentation Mode • Press <kbd class="px-1.5 py-0.5 bg-white border rounded shadow-sm font-mono text-slate-700">←</kbd> and <kbd class="px-1.5 py-0.5 bg-white border rounded shadow-sm font-mono text-slate-700">→</kbd> to cycle slides
+            </div>
+            <div>
+                {% if story.allow_live_drilldown %}
+                <span class="text-emerald-600 font-medium flex items-center gap-1">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i> Live Drilldown Active
+                </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.story-slide');
+    const totalSlides = slides.length;
+    const indicator = document.getElementById('slideIndicator');
+
+    function showSlide(index) {
+        if (totalSlides === 0) return;
+        if (index < 0) index = 0;
+        if (index >= totalSlides) index = totalSlides - 1;
+
+        slides.forEach((s, i) => {
+            s.classList.toggle('hidden', i !== index);
+        });
+        currentSlide = index;
+        if (indicator) {
+            indicator.textContent = `Slide ${currentSlide + 1} of ${totalSlides}`;
+        }
+    }
+
+    function prevSlide() {
+        showSlide(currentSlide - 1);
+    }
+
+    function nextSlide() {
+        showSlide(currentSlide + 1);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'Space') {
+            nextSlide();
+        } else if (e.key === 'ArrowLeft') {
+            prevSlide();
+        }
+    });
+</script>
+{% endblock %}
