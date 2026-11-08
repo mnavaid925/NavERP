@@ -11,6 +11,10 @@ from apps.assets.models import (
     AssetAcquisitionReceipt,
     AssetCapitalization,
     AssetTag,
+    AssetAudit,
+    AssetMovementLog,
+    AssetCustodyLog,
+    AssetIncidentReport,
 )
 
 
@@ -65,11 +69,31 @@ def org_unit_a(db, tenant_a):
 
 
 @pytest.fixture
+def org_unit_b(db, tenant_b):
+    return OrgUnit.objects.create(
+        tenant=tenant_b,
+        name="Globex Logistics Hub",
+        kind="department",
+    )
+
+
+@pytest.fixture
 def location_a(db, tenant_a):
     return Location.objects.create(
         tenant=tenant_a,
         code="WH-MAIN-A",
         name="Acme Central Staging Dock",
+        location_type="staging",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def location_a2(db, tenant_a):
+    return Location.objects.create(
+        tenant=tenant_a,
+        code="WH-BAY2-A",
+        name="Acme Bay 2 Assembly",
         location_type="staging",
         is_active=True,
     )
@@ -288,4 +312,146 @@ def asset_tag_b(db, tenant_b, operational_asset_b, capitalization_b):
         physical_placement="Dashboard label",
         status="pending_print",
         is_verified=False,
+    )
+
+
+# ==============================================================================
+# Sub-module 11.2 Asset Inventory & Tracking Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def audit_a(db, tenant_a, location_a, org_unit_a, admin_user):
+    return AssetAudit.objects.create(
+        tenant=tenant_a,
+        title="Q2 Annual Physical Audit",
+        audit_type="wall_to_wall",
+        target_location=location_a,
+        target_org_unit=org_unit_a,
+        lead_auditor=admin_user,
+        supervisor=admin_user,
+        scheduled_date=timezone.now().date() + timezone.timedelta(days=7),
+        is_blind_count=True,
+        expected_asset_count=25,
+        scanned_asset_count=0,
+        status="scheduled",
+    )
+
+
+@pytest.fixture
+def audit_b(db, tenant_b, location_b, admin_b):
+    return AssetAudit.objects.create(
+        tenant=tenant_b,
+        title="Globex Depot Spot Check",
+        audit_type="spot_check",
+        target_location=location_b,
+        lead_auditor=admin_b,
+        scheduled_date=timezone.now().date(),
+        is_blind_count=False,
+        expected_asset_count=10,
+        scanned_asset_count=0,
+        status="scheduled",
+    )
+
+
+@pytest.fixture
+def movement_a(db, tenant_a, operational_asset_a, location_a, location_a2, org_unit_a, vendor_party_a, admin_user):
+    return AssetMovementLog.objects.create(
+        tenant=tenant_a,
+        title="Transfer CNC to Bay 2",
+        asset=operational_asset_a,
+        movement_type="inter_facility_transfer",
+        from_location=location_a,
+        to_location=location_a2,
+        from_org_unit=org_unit_a,
+        to_org_unit=org_unit_a,
+        from_custodian=vendor_party_a,
+        carrier_name="Internal Transport",
+        status="requested",
+        reason="Scheduled maintenance overhaul in Bay 2.",
+    )
+
+
+@pytest.fixture
+def movement_b(db, tenant_b, operational_asset_b, location_b, vendor_party_b):
+    return AssetMovementLog.objects.create(
+        tenant=tenant_b,
+        title="Globex Forklift Transfer",
+        asset=operational_asset_b,
+        movement_type="department_transfer",
+        from_location=location_b,
+        to_location=location_b,
+        from_custodian=vendor_party_b,
+        status="requested",
+        reason="Relocation to packing station.",
+    )
+
+
+@pytest.fixture
+def custody_a(db, tenant_a, operational_asset_a, vendor_party_a, admin_user):
+    return AssetCustodyLog.objects.create(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        action_type="checkout",
+        borrower=vendor_party_a,
+        borrower_name=vendor_party_a.name,
+        crib_attendant=admin_user,
+        purpose="Precision CNC prototyping",
+        checkout_date=timezone.now() - timezone.timedelta(days=1),
+        expected_return_date=timezone.now().date() + timezone.timedelta(days=7),
+        checkout_condition="excellent",
+        borrower_signature_acknowledged=True,
+        status="active_loan",
+    )
+
+
+@pytest.fixture
+def custody_b(db, tenant_b, operational_asset_b, vendor_party_b, admin_b):
+    return AssetCustodyLog.objects.create(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        action_type="checkout",
+        borrower=vendor_party_b,
+        borrower_name=vendor_party_b.name,
+        crib_attendant=admin_b,
+        purpose="Globex warehouse operations",
+        checkout_date=timezone.now() - timezone.timedelta(days=2),
+        expected_return_date=timezone.now().date() + timezone.timedelta(days=5),
+        checkout_condition="good",
+        borrower_signature_acknowledged=True,
+        status="active_loan",
+    )
+
+
+@pytest.fixture
+def incident_a(db, tenant_a, operational_asset_a, location_a, admin_user, vendor_party_a):
+    return AssetIncidentReport.objects.create(
+        tenant=tenant_a,
+        title="Spindle Motor Damage Report",
+        asset=operational_asset_a,
+        incident_type="damaged_beyond_repair",
+        severity="high",
+        incident_date=timezone.now().date() - timezone.timedelta(days=2),
+        last_known_location=location_a,
+        reported_by=admin_user,
+        custodian_at_loss=vendor_party_a,
+        estimated_loss_value=Decimal("8500.00"),
+        incident_description="Overvoltage surge caused terminal stator burnout during roughing pass.",
+        status="reported",
+    )
+
+
+@pytest.fixture
+def incident_b(db, tenant_b, operational_asset_b, location_b, admin_b):
+    return AssetIncidentReport.objects.create(
+        tenant=tenant_b,
+        title="Missing Forklift Attachment",
+        asset=operational_asset_b,
+        incident_type="lost",
+        severity="medium",
+        incident_date=timezone.now().date() - timezone.timedelta(days=5),
+        last_known_location=location_b,
+        reported_by=admin_b,
+        estimated_loss_value=Decimal("1200.00"),
+        incident_description="Clamp attachment missing from staging rack.",
+        status="reported",
     )
