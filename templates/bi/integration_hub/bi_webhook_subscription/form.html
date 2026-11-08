@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_create %}New Webhook Subscription{% else %}Edit {{ webhook.name }}{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <a href="{% url 'bi:bi_webhook_subscription_list' %}">Webhooks</a>
+            <span class="sep">/</span>
+            <span>{% if is_create %}Register{% else %}Edit {{ webhook.number }}{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_create %}Register Webhook Subscription{% else %}Edit {{ webhook.name }}{% endif %}</h1>
+        <p class="text-muted text-sm">Configure outbound event broadcast endpoints with HMAC signing token</p>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Subscription Parameters</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Subscription Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.payload_format.id_for_label }}">Payload Format *</label>
+                    {{ form.payload_format }}
+                    {% if form.payload_format.errors %}<div class="form-error">{{ form.payload_format.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Destination HTTPS URL *</label>
+                {{ form.endpoint_url }}
+                {% if form.endpoint_url.errors %}<div class="form-error">{{ form.endpoint_url.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.secret_token.id_for_label }}">HMAC-SHA256 Secret Token</label>
+                {{ form.secret_token }}
+                <span class="text-xs text-muted">Leave empty to automatically generate a secure 48-character hex token (whsec_...)</span>
+                {% if form.secret_token.errors %}<div class="form-error">{{ form.secret_token.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.event_types_raw.id_for_label }}">{{ form.event_types_raw.label }}</label>
+                {{ form.event_types_raw }}
+                <span class="text-xs text-muted">{{ form.event_types_raw.help_text }}</span>
+                {% if form.event_types_raw.errors %}<div class="form-error">{{ form.event_types_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="{{ form.custom_headers_raw.id_for_label }}">{{ form.custom_headers_raw.label }}</label>
+                {{ form.custom_headers_raw }}
+                <span class="text-xs text-muted">{{ form.custom_headers_raw.help_text }}</span>
+                {% if form.custom_headers_raw.errors %}<div class="form-error">{{ form.custom_headers_raw.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.max_retries.id_for_label }}">Max Retries</label>
+                    {{ form.max_retries }}
+                    {% if form.max_retries.errors %}<div class="form-error">{{ form.max_retries.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.timeout_seconds.id_for_label }}">Timeout (seconds)</label>
+                    {{ form.timeout_seconds }}
+                    {% if form.timeout_seconds.errors %}<div class="form-error">{{ form.timeout_seconds.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group pt-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_active }}
+                        <span class="text-sm font-medium">Subscription Active</span>
+                    </label>
+                    <span class="text-xs text-muted">Dispatch event triggers to this endpoint</span>
+                    {% if form.is_active.errors %}<div class="form-error">{{ form.is_active.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                <a href="{% if is_create %}{% url 'bi:bi_webhook_subscription_list' %}{% else %}{% url 'bi:bi_webhook_subscription_detail' webhook.pk %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save"></i>
+                    <span>{% if is_create %}Register Webhook{% else %}Save Changes{% endif %}</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
