@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Open APIs & Webhooks — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'bi:data_integration_hub' %}">Business Intelligence</a>
+            <span class="sep">/</span>
+            <span>Integration & API Hub</span>
+            <span class="sep">/</span>
+            <span>Webhooks</span>
+        </div>
+        <h1 class="page-title">Open APIs & Webhooks</h1>
+        <p class="text-muted text-sm">Event-driven HTTP webhooks with HMAC-SHA256 request signing and retry telemetry</p>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'bi:integration_connector_list' %}" class="btn btn-outline">
+            <i data-lucide="layers"></i>
+            <span>Connectors</span>
+        </a>
+        <a href="{% url 'bi:warehouse_sync_endpoint_list' %}" class="btn btn-outline">
+            <i data-lucide="database"></i>
+            <span>Warehouse Syncs</span>
+        </a>
+        <a href="{% url 'bi:bi_extension_plugin_list' %}" class="btn btn-outline">
+            <i data-lucide="puzzle"></i>
+            <span>Extensions</span>
+        </a>
+        <a href="{% url 'bi:bi_webhook_subscription_create' %}" class="btn btn-primary">
+            <i data-lucide="plus"></i>
+            <span>New Webhook</span>
+        </a>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i data-lucide="webhook"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Total Subscriptions</div>
+            <div class="text-2xl font-bold">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i data-lucide="check-circle-2"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Active Listeners</div>
+            <div class="text-2xl font-bold text-emerald-600">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+        <div>
+            <div class="text-muted text-xs font-medium uppercase tracking-wider">Failing / Suspended</div>
+            <div class="text-2xl font-bold text-amber-600">{{ failing_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label for="id_q" class="form-label text-xs">Search</label>
+                <div class="relative">
+                    <input type="text" id="id_q" name="q" value="{{ request.GET.q }}" placeholder="Search by name, number, url..." class="form-input text-sm ps-9 w-full">
+                    <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute start-3 top-2.5"></i>
+                </div>
+            </div>
+            <div>
+                <label for="id_payload_format" class="form-label text-xs">Payload Format</label>
+                <select id="id_payload_format" name="payload_format" class="form-select text-sm">
+                    <option value="">All Formats</option>
+                    {% for val, label in format_choices %}
+                    <option value="{{ val }}" {% if request.GET.payload_format == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_status" class="form-label text-xs">Status</label>
+                <select id="id_status" name="status" class="form-select text-sm">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-3 flex justify-end gap-2">
+                <a href="{% url 'bi:bi_webhook_subscription_list' %}" class="btn btn-outline btn-sm">Reset</a>
+                <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Subscription</th>
+                    <th>Destination URL</th>
+                    <th>Format</th>
+                    <th>Subscribed Events</th>
+                    <th>Status</th>
+                    <th>Deliveries</th>
+                    <th>Last Response</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in webhooks %}
+                <tr>
+                    <td>
+                        <div class="font-medium text-slate-900">
+                            <a href="{% url 'bi:bi_webhook_subscription_detail' w.pk %}" class="text-blue-600 hover:underline">
+                                {{ w.name }}
+                            </a>
+                        </div>
+                        <div class="text-xs text-muted font-mono">{{ w.number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs text-slate-700 truncate max-w-xs" title="{{ w.endpoint_url }}">
+                            {{ w.endpoint_url }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge badge-info">{{ w.get_payload_format_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-muted">
+                            {{ w.event_types|length }} events
+                        </div>
+                    </td>
+                    <td>
+                        {% if w.status == 'active' %}
+                        <span class="badge badge-green">Active</span>
+                        {% elif w.status == 'failing' %}
+                        <span class="badge badge-amber">Failing</span>
+                        {% elif w.status == 'suspended' %}
+                        <span class="badge badge-red">Suspended</span>
+                        {% else %}
+                        <span class="badge badge-slate">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-xs">
+                        {{ w.total_deliveries }}
+                    </td>
+                    <td class="text-xs text-muted">
+                        {% if w.last_triggered_at %}
+                        <div>
+                            <span class="font-mono {% if w.last_response_code == 200 or w.last_response_code == 202 %}text-emerald-600 font-semibold{% else %}text-red-600 font-semibold{% endif %}">
+                                HTTP {{ w.last_response_code|default:"200" }}
+                            </span>
+                            <span class="text-slate-500">({{ w.last_response_time_ms }}ms)</span>
+                        </div>
+                        <div>{{ w.last_triggered_at|date:"Y-m-d H:i" }}</div>
+                        {% else %}
+                        <span>Never triggered</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <form method="post" action="{% url 'bi:bi_webhook_subscription_ping' w.pk %}" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-blue-600 hover:text-blue-700" title="Dispatch Test Ping">
+                                    <i data-lucide="send"></i>
+                                </button>
+                            </form>
+                            <a href="{% url 'bi:bi_webhook_subscription_detail' w.pk %}" class="btn btn-icon" title="View details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'bi:bi_webhook_subscription_edit' w.pk %}" class="btn btn-icon" title="Edit webhook">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'bi:bi_webhook_subscription_delete' w.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete webhook {{ w.name }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete webhook">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="webhook" class="empty-state-icon"></i>
+                            <div class="empty-state-title">No Webhook Subscriptions Configured</div>
+                            <div class="empty-state-text">Broadcast real-time analytical events and KPI alerts to external webhooks.</div>
+                            <div class="mt-4">
+                                <a href="{% url 'bi:bi_webhook_subscription_create' %}" class="btn btn-primary">
+                                    <i data-lucide="plus"></i>
+                                    <span>Register First Webhook</span>
+                                </a>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} webhooks
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.payload_format %}&payload_format={{ request.GET.payload_format }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-current">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.payload_format %}&payload_format={{ request.GET.payload_format }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
