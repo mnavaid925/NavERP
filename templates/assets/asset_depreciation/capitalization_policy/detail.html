@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}{{ policy.number }} — Capitalization Policy — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:capitalization_policy_list' %}">Capitalization Policies</a>
+            <span>/</span>
+            <span>{{ policy.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ policy.name }}</h1>
+            <span class="badge {{ policy.status_css }}">{{ policy.is_active|yesno:"Active,Archived" }}</span>
+            <span class="badge {{ policy.scope_css }}">{{ policy.get_policy_scope_display }}</span>
+            {% if policy.de_minimis_safe_harbor %}
+            <span class="badge badge-green">IRS Safe Harbor</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:capitalization_policy_edit' policy.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:capitalization_policy_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete capitalization policy {{ policy.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:capitalization_policy_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Policy Criteria & Evaluation Simulator -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Criteria Parameters -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Threshold & Capitalization Criteria</h2>
+                <span class="text-xs text-muted">{{ policy.applicable_gaap_standard }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Minimum Cost Threshold</div>
+                        <div class="text-2xl font-bold font-mono text-slate-900">${{ policy.minimum_cost_threshold|floatformat:2 }}</div>
+                        <div class="text-xs text-muted mt-1">CapEx capitalization floor</div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Minimum Useful Life</div>
+                        <div class="text-2xl font-bold text-slate-900">{{ policy.minimum_useful_life_months }} mos</div>
+                        <div class="text-xs text-muted mt-1">Economic life requirement</div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Sub-Threshold Treatment</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-1">{{ policy.get_default_classification_display }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-muted">Policy Scope</div>
+                        <div class="font-medium text-slate-800">{{ policy.get_policy_scope_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Category Scope</div>
+                        <div class="font-medium text-slate-800">{{ policy.category.name|default:"All Categories (Global)" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Effective From</div>
+                        <div class="font-medium text-slate-800">{{ policy.effective_from|date:"Y-m-d" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Effective To</div>
+                        <div class="font-medium text-slate-800">{{ policy.effective_to|date:"Y-m-d"|default:"Indefinite / Ongoing" }}</div>
+                    </div>
+                </div>
+
+                {% if policy.policy_notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted mb-1">Accounting Policy Memo & Regulatory Justification</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200">{{ policy.policy_notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- CapEx vs OpEx Interactive Evaluator -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Test CapEx vs. OpEx Decision Engine</h2>
+            </div>
+            <div class="card-body">
+                <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label for="eval-cost" class="form-label">Asset Acquisition Cost ($)</label>
+                        <input type="number" id="eval-cost" name="eval_cost" value="{{ eval_cost }}" step="0.01" min="0" placeholder="e.g. 3500.00" class="form-input" required>
+                    </div>
+                    <div>
+                        <label for="eval-life" class="form-label">Estimated Useful Life (Months)</label>
+                        <input type="number" id="eval-life" name="eval_life" value="{{ eval_life }}" min="1" placeholder="e.g. 24" class="form-input">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="btn btn-primary w-full">
+                            <i data-lucide="calculator" class="w-4 h-4 mr-1"></i> Evaluate Asset
+                        </button>
+                    </div>
+                </form>
+
+                {% if eval_result %}
+                <div class="p-4 rounded-lg border {% if eval_result.classification == 'capitalize' %}bg-green-50 border-green-200{% else %}bg-amber-50 border-amber-200{% endif %}">
+                    <div class="flex items-center gap-2 mb-1">
+                        <i data-lucide="{% if eval_result.classification == 'capitalize' %}check-circle-2{% else %}alert-circle{% endif %}" class="w-5 h-5 {% if eval_result.classification == 'capitalize' %}text-green{% else %}text-amber{% endif %}"></i>
+                        <span class="font-bold text-base {% if eval_result.classification == 'capitalize' %}text-green{% else %}text-amber{% endif %}">
+                            Classification: {% if eval_result.classification == 'capitalize' %}CAPITALIZE AS ASSET (CapEx){% else %}EXPENSE IMMEDIATELY (OpEx){% endif %}
+                        </span>
+                    </div>
+                    <p class="text-sm text-slate-700 ml-7">{{ eval_result.reason }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: General Ledger Routing & Audit -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Default Accounting Routing</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted">CIP Clearing Account</div>
+                    {% if policy.default_cip_account %}
+                    <div class="font-medium text-slate-900">{{ policy.default_cip_account.code }} — {{ policy.default_cip_account.name }}</div>
+                    {% else %}
+                    <div class="text-sm text-muted">Not configured</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Immediate Expense Account (OpEx)</div>
+                    {% if policy.default_expense_account %}
+                    <div class="font-medium text-slate-900">{{ policy.default_expense_account.code }} — {{ policy.default_expense_account.name }}</div>
+                    {% else %}
+                    <div class="text-sm text-muted">Not configured</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Statutory Safe Harbor Compliance</div>
+                    {% if policy.de_minimis_safe_harbor %}
+                    <div class="text-sm font-medium text-green flex items-center gap-1.5 mt-1">
+                        <i data-lucide="check" class="w-4 h-4"></i> IRS Reg. 1.263(a)-1(f) De Minimis
+                    </div>
+                    {% else %}
+                    <div class="text-sm text-muted mt-1">Non-Safe Harbor GAAP Policy</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Policy Metadata</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted">Policy Number</div>
+                    <div class="font-mono font-medium text-slate-900">{{ policy.number }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Active State</div>
+                    <span class="badge {{ policy.status_css }}">{{ policy.is_active|yesno:"Active,Archived" }}</span>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-muted">
+                    <div>Created: {{ policy.created_at|date:"Y-m-d H:i" }}</div>
+                    <div>Updated: {{ policy.updated_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
