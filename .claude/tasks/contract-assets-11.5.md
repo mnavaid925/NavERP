@@ -12,7 +12,7 @@
 All 4 models inherit from `apps.assets.models._base.TenantNumbered` (`tenant`, `number`, `created_at`, `updated_at`).
 
 ### 1.1 `AssetMaintenanceRequest` (`apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py`)
-- **Table:** `assets_maintenance_request`
+- **Table:** `assets_assetmaintenancerequest` (canonical target: `assets_maintenance_request`; see GAP-assets-11.5-01)
 - **Number Prefix:** `AMRQ` (format: `AMRQ-YYYYMM-XXXX`)
 - **CHOICES:**
   - `REQUEST_TYPE_CHOICES = [('breakdown_repair', 'Breakdown Repair'), ('preventive_inspection', 'Preventive Inspection'), ('safety_hazard', 'Safety / Environmental Hazard'), ('calibration', 'Calibration / Alignment'), ('facility_upkeep', 'Facility Upkeep')]`
@@ -63,7 +63,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (`tenant`, `
 ---
 
 ### 1.2 `AssetMaintenanceSchedule` (`apps/assets/models/AssetMaintenance/AssetMaintenanceSchedules.py`)
-- **Table:** `assets_maintenance_schedule`
+- **Table:** `assets_assetmaintenanceschedule` (canonical target: `assets_maintenance_schedule`; see GAP-assets-11.5-01)
 - **Number Prefix:** `AMSC` (format: `AMSC-YYYYMM-XXXX`)
 - **CHOICES:**
   - `SCHEDULE_TYPE_CHOICES = [('time_based', 'Time-Based (Calendar Recurring)'), ('meter_based', 'Meter / Runtime Hours Based'), ('condition_based', 'Condition / Anomaly Triggered'), ('seasonal_shutdown', 'Seasonal / Annual Turnaround')]`
@@ -113,7 +113,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (`tenant`, `
 ---
 
 ### 1.3 `AssetServiceContract` (`apps/assets/models/AssetMaintenance/AssetServiceContracts.py`)
-- **Table:** `assets_service_contract`
+- **Table:** `assets_assetservicecontract` (canonical target: `assets_service_contract`; see GAP-assets-11.5-01)
 - **Number Prefix:** `ASVC` (format: `ASVC-YYYYMM-XXXX`)
 - **CHOICES:**
   - `CONTRACT_TYPE_CHOICES = [('comprehensive_amc', 'Comprehensive Annual Maintenance (Parts & Labor)'), ('labor_only', 'Labor-Only Maintenance Agreement'), ('parts_and_labor', 'Standard Parts & Labor Agreement'), ('on_call_support', 'On-Call Emergency Support Agreement'), ('oem_warranty_extension', 'OEM Extended Warranty Contract')]`
@@ -164,7 +164,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (`tenant`, `
 ---
 
 ### 1.4 `AssetMaintenanceLog` (`apps/assets/models/AssetMaintenance/AssetMaintenanceLogs.py`)
-- **Table:** `assets_maintenance_log`
+- **Table:** `assets_assetmaintenancelog` (canonical target: `assets_maintenance_log`; see GAP-assets-11.5-01)
 - **Number Prefix:** `AMLG` (format: `AMLG-YYYYMM-XXXX`)
 - **CHOICES:**
   - `MAINTENANCE_TYPE_CHOICES = [('corrective_repair', 'Corrective Repair / Breakdown Fix'), ('preventive_service', 'Scheduled Preventive Service'), ('emergency_breakdown', 'Emergency Breakdown Response'), ('calibration', 'Precision Calibration / Alignment'), ('inspection', 'Safety & Statutory Inspection'), ('overhaul', 'Major Overhaul / Component Rebuild')]`
