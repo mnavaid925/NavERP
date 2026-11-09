@@ -61,3 +61,46 @@
   - **Problem**: Compares `self.end_date < today` without checking if `end_date` is truthy.
   - **Fix**: Add `if self.end_date and self.status == "active":`.
 
+---
+
+## Reviewer 2: `explorer` Findings
+
+### Critical
+- **[EXP-C1] Explicit db_table Omitted on All Four 11.5 Models**
+  - **Files**: `apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py`, `AssetMaintenanceSchedules.py`, `AssetServiceContracts.py`, `AssetMaintenanceLogs.py`, `migrations/0008_...py`, `.claude/tasks/contract-assets-11.5.md`.
+  - **Problem**: Contract mandates `assets_maintenance_request`, `assets_maintenance_schedule`, `assets_service_contract`, `assets_maintenance_log`. Models omitted `db_table`, defaulting to `assets_assetmaintenancerequest`, etc.
+  - **Fix**: Update contract and document in gap register or add `db_table` and generate migration.
+
+### Important
+- **[EXP-I1] Dead Context Variable: linked_logs Provided by Views But Never Rendered in Templates**
+  - **Files**: `apps/assets/views/AssetMaintenance/AssetMaintenanceSchedules.py` (102), `AssetServiceContracts.py` (93), `templates/assets/asset_maintenance/asset_maintenance_schedule/detail.html`, `templates/assets/asset_maintenance/asset_service_contract/detail.html`.
+  - **Problem**: `linked_logs` is queried and passed by schedule and service contract detail views, but neither template renders the logs card.
+  - **Fix**: Add a "Service & Maintenance Execution Logs" card/table rendering `linked_logs` in both detail templates.
+
+- **[EXP-I2] Missing Form Filter Control for is_breakdown in Asset Maintenance Request List Template**
+  - **Files**: `templates/assets/asset_maintenance/asset_maintenance_request/list.html` (57-103), `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (49-52).
+  - **Problem**: View filters by `is_breakdown=1`, but filter `<form>` in template lacks dropdown or control for it.
+  - **Fix**: Add `is_breakdown` filter dropdown or wrap Breakdowns KPI card with `?is_breakdown=1`.
+
+- **[EXP-I3] Contract Action Mismatch: post_to_gl Stub Does Not Create Balanced accounting.JournalEntry**
+  - **Files**: `apps/assets/models/AssetMaintenance/AssetMaintenanceLogs.py` (288-307), `apps/assets/views/AssetMaintenance/AssetMaintenanceLogs.py` (188-193).
+  - **Problem**: `post_to_gl()` marks status `posted` without generating `JournalEntry`/`JournalLine`s.
+  - **Fix**: Create balanced `JournalEntry` or register in `.agents/tasks/gaps-assets-11.5.md`.
+
+- **[EXP-I4] Contract Compliance: service_contract Omitted from AssetMaintenanceRequestDispatchForm and Dispatch Modal**
+  - **Files**: `apps/assets/forms/AssetMaintenance/AssetMaintenanceRequests.py` (85-108), `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (211-224), `templates/assets/asset_maintenance/asset_maintenance_request/detail.html` (340-365).
+  - **Problem**: `service_contract` omitted from dispatch form and modal.
+  - **Fix**: Add `service_contract` choice field, pass to `obj.dispatch()`, and render in modal.
+
+### Minor
+- **[EXP-M1] Missing Empty State Action Buttons in Request Detail Linked Logs Table**
+  - **Files**: `templates/assets/asset_maintenance/asset_maintenance_request/detail.html` (207-212).
+  - **Problem**: Empty state row has no CTA button.
+  - **Fix**: Add "Log First Service Work" button linking to create view.
+
+- **[EXP-M2] Inconsistent Search Query Context Alias Across 11.5 List Views**
+  - **Files**: `apps/assets/views/AssetMaintenance/` all 4 list views.
+  - **Problem**: Views pass `q` but omit `"search_query": q` in context.
+  - **Fix**: Pass `"search_query": q` in list contexts.
+
+
