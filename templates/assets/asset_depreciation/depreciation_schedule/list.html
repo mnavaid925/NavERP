@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Depreciation Schedules — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Depreciation & Financial Management</span>
+            <span>/</span>
+            <span>Depreciation Schedules</span>
+        </div>
+        <h1 class="page-title">Asset Depreciation Schedules</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:depreciation_schedule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Schedule Run
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Schedule Runs</div>
+            <div class="stat-value">{{ total_runs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Posted to GL</div>
+            <div class="stat-value">{{ posted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="calculator"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending / Calculated</div>
+            <div class="stat-value">{{ calculated_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Deprec. Value</div>
+            <div class="stat-value">${{ total_depreciation_period|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ q }}" placeholder="Schedule #, asset name, notes..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="method-filter" class="form-label">Method</label>
+                <select id="method-filter" name="method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in method_choices %}
+                    <option value="{{ val }}" {% if selected_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="year-filter" class="form-label">Fiscal Year</label>
+                <select id="year-filter" name="year" class="form-select">
+                    <option value="">All Years</option>
+                    {% for yr in year_choices %}
+                    <option value="{{ yr }}" {% if selected_year == yr|stringformat:"d" %}selected{% endif %}>{{ yr }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:depreciation_schedule_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Schedules Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Schedule #</th>
+                    <th>Fixed Asset</th>
+                    <th>Fiscal Period</th>
+                    <th>Method</th>
+                    <th class="text-right">Starting NBV</th>
+                    <th class="text-right">Period Deprec.</th>
+                    <th class="text-right">Ending NBV</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in depreciation_schedules %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:depreciation_schedule_detail' item.pk %}" class="font-medium text-brand hover:underline">
+                            {{ item.number }}
+                        </a>
+                        <div class="text-xs text-muted">{{ item.schedule_date|date:"Y-m-d" }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.fixed_asset.name }}</div>
+                        <div class="text-xs text-muted">{{ item.fixed_asset.number }}{% if item.operational_asset %} · {{ item.operational_asset.number }}{% endif %}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">FY{{ item.fiscal_year }} P{{ item.period_number }}</div>
+                        <div class="text-xs text-muted">{{ item.get_period_frequency_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.method_css }}">{{ item.get_depreciation_method_display }}</span>
+                    </td>
+                    <td class="text-right font-mono text-sm">
+                        ${{ item.starting_book_value|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-sm font-semibold text-slate-900">
+                        ${{ item.depreciation_amount|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-sm">
+                        ${{ item.ending_book_value|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:depreciation_schedule_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if item.status != 'posted' %}
+                        <a href="{% url 'assets:depreciation_schedule_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:depreciation_schedule_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete schedule {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="calculator" class="w-12 h-12 text-muted mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Depreciation Schedules Found</h3>
+                            <p class="text-sm text-muted mb-4">No schedules match the active filter criteria or none have been calculated yet.</p>
+                            <a href="{% url 'assets:depreciation_schedule_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Schedule Run
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex items-center justify-between">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} schedules
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_method %}&method={{ selected_method }}{% endif %}{% if selected_year %}&year={{ selected_year }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}{% if selected_method %}&method={{ selected_method }}{% endif %}{% if selected_year %}&year={{ selected_year }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
