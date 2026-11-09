@@ -221,7 +221,11 @@
                 <div>
                     <span class="text-slate-500 block text-xs uppercase">Assessed By</span>
                     <div class="font-medium text-slate-800">
-                        {{ failure_mode.assessed_by.get_full_name|default:failure_mode.assessed_by.username|default:"—" }}
+                        {% if failure_mode.assessed_by %}
+                            {{ failure_mode.assessed_by.get_full_name|default:failure_mode.assessed_by.username }}
+                        {% else %}
+                            —
+                        {% endif %}
                     </div>
                 </div>
 
