@@ -585,14 +585,14 @@ def spec_template_a(db, tenant_a, category_root_a):
     return AssetSpecificationTemplate.objects.create(
         tenant=tenant_a,
         category=category_root_a,
-        attribute_name="Operating Voltage",
+        display_name="Operating Voltage",
         attribute_key="operating_voltage",
-        data_type="numeric",
+        data_type="number",
         unit_of_measure="V",
         min_numeric_value=Decimal("380.00"),
         max_numeric_value=Decimal("480.00"),
         is_required=True,
-        is_searchable=True,
+        is_filterable=True,
     )
 
 
@@ -601,9 +601,12 @@ def spec_template_b(db, tenant_b, category_root_b):
     return AssetSpecificationTemplate.objects.create(
         tenant=tenant_b,
         category=category_root_b,
-        attribute_name="Battery Capacity",
+        display_name="Battery Capacity",
         attribute_key="battery_capacity",
-        data_type="numeric",
+        data_type="number",
+        unit_of_measure="Ah",
+        is_required=False,
+    )
         unit_of_measure="Ah",
         is_required=False,
     )
