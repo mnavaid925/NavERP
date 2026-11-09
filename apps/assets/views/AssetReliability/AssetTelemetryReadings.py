@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -215,7 +217,7 @@ def asset_telemetry_reading_flag_anomaly(request, pk):
     reading.is_anomaly = True
     reading.threshold_status = "anomaly_detected"
     if not reading.anomaly_confidence:
-        reading.anomaly_confidence = 95.0
+        reading.anomaly_confidence = Decimal("95.00")
     reading.save(update_fields=["is_anomaly", "threshold_status", "anomaly_confidence", "updated_at"])
     write_audit_log(request.user, reading, "update", tenant=request.tenant)
     messages.warning(request, f"Reading {reading.number} flagged as Anomaly Detected.")
