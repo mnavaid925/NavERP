@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}Contract {{ service_contract.number }} — Maintenance & Repair — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_service_contract_list' %}">Service Contracts</a>
+            <span>/</span>
+            <span>{{ service_contract.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ service_contract.number }}</h1>
+            <span class="badge {{ service_contract.status_css }}">{{ service_contract.get_status_display }}</span>
+            <span class="badge {{ service_contract.contract_type_css }}">{{ service_contract.get_contract_type_display }}</span>
+            <span class="text-sm text-slate-500 font-mono">Ref: {{ service_contract.contract_number }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if service_contract.status == "active" %}
+        <form method="post" action="{% url 'assets:asset_service_contract_record_visit' service_contract.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+                <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Log Routine PM Visit
+            </button>
+        </form>
+
+        <button type="button" onclick="document.getElementById('renew-modal').classList.remove('hidden')" class="btn btn-outline text-blue-700 hover:bg-blue-50">
+            <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i> Renew Contract
+        </button>
+        {% endif %}
+
+        {% if service_contract.status == "draft" %}
+        <form method="post" action="{% url 'assets:asset_service_contract_activate' service_contract.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check" class="w-4 h-4 mr-1"></i> Activate Agreement
+            </button>
+        </form>
+        {% endif %}
+
+        {% if service_contract.status == "active" %}
+        <form method="post" action="{% url 'assets:asset_service_contract_terminate' service_contract.pk %}" class="inline" onsubmit="return confirm('Terminate service contract early?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="ban" class="w-4 h-4 mr-1"></i> Terminate Early
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_service_contract_edit' service_contract.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+
+        <form method="post" action="{% url 'assets:asset_service_contract_delete' service_contract.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ service_contract.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Scope & SLA Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Agreement Scope & Financials</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Contract Title & Description</div>
+                    <div class="text-lg font-semibold text-slate-900 mt-0.5">{{ service_contract.title }}</div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs text-slate-500">Effective Start Date</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ service_contract.start_date|date:"M d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Expiration Date</div>
+                        <div class="text-sm font-bold {% if service_contract.status_css == 'badge-red' %}text-red-600{% elif service_contract.status_css == 'badge-amber' %}text-amber-600{% else %}text-slate-900{% endif %} mt-1">
+                            {{ service_contract.end_date|date:"M d, Y" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Contract Value</div>
+                        <div class="text-sm font-bold text-slate-900 mt-1">${{ service_contract.contract_value|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Billing Cycle</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ service_contract.get_billing_frequency_display }}</div>
+                    </div>
+                </div>
+
+                <!-- SLA & Visit Quota Metric Tiles -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200 mt-2">
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase font-semibold">Response SLA</div>
+                        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ service_contract.sla_response_hours }} hours</div>
+                        <div class="text-xs text-slate-500">First arrival target</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase font-semibold">Resolution SLA</div>
+                        <div class="text-xl font-bold text-slate-900 mt-0.5">{{ service_contract.sla_resolution_hours }} hours</div>
+                        <div class="text-xs text-slate-500">Total repair target</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 uppercase font-semibold">PM Visit Quota</div>
+                        <div class="text-xl font-bold text-slate-900 mt-0.5">
+                            {{ service_contract.pm_visits_completed }} / {{ service_contract.pm_visits_included }}
+                        </div>
+                        <div class="text-xs text-slate-500">{{ service_contract.remaining_visits }} visits remaining</div>
+                    </div>
+                </div>
+
+                {% if service_contract.coverage_terms %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Coverage Scope & Terms</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line leading-relaxed">
+                        {{ service_contract.coverage_terms }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if service_contract.notes %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Administrative Notes</div>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ service_contract.notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Work Requests -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Maintenance Tickets Covered Under this Agreement</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Ticket #</th>
+                            <th>Title</th>
+                            <th>Urgency</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in linked_requests %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'assets:asset_maintenance_request_detail' req.pk %}" class="text-blue-600 hover:underline">
+                                    {{ req.number }}
+                                </a>
+                            </td>
+                            <td>{{ req.title }}</td>
+                            <td><span class="badge {{ req.urgency_css }}">{{ req.get_urgency_display }}</span></td>
+                            <td><span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span></td>
+                            <td class="text-xs text-slate-500">{{ req.created_at|date:"M d, Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-slate-500 text-sm">
+                                No service tickets logged under this agreement.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Vendor & Covered Asset -->
+    <div class="space-y-6">
+        <!-- Vendor Identification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Service Vendor Details</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500">Contractor / Vendor Party</div>
+                    <div class="text-base font-semibold text-slate-900 mt-0.5">{{ service_contract.vendor.name }}</div>
+                </div>
+
+                {% if service_contract.contact_person %}
+                <div>
+                    <div class="text-xs text-slate-500">Account Rep / Contact Person</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">{{ service_contract.contact_person }}</div>
+                </div>
+                {% endif %}
+
+                {% if service_contract.contact_phone %}
+                <div>
+                    <div class="text-xs text-slate-500">Support Telephone</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">{{ service_contract.contact_phone }}</div>
+                </div>
+                {% endif %}
+
+                {% if service_contract.contact_email %}
+                <div>
+                    <div class="text-xs text-slate-500">Service Email</div>
+                    <div class="text-sm font-medium text-blue-600 mt-0.5">
+                        <a href="mailto:{{ service_contract.contact_email }}" class="hover:underline">{{ service_contract.contact_email }}</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Asset Covered Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Covered Asset Context</h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if service_contract.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Financial Fixed Asset</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ service_contract.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-slate-500">{{ service_contract.fixed_asset.number }}</div>
+                </div>
+                {% endif %}
+
+                {% if service_contract.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Operational Equipment</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ service_contract.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-500">{{ service_contract.operational_asset.asset_tag|default:"No Tag" }}</div>
+                </div>
+                {% endif %}
+
+                {% if not service_contract.fixed_asset and not service_contract.operational_asset %}
+                <div class="text-sm text-slate-500 italic">Facility / Multi-asset Blanket Agreement</div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs text-slate-500">Auto-Renewal Flag</div>
+                    <div class="text-sm font-medium mt-0.5 {% if service_contract.auto_renew %}text-emerald-700{% else %}text-slate-600{% endif %}">
+                        {% if service_contract.auto_renew %}Yes — Auto-Renews Annually{% else %}No — Fixed Expiration{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Contract Renewal -->
+<div id="renew-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Renew Service Agreement</h3>
+        <p class="text-xs text-slate-500 mb-4">Renewing extends the contract end date and resets the completed PM visit quota to 0.</p>
+        <form method="post" action="{% url 'assets:asset_service_contract_renew' service_contract.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">New Expiration Date *</label>
+                    {{ renew_form.new_end_date }}
+                </div>
+                <div>
+                    <label class="form-label">New Contract Value (Leave blank if unchanged)</label>
+                    {{ renew_form.new_contract_value }}
+                </div>
+                <div>
+                    <label class="form-label">Renewal Notes</label>
+                    {{ renew_form.notes }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('renew-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-700">Confirm Renewal</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
