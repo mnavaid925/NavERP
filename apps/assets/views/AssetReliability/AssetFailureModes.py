@@ -20,8 +20,6 @@ def asset_failure_mode_list(request):
             "fixed_asset",
             "operational_asset",
             "asset_category",
-            "linked_maintenance_schedule",
-            "assessed_by",
         ),
         request,
     )
