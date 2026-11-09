@@ -174,7 +174,7 @@
                                 </a>
                             </td>
                             <td>{{ req.title }}</td>
-                            <td>{{ req.assigned_technician.get_full_name|default:req.assigned_technician.username|default:"—" }}</td>
+                            <td>{% if req.assigned_technician %}{{ req.assigned_technician.get_full_name|default:req.assigned_technician.username }}{% else %}—{% endif %}</td>
                             <td><span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span></td>
                             <td class="text-xs text-slate-500">{{ req.created_at|date:"M d, Y" }}</td>
                         </tr>
