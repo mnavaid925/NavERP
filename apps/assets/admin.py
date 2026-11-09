@@ -7,12 +7,16 @@ from apps.assets.models import (
     AssetCategory,
     AssetCriticalityAssessment,
     AssetCustodyLog,
+    AssetDepreciationSchedule,
     AssetIncidentReport,
     AssetModel,
     AssetMovementLog,
     AssetRequisition,
+    AssetRevaluation,
     AssetSpecificationTemplate,
     AssetTag,
+    AssetTransfer,
+    CapitalizationPolicy,
 )
 
 
@@ -111,3 +115,34 @@ class AssetSpecificationTemplateAdmin(admin.ModelAdmin):
     list_filter = ("data_type", "is_required", "is_filterable")
     search_fields = ("attribute_key", "display_name", "unit_of_measure")
 
+
+@admin.register(AssetDepreciationSchedule)
+class AssetDepreciationScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "fixed_asset", "fiscal_year", "period_number", "depreciation_method", "depreciation_amount", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "fiscal_period")
+    list_filter = ("status", "depreciation_method", "fiscal_year", "period_frequency")
+    search_fields = ("number", "fixed_asset__name", "fixed_asset__number", "notes")
+
+
+@admin.register(AssetRevaluation)
+class AssetRevaluationAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "fixed_asset", "event_type", "valuation_date", "new_fair_market_value", "revaluation_adjustment", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "appraiser")
+    list_filter = ("status", "event_type", "valuation_method")
+    search_fields = ("number", "title", "fixed_asset__name", "fixed_asset__number")
+
+
+@admin.register(AssetTransfer)
+class AssetTransferAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "fixed_asset", "transfer_type", "source_department", "destination_department", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "source_department", "destination_department")
+    list_filter = ("status", "transfer_type")
+    search_fields = ("number", "title", "fixed_asset__name", "fixed_asset__number")
+
+
+@admin.register(CapitalizationPolicy)
+class CapitalizationPolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "policy_scope", "minimum_cost_threshold", "minimum_useful_life_months", "de_minimis_safe_harbor", "is_active", "tenant")
+    list_select_related = ("tenant", "category")
+    list_filter = ("policy_scope", "de_minimis_safe_harbor", "is_active")
+    search_fields = ("number", "name", "applicable_gaap_standard")
