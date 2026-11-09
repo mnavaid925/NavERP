@@ -205,7 +205,7 @@ def test_asset_maintenance_security_idor_schedule_actions_return_404(client_a, m
     actions = [
         ("assets:asset_maintenance_schedule_pause", {}),
         ("assets:asset_maintenance_schedule_activate", {}),
-        ("assets:asset_maintenance_schedule_spawn", {}),
+        ("assets:asset_maintenance_schedule_generate_request", {}),
         ("assets:asset_maintenance_schedule_record_completion", {}),
     ]
     for action_name, payload in actions:
@@ -225,7 +225,7 @@ def test_asset_maintenance_security_schedule_list_isolation(client_a, maintenanc
     url = reverse("assets:asset_maintenance_schedule_list")
     response = client_a.get(url)
     assert response.status_code == 200
-    schedules = response.context["schedules"]
+    schedules = response.context["maintenance_schedules"]
     assert maintenance_schedule_a in schedules
     assert maintenance_schedule_b not in schedules
 
