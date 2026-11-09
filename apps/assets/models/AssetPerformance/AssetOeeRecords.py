@@ -197,6 +197,7 @@ class AssetOeeRecord(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_aoee_ten_stat"),
             models.Index(fields=["tenant", "record_date"], name="idx_aoee_ten_date"),
             models.Index(fields=["tenant", "benchmark_tier"], name="idx_aoee_ten_tier"),
             models.Index(fields=["tenant", "fixed_asset"], name="idx_aoee_ten_fa"),
