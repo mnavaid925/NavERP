@@ -10,6 +10,7 @@ from apps.assets.forms.AssetReliability.AssetTelemetryReadings import AssetTelem
 from apps.assets.models import AssetMaintenanceRequest
 from apps.assets.models.AssetReliability.AssetTelemetryReadings import AssetTelemetryReading
 from apps.assets.views._common import assets_object, assets_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 
 
@@ -149,6 +150,7 @@ def asset_telemetry_reading_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_telemetry_reading_delete(request, pk):
     reading = assets_object(request, AssetTelemetryReading, pk)
