@@ -8,12 +8,16 @@ from apps.assets.models import (
     AssetCriticalityAssessment,
     AssetCustodyLog,
     AssetDepreciationSchedule,
+    AssetDowntimeLog,
+    AssetEnergyReading,
     AssetIncidentReport,
     AssetMaintenanceLog,
     AssetMaintenanceRequest,
     AssetMaintenanceSchedule,
     AssetModel,
     AssetMovementLog,
+    AssetOeeRecord,
+    AssetPerformanceScorecard,
     AssetRequisition,
     AssetRevaluation,
     AssetServiceContract,
@@ -182,4 +186,37 @@ class AssetMaintenanceLogAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "fixed_asset", "operational_asset", "lead_technician", "service_vendor")
     list_filter = ("status", "maintenance_type", "failure_code")
     search_fields = ("number", "parts_consumed_summary", "action_taken")
+
+
+@admin.register(AssetDowntimeLog)
+class AssetDowntimeLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "started_at", "downtime_category", "impact_level", "duration_minutes", "total_downtime_cost", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "department", "logged_by")
+    list_filter = ("status", "downtime_category", "impact_level", "is_mtbf_failure")
+    search_fields = ("number", "root_cause_code", "failure_description")
+
+
+@admin.register(AssetOeeRecord)
+class AssetOeeRecordAdmin(admin.ModelAdmin):
+    list_display = ("number", "record_date", "shift_name", "availability_percentage", "performance_percentage", "quality_percentage", "oee_percentage", "benchmark_tier", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "recorded_by")
+    list_filter = ("status", "benchmark_tier")
+    search_fields = ("number", "shift_name", "notes")
+
+
+@admin.register(AssetEnergyReading)
+class AssetEnergyReadingAdmin(admin.ModelAdmin):
+    list_display = ("number", "reading_timestamp", "utility_type", "consumption_value", "unit_of_measure", "carbon_emissions_kg_co2e", "total_energy_cost", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "utility_provider", "recorded_by")
+    list_filter = ("status", "utility_type", "ghg_scope")
+    search_fields = ("number", "meter_serial_number", "notes")
+
+
+@admin.register(AssetPerformanceScorecard)
+class AssetPerformanceScorecardAdmin(admin.ModelAdmin):
+    list_display = ("number", "period_type", "period_start", "period_end", "capacity_utilization_rate", "availability_rate", "mtbf_hours", "performance_index_score", "benchmark_grade", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "department", "evaluated_by")
+    list_filter = ("status", "period_type", "benchmark_grade")
+    search_fields = ("number", "executive_summary")
+
 
