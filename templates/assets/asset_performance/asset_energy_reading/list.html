@@ -172,7 +172,7 @@
                     </td>
                     <td>
                         <span class="font-mono font-medium text-slate-800">{{ reading.carbon_emissions_kg_co2e|floatformat:2 }} kg</span>
-                        <div><span class="badge {{ reading.scope_css }} text-2xs">{{ reading.get_ghg_scope_display }}</span></div>
+                        <div><span class="badge {{ reading.scope_css }} text-xs">{{ reading.get_ghg_scope_display }}</span></div>
                     </td>
                     <td>
                         <span class="font-mono text-sm">${{ reading.total_energy_cost|floatformat:2 }}</span>
