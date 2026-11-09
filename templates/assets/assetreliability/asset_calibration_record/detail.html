@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block title %}{{ calibration.number }} — Calibration Record — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_calibration_record_list' %}">Calibration Records</a>
+            <span>/</span>
+            <span>{{ calibration.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ calibration.instrument_tag }}: {{ calibration.number }}</h1>
+            <span class="badge {{ calibration.calibration_result_css }}">{{ calibration.get_calibration_result_display }}</span>
+            <span class="badge {{ calibration.status_css }}">{{ calibration.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_calibration_record_edit' calibration.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+
+        {% if calibration.calibration_result != 'quarantined' and request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_calibration_record_quarantine' calibration.pk %}" class="inline" onsubmit="return confirm('Quarantine instrument {{ calibration.instrument_tag }}? Instrument will be flagged Out of Service.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="alert-octagon" class="w-4 h-4 me-1"></i> Quarantine Instrument
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_calibration_record_delete' calibration.pk %}" class="inline" onsubmit="return confirm('Permanently delete calibration record {{ calibration.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Calibration Verification & Accuracy -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Measurement Deviation & Tolerance Comparison -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i> Metrological Tolerances & Accuracy Verification
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Nominal Setpoint</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">{{ calibration.setpoint_nominal }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">{{ calibration.get_tolerance_unit_display }}</div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Permissible Tolerance</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">±{{ calibration.allowable_tolerance }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">{{ calibration.get_tolerance_unit_display }}</div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">As-Found Reading</div>
+                        <div class="text-2xl font-bold text-slate-700 mt-1">{{ calibration.as_found_reading }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Error: {{ calibration.as_found_error|default:"0" }}</div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">As-Left Reading</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">{{ calibration.as_left_reading }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Error: {{ calibration.as_left_error|default:"0" }}</div>
+                    </div>
+                </div>
+
+                <div class="mt-6 p-4 rounded border {% if calibration.calibration_result == 'fail_out_of_tolerance' or calibration.calibration_result == 'quarantined' %}bg-red-50 border-red-200 text-red-900{% else %}bg-green-50 border-green-200 text-green-900{% endif %}">
+                    <div class="flex items-center gap-2 font-semibold">
+                        {% if calibration.calibration_result == 'fail_out_of_tolerance' or calibration.calibration_result == 'quarantined' %}
+                            <i data-lucide="alert-triangle" class="w-5 h-5 text-red-600"></i> Calibration Verification: FAILED OUT OF TOLERANCE
+                        {% else %}
+                            <i data-lucide="check-circle" class="w-5 h-5 text-green-600"></i> Calibration Verification: PASSED WITHIN TOLERANCE
+                        {% endif %}
+                    </div>
+                    <p class="text-sm mt-1">
+                        As-Left error ({{ calibration.as_left_error }}) is
+                        {% if calibration.calibration_result == 'fail_out_of_tolerance' %}outside allowable limits (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument must be adjusted or replaced.{% else %}within acceptable bounds (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument certified for process service.{% endif %}
+                    </p>
+                </div>
+
+                {% if calibration.notes %}
+                <div class="mt-4">
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Calibration Notes & Laboratory Conditions</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-line text-slate-800">
+                        {{ calibration.notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Traceability Standards & Certificate Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="file-badge" class="w-4 h-4 text-purple-600"></i> Metrology Traceability & Certification
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase font-semibold">Reference Standard Instrument Used</span>
+                    <div class="p-2.5 bg-slate-50 rounded border border-slate-200 text-slate-800 font-medium">
+                        {{ calibration.reference_standard_used }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-slate-500 block text-xs uppercase font-semibold">Traceability Certificate #</span>
+                        <div class="font-mono text-slate-900 font-semibold">{{ calibration.traceability_certificate_no|default:"Not specified" }}</div>
+                    </div>
+
+                    <div>
+                        <span class="text-slate-500 block text-xs uppercase font-semibold">Calibration Report Document #</span>
+                        <div class="font-mono text-slate-900 font-semibold">{{ calibration.certificate_number|default:"Internal Metrology Log" }}</div>
+                    </div>
+                </div>
+
+                {% if calibration.certificate_document %}
+                <div class="pt-2">
+                    <span class="text-slate-500 block text-xs uppercase font-semibold">Digital Certificate File</span>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 flex items-center justify-between mt-1">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i>
+                            <span class="font-medium text-slate-800">{{ calibration.certificate_document.title }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Recalibration Deadlines & Instrument Details -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="clock" class="w-4 h-4 text-blue-600"></i> Recalibration Schedule
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Calibration Date</span>
+                    <div class="font-medium text-slate-900">{{ calibration.calibration_date|date:"F d, Y" }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Recalibration Cycle</span>
+                    <div class="font-medium text-slate-900">{{ calibration.calibration_frequency_days }} days</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Next Due Deadline</span>
+                    <div class="font-bold text-base {% if calibration.status == 'expired' %}text-red-600{% elif calibration.status == 'expiring_soon' %}text-amber-600{% else %}text-green-600{% endif %}">
+                        {{ calibration.next_due_date|date:"F d, Y" }}
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Certificate Validity Status</span>
+                    <span class="badge {{ calibration.status_css }} mt-1">
+                        {{ calibration.get_status_display }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-slate-600"></i> Target Instrument & Lab
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Instrument Tag</span>
+                    <div class="font-semibold text-slate-900">{{ calibration.instrument_tag }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Financial Fixed Asset</span>
+                    {% if calibration.fixed_asset %}
+                        <div class="font-medium text-slate-900">{{ calibration.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ calibration.fixed_asset.asset_number }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Operational Machinery</span>
+                    {% if calibration.operational_asset %}
+                        <div class="font-medium text-slate-900">{{ calibration.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ calibration.operational_asset.asset_tag }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Calibrated By</span>
+                    <div class="font-medium text-slate-800">
+                        {{ calibration.calibrated_by.get_full_name|default:calibration.calibrated_by.username|default:"External Laboratory" }}
+                    </div>
+                </div>
+
+                {% if calibration.service_vendor %}
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Accredited Calibration Lab</span>
+                    <div class="font-medium text-slate-800">{{ calibration.service_vendor.legal_name }}</div>
+                </div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100 text-xs text-slate-400">
+                    Created: {{ calibration.created_at|date:"M d, Y H:i" }}<br>
+                    Updated: {{ calibration.updated_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
