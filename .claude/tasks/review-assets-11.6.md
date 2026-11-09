@@ -78,7 +78,24 @@
 
 ## 5. QA Smoke Tester Findings
 
-*(Pending review pass)*
+### Verified Passing Runs
+- All 4 list routes return HTTP 200 with valid HTML structure, no comment leaks (`{#`), and correct card KPI aggregations.
+- All 4 detail routes return HTTP 200 with seeded record numbers and identifiers present.
+- All 4 create views and 4 edit views return HTTP 200 with form controls properly rendered.
+- Resolution view `asset_downtime_log_resolve` returns HTTP 200.
+- Empty states and junk parameter filters (`?q=nonexistent&status=invalid`) return HTTP 200 without unhandled 500 exceptions.
+- Cross-tenant IDOR defense: requests by Acme admin to Globex primary keys return HTTP 404 across all entities.
+
+### Critical
+- **QA-C1**: Detail templates crash with HTTP 500 when user FK fields (`logged_by`, `recorded_by`, `evaluated_by`) are `None` due to filter argument evaluation in `default:user.username` (Lesson L10).
+- **QA-C2**: `asset_downtime_log/resolve.html:28` crashes with HTTP 500 if both `fixed_asset` and `operational_asset` are `None` (or when `fixed_asset` is None and `operational_asset.name` is looked up inside `default:`).
+
+### Important
+- **QA-I1**: `asset_energy_reading/detail.html:148` renders blank text for utility provider due to invalid `reading.utility_provider.legal_name` attribute lookup (should be `.name`).
+- **QA-I2**: Action views (`finalize`, `validate`, `publish`) allow transitioning cancelled/archived records if accessed via direct POST due to missing view-level status preconditions.
+
+### Minor
+- **QA-M1**: Filter forms omit `status` dropdown in energy reading and performance scorecard list templates, preventing quick lifecycle status filtering.
 
 ---
 
