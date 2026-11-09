@@ -152,7 +152,7 @@
                         <span class="badge {{ req.urgency_css }}">{{ req.get_urgency_display }}</span>
                     </td>
                     <td>
-                        <div class="text-sm">{{ req.requester.get_full_name|default:req.requester.username|default:"—" }}</div>
+                        <div class="text-sm">{% if req.requester %}{{ req.requester.get_full_name|default:req.requester.username }}{% else %}—{% endif %}</div>
                         {% if req.department %}
                         <div class="text-xs text-slate-500">{{ req.department.name }}</div>
                         {% endif %}
