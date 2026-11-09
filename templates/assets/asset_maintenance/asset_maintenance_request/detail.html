@@ -28,13 +28,13 @@
     <div class="page-actions flex flex-wrap gap-2">
         {% if maintenance_request.status == "submitted" %}
         <button type="button" onclick="document.getElementById('triage-modal').classList.remove('hidden')" class="btn btn-outline">
-            <i data-lucide="clipboard-check" class="w-4 h-4 mr-1"></i> Triage
+            <i data-lucide="clipboard-check" class="w-4 h-4 me-1"></i> Triage
         </button>
         {% endif %}
 
-        {% if maintenance_request.status in "submitted,triaged" %}
+        {% if maintenance_request.status == "submitted" or maintenance_request.status == "triaged" %}
         <button type="button" onclick="document.getElementById('dispatch-modal').classList.remove('hidden')" class="btn btn-primary">
-            <i data-lucide="send" class="w-4 h-4 mr-1"></i> Dispatch Tech
+            <i data-lucide="send" class="w-4 h-4 me-1"></i> Dispatch Tech
         </button>
         {% endif %}
 
@@ -42,14 +42,14 @@
         <form method="post" action="{% url 'assets:asset_maintenance_request_start' maintenance_request.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
-                <i data-lucide="play" class="w-4 h-4 mr-1"></i> Start Work
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Start Work
             </button>
         </form>
         {% endif %}
 
-        {% if maintenance_request.status in "assigned,in_progress" %}
+        {% if maintenance_request.status == "assigned" or maintenance_request.status == "in_progress" %}
         <button type="button" onclick="document.getElementById('resolve-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
-            <i data-lucide="check" class="w-4 h-4 mr-1"></i> Resolve
+            <i data-lucide="check" class="w-4 h-4 me-1"></i> Resolve
         </button>
         {% endif %}
 
@@ -57,27 +57,33 @@
         <form method="post" action="{% url 'assets:asset_maintenance_request_close' maintenance_request.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-slate-700 hover:bg-slate-100">
-                <i data-lucide="archive" class="w-4 h-4 mr-1"></i> Verify & Close
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Verify & Close
             </button>
         </form>
         {% endif %}
 
-        {% if maintenance_request.status in "submitted,triaged" %}
+        {% if maintenance_request.status == "submitted" or maintenance_request.status == "triaged" %}
         <button type="button" onclick="document.getElementById('reject-modal').classList.remove('hidden')" class="btn btn-outline text-red-600 hover:bg-red-50">
-            <i data-lucide="x-circle" class="w-4 h-4 mr-1"></i> Reject
+            <i data-lucide="x-circle" class="w-4 h-4 me-1"></i> Reject
         </button>
         {% endif %}
 
         <a href="{% url 'assets:asset_maintenance_request_edit' maintenance_request.pk %}" class="btn btn-outline">
-            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
 
+        {% if is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_maintenance_request_delete' maintenance_request.pk %}" class="inline" onsubmit="return confirm('Delete maintenance request {{ maintenance_request.number }}?');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete" aria-label="Delete Request">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_maintenance_request_list' %}" class="btn btn-ghost" aria-label="Back to Requests">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
     </div>
 </div>
 
@@ -205,8 +211,11 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center py-4 text-slate-500 text-sm">
-                                No service records logged yet for this request.
+                            <td colspan="7" class="text-center py-6 text-slate-500 text-sm">
+                                <p>No service records logged yet for this request.</p>
+                                <a href="{% url 'assets:asset_maintenance_log_create' %}?maintenance_request={{ maintenance_request.pk }}" class="btn btn-sm btn-outline mt-2 inline-flex items-center">
+                                    <i data-lucide="wrench" class="w-3.5 h-3.5 me-1"></i> Log First Service Work
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -320,11 +329,11 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">Urgency Assessment</label>
+                    <label class="form-label" for="{{ triage_form.urgency.id_for_label }}">Urgency Assessment</label>
                     {{ triage_form.urgency }}
                 </div>
                 <div>
-                    <label class="form-label">Triage & Hazard Notes</label>
+                    <label class="form-label" for="{{ triage_form.triage_notes.id_for_label }}">Triage & Hazard Notes</label>
                     {{ triage_form.triage_notes }}
                 </div>
             </div>
@@ -344,15 +353,19 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">Internal Technician</label>
+                    <label class="form-label" for="{{ dispatch_form.assigned_technician.id_for_label }}">Internal Technician</label>
                     {{ dispatch_form.assigned_technician }}
                 </div>
                 <div>
-                    <label class="form-label">Or External Service Vendor</label>
+                    <label class="form-label" for="{{ dispatch_form.assigned_vendor.id_for_label }}">Or External Service Vendor</label>
                     {{ dispatch_form.assigned_vendor }}
                 </div>
                 <div>
-                    <label class="form-label">Operational Work Order (Optional)</label>
+                    <label class="form-label" for="{{ dispatch_form.service_contract.id_for_label }}">Active Service Agreement (AMC)</label>
+                    {{ dispatch_form.service_contract }}
+                </div>
+                <div>
+                    <label class="form-label" for="{{ dispatch_form.dispatched_work_order.id_for_label }}">Operational Work Order (Optional)</label>
                     {{ dispatch_form.dispatched_work_order }}
                 </div>
             </div>
@@ -372,7 +385,7 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">Corrective Actions & Resolution Details</label>
+                    <label class="form-label" for="{{ resolve_form.resolution_summary.id_for_label }}">Corrective Actions & Resolution Details</label>
                     {{ resolve_form.resolution_summary }}
                 </div>
             </div>
@@ -392,7 +405,7 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">Rejection Reason</label>
+                    <label class="form-label" for="{{ reject_form.rejection_reason.id_for_label }}">Rejection Reason</label>
                     {{ reject_form.rejection_reason }}
                 </div>
             </div>
