@@ -269,39 +269,42 @@ class AssetDepreciationSchedule(TenantNumbered):
         exp_acc = self.expense_account or self.fixed_asset.expense_account
         accum_acc = self.accumulated_account or self.fixed_asset.accumulated_account
 
+        if not exp_acc or not accum_acc:
+            raise ValidationError(
+                "Both Depreciation Expense and Accumulated Depreciation GL accounts are required to post to the General Ledger."
+            )
+
         with transaction.atomic():
-            je = None
-            if exp_acc and accum_acc:
-                je = JournalEntry.objects.create(
-                    tenant=self.tenant,
-                    entry_type="recurring",
-                    status="posted",
-                    entry_date=self.schedule_date,
-                    description=f"Depreciation for {self.fixed_asset.number} - {self.fixed_asset.name} (FY{self.fiscal_year} P{self.period_number})",
-                    reference=f"{self.number}",
-                    created_by=user,
-                    approved_by=user,
-                    posted_at=timezone.now(),
-                    fiscal_period=self.fiscal_period,
-                )
-                # Debit Depreciation Expense
-                JournalLine.objects.create(
-                    entry=je,
-                    gl_account=exp_acc,
-                    debit=self.depreciation_amount,
-                    credit=Decimal("0.00"),
-                    description=f"Deprec Expense - {self.fixed_asset.name}",
-                    org_unit=self.cost_center,
-                )
-                # Credit Accumulated Depreciation
-                JournalLine.objects.create(
-                    entry=je,
-                    gl_account=accum_acc,
-                    debit=Decimal("0.00"),
-                    credit=self.depreciation_amount,
-                    description=f"Accum Deprec - {self.fixed_asset.name}",
-                    org_unit=self.cost_center,
-                )
+            je = JournalEntry.objects.create(
+                tenant=self.tenant,
+                entry_type="recurring",
+                status="posted",
+                entry_date=self.schedule_date,
+                description=f"Depreciation for {self.fixed_asset.number} - {self.fixed_asset.name} (FY{self.fiscal_year} P{self.period_number})",
+                reference=f"{self.number}",
+                created_by=user,
+                approved_by=user,
+                posted_at=timezone.now(),
+                fiscal_period=self.fiscal_period,
+            )
+            # Debit Depreciation Expense
+            JournalLine.objects.create(
+                entry=je,
+                gl_account=exp_acc,
+                debit=self.depreciation_amount,
+                credit=Decimal("0.00"),
+                description=f"Deprec Expense - {self.fixed_asset.name}",
+                org_unit=self.cost_center,
+            )
+            # Credit Accumulated Depreciation
+            JournalLine.objects.create(
+                entry=je,
+                gl_account=accum_acc,
+                debit=Decimal("0.00"),
+                credit=self.depreciation_amount,
+                description=f"Accum Deprec - {self.fixed_asset.name}",
+                org_unit=self.cost_center,
+            )
 
             self.journal_entry = je
             self.status = "posted"
