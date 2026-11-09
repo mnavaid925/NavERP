@@ -154,6 +154,7 @@ def asset_calibration_record_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_calibration_record_delete(request, pk):
     calibration = assets_object(request, AssetCalibrationRecord, pk)
