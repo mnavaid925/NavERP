@@ -70,6 +70,7 @@ def asset_criticality_assessment_list(request):
         "search_query": q,
         "selected_abc": abc,
         "selected_status": status,
+        "selected_asset": asset_id,
         "total_count": counts["total"] or 0,
         "class_a_count": counts["class_a"] or 0,
         "class_b_count": counts["class_b"] or 0,
