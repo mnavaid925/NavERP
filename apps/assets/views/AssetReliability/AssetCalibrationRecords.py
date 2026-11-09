@@ -65,7 +65,7 @@ def asset_calibration_record_list(request):
 
     vendor_list = Party.objects.filter(
         tenant=request.tenant,
-        party_roles__role="vendor",
+        roles__role="vendor",
     ).distinct()
 
     context = {
