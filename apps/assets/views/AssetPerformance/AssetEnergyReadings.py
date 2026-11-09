@@ -168,6 +168,9 @@ def asset_energy_reading_delete(request, pk):
 @require_POST
 def asset_energy_reading_validate(request, pk):
     reading = assets_object(request, AssetEnergyReading, pk)
+    if reading.status not in ("pending", "flagged_anomaly"):
+        messages.error(request, f"Energy reading {reading.number} cannot be validated because it is currently {reading.get_status_display().lower()}.")
+        return redirect("assets:asset_energy_reading_detail", pk=reading.pk)
     reading.status = "validated"
     reading.save()
     write_audit_log(request.user, reading, "validate", tenant=request.tenant)
