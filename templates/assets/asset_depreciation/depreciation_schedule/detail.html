@@ -212,7 +212,7 @@
                 </div>
                 <div>
                     <div class="text-xs text-muted">Posted By</div>
-                    <div class="font-medium text-slate-800">{{ schedule.posted_by.get_full_name|default:schedule.posted_by.username|default:"—" }}</div>
+                    <div class="font-medium text-slate-800">{% if schedule.posted_by %}{{ schedule.posted_by.get_full_name|default:schedule.posted_by.username }}{% else %}—{% endif %}</div>
                 </div>
                 <div class="pt-3 border-t border-slate-200 text-xs text-muted">
                     <div>Created: {{ schedule.created_at|date:"Y-m-d H:i" }}</div>
