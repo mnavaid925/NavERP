@@ -89,7 +89,16 @@ def asset_maintenance_schedule_detail(request, pk):
             "service_contract",
         ],
     )
-    linked_requests = obj.maintenance_requests.select_related("assigned_technician").order_by("-created_at")[:10]
+    if obj.fixed_asset:
+        linked_requests = AssetMaintenanceRequest.objects.filter(
+            tenant=request.tenant, fixed_asset=obj.fixed_asset
+        ).select_related("assigned_technician").order_by("-created_at")[:10]
+    elif obj.operational_asset:
+        linked_requests = AssetMaintenanceRequest.objects.filter(
+            tenant=request.tenant, operational_asset=obj.operational_asset
+        ).select_related("assigned_technician").order_by("-created_at")[:10]
+    else:
+        linked_requests = []
     linked_logs = obj.maintenance_logs.select_related("lead_technician", "service_vendor").order_by("-service_date")[:10]
 
     context = {
