@@ -76,7 +76,7 @@ def asset_category_list(request):
 
 @login_required
 def asset_category_detail(request, pk):
-    category = assets_object(request, AssetCategory, pk=pk, select_related=["parent"])
+    category = assets_object(request, AssetCategory, pk=pk, select_related=["parent", "parent__parent"])
     children = category.children.filter(tenant=request.tenant).order_by("code")
     models_qs = category.models.filter(tenant=request.tenant).select_related("manufacturer").order_by("model_number")
     spec_templates = category.spec_templates.filter(tenant=request.tenant).order_by("display_order")
