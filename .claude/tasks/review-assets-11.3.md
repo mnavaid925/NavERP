@@ -123,5 +123,29 @@ None.
 - Strict pre-paginator filtering and standard page size of 15.
 - Zero N+1 queries in Django Admin thanks to explicit `list_select_related`.
 
+---
+
+## 5. QA Smoke Tester Pass
+
+### Verdict
+PASS — All 47 automated runtime checks passed cleanly (0 failures, 0 server errors, 0 IDOR leaks).
+
+### Critical
+None.
+
+### Important
+None.
+
+### Minor
+None.
+
+### Runtime Verification Summary
+- All 19 sub-module URLs + module landing page verified (Status 200/302/405/404 as expected).
+- Zero comment leaks (`{#` or `{% comment`) in any template output.
+- Context integrity verified on all detail views (`FAC-PLANT`, `CAT-320GC`, `ACRT-00002`, `ASPC-00004` tokens present).
+- Junk parameters (`?category=abc&status=invalid_status&q=xyz`) and boundary pagination (`?page=2`, `?page=99999`) handled gracefully without 500s.
+- 13 Cross-tenant IDOR checks on Detail (GET), Edit (GET), Delete (POST), and Approve (POST) all returned 404.
+
+
 
 
