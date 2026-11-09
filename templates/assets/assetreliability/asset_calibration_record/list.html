@@ -75,7 +75,7 @@
                 <select id="vendor-filter" name="vendor" class="form-select">
                     <option value="">All Labs / Vendors</option>
                     {% for v in vendor_list %}
-                    <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.legal_name }}</option>
+                    <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.name }}</option>
                     {% endfor %}
                 </select>
             </div>
