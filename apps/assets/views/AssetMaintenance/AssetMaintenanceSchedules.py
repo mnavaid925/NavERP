@@ -63,6 +63,7 @@ def asset_maintenance_schedule_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "search_query": q,
         "status_choices": AssetMaintenanceSchedule.STATUS_CHOICES,
         "schedule_type_choices": AssetMaintenanceSchedule.SCHEDULE_TYPE_CHOICES,
         "frequency_unit_choices": AssetMaintenanceSchedule.FREQUENCY_UNIT_CHOICES,
@@ -118,7 +119,7 @@ def asset_maintenance_schedule_detail(request, pk):
 @login_required
 def asset_maintenance_schedule_create(request):
     if request.method == "POST":
-        form = AssetMaintenanceScheduleForm(request.POST)
+        form = AssetMaintenanceScheduleForm(request.POST, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save(commit=False)
@@ -137,7 +138,7 @@ def asset_maintenance_schedule_create(request):
         operational_asset_id = request.GET.get("operational_asset")
         if operational_asset_id:
             initial["operational_asset"] = operational_asset_id
-        form = AssetMaintenanceScheduleForm(initial=initial)
+        form = AssetMaintenanceScheduleForm(initial=initial, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -152,7 +153,7 @@ def asset_maintenance_schedule_create(request):
 def asset_maintenance_schedule_edit(request, pk):
     obj = assets_object(request, AssetMaintenanceSchedule, pk)
     if request.method == "POST":
-        form = AssetMaintenanceScheduleForm(request.POST, instance=obj)
+        form = AssetMaintenanceScheduleForm(request.POST, instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save()
@@ -160,7 +161,7 @@ def asset_maintenance_schedule_edit(request, pk):
             messages.success(request, f"Maintenance Schedule {obj.number} updated successfully.")
             return redirect("assets:asset_maintenance_schedule_detail", pk=obj.pk)
     else:
-        form = AssetMaintenanceScheduleForm(instance=obj)
+        form = AssetMaintenanceScheduleForm(instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -233,7 +234,8 @@ def asset_maintenance_schedule_record_completion(request, pk):
     if form.is_valid():
         comp_date = form.cleaned_data["completion_date"]
         comp_meter = form.cleaned_data.get("completion_meter")
-        obj.record_completion(completion_date=comp_date, completion_meter=comp_meter, user=request.user)
+        notes = form.cleaned_data.get("notes", "")
+        obj.record_completion(completion_date=comp_date, completion_meter=comp_meter, user=request.user, notes=notes)
         write_audit_log(
             request.user,
             obj,
@@ -242,6 +244,7 @@ def asset_maintenance_schedule_record_completion(request, pk):
                 "action": "record_completion",
                 "completed_date": str(comp_date),
                 "next_due_date": str(obj.next_due_date),
+                "notes": notes,
             },
             tenant=request.tenant,
         )
