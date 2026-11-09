@@ -17,7 +17,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def asset_criticality_assessment_list(request):
     qs = AssetCriticalityAssessment.objects.filter(tenant=request.tenant).select_related(
-        "asset", "assessor", "approved_by"
+        "asset__location", "assessor", "approved_by"
     )
 
     q = request.GET.get("q", "").strip()
