@@ -139,6 +139,12 @@ class AssetSpecificationTemplate(TenantNumbered):
             if self.min_numeric_value > self.max_numeric_value:
                 raise ValidationError({"min_numeric_value": "Minimum bound cannot exceed maximum bound."})
 
+        if self.validation_regex:
+            try:
+                re.compile(self.validation_regex)
+            except re.error as e:
+                raise ValidationError({"validation_regex": f"Invalid regular expression pattern: {e}"})
+
     @property
     def data_type_css(self):
         return self.DATA_TYPE_CSS.get(self.data_type, "badge-slate")
