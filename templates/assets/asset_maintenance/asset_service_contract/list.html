@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Service Contracts (AMC) — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <span>Service Contracts</span>
+        </div>
+        <h1 class="page-title">Vendor Service Contracts & AMC</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_service_contract_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Service Contract
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Contracts</div>
+            <div class="stat-value">{{ total_contracts }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Agreements</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expiring in 30 Days</div>
+            <div class="stat-value">{{ expiring_soon_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Contract Value</div>
+            <div class="stat-value">${{ total_contract_value|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Contract #, vendor, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Contract Type</label>
+                <select id="type-filter" name="contract_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in contract_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.contract_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="billing-filter" class="form-label">Billing Frequency</label>
+                <select id="billing-filter" name="billing_frequency" class="form-select">
+                    <option value="">All Frequencies</option>
+                    {% for val, label in billing_frequency_choices %}
+                    <option value="{{ val }}" {% if request.GET.billing_frequency == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.contract_type or request.GET.billing_frequency %}
+                <a href="{% url 'assets:asset_service_contract_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Contract #</th>
+                    <th>Title & Type</th>
+                    <th>Vendor</th>
+                    <th>Asset Covered</th>
+                    <th>SLA (Resp/Res)</th>
+                    <th>Visits (Done/Max)</th>
+                    <th>Contract Value</th>
+                    <th>Expiration</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contract in service_contracts %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_service_contract_detail' contract.pk %}" class="text-blue-600 hover:underline">
+                            {{ contract.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ contract.contract_number }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ contract.title }}</div>
+                        <span class="badge {{ contract.contract_type_css }} text-xs">{{ contract.get_contract_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ contract.vendor.name }}</div>
+                        <div class="text-xs text-slate-500">{{ contract.contact_person|default:"—" }}</div>
+                    </td>
+                    <td>
+                        {% if contract.fixed_asset %}
+                        <div class="text-sm font-medium">{{ contract.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ contract.fixed_asset.number }}</div>
+                        {% elif contract.operational_asset %}
+                        <div class="text-sm font-medium">{{ contract.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ contract.operational_asset.asset_tag|default:"Operational" }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">Site-Wide</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm">
+                        <span class="font-mono">{{ contract.sla_response_hours }}h</span> / <span class="font-mono">{{ contract.sla_resolution_hours }}h</span>
+                    </td>
+                    <td class="text-sm">
+                        <span class="font-medium {% if contract.remaining_visits == 0 %}text-amber-600 font-bold{% endif %}">
+                            {{ contract.pm_visits_completed }} / {{ contract.pm_visits_included }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">${{ contract.contract_value|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-500">{{ contract.get_billing_frequency_display }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium {% if contract.status_css == 'badge-red' %}text-red-600 font-bold{% elif contract.status_css == 'badge-amber' %}text-amber-600 font-bold{% else %}text-slate-900{% endif %}">
+                            {{ contract.end_date|date:"M d, Y" }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ contract.status_css }}">{{ contract.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_service_contract_detail' contract.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_service_contract_edit' contract.pk %}" class="btn btn-icon" title="Edit Contract">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_service_contract_delete' contract.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ contract.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Contract">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="shield-alert" class="empty-icon"></i>
+                            <div class="empty-title">No service contracts found</div>
+                            <div class="empty-text">No vendor maintenance agreements or warranties match your criteria.</div>
+                            <a href="{% url 'assets:asset_service_contract_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Register Service Contract
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div>
+            Showing <span class="font-medium">{{ page_obj.start_index }}</span> to <span class="font-medium">{{ page_obj.end_index }}</span> of <span class="font-medium">{{ paginator.count }}</span> contracts
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.contract_type %}&contract_type={{ request.GET.contract_type }}{% endif %}{% if request.GET.billing_frequency %}&billing_frequency={{ request.GET.billing_frequency }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left" class="w-4 h-4 mr-1"></i> Previous
+            </a>
+            {% endif %}
+            <span class="text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.contract_type %}&contract_type={{ request.GET.contract_type }}{% endif %}{% if request.GET.billing_frequency %}&billing_frequency={{ request.GET.billing_frequency }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
