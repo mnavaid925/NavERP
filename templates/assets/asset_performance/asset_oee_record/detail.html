@@ -219,7 +219,7 @@
                 <div>
                     <span class="text-xs text-slate-500">Recorded By</span>
                     <div class="text-slate-800 font-medium">
-                        {{ record.recorded_by.get_full_name|default:record.recorded_by.username|default:"System" }}
+                        {% if record.recorded_by %}{{ record.recorded_by.get_full_name|default:record.recorded_by.username }}{% else %}System{% endif %}
                     </div>
                 </div>
                 <div>
