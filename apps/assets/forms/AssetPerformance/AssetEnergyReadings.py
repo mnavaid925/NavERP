@@ -73,7 +73,7 @@ class AssetEnergyReadingForm(TenantUniqueMixin, forms.ModelForm):
         if tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant).order_by("name")
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant).order_by("name")
-            self.fields["utility_provider"].queryset = Party.objects.filter(tenant=tenant).order_by("legal_name")
+            self.fields["utility_provider"].queryset = Party.objects.filter(tenant=tenant).order_by("name")
             self.fields["recorded_by"].queryset = User.objects.filter(tenant=tenant, is_active=True).order_by("first_name", "last_name", "username")
 
     def clean(self):
