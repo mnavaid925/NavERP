@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, and metrology calibration records with tolerance verification). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -22,6 +22,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.4 Asset Depreciation & Accounting**: Depreciation runs, revaluations, impairment testing, salvage adjustments (interconnected with Module 2 ledger).
 - **11.5 Asset Maintenance & Repair**: Breakdown tickets, triage, work orders, preventive maintenance calendars, runtime meter triggers, vendor AMC/SLA agreements, and work history logs with wrench time, ISO failure codes, and GL cost accounting.
 - **11.6 Asset Performance & Utilization**: Operational downtime logging with hourly financial loss, Overall Equipment Effectiveness (OEE) tracking with TPM Six Big Losses, smart sub-meter energy readings with GHG Scope 1/2/3 carbon footprint metrics, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking.
+- **11.7 Asset Reliability & Condition Monitoring**: Multi-technique non-destructive testing (NDT) condition assessments, continuous IoT & SCADA telemetry streaming with threshold anomaly alerts, FMEA failure mode cataloging with RPN risk matrix & RCM strategies, and metrology calibration records with automated drift/error calculation and corrective maintenance work order generation.
 
 ---
 
@@ -63,6 +64,11 @@ apps/assets/
       AssetOeeRecords.py                      <- AssetOeeRecord [AOEE-]
       AssetEnergyReadings.py                  <- AssetEnergyReading [AENG-]
       AssetPerformanceScorecards.py           <- AssetPerformanceScorecard [APSC-]
+    AssetReliability/                         <- Sub-module 11.7 models
+      AssetConditionAssessments.py            <- AssetConditionAssessment [ACAS-]
+      AssetTelemetryReadings.py               <- AssetTelemetryReading [ATEL-]
+      AssetFailureModes.py                    <- AssetFailureMode [AFMA-]
+      AssetCalibrationRecords.py              <- AssetCalibrationRecord [ACAL-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -96,6 +102,11 @@ apps/assets/
       AssetOeeRecords.py                      <- AssetOeeRecordForm
       AssetEnergyReadings.py                  <- AssetEnergyReadingForm
       AssetPerformanceScorecards.py           <- AssetPerformanceScorecardForm
+    AssetReliability/                         <- Sub-module 11.7 forms
+      AssetConditionAssessments.py            <- AssetConditionAssessmentForm
+      AssetTelemetryReadings.py               <- AssetTelemetryReadingForm
+      AssetFailureModes.py                    <- AssetFailureModeForm
+      AssetCalibrationRecords.py              <- AssetCalibrationRecordForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -130,6 +141,11 @@ apps/assets/
       AssetOeeRecords.py                      <- OEE CRUD + finalize
       AssetEnergyReadings.py                  <- Energy CRUD + validate
       AssetPerformanceScorecards.py           <- Scorecard CRUD + publish
+    AssetReliability/                         <- Sub-module 11.7 views
+      AssetConditionAssessments.py            <- Assessment CRUD + complete, review, trigger_request
+      AssetTelemetryReadings.py               <- Telemetry CRUD + flag_anomaly, trigger_request
+      AssetFailureModes.py                    <- FMEA CRUD + activate, archive
+      AssetCalibrationRecords.py              <- Calibration CRUD + quarantine
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -162,11 +178,16 @@ apps/assets/
       AssetOeeRecords.py
       AssetEnergyReadings.py
       AssetPerformanceScorecards.py
+    AssetReliability/                         <- Sub-module 11.7 URL route definitions
+      AssetConditionAssessments.py
+      AssetTelemetryReadings.py
+      AssetFailureModes.py
+      AssetCalibrationRecords.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5 & 11.6)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6 & 11.7)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -191,6 +212,10 @@ apps/assets/
     test_assetperformance_forms.py            <- 11.6 Form validation, time/power factor bounds, reject_foreign
     test_assetperformance_views.py            <- 11.6 View contracts, page_obj, state actions, delete protection
     test_assetperformance_security.py         <- 11.6 IDOR (404), list isolation, unauthenticated redirect (302)
+    test_asset_reliability_models.py          <- 11.7 Model invariants, deviation math, RPN risk matrix, metrology errors
+    test_asset_reliability_forms.py           <- 11.7 Form validation, user/vendor scoping, reject_foreign
+    test_asset_reliability_views.py           <- 11.7 View context contracts, filters, aggregates, maintenance triggers
+    test_asset_reliability_security.py        <- 11.7 IDOR (404), RBAC admin gates (403), audit logging, FK injection
 ```
 
 ---
@@ -457,6 +482,44 @@ Namespace: `assets:`
 
 ---
 
+## Key URLs & Routes (11.7)
+
+Namespace: `assets:`
+- **Condition Assessments:**
+  - `assets:asset_condition_assessment_list`: `/assets/reliability/assessments/`
+  - `assets:asset_condition_assessment_create`: `/assets/reliability/assessments/create/`
+  - `assets:asset_condition_assessment_detail`: `/assets/reliability/assessments/<pk>/`
+  - `assets:asset_condition_assessment_edit`: `/assets/reliability/assessments/<pk>/edit/`
+  - `assets:asset_condition_assessment_delete`: `/assets/reliability/assessments/<pk>/delete/` [POST, Admin]
+  - `assets:asset_condition_assessment_complete`: `/assets/reliability/assessments/<pk>/complete/` [POST]
+  - `assets:asset_condition_assessment_review`: `/assets/reliability/assessments/<pk>/review/` [POST, Admin]
+  - `assets:asset_condition_assessment_trigger_request`: `/assets/reliability/assessments/<pk>/trigger-request/` [POST]
+- **Telemetry Readings:**
+  - `assets:asset_telemetry_reading_list`: `/assets/reliability/telemetry/`
+  - `assets:asset_telemetry_reading_create`: `/assets/reliability/telemetry/create/`
+  - `assets:asset_telemetry_reading_detail`: `/assets/reliability/telemetry/<pk>/`
+  - `assets:asset_telemetry_reading_edit`: `/assets/reliability/telemetry/<pk>/edit/`
+  - `assets:asset_telemetry_reading_delete`: `/assets/reliability/telemetry/<pk>/delete/` [POST, Admin]
+  - `assets:asset_telemetry_reading_flag_anomaly`: `/assets/reliability/telemetry/<pk>/flag-anomaly/` [POST]
+  - `assets:asset_telemetry_reading_trigger_request`: `/assets/reliability/telemetry/<pk>/trigger-request/` [POST]
+- **Failure Modes & Effects Analysis (FMEA):**
+  - `assets:asset_failure_mode_list`: `/assets/reliability/failure-modes/`
+  - `assets:asset_failure_mode_create`: `/assets/reliability/failure-modes/create/`
+  - `assets:asset_failure_mode_detail`: `/assets/reliability/failure-modes/<pk>/`
+  - `assets:asset_failure_mode_edit`: `/assets/reliability/failure-modes/<pk>/edit/`
+  - `assets:asset_failure_mode_delete`: `/assets/reliability/failure-modes/<pk>/delete/` [POST, Admin]
+  - `assets:asset_failure_mode_activate`: `/assets/reliability/failure-modes/<pk>/activate/` [POST]
+  - `assets:asset_failure_mode_archive`: `/assets/reliability/failure-modes/<pk>/archive/` [POST, Admin]
+- **Calibration Records:**
+  - `assets:asset_calibration_record_list`: `/assets/reliability/calibrations/`
+  - `assets:asset_calibration_record_create`: `/assets/reliability/calibrations/create/`
+  - `assets:asset_calibration_record_detail`: `/assets/reliability/calibrations/<pk>/`
+  - `assets:asset_calibration_record_edit`: `/assets/reliability/calibrations/<pk>/edit/`
+  - `assets:asset_calibration_record_delete`: `/assets/reliability/calibrations/<pk>/delete/` [POST, Admin]
+  - `assets:asset_calibration_record_quarantine`: `/assets/reliability/calibrations/<pk>/quarantine/` [POST, Admin]
+
+---
+
 ## Conventions & Gotchas
 
 1. **Multi-Tenancy**:
@@ -500,4 +563,5 @@ Unfiltered run on SQLite in-memory test database (821 passing tests across 11.1,
 - `11.4`: Depreciation & Financials (`assets:depreciation_schedule_list`)
 - `11.5`: Maintenance & Repair (`assets:asset_maintenance_request_list`)
 - `11.6`: Performance & Utilization (`assets:asset_downtime_log_list`)
+- `11.7`: Reliability & Condition Monitoring (`assets:asset_condition_assessment_list`)
 
