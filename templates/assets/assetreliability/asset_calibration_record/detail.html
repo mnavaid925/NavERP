@@ -215,7 +215,11 @@
                 <div>
                     <span class="text-slate-500 block text-xs uppercase">Calibrated By</span>
                     <div class="font-medium text-slate-800">
-                        {{ calibration.calibrated_by.get_full_name|default:calibration.calibrated_by.username|default:"External Laboratory" }}
+                        {% if calibration.calibrated_by %}
+                            {{ calibration.calibrated_by.get_full_name|default:calibration.calibrated_by.username }}
+                        {% else %}
+                            External Laboratory
+                        {% endif %}
                     </div>
                 </div>
 
