@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.db import models
@@ -219,32 +219,38 @@ class AssetOeeRecord(TenantNumbered):
         return self.TIER_CSS.get(self.benchmark_tier, "badge-slate")
 
     def calculate_oee(self):
+        planned_time = self.planned_production_time_minutes or Decimal("0.00")
+        operating_time = self.operating_time_minutes or Decimal("0.00")
+        ideal_cycle = self.ideal_cycle_time_seconds or Decimal("0.00")
+        total_units = self.total_units_produced or 0
+        good_units = self.good_units_produced or 0
+
         # 1. Availability factor = Operating Time / Planned Production Time * 100
-        if self.planned_production_time_minutes and self.planned_production_time_minutes > 0:
-            avail = (self.operating_time_minutes / self.planned_production_time_minutes) * Decimal("100.0")
-            self.availability_percentage = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(avail), 2)))))
+        if planned_time > Decimal("0.00"):
+            avail = (operating_time / planned_time) * Decimal("100.0")
+            self.availability_percentage = min(Decimal("100.00"), max(Decimal("0.00"), avail.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
         else:
             self.availability_percentage = Decimal("0.00")
 
         # 2. Performance factor = (Ideal Cycle Time (sec) * Total Units) / (Operating Time (min) * 60) * 100
-        operating_seconds = self.operating_time_minutes * Decimal("60.0")
-        if operating_seconds > 0 and self.ideal_cycle_time_seconds and self.ideal_cycle_time_seconds > 0:
-            ideal_production_time = Decimal(str(self.total_units_produced)) * self.ideal_cycle_time_seconds
+        operating_seconds = operating_time * Decimal("60.0")
+        if operating_seconds > Decimal("0.00") and ideal_cycle > Decimal("0.00"):
+            ideal_production_time = Decimal(str(total_units)) * ideal_cycle
             perf = (ideal_production_time / operating_seconds) * Decimal("100.0")
-            self.performance_percentage = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(perf), 2)))))
+            self.performance_percentage = min(Decimal("100.00"), max(Decimal("0.00"), perf.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
         else:
             self.performance_percentage = Decimal("0.00")
 
         # 3. Quality factor = Good Units / Total Units * 100
-        if self.total_units_produced > 0:
-            qual = (Decimal(str(self.good_units_produced)) / Decimal(str(self.total_units_produced))) * Decimal("100.0")
-            self.quality_percentage = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(qual), 2)))))
+        if total_units > 0:
+            qual = (Decimal(str(good_units)) / Decimal(str(total_units))) * Decimal("100.0")
+            self.quality_percentage = min(Decimal("100.00"), max(Decimal("0.00"), qual.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
         else:
             self.quality_percentage = Decimal("0.00")
 
         # 4. Overall OEE = A × P × Q / 10000
         oee = (self.availability_percentage * self.performance_percentage * self.quality_percentage) / Decimal("10000.0")
-        self.oee_percentage = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(oee), 2)))))
+        self.oee_percentage = min(Decimal("100.00"), max(Decimal("0.00"), oee.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
 
         # 5. Benchmark Tier classification
         if self.oee_percentage >= Decimal("85.00"):
