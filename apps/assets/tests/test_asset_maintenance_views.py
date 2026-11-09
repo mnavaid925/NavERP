@@ -61,8 +61,10 @@ def test_asset_maintenance_request_edit_view(client, admin_user, maintenance_req
     data = {
         "title": "Updated Spindle Vibration Details",
         "fixed_asset": str(maintenance_request_a.fixed_asset.pk),
+        "department": str(maintenance_request_a.department.pk) if maintenance_request_a.department else "",
         "request_type": maintenance_request_a.request_type,
         "urgency": "critical",
+        "symptom_description": maintenance_request_a.symptom_description,
     }
     post_resp = client.post(reverse("assets:asset_maintenance_request_edit", args=[maintenance_request_a.pk]), data=data)
     assert post_resp.status_code == 302
@@ -182,7 +184,6 @@ def test_asset_maintenance_schedule_create_view(client, admin_user, tenant_a, fi
         "fixed_asset": str(fixed_asset_a.pk),
         "frequency_interval": 1,
         "frequency_unit": "months",
-        "start_date": timezone.now().date().strftime("%Y-%m-%d"),
         "lead_time_days": 3,
         "is_mandatory": False,
         "is_active": True,
