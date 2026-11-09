@@ -167,6 +167,9 @@ def asset_downtime_log_delete(request, pk):
 @login_required
 def asset_downtime_log_resolve(request, pk):
     log = assets_object(request, AssetDowntimeLog, pk)
+    if log.status != "active":
+        messages.error(request, f"Downtime event {log.number} cannot be resolved because it is currently {log.get_status_display().lower()}.")
+        return redirect("assets:asset_downtime_log_detail", pk=log.pk)
     if request.method == "POST":
         form = AssetDowntimeLogResolveForm(request.POST, instance=log)
         if form.is_valid():
