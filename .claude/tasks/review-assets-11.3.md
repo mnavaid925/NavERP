@@ -95,4 +95,33 @@ None.
 - Accessible & well-structured forms and table delete actions.
 - Risk assessment consequence progress bar breakdown leveraging theme.css `.progress` and `.progress-bar`.
 
+---
+
+## 4. Performance Reviewer Pass
+
+### Verdict
+Commit after fixing Important findings in Phase 5 (0 Critical, 1 Important, 2 Minor).
+
+### Critical
+None.
+
+### Important
+1. `apps/assets/views/AssetClassification/AssetCriticalityAssessments.py:19-21` — Chained N+1 query on `asmt.asset.location` in `asset_criticality_assessment_list`. In `templates/.../list.html:129`, each row accesses `asmt.asset.location.name`. Fix: Add `"asset__location"` to `select_related` in `AssetCriticalityAssessments.py`:
+   ```python
+   qs = AssetCriticalityAssessment.objects.filter(tenant=request.tenant).select_related(
+       "asset__location", "assessor", "approved_by"
+   )
+   ```
+
+### Minor
+1. `apps/assets/views/AssetClassification/AssetCategories.py:78` — Shallow `select_related` on hierarchy breadcrumb in `asset_category_detail`. Fix: Enhance `select_related` in `asset_category_detail` to `select_related=["parent__parent"]` to cover standard 3-tier taxonomies without additional queries.
+2. `apps/assets/views/AssetClassification/AssetModels.py:81-85` — Cross-module unindexed filter on `scm.Asset.model_number`. (SCM app maintenance recommendation).
+
+### Done well
+- Single-query KPI aggregates via `.aggregate(Count("id", filter=Q(...)))` across all 4 list views.
+- Robust tenant-composite indexes on all 4 models covering all search and filter combinations.
+- Strict pre-paginator filtering and standard page size of 15.
+- Zero N+1 queries in Django Admin thanks to explicit `list_select_related`.
+
+
 
