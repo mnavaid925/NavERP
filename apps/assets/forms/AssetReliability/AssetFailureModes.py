@@ -1,10 +1,13 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.accounting.models import FixedAsset
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.assets.models import AssetCategory, AssetMaintenanceSchedule
 from apps.assets.models.AssetReliability.AssetFailureModes import AssetFailureMode
 from apps.scm.models import Asset as OperationalAsset
+
+User = get_user_model()
 
 
 class AssetFailureModeForm(TenantUniqueMixin, TenantModelForm):
@@ -58,12 +61,13 @@ class AssetFailureModeForm(TenantUniqueMixin, TenantModelForm):
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
             self.fields["asset_category"].queryset = AssetCategory.objects.filter(tenant=self.tenant)
             self.fields["linked_maintenance_schedule"].queryset = AssetMaintenanceSchedule.objects.filter(tenant=self.tenant)
+            self.fields["assessed_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
     def clean(self):
         cleaned_data = super().clean()
         reject_foreign(
             self,
             cleaned_data,
-            ["fixed_asset", "operational_asset", "asset_category", "linked_maintenance_schedule"],
+            ["fixed_asset", "operational_asset", "asset_category", "linked_maintenance_schedule", "assessed_by"],
         )
         return cleaned_data
