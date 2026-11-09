@@ -182,11 +182,11 @@
             <div class="card-body space-y-3 text-sm">
                 <div>
                     <div class="text-xs text-muted">Dispatched / Initiated By</div>
-                    <div class="font-medium text-slate-800">{{ transfer.transferred_by.get_full_name|default:transfer.transferred_by.username|default:"—" }}</div>
+                    <div class="font-medium text-slate-800">{% if transfer.transferred_by %}{{ transfer.transferred_by.get_full_name|default:transfer.transferred_by.username }}{% else %}—{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-xs text-muted">Received & Accepted By</div>
-                    <div class="font-medium text-slate-800">{{ transfer.received_by.get_full_name|default:transfer.received_by.username|default:"Pending Acceptance" }}</div>
+                    <div class="font-medium text-slate-800">{% if transfer.received_by %}{{ transfer.received_by.get_full_name|default:transfer.received_by.username }}{% else %}Pending Acceptance{% endif %}</div>
                 </div>
                 <div>
                     <div class="text-xs text-muted">Completed Timestamp</div>
