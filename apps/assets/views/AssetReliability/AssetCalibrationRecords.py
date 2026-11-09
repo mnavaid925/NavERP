@@ -65,7 +65,7 @@ def asset_calibration_record_list(request):
     failed_count = stats["failed"]
     overdue_count = stats["overdue"]
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
