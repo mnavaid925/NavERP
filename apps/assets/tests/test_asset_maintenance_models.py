@@ -73,7 +73,7 @@ def test_asset_maintenance_request_reject(maintenance_request_a):
     maintenance_request_a.reject(reason="Duplicate ticket reported by shift operator.")
     maintenance_request_a.refresh_from_db()
     assert maintenance_request_a.status == "rejected"
-    assert "Duplicate ticket" in maintenance_request_a.rejection_reason
+    assert "Duplicate ticket" in maintenance_request_a.resolution_summary
 
 
 @pytest.mark.django_db
