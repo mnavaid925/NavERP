@@ -27,6 +27,10 @@ from apps.assets.models import (
     AssetMaintenanceSchedule,
     AssetServiceContract,
     AssetMaintenanceLog,
+    AssetDowntimeLog,
+    AssetOeeRecord,
+    AssetEnergyReading,
+    AssetPerformanceScorecard,
 )
 
 
@@ -1084,5 +1088,216 @@ def maintenance_log_b(db, tenant_b, fixed_asset_b, operational_asset_b, maintena
         expense_account=expense_account_b,
         status="draft",
     )
+
+
+# ---------------------------------------------------------------------------
+# Module 11.6: Asset Performance & Utilization Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def downtime_log_a(db, tenant_a, fixed_asset_a, operational_asset_a, org_unit_a, admin_user):
+    now = timezone.now()
+    return AssetDowntimeLog.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        department=org_unit_a,
+        logged_by=admin_user,
+        category="unplanned_breakdown",
+        impact="moderate",
+        started_at=now - timezone.timedelta(hours=3),
+        ended_at=now,
+        duration_minutes=Decimal("180.00"),
+        hourly_cost_rate=Decimal("150.00"),
+        total_downtime_cost=Decimal("450.00"),
+        primary_reason="Spindle bearing seizure under heavy cutting load.",
+        root_cause_category="mechanical_failure",
+        status="active",
+    )
+
+
+@pytest.fixture
+def downtime_log_b(db, tenant_b, fixed_asset_b, operational_asset_b, org_unit_b, admin_b):
+    now = timezone.now()
+    return AssetDowntimeLog.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        department=org_unit_b,
+        logged_by=admin_b,
+        category="planned_maintenance",
+        impact="minor",
+        started_at=now - timezone.timedelta(hours=1),
+        ended_at=now,
+        duration_minutes=Decimal("60.00"),
+        hourly_cost_rate=Decimal("100.00"),
+        total_downtime_cost=Decimal("100.00"),
+        primary_reason="Scheduled hydraulic fluid flush and filter replacement.",
+        root_cause_category="operational_issue",
+        status="active",
+    )
+
+
+@pytest.fixture
+def oee_record_a(db, tenant_a, fixed_asset_a, operational_asset_a, admin_user):
+    return AssetOeeRecord.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        recorded_by=admin_user,
+        record_date=timezone.now().date(),
+        shift_identifier="Day Shift A",
+        planned_production_time_minutes=Decimal("480.00"),
+        operating_time_minutes=Decimal("420.00"),
+        ideal_cycle_time_seconds=Decimal("30.00"),
+        total_units_produced=800,
+        good_units_produced=780,
+        defect_units_count=20,
+        rework_units_count=5,
+        breakdown_loss_minutes=Decimal("30.00"),
+        setup_loss_minutes=Decimal("30.00"),
+        small_stops_loss_minutes=Decimal("10.00"),
+        reduced_speed_loss_minutes=Decimal("10.00"),
+        defect_loss_minutes=Decimal("10.00"),
+        startup_loss_minutes=Decimal("5.00"),
+        availability_rate=Decimal("87.50"),
+        performance_rate=Decimal("95.24"),
+        quality_rate=Decimal("97.50"),
+        oee_percentage=Decimal("81.25"),
+        status="draft",
+    )
+
+
+@pytest.fixture
+def oee_record_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin_b):
+    return AssetOeeRecord.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        recorded_by=admin_b,
+        record_date=timezone.now().date(),
+        shift_identifier="Night Shift B",
+        planned_production_time_minutes=Decimal("480.00"),
+        operating_time_minutes=Decimal("360.00"),
+        ideal_cycle_time_seconds=Decimal("45.00"),
+        total_units_produced=450,
+        good_units_produced=420,
+        defect_units_count=30,
+        rework_units_count=10,
+        availability_rate=Decimal("75.00"),
+        performance_rate=Decimal("93.75"),
+        quality_rate=Decimal("93.33"),
+        oee_percentage=Decimal("65.62"),
+        status="draft",
+    )
+
+
+@pytest.fixture
+def energy_reading_a(db, tenant_a, fixed_asset_a, operational_asset_a, vendor_party_a, admin_user):
+    return AssetEnergyReading.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        utility_provider=vendor_party_a,
+        recorded_by=admin_user,
+        reading_timestamp=timezone.now(),
+        utility_type="electricity",
+        meter_reading_value=Decimal("12450.50"),
+        consumption_kwh=Decimal("285.50"),
+        peak_demand_kw=Decimal("45.20"),
+        power_factor=Decimal("0.950"),
+        cost_per_unit=Decimal("0.1450"),
+        total_energy_cost=Decimal("41.40"),
+        ghg_scope="scope_2_indirect",
+        emission_factor=Decimal("0.3850"),
+        carbon_emissions_kg=Decimal("109.92"),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def energy_reading_b(db, tenant_b, fixed_asset_b, operational_asset_b, vendor_party_b, admin_b):
+    return AssetEnergyReading.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        utility_provider=vendor_party_b,
+        recorded_by=admin_b,
+        reading_timestamp=timezone.now(),
+        utility_type="diesel",
+        meter_reading_value=Decimal("5400.00"),
+        consumption_kwh=Decimal("150.00"),
+        cost_per_unit=Decimal("1.2500"),
+        total_energy_cost=Decimal("187.50"),
+        ghg_scope="scope_1_direct",
+        emission_factor=Decimal("2.6800"),
+        carbon_emissions_kg=Decimal("402.00"),
+        status="pending",
+    )
+
+
+@pytest.fixture
+def performance_scorecard_a(db, tenant_a, fixed_asset_a, operational_asset_a, org_unit_a, admin_user):
+    today = timezone.now().date()
+    return AssetPerformanceScorecard.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        department=org_unit_a,
+        evaluated_by=admin_user,
+        period_type="monthly",
+        period_start=today.replace(day=1),
+        period_end=today,
+        total_calendar_hours=Decimal("720.00"),
+        planned_operating_hours=Decimal("500.00"),
+        actual_operating_hours=Decimal("460.00"),
+        unplanned_downtime_hours=Decimal("25.00"),
+        planned_downtime_hours=Decimal("15.00"),
+        failure_event_count=2,
+        capacity_utilization_rate=Decimal("63.89"),
+        availability_rate=Decimal("92.00"),
+        mtbf_hours=Decimal("230.00"),
+        mttr_hours=Decimal("12.50"),
+        average_oee_percentage=Decimal("82.50"),
+        total_energy_consumption_kwh=Decimal("14250.00"),
+        total_carbon_emissions_kg=Decimal("5486.25"),
+        total_downtime_cost=Decimal("3750.00"),
+        performance_index_score=Decimal("86.50"),
+        benchmark_grade="gold",
+        status="draft",
+    )
+
+
+@pytest.fixture
+def performance_scorecard_b(db, tenant_b, fixed_asset_b, operational_asset_b, org_unit_b, admin_b):
+    today = timezone.now().date()
+    return AssetPerformanceScorecard.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        department=org_unit_b,
+        evaluated_by=admin_b,
+        period_type="monthly",
+        period_start=today.replace(day=1),
+        period_end=today,
+        total_calendar_hours=Decimal("720.00"),
+        planned_operating_hours=Decimal("400.00"),
+        actual_operating_hours=Decimal("320.00"),
+        unplanned_downtime_hours=Decimal("60.00"),
+        planned_downtime_hours=Decimal("20.00"),
+        failure_event_count=5,
+        capacity_utilization_rate=Decimal("44.44"),
+        availability_rate=Decimal("80.00"),
+        mtbf_hours=Decimal("64.00"),
+        mttr_hours=Decimal("12.00"),
+        average_oee_percentage=Decimal("68.00"),
+        total_energy_consumption_kwh=Decimal("9800.00"),
+        total_carbon_emissions_kg=Decimal("3773.00"),
+        total_downtime_cost=Decimal("6000.00"),
+        performance_index_score=Decimal("68.20"),
+        benchmark_grade="bronze",
+        status="draft",
+    )
+
 
 
