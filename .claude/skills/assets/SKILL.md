@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, and maintenance work history logs with GL posting). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -21,7 +21,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.3 Asset Classification & Categorization**: Hierarchies, UNSPSC taxonomy, manufacturer model specs, criticality scoring.
 - **11.4 Asset Depreciation & Accounting**: Depreciation runs, revaluations, impairment testing, salvage adjustments (interconnected with Module 2 ledger).
 - **11.5 Asset Maintenance & Repair**: Breakdown tickets, triage, work orders, preventive maintenance calendars, runtime meter triggers, vendor AMC/SLA agreements, and work history logs with wrench time, ISO failure codes, and GL cost accounting.
-- **11.6 Asset Disposal & Decommissioning**: Asset retirement, scrap, auctions, trade-ins, write-offs, gain/loss calculation.
+- **11.6 Asset Performance & Utilization**: Operational downtime logging with hourly financial loss, Overall Equipment Effectiveness (OEE) tracking with TPM Six Big Losses, smart sub-meter energy readings with GHG Scope 1/2/3 carbon footprint metrics, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking.
 
 ---
 
@@ -58,6 +58,11 @@ apps/assets/
       AssetMaintenanceSchedules.py            <- AssetMaintenanceSchedule [AMSC-]
       AssetServiceContracts.py                <- AssetServiceContract [ASVC-]
       AssetMaintenanceLogs.py                 <- AssetMaintenanceLog [AMLG-]
+    AssetPerformance/                         <- Sub-module 11.6 models
+      AssetDowntimeLogs.py                    <- AssetDowntimeLog [ADWN-]
+      AssetOeeRecords.py                      <- AssetOeeRecord [AOEE-]
+      AssetEnergyReadings.py                  <- AssetEnergyReading [AENG-]
+      AssetPerformanceScorecards.py           <- AssetPerformanceScorecard [APSC-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -86,6 +91,11 @@ apps/assets/
       AssetMaintenanceSchedules.py            <- AssetMaintenanceScheduleForm, RecordCompletionForm
       AssetServiceContracts.py                <- AssetServiceContractForm, RenewForm
       AssetMaintenanceLogs.py                 <- AssetMaintenanceLogForm
+    AssetPerformance/                         <- Sub-module 11.6 forms
+      AssetDowntimeLogs.py                    <- AssetDowntimeLogForm, AssetDowntimeLogResolveForm
+      AssetOeeRecords.py                      <- AssetOeeRecordForm
+      AssetEnergyReadings.py                  <- AssetEnergyReadingForm
+      AssetPerformanceScorecards.py           <- AssetPerformanceScorecardForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -115,6 +125,11 @@ apps/assets/
       AssetMaintenanceSchedules.py            <- Schedule CRUD + pause, activate, generate_request, record_completion
       AssetServiceContracts.py                <- Contract CRUD + record_visit, renew, terminate
       AssetMaintenanceLogs.py                 <- Log CRUD + submit_review, approve, post_gl
+    AssetPerformance/                         <- Sub-module 11.6 views
+      AssetDowntimeLogs.py                    <- Downtime CRUD + resolve
+      AssetOeeRecords.py                      <- OEE CRUD + finalize
+      AssetEnergyReadings.py                  <- Energy CRUD + validate
+      AssetPerformanceScorecards.py           <- Scorecard CRUD + publish
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -142,11 +157,16 @@ apps/assets/
       AssetMaintenanceSchedules.py
       AssetServiceContracts.py
       AssetMaintenanceLogs.py
+    AssetPerformance/                         <- Sub-module 11.6 URL route definitions
+      AssetDowntimeLogs.py
+      AssetOeeRecords.py
+      AssetEnergyReadings.py
+      AssetPerformanceScorecards.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4 & 11.5)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5 & 11.6)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -167,6 +187,10 @@ apps/assets/
     test_asset_maintenance_forms.py           <- 11.5 Form validations, tenant kwargs, foreign key isolation
     test_asset_maintenance_views.py           <- 11.5 View contracts, filters, action endpoints, pagination
     test_asset_maintenance_security.py        <- 11.5 IDOR (404), RBAC gates (403), cross-tenant FK injection, status guards
+    test_assetperformance_models.py           <- 11.6 Model invariants, OEE formulas, energy intensity, scorecards
+    test_assetperformance_forms.py            <- 11.6 Form validation, time/power factor bounds, reject_foreign
+    test_assetperformance_views.py            <- 11.6 View contracts, page_obj, state actions, delete protection
+    test_assetperformance_security.py         <- 11.6 IDOR (404), list isolation, unauthenticated redirect (302)
 ```
 
 ---
@@ -235,6 +259,20 @@ apps/assets/
    - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `maintenance_request` (FK `AssetMaintenanceRequest`), `maintenance_schedule` (FK `AssetMaintenanceSchedule`), `service_contract` (FK `AssetServiceContract`), `work_order` (FK `scm.MaintenanceWorkOrder`), `service_date`, `completion_date`, `maintenance_type` (`corrective_repair`, `preventive_service`, `emergency_breakdown`, `calibration`, `inspection`, `overhaul`), `failure_code` (`mechanical_wear`, `electrical_short`, `hydraulic_leak`, `software_fault`, `operator_error`, `corrosion`, `thermal_overload`, `lubrication_failure`, `normal_wear`, `other`), `downtime_hours`, `meter_reading`, `lead_technician` (FK `User`), `service_vendor` (FK `core.Party`), `labor_hours`, `labor_cost`, `parts_consumed_summary`, `parts_cost`, `vendor_invoice_cost`, `total_cost`, `expense_account` (FK `accounting.GLAccount`), `root_cause_analysis`, `action_taken`, `status` (`draft`, `in_review`, `approved`, `posted`), `approved_by` (FK `User`), `approved_at`.
    - **Invariants:** Cost roll-up (`labor_cost + parts_cost + vendor_invoice_cost = total_cost`), ISO 14224 failure categorization, supervisory approval workflow, GL posting with synchronized updates across linked schedule, request, and contract.
 
+### 11.6 Asset Performance & Utilization
+1. **`AssetDowntimeLog`** (`ADWN-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `maintenance_request` (FK `assets.AssetMaintenanceRequest`), `work_order` (FK `scm.MaintenanceWorkOrder`), `downtime_category` (`unplanned_breakdown`, `planned_maintenance`, `setup_changeover`, `tooling_adjustment`, `process_interruption`, `utility_outage`, `operator_unavailable`, `cleaning_sanitation`), `impact_level` (`full_shutdown`, `partial_derate`, `cell_idle`, `minor_stop`), `root_cause_code`, `failure_description`, `started_at`, `ended_at`, `duration_minutes`, `hourly_cost_rate`, `total_downtime_cost`, `is_mtbf_failure`, `logged_by` (FK `User`), `department` (FK `core.OrgUnit`), `status` (`active`, `resolved`, `under_investigation`, `cancelled`), `resolution_notes`.
+   - **Invariants:** Auto-calculates duration and financial loss (`hours * hourly_cost_rate`). Resolve workflow records restart timestamp and notes.
+2. **`AssetOeeRecord`** (`AOEE-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `record_date`, `shift_name`, `planned_production_time_minutes`, `operating_time_minutes`, `ideal_cycle_time_seconds`, `total_units_produced`, `good_units_produced`, `defect_units_count`, `rework_units_count`, TPM Six Big Losses (`breakdown_loss_minutes`, `setup_loss_minutes`, `small_stops_loss_minutes`, `reduced_speed_loss_minutes`, `defect_loss_minutes`, `startup_loss_minutes`), `availability_percentage`, `performance_percentage`, `quality_percentage`, `oee_percentage`, `benchmark_tier` (`world_class`, `typical`, `needs_improvement`), `status` (`draft`, `finalized`, `cancelled`), `notes`, `recorded_by` (FK `User`).
+   - **Invariants:** Mathematical OEE calculation ($A \times P \times Q$), benchmark classification, status transition guard (`draft` -> `finalized`).
+3. **`AssetEnergyReading`** (`AENG-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `reading_timestamp`, `utility_type` (`electricity`, `natural_gas`, `water`, `compressed_air`, `steam`, `diesel`), `meter_serial_number`, `consumption_value`, `unit_of_measure`, `peak_demand_kw`, `power_factor`, `operating_hours`, `units_produced`, `energy_intensity_per_hour`, `energy_intensity_per_unit`, `emission_factor`, `carbon_emissions_kg_co2e`, `ghg_scope` (`scope_1`, `scope_2`, `scope_3`), `cost_per_unit`, `total_energy_cost`, `utility_provider` (FK `core.Party`), `status` (`pending`, `validated`, `flagged_anomaly`, `cancelled`), `notes`, `recorded_by` (FK `User`).
+   - **Invariants:** Specific energy consumption (SEC) intensity metrics, GHG Protocol Scope 1/2/3 emissions rollups, validation workflow.
+4. **`AssetPerformanceScorecard`** (`APSC-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `period_type` (`daily`, `weekly`, `monthly`, `quarterly`, `annual`), `period_start`, `period_end`, `total_calendar_hours`, `planned_operating_hours`, `actual_operating_hours`, `unplanned_downtime_hours`, `planned_downtime_hours`, `idle_capacity_hours`, `failure_event_count`, `capacity_utilization_rate`, `availability_rate`, `mtbf_hours`, `mttr_hours`, `average_oee_percentage`, `total_energy_consumption_kwh`, `total_carbon_emissions_kg`, `total_downtime_cost`, `performance_index_score`, `benchmark_grade` (`grade_a`, `grade_b`, `grade_c`, `grade_d`), `status` (`draft`, `published`, `archived`), `department` (FK `core.OrgUnit`), `evaluated_by` (FK `User`), `executive_summary`.
+   - **Invariants:** Roll-up synthesis (35% Utilization + 35% Availability + 30% OEE), MTBF/MTTR calculation, publish lifecycle.
+
 ---
 
 ## Key URLs & Routes (11.2, 11.3, 11.4 & 11.5)
@@ -281,6 +319,37 @@ Namespace: `assets:`
   - `assets:asset_maintenance_log_submit_review`: `/assets/logs/<pk>/submit-review/` [POST]
   - `assets:asset_maintenance_log_approve`: `/assets/logs/<pk>/approve/` [POST, Admin]
   - `assets:asset_maintenance_log_post_gl`: `/assets/logs/<pk>/post-gl/` [POST, Admin]
+
+### 11.6 Asset Performance & Utilization
+Namespace: `assets:`
+- **Downtime Logs:**
+  - `assets:asset_downtime_log_list`: `/assets/downtime/`
+  - `assets:asset_downtime_log_create`: `/assets/downtime/create/`
+  - `assets:asset_downtime_log_detail`: `/assets/downtime/<pk>/`
+  - `assets:asset_downtime_log_edit`: `/assets/downtime/<pk>/edit/`
+  - `assets:asset_downtime_log_delete`: `/assets/downtime/<pk>/delete/` [POST]
+  - `assets:asset_downtime_log_resolve`: `/assets/downtime/<pk>/resolve/` [GET, POST]
+- **OEE Records:**
+  - `assets:asset_oee_record_list`: `/assets/oee/`
+  - `assets:asset_oee_record_create`: `/assets/oee/create/`
+  - `assets:asset_oee_record_detail`: `/assets/oee/<pk>/`
+  - `assets:asset_oee_record_edit`: `/assets/oee/<pk>/edit/`
+  - `assets:asset_oee_record_delete`: `/assets/oee/<pk>/delete/` [POST]
+  - `assets:asset_oee_record_finalize`: `/assets/oee/<pk>/finalize/` [POST]
+- **Energy Readings:**
+  - `assets:asset_energy_reading_list`: `/assets/energy/`
+  - `assets:asset_energy_reading_create`: `/assets/energy/create/`
+  - `assets:asset_energy_reading_detail`: `/assets/energy/<pk>/`
+  - `assets:asset_energy_reading_edit`: `/assets/energy/<pk>/edit/`
+  - `assets:asset_energy_reading_delete`: `/assets/energy/<pk>/delete/` [POST]
+  - `assets:asset_energy_reading_validate`: `/assets/energy/<pk>/validate/` [POST]
+- **Performance Scorecards:**
+  - `assets:asset_performance_scorecard_list`: `/assets/scorecards/`
+  - `assets:asset_performance_scorecard_create`: `/assets/scorecards/create/`
+  - `assets:asset_performance_scorecard_detail`: `/assets/scorecards/<pk>/`
+  - `assets:asset_performance_scorecard_edit`: `/assets/scorecards/<pk>/edit/`
+  - `assets:asset_performance_scorecard_delete`: `/assets/scorecards/<pk>/delete/` [POST]
+  - `assets:asset_performance_scorecard_publish`: `/assets/scorecards/<pk>/publish/` [POST]
 
 ### 11.4 Asset Depreciation & Financial Management
 Namespace: `assets:`
@@ -420,7 +489,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (766 passing tests across 11.1, 11.2, 11.3, 11.4, and 11.5).
+Unfiltered run on SQLite in-memory test database (821 passing tests across 11.1, 11.2, 11.3, 11.4, 11.5, and 11.6).
 
 ---
 
@@ -430,4 +499,5 @@ Unfiltered run on SQLite in-memory test database (766 passing tests across 11.1,
 - `11.3`: Classification & Taxonomy (`assets:asset_category_list`)
 - `11.4`: Depreciation & Financials (`assets:depreciation_schedule_list`)
 - `11.5`: Maintenance & Repair (`assets:asset_maintenance_request_list`)
+- `11.6`: Performance & Utilization (`assets:asset_downtime_log_list`)
 
