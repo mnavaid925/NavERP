@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}{{ schedule.number }} — Depreciation Schedule — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:depreciation_schedule_list' %}">Depreciation Schedules</a>
+            <span>/</span>
+            <span>{{ schedule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ schedule.number }}</h1>
+            <span class="badge {{ schedule.status_css }}">{{ schedule.get_status_display }}</span>
+            <span class="badge {{ schedule.method_css }}">{{ schedule.get_depreciation_method_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if schedule.status != 'posted' %}
+        <form method="post" action="{% url 'assets:depreciation_schedule_calculate' schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="calculator" class="w-4 h-4 mr-1"></i> Recalculate
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:depreciation_schedule_post' schedule.pk %}" class="inline" onsubmit="return confirm('Post depreciation schedule {{ schedule.number }} to General Ledger? This creates double-entry journal entries.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="book-open" class="w-4 h-4 mr-1"></i> Post to GL
+            </button>
+        </form>
+        <a href="{% url 'assets:depreciation_schedule_edit' schedule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:depreciation_schedule_delete' schedule.pk %}" class="inline" onsubmit="return confirm('Delete depreciation schedule {{ schedule.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:depreciation_schedule_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Calculation & Financial Metrics -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Schedule Financial Summary -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <h2 class="text-base font-semibold text-slate-800">Depreciation Run Summary</h2>
+                <span class="text-xs text-muted">Run Date: {{ schedule.schedule_date|date:"Y-m-d" }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Starting Net Book Value</div>
+                        <div class="text-xl font-bold font-mono text-slate-800">${{ schedule.starting_book_value|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div class="text-xs text-brand mb-1">Period Depreciation Charge</div>
+                        <div class="text-xl font-bold font-mono text-brand">${{ schedule.depreciation_amount|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Ending Net Book Value</div>
+                        <div class="text-xl font-bold font-mono text-slate-800">${{ schedule.ending_book_value|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-muted">Fiscal Year</div>
+                        <div class="font-medium text-slate-800">FY{{ schedule.fiscal_year }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Period Number</div>
+                        <div class="font-medium text-slate-800">Period {{ schedule.period_number }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Frequency</div>
+                        <div class="font-medium text-slate-800">{{ schedule.get_period_frequency_display }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Accum. Deprec. After</div>
+                        <div class="font-medium font-mono text-slate-800">${{ schedule.accumulated_depreciation_after|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                {% if schedule.depreciation_method == 'units_of_production' %}
+                <div class="mt-6 pt-4 border-t border-slate-200 grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <div class="text-xs text-muted">Total Units Expected</div>
+                        <div class="font-medium font-mono">{{ schedule.total_units_expected|default:"—" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted">Units Produced This Period</div>
+                        <div class="font-medium font-mono">{{ schedule.units_produced_period|default:"—" }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if schedule.notes %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted mb-1">Notes & Justification</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ schedule.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- General Ledger & Posting Details -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">General Ledger & Cost Allocation</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-xs text-muted mb-1">Debit Account (Expense)</div>
+                        {% if schedule.expense_account %}
+                        <div class="font-medium text-slate-900">{{ schedule.expense_account.code }} — {{ schedule.expense_account.name }}</div>
+                        {% else %}
+                        <div class="text-sm text-muted">Default from Fixed Asset ({{ schedule.fixed_asset.expense_account.code|default:"None" }})</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Credit Account (Accumulated Depreciation)</div>
+                        {% if schedule.accumulated_account %}
+                        <div class="font-medium text-slate-900">{{ schedule.accumulated_account.code }} — {{ schedule.accumulated_account.name }}</div>
+                        {% else %}
+                        <div class="text-sm text-muted">Default from Fixed Asset ({{ schedule.fixed_asset.accumulated_account.code|default:"None" }})</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Cost Center (OrgUnit)</div>
+                        <div class="font-medium text-slate-900">{{ schedule.cost_center.name|default:"Unallocated" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Linked Journal Entry</div>
+                        {% if schedule.journal_entry %}
+                        <span class="font-medium font-mono text-brand">{{ schedule.journal_entry.number }}</span>
+                        <span class="badge badge-green ml-2">Posted</span>
+                        {% else %}
+                        <span class="text-sm text-muted">Not Posted Yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Fixed Asset Master Information -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Fixed Asset Subledger</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted">Asset Name & Number</div>
+                    <div class="font-bold text-slate-900 text-base">{{ schedule.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ schedule.fixed_asset.number }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Original Acquisition Cost</div>
+                    <div class="font-medium font-mono text-slate-900">${{ schedule.fixed_asset.acquisition_cost|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Estimated Salvage Value</div>
+                    <div class="font-medium font-mono text-slate-900">${{ schedule.fixed_asset.salvage_value|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Useful Life</div>
+                    <div class="font-medium text-slate-900">{{ schedule.fixed_asset.useful_life_months }} months</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Subledger Accum. Deprec.</div>
+                    <div class="font-medium font-mono text-slate-900">${{ schedule.fixed_asset.accumulated_depreciation|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Last Depreciation Run Date</div>
+                    <div class="font-medium text-slate-900">{{ schedule.fixed_asset.last_depreciation_date|default:"None" }}</div>
+                </div>
+                {% if schedule.operational_asset %}
+                <div class="pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted">Operational Asset Register</div>
+                    <div class="font-medium text-slate-900">{{ schedule.operational_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ schedule.operational_asset.number }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Posting Metadata</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted">Posting Status</div>
+                    <span class="badge {{ schedule.status_css }}">{{ schedule.get_status_display }}</span>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Posted At</div>
+                    <div class="font-medium text-slate-800">{{ schedule.posted_at|date:"Y-m-d H:i"|default:"Pending" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Posted By</div>
+                    <div class="font-medium text-slate-800">{{ schedule.posted_by.get_full_name|default:schedule.posted_by.username|default:"—" }}</div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-muted">
+                    <div>Created: {{ schedule.created_at|date:"Y-m-d H:i" }}</div>
+                    <div>Updated: {{ schedule.updated_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
