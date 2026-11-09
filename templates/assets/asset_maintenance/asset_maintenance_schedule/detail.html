@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+
+{% block title %}PM Schedule {{ maintenance_schedule.number }} — Maintenance & Repair — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_maintenance_schedule_list' %}">PM Schedules</a>
+            <span>/</span>
+            <span>{{ maintenance_schedule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ maintenance_schedule.number }}</h1>
+            <span class="badge {{ maintenance_schedule.status_css }}">{{ maintenance_schedule.get_status_display }}</span>
+            <span class="badge {{ maintenance_schedule.schedule_type_css }}">{{ maintenance_schedule.get_schedule_type_display }}</span>
+            {% if maintenance_schedule.is_mandatory %}
+            <span class="badge badge-amber">Mandatory Compliance</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <form method="post" action="{% url 'assets:asset_maintenance_schedule_generate_request' maintenance_schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> Spawn Work Ticket
+            </button>
+        </form>
+
+        <button type="button" onclick="document.getElementById('completion-modal').classList.remove('hidden')" class="btn btn-outline text-emerald-700 hover:bg-emerald-50">
+            <i data-lucide="check-check" class="w-4 h-4 mr-1"></i> Record Completion
+        </button>
+
+        {% if maintenance_schedule.is_active %}
+        <form method="post" action="{% url 'assets:asset_maintenance_schedule_pause' maintenance_schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50">
+                <i data-lucide="pause" class="w-4 h-4 mr-1"></i> Pause
+            </button>
+        </form>
+        {% else %}
+        <form method="post" action="{% url 'assets:asset_maintenance_schedule_activate' maintenance_schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-700 hover:bg-emerald-50">
+                <i data-lucide="play" class="w-4 h-4 mr-1"></i> Activate
+            </button>
+        </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_maintenance_schedule_edit' maintenance_schedule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+
+        <form method="post" action="{% url 'assets:asset_maintenance_schedule_delete' maintenance_schedule.pk %}" class="inline" onsubmit="return confirm('Delete PM schedule {{ maintenance_schedule.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Parameters & Checklist -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Plan Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Schedule Definition</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Plan Name</div>
+                    <div class="text-lg font-semibold text-slate-900 mt-0.5">{{ maintenance_schedule.name }}</div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs text-slate-500">Recurrence Interval</div>
+                        <div class="text-sm font-semibold text-slate-900 mt-1">
+                            Every {{ maintenance_schedule.frequency_interval }} {{ maintenance_schedule.get_frequency_unit_display }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Lead Notice Time</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ maintenance_schedule.lead_time_days }} days</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Last Serviced Date</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">
+                            {{ maintenance_schedule.last_service_date|date:"M d, Y"|default:"Never recorded" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Next Due Date</div>
+                        <div class="text-sm font-bold {% if maintenance_schedule.status_css == 'badge-red' %}text-red-600{% else %}text-slate-900{% endif %} mt-1">
+                            {{ maintenance_schedule.next_due_date|date:"M d, Y"|default:"TBD" }}
+                        </div>
+                    </div>
+                </div>
+
+                {% if maintenance_schedule.meter_trigger_threshold %}
+                <div class="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs text-slate-500">Meter Delta Threshold</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ maintenance_schedule.meter_trigger_threshold }} units</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Next Due Meter Reading</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ maintenance_schedule.next_due_meter|default:"—" }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_schedule.notes %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Operational Notes</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line leading-relaxed">
+                        {{ maintenance_schedule.notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Preventive Checklist Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Preventive Service Checklist & SOP</h3>
+                <span class="text-xs text-slate-500">{{ service_checklist_items|length }} checklist items</span>
+            </div>
+            <div class="card-body">
+                {% if service_checklist_items %}
+                <ul class="space-y-2.5">
+                    {% for item in service_checklist_items %}
+                    <li class="flex items-start gap-2.5 text-sm text-slate-800">
+                        <i data-lucide="check-square" class="w-4 h-4 text-emerald-600 mt-0.5 shrink-0"></i>
+                        <span>{{ item }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-sm text-slate-500 italic">No checklist items defined. Technicians will perform general inspection.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Work Tickets Spawned -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Tickets Spawned from this Schedule</h3>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Ticket #</th>
+                            <th>Title</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                            <th>Created On</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in linked_requests %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'assets:asset_maintenance_request_detail' req.pk %}" class="text-blue-600 hover:underline">
+                                    {{ req.number }}
+                                </a>
+                            </td>
+                            <td>{{ req.title }}</td>
+                            <td>{{ req.assigned_technician.get_full_name|default:req.assigned_technician.username|default:"—" }}</td>
+                            <td><span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span></td>
+                            <td class="text-xs text-slate-500">{{ req.created_at|date:"M d, Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-slate-500 text-sm">
+                                No maintenance requests generated yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Asset Context & Contracts -->
+    <div class="space-y-6">
+        <!-- Asset Identification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Asset Binding</h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if maintenance_schedule.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Fixed Asset Master</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ maintenance_schedule.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-slate-500">{{ maintenance_schedule.fixed_asset.number }}</div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_schedule.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Operational Equipment</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ maintenance_schedule.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-500">{{ maintenance_schedule.operational_asset.asset_tag|default:"No Tag" }}</div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_schedule.asset_category %}
+                <div>
+                    <div class="text-xs text-slate-500">Asset Category Template</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ maintenance_schedule.asset_category.name }}</div>
+                </div>
+                {% endif %}
+
+                {% if not maintenance_schedule.fixed_asset and not maintenance_schedule.operational_asset and not maintenance_schedule.asset_category %}
+                <div class="text-sm text-slate-500 italic">No asset or category linked.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Vendor & Contract Details -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Contractor & Vendor</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500">Assigned Internal Technician</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {{ maintenance_schedule.assigned_technician.get_full_name|default:maintenance_schedule.assigned_technician.username|default:"Unassigned" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-slate-500">Preferred External Vendor</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {{ maintenance_schedule.preferred_vendor.name|default:"Internal Only" }}
+                    </div>
+                </div>
+
+                {% if maintenance_schedule.service_contract %}
+                <div>
+                    <div class="text-xs text-slate-500">Governing Service Agreement</div>
+                    <div class="text-sm font-medium text-blue-600 mt-0.5">
+                        <a href="{% url 'assets:asset_service_contract_detail' maintenance_schedule.service_contract.pk %}" class="hover:underline">
+                            {{ maintenance_schedule.service_contract.number }} ({{ maintenance_schedule.service_contract.contract_number }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Record Service Completion -->
+<div id="completion-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Record PM Service Completion</h3>
+        <p class="text-xs text-slate-500 mb-4">Recording completion will automatically advance the next service due date by {{ maintenance_schedule.frequency_interval }} {{ maintenance_schedule.get_frequency_unit_display }}.</p>
+        <form method="post" action="{% url 'assets:asset_maintenance_schedule_record_completion' maintenance_schedule.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Completion Date *</label>
+                    {{ completion_form.completion_date }}
+                </div>
+                <div>
+                    <label class="form-label">Asset Meter Reading at Completion</label>
+                    {{ completion_form.completion_meter }}
+                </div>
+                <div>
+                    <label class="form-label">Service Notes & Findings</label>
+                    {{ completion_form.notes }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('completion-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">Record & Advance Schedule</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
