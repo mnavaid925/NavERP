@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.accounting.models import FixedAsset
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -6,6 +7,8 @@ from apps.assets.models import AssetCategory
 from apps.assets.models.AssetReliability.AssetConditionAssessments import AssetConditionAssessment
 from apps.core.models import Party
 from apps.scm.models import Asset as OperationalAsset
+
+User = get_user_model()
 
 
 class AssetConditionAssessmentForm(TenantUniqueMixin, TenantModelForm):
@@ -52,6 +55,7 @@ class AssetConditionAssessmentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
             self.fields["asset_category"].queryset = AssetCategory.objects.filter(tenant=self.tenant)
+            self.fields["inspector"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
             self.fields["external_inspector"].queryset = Party.objects.filter(
                 tenant=self.tenant,
                 roles__role="vendor",
@@ -59,5 +63,5 @@ class AssetConditionAssessmentForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["fixed_asset", "operational_asset", "asset_category", "external_inspector"])
+        reject_foreign(self, cleaned_data, ["fixed_asset", "operational_asset", "asset_category", "inspector", "external_inspector"])
         return cleaned_data
