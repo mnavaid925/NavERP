@@ -6,6 +6,12 @@ from apps.assets.models.AssetClassification import (
     AssetModel,
     AssetSpecificationTemplate,
 )
+from apps.assets.models.AssetDepreciation import (
+    AssetDepreciationSchedule,
+    AssetRevaluation,
+    AssetTransfer,
+    CapitalizationPolicy,
+)
 from apps.assets.models.AssetInventoryTracking import (
     AssetAudit,
     AssetCustodyLog,
@@ -34,4 +40,8 @@ __all__ = [
     "AssetModel",
     "AssetCriticalityAssessment",
     "AssetSpecificationTemplate",
+    "AssetDepreciationSchedule",
+    "AssetRevaluation",
+    "AssetTransfer",
+    "CapitalizationPolicy",
 ]
