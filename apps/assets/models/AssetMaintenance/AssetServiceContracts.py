@@ -50,9 +50,9 @@ class AssetServiceContract(TenantNumbered):
     CONTRACT_TYPE_CSS = {
         "comprehensive_amc": "badge-green",
         "labor_only": "badge-info",
-        "parts_and_labor": "badge-blue",
+        "parts_and_labor": "badge-info",
         "on_call_support": "badge-amber",
-        "oem_warranty_extension": "badge-purple",
+        "oem_warranty_extension": "badge-slate",
     }
 
     contract_number = models.CharField(
@@ -173,7 +173,7 @@ class AssetServiceContract(TenantNumbered):
     @property
     def status_css(self):
         today = timezone.now().date()
-        if self.status == "active":
+        if self.status == "active" and self.end_date:
             if self.end_date < today:
                 return "badge-red"
             elif self.end_date <= today + timedelta(days=30):
@@ -196,13 +196,17 @@ class AssetServiceContract(TenantNumbered):
         self.pm_visits_completed += 1
         self.save(update_fields=["pm_visits_completed", "updated_at"])
 
-    def renew(self, new_end_date, new_contract_value=None):
+    def renew(self, new_end_date, new_contract_value=None, notes=""):
         self.end_date = new_end_date
         if new_contract_value is not None:
             self.contract_value = new_contract_value
+        if notes:
+            timestamp = timezone.now().strftime("%Y-%m-%d %H:%M")
+            addition = f"[{timestamp}] Renewal note: {notes.strip()}"
+            self.notes = f"{self.notes}\n\n{addition}".strip() if self.notes else addition
         self.status = "active"
         self.pm_visits_completed = 0
-        self.save(update_fields=["end_date", "contract_value", "status", "pm_visits_completed", "updated_at"])
+        self.save(update_fields=["end_date", "contract_value", "notes", "status", "pm_visits_completed", "updated_at"])
 
     def terminate(self):
         self.status = "terminated"
