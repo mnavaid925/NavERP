@@ -20,7 +20,7 @@ def asset_failure_mode_list(request):
             "fixed_asset",
             "operational_asset",
             "asset_category",
-        ),
+        ).defer("function_description", "failure_effect", "strategy_rationale", "mitigation_task"),
         request,
     )
 
