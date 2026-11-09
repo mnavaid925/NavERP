@@ -26,39 +26,45 @@
         <form method="post" action="{% url 'assets:asset_maintenance_log_submit_review' maintenance_log.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50">
-                <i data-lucide="send" class="w-4 h-4 mr-1"></i> Submit for Review
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Review
             </button>
         </form>
         {% endif %}
 
-        {% if maintenance_log.status == "in_review" %}
+        {% if is_tenant_admin and maintenance_log.status == "in_review" %}
         <form method="post" action="{% url 'assets:asset_maintenance_log_approve' maintenance_log.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary bg-blue-600 hover:bg-blue-700">
-                <i data-lucide="check" class="w-4 h-4 mr-1"></i> Approve Service Record
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Approve Service Record
             </button>
         </form>
         {% endif %}
 
-        {% if maintenance_log.status == "approved" %}
+        {% if is_tenant_admin and maintenance_log.status == "approved" %}
         <form method="post" action="{% url 'assets:asset_maintenance_log_post_gl' maintenance_log.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
-                <i data-lucide="book" class="w-4 h-4 mr-1"></i> Post to General Ledger
+                <i data-lucide="book" class="w-4 h-4 me-1"></i> Post to General Ledger
             </button>
         </form>
         {% endif %}
 
         <a href="{% url 'assets:asset_maintenance_log_edit' maintenance_log.pk %}" class="btn btn-outline">
-            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
 
+        {% if is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_maintenance_log_delete' maintenance_log.pk %}" class="inline" onsubmit="return confirm('Delete maintenance log {{ maintenance_log.number }}?');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete" aria-label="Delete Log">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_maintenance_log_list' %}" class="btn btn-ghost" aria-label="Back to Maintenance Logs">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
     </div>
 </div>
 
