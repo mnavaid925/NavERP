@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Transfers & Relocations — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Depreciation & Financial Management</span>
+            <span>/</span>
+            <span>Transfers & Cost Allocation</span>
+        </div>
+        <h1 class="page-title">Asset Transfers & Reallocations</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:transfer_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Transfer Order
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="arrow-left-right"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Transfers</div>
+            <div class="stat-value">{{ total_transfers }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="truck"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Transit</div>
+            <div class="stat-value">{{ in_transit_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Completed & Accepted</div>
+            <div class="stat-value">{{ completed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Freight / Cost</div>
+            <div class="stat-value">${{ total_transport_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ q }}" placeholder="Transfer #, title, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Transfer Type</label>
+                <select id="type-filter" name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in transfer_type_choices %}
+                    <option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if selected_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:transfer_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Transfers Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Transfer #</th>
+                    <th>Fixed Asset</th>
+                    <th>Transfer Type</th>
+                    <th>Source ➔ Destination</th>
+                    <th>Date</th>
+                    <th class="text-right">Carrying NBV</th>
+                    <th class="text-right">Moving Cost</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in transfers %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:transfer_detail' item.pk %}" class="font-medium text-brand hover:underline">
+                            {{ item.number }}
+                        </a>
+                        <div class="text-xs text-muted truncate max-w-xs">{{ item.title }}</div>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.fixed_asset.name }}</div>
+                        <div class="text-xs text-muted">{{ item.fixed_asset.number }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.transfer_type_css }}">{{ item.get_transfer_type_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-xs text-slate-700">
+                            {{ item.source_department.name|default:"Unassigned" }}
+                            ➔
+                            <span class="font-medium text-slate-900">{{ item.destination_department.name|default:"Unassigned" }}</span>
+                        </div>
+                        {% if item.source_location or item.destination_location %}
+                        <div class="text-xs text-muted">
+                            Loc: {{ item.source_location.name|default:"—" }} ➔ {{ item.destination_location.name|default:"—" }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ item.transfer_date|date:"Y-m-d" }}</div>
+                    </td>
+                    <td class="text-right font-mono text-sm">
+                        ${{ item.carrying_value_at_transfer|floatformat:2 }}
+                    </td>
+                    <td class="text-right font-mono text-sm">
+                        ${{ item.transportation_cost|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:transfer_detail' item.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        {% if item.status != 'completed' %}
+                        <a href="{% url 'assets:transfer_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:transfer_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete transfer order {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="arrow-left-right" class="w-12 h-12 text-muted mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Asset Transfers Found</h3>
+                            <p class="text-sm text-muted mb-4">No transfer orders match the active filter criteria or none have been submitted.</p>
+                            <a href="{% url 'assets:transfer_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Transfer Order
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex items-center justify-between">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} transfers
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_type %}&type={{ selected_type }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
