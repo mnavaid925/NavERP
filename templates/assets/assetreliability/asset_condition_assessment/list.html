@@ -136,7 +136,7 @@
                                 {% if assessment.fixed_asset %}
                                     FA: {{ assessment.fixed_asset.number }} ({{ assessment.fixed_asset.name }})
                                 {% elif assessment.operational_asset %}
-                                    AST: {{ assessment.operational_asset.asset_tag }}
+                                    AST: {{ assessment.operational_asset.tag_code|default:assessment.operational_asset.number }}
                                 {% else %}
                                     Category: {{ assessment.asset_category.name|default:"General" }}
                                 {% endif %}
