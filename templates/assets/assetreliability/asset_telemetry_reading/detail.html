@@ -102,7 +102,7 @@
 
                     <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
                         <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Baseline Deviation</div>
-                        <div class="text-3xl font-bold mt-1 {% if reading.deviation_percentage > 20 %}text-red-600{% elif reading.deviation_percentage < -20 %}text-amber-600{% else %}text-green-600{% endif %}">
+                        <div class="text-3xl font-bold mt-1 {% if reading.deviation_percentage is None %}text-slate-400{% elif reading.deviation_percentage > 20 %}text-red-600{% elif reading.deviation_percentage < -20 %}text-amber-600{% else %}text-green-600{% endif %}">
                             {% if reading.deviation_percentage is not None %}
                                 {% if reading.deviation_percentage > 0 %}+{% endif %}{{ reading.deviation_percentage }}%
                             {% else %}
