@@ -44,7 +44,7 @@ class AssetRevaluation(TenantNumbered):
     EVENT_TYPE_CSS = {
         "impairment": "badge-red",
         "revaluation_up": "badge-green",
-        "reversal_impairment": "badge-blue",
+        "reversal_impairment": "badge-info",
         "salvage_revision": "badge-amber",
     }
 
