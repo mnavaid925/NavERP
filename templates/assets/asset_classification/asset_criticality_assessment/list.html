@@ -162,7 +162,7 @@
                         </a>
                         <form method="post" action="{% url 'assets:asset_criticality_assessment_approve' asmt.pk %}" class="inline" onsubmit="return confirm('Approve criticality assessment {{ asmt.number }} and synchronize operational criticality to asset {{ asmt.asset.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-green" title="Approve & Sync">
+                            <button type="submit" class="btn btn-icon text-ok" title="Approve & Sync">
                                 <i data-lucide="check-circle-2"></i>
                             </button>
                         </form>
