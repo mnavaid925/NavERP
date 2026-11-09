@@ -35,8 +35,10 @@ def asset_failure_mode_list(request):
             | Q(failure_mode__icontains=q)
             | Q(failure_cause__icontains=q)
             | Q(functional_failure__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
-            | Q(operational_asset__asset_tag__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
+            | Q(fixed_asset__name__icontains=q)
+            | Q(operational_asset__tag_code__icontains=q)
+            | Q(operational_asset__name__icontains=q)
         )
 
     # Filters
@@ -53,8 +55,8 @@ def asset_failure_mode_list(request):
         qs = qs.filter(status=status_filter)
 
     cat_filter = request.GET.get("category", "").strip()
-    if cat_filter:
-        qs = qs.filter(asset_category_id=cat_filter)
+    if cat_filter and cat_filter.isdigit():
+        qs = qs.filter(asset_category_id=int(cat_filter))
 
     # KPI counts over tenant
     tenant_base = AssetFailureMode.objects.filter(tenant=request.tenant)
