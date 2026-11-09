@@ -99,6 +99,7 @@ class AssetTransferForm(TenantUniqueMixin, forms.ModelForm):
                     "destination_location",
                     "destination_custodian",
                     "destination_expense_account",
+                    "transferred_by",
                 ],
             )
         return cleaned_data
