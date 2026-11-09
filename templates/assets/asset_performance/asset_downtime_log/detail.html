@@ -193,7 +193,7 @@
                 <div>
                     <span class="text-xs text-slate-500">Logged By</span>
                     <div class="text-slate-800 font-medium">
-                        {{ log.logged_by.get_full_name|default:log.logged_by.username|default:"System" }}
+                        {% if log.logged_by %}{{ log.logged_by.get_full_name|default:log.logged_by.username }}{% else %}System{% endif %}
                     </div>
                 </div>
             </div>
