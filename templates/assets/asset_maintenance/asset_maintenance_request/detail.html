@@ -254,7 +254,7 @@
                 <div>
                     <div class="text-xs text-slate-500">Submitted By</div>
                     <div class="text-sm font-medium text-slate-900 mt-0.5">
-                        {{ maintenance_request.requester.get_full_name|default:maintenance_request.requester.username|default:"System" }}
+                        {% if maintenance_request.requester %}{{ maintenance_request.requester.get_full_name|default:maintenance_request.requester.username }}{% else %}System{% endif %}
                     </div>
                 </div>
             </div>
