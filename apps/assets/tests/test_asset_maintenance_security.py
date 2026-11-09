@@ -312,7 +312,7 @@ def test_asset_maintenance_security_idor_log_delete_returns_404(client_a, mainte
 def test_asset_maintenance_security_idor_log_actions_return_404(client_a, maintenance_log_b):
     """Tenant A client calling workflow actions on Tenant B log returns 404."""
     actions = [
-        ("assets:asset_maintenance_log_submit", {}),
+        ("assets:asset_maintenance_log_submit_review", {}),
         ("assets:asset_maintenance_log_approve", {}),
         ("assets:asset_maintenance_log_post_gl", {}),
     ]
@@ -333,7 +333,7 @@ def test_asset_maintenance_security_log_list_isolation(client_a, maintenance_log
     url = reverse("assets:asset_maintenance_log_list")
     response = client_a.get(url)
     assert response.status_code == 200
-    logs = response.context["logs"]
+    logs = response.context["maintenance_logs"]
     assert maintenance_log_a in logs
     assert maintenance_log_b not in logs
 
@@ -426,13 +426,13 @@ def test_asset_maintenance_security_member_cannot_delete_log(member_client, main
 
 def test_asset_maintenance_security_member_cannot_approve_log(member_client, maintenance_log_a):
     """Regular member cannot approve a maintenance log -> 403 Forbidden."""
-    maintenance_log_a.status = "submitted"
+    maintenance_log_a.status = "in_review"
     maintenance_log_a.save()
     url = reverse("assets:asset_maintenance_log_approve", args=[maintenance_log_a.pk])
     response = member_client.post(url)
     assert response.status_code == 403
     maintenance_log_a.refresh_from_db()
-    assert maintenance_log_a.status == "submitted"
+    assert maintenance_log_a.status == "in_review"
 
 
 def test_asset_maintenance_security_member_cannot_post_gl_log(member_client, maintenance_log_a):
@@ -443,7 +443,7 @@ def test_asset_maintenance_security_member_cannot_post_gl_log(member_client, mai
     response = member_client.post(url)
     assert response.status_code == 403
     maintenance_log_a.refresh_from_db()
-    assert not maintenance_log_a.is_gl_posted
+    assert maintenance_log_a.status != "posted"
 
 
 # ==============================================================================
@@ -494,7 +494,7 @@ def test_asset_maintenance_security_cannot_post_gl_on_draft_log(client_a, mainte
     response = client_a.post(url)
     assert response.status_code == 302
     maintenance_log_a.refresh_from_db()
-    assert not maintenance_log_a.is_gl_posted
+    assert maintenance_log_a.status != "posted"
 
 
 def test_asset_maintenance_security_cannot_terminate_already_terminated_contract(client_a, service_contract_a):
