@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Telemetry Readings — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Reliability & Condition</span>
+            <span>/</span>
+            <span>Telemetry Readings</span>
+        </div>
+        <h1 class="page-title">IoT & Condition Telemetry Readings</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_telemetry_reading_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Ingest Reading
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="radio"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Readings</div>
+            <div class="stat-value">{{ total_readings }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Specification</div>
+            <div class="stat-value">{{ normal_reading_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Alarms</div>
+            <div class="stat-value">{{ critical_reading_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="zap"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Anomalies Detected</div>
+            <div class="stat-value">{{ anomaly_reading_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Sensor, number, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="thresh-filter" class="form-label">Threshold Status</label>
+                <select id="thresh-filter" name="threshold_status" class="form-select">
+                    <option value="">All Thresholds</option>
+                    {% for val, label in threshold_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.threshold_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="metric-filter" class="form-label">Metric Type</label>
+                <select id="metric-filter" name="metric_type" class="form-select">
+                    <option value="">All Metrics</option>
+                    {% for val, label in metric_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.metric_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="source-filter" class="form-label">Telemetry Source</label>
+                <select id="source-filter" name="source" class="form-select">
+                    <option value="">All Sources</option>
+                    {% for val, label in source_choices %}
+                    <option value="{{ val }}" {% if request.GET.source == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="anomaly-filter" class="form-label">Pattern Anomaly</label>
+                <select id="anomaly-filter" name="is_anomaly" class="form-select">
+                    <option value="">All</option>
+                    <option value="1" {% if request.GET.is_anomaly == "1" %}selected{% endif %}>Anomaly Flagged</option>
+                    <option value="0" {% if request.GET.is_anomaly == "0" %}selected{% endif %}>Normal Pattern</option>
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_telemetry_reading_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Reading #</th>
+                        <th>Sensor / Asset</th>
+                        <th>Metric</th>
+                        <th>Measured Value</th>
+                        <th>Baseline</th>
+                        <th>Deviation</th>
+                        <th>Threshold</th>
+                        <th>Captured At</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in telemetry_readings %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'assets:asset_telemetry_reading_detail' r.pk %}" class="text-blue-600 hover:underline">
+                                {{ r.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800">{{ r.sensor_identifier|default:"Unlabeled Sensor" }}</div>
+                            <div class="text-xs text-slate-500">
+                                {% if r.fixed_asset %}
+                                    FA: {{ r.fixed_asset.asset_number }} ({{ r.fixed_asset.name }})
+                                {% elif r.operational_asset %}
+                                    AST: {{ r.operational_asset.asset_tag }}
+                                {% else %}
+                                    Direct Ingestion
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ r.metric_type_css }}">
+                                {{ r.get_metric_type_display }}
+                            </span>
+                        </td>
+                        <td class="font-bold text-slate-900">
+                            {{ r.reading_value }} <span class="text-xs font-normal text-slate-500">{{ r.metric_unit }}</span>
+                        </td>
+                        <td class="text-slate-600 text-sm">
+                            {% if r.baseline_value %}
+                                {{ r.baseline_value }} <span class="text-xs text-slate-400">{{ r.metric_unit }}</span>
+                            {% else %}
+                                <span class="text-slate-400 italic">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if r.deviation_percentage is not None %}
+                                <span class="font-semibold text-sm {% if r.deviation_percentage > 20 %}text-red-600{% elif r.deviation_percentage < -20 %}text-amber-600{% else %}text-green-600{% endif %}">
+                                    {% if r.deviation_percentage > 0 %}+{% endif %}{{ r.deviation_percentage }}%
+                                </span>
+                            {% else %}
+                                <span class="text-slate-400 italic">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ r.threshold_status_css }}">
+                                {{ r.get_threshold_status_display }}
+                            </span>
+                            {% if r.is_anomaly %}
+                            <span class="badge badge-purple text-xs ms-1" title="Statistical Anomaly Flagged">Anomaly</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-xs text-slate-500">
+                            {{ r.recorded_at|date:"M d, H:i" }}
+                        </td>
+                        <td class="text-end table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'assets:asset_telemetry_reading_detail' r.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'assets:asset_telemetry_reading_edit' r.pk %}" class="btn btn-icon btn-outline" title="Edit Reading">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_telemetry_reading_delete' r.pk %}" class="inline" onsubmit="return confirm('Delete telemetry reading {{ r.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Reading">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="empty-state py-12 text-center">
+                                <div class="empty-state-icon mx-auto text-slate-300 mb-3">
+                                    <i data-lucide="activity" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-800">No telemetry readings found</h3>
+                                <p class="text-sm text-slate-500 mt-1">Ingest vibration, acoustic, temperature, or current sensor telemetry.</p>
+                                <div class="mt-4">
+                                    <a href="{% url 'assets:asset_telemetry_reading_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 me-1"></i> Ingest First Reading
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.threshold_status %}&threshold_status={{ request.GET.threshold_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.threshold_status %}&threshold_status={{ request.GET.threshold_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
