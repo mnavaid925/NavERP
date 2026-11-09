@@ -74,6 +74,7 @@ def depreciation_schedule_list(request):
         "calculated_count": agg["calculated_count"] or 0,
         "total_runs": agg["total_runs"] or 0,
         "q": q,
+        "search_query": q,
         "selected_status": selected_status,
         "selected_method": selected_method,
         "selected_year": selected_year,
