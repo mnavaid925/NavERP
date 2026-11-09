@@ -27,40 +27,46 @@
         <form method="post" action="{% url 'assets:asset_maintenance_schedule_generate_request' maintenance_schedule.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
-                <i data-lucide="plus-circle" class="w-4 h-4 mr-1"></i> Spawn Work Ticket
+                <i data-lucide="plus-circle" class="w-4 h-4 me-1"></i> Spawn Work Ticket
             </button>
         </form>
 
         <button type="button" onclick="document.getElementById('completion-modal').classList.remove('hidden')" class="btn btn-outline text-emerald-700 hover:bg-emerald-50">
-            <i data-lucide="check-check" class="w-4 h-4 mr-1"></i> Record Completion
+            <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Record Completion
         </button>
 
         {% if maintenance_schedule.is_active %}
         <form method="post" action="{% url 'assets:asset_maintenance_schedule_pause' maintenance_schedule.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-amber-700 hover:bg-amber-50">
-                <i data-lucide="pause" class="w-4 h-4 mr-1"></i> Pause
+                <i data-lucide="pause" class="w-4 h-4 me-1"></i> Pause
             </button>
         </form>
         {% else %}
         <form method="post" action="{% url 'assets:asset_maintenance_schedule_activate' maintenance_schedule.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-emerald-700 hover:bg-emerald-50">
-                <i data-lucide="play" class="w-4 h-4 mr-1"></i> Activate
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Activate
             </button>
         </form>
         {% endif %}
 
         <a href="{% url 'assets:asset_maintenance_schedule_edit' maintenance_schedule.pk %}" class="btn btn-outline">
-            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
 
+        {% if is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_maintenance_schedule_delete' maintenance_schedule.pk %}" class="inline" onsubmit="return confirm('Delete PM schedule {{ maintenance_schedule.number }}?');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete" aria-label="Delete Schedule">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_maintenance_schedule_list' %}" class="btn btn-ghost" aria-label="Back to Schedules">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
     </div>
 </div>
 
@@ -189,6 +195,54 @@
                 </table>
             </div>
         </div>
+
+        <!-- Service & Maintenance Execution Logs -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Completed Maintenance Logs</h3>
+                <a href="{% url 'assets:asset_maintenance_log_create' %}?maintenance_schedule={{ maintenance_schedule.pk }}" class="btn btn-sm btn-outline inline-flex items-center">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Log Service
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Log #</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Technician / Contractor</th>
+                            <th>Total Cost</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in linked_logs %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'assets:asset_maintenance_log_detail' log.pk %}" class="text-blue-600 hover:underline">
+                                    {{ log.number }}
+                                </a>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ log.service_date|date:"M d, Y" }}</td>
+                            <td><span class="badge {{ log.maintenance_type_css }}">{{ log.get_maintenance_type_display }}</span></td>
+                            <td class="text-sm">
+                                {% if log.lead_technician %}{{ log.lead_technician.get_full_name|default:log.lead_technician.username }}{% elif log.service_vendor %}{{ log.service_vendor.name }}{% else %}—{% endif %}
+                            </td>
+                            <td class="font-medium">${{ log.total_cost|floatformat:2 }}</td>
+                            <td><span class="badge {{ log.status_css }}">{{ log.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-500 text-sm">
+                                No service completion logs recorded yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Right Column: Asset Context & Contracts -->
@@ -272,15 +326,15 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">Completion Date *</label>
+                    <label class="form-label" for="{{ completion_form.completion_date.id_for_label }}">Completion Date *</label>
                     {{ completion_form.completion_date }}
                 </div>
                 <div>
-                    <label class="form-label">Asset Meter Reading at Completion</label>
+                    <label class="form-label" for="{{ completion_form.completion_meter.id_for_label }}">Asset Meter Reading at Completion</label>
                     {{ completion_form.completion_meter }}
                 </div>
                 <div>
-                    <label class="form-label">Service Notes & Findings</label>
+                    <label class="form-label" for="{{ completion_form.notes.id_for_label }}">Service Notes & Findings</label>
                     {{ completion_form.notes }}
                 </div>
             </div>
