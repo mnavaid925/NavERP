@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Assessment {{ assessment.number }}{% else %}New Condition Assessment{% endif %} — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_condition_assessment_list' %}">Condition Assessments</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ assessment.number }}{% else %}New Assessment{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Condition Assessment: {{ assessment.number }}{% else %}New Asset Condition Assessment{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body py-3 text-sm text-red-700">
+            <div class="font-semibold mb-1">Please correct the following errors:</div>
+            <ul class="list-disc list-inside">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li>{{ field.label }}: {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Basic Scope & Targets -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">1. Inspection Scope & Asset Identification</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2 form-group">
+                <label for="{{ form.title.id_for_label }}" class="form-label">Assessment Title <span class="text-red-500">*</span></label>
+                {{ form.title }}
+                {% if form.title.help_text %}<p class="text-xs text-slate-500 mt-1">{{ form.title.help_text }}</p>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                {{ form.fixed_asset }}
+                {% if form.fixed_asset.help_text %}<p class="text-xs text-slate-500 mt-1">{{ form.fixed_asset.help_text }}</p>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery / Equipment</label>
+                {{ form.operational_asset }}
+                {% if form.operational_asset.help_text %}<p class="text-xs text-slate-500 mt-1">{{ form.operational_asset.help_text }}</p>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.asset_category.id_for_label }}" class="form-label">Asset Category</label>
+                {{ form.asset_category }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.assessment_date.id_for_label }}" class="form-label">Assessment Date <span class="text-red-500">*</span></label>
+                {{ form.assessment_date }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.assessment_type.id_for_label }}" class="form-label">Assessment / NDT Testing Type <span class="text-red-500">*</span></label>
+                {{ form.assessment_type }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.inspector.id_for_label }}" class="form-label">Internal Reliability Inspector</label>
+                {{ form.inspector }}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.external_inspector.id_for_label }}" class="form-label">External NDT Testing Agency / Laboratory</label>
+                {{ form.external_inspector }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Index, Grade, and Operating Status -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">2. Condition Grading & Health Scoring</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.condition_grade.id_for_label }}" class="form-label">Condition Grade (1–5) <span class="text-red-500">*</span></label>
+                {{ form.condition_grade }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.health_score.id_for_label }}" class="form-label">Health Score (0–100%) <span class="text-red-500">*</span></label>
+                {{ form.health_score }}
+                <p class="text-xs text-slate-500 mt-1">Calculated health index (0=Dead, 100=As New)</p>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operating_status.id_for_label }}" class="form-label">Operating Status <span class="text-red-500">*</span></label>
+                {{ form.operating_status }}
+            </div>
+
+            <div class="md:col-span-3 pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.followup_required }}
+                    <span class="text-sm font-medium text-slate-800">Immediate Corrective Maintenance Follow-up Required</span>
+                </label>
+                <p class="text-xs text-slate-500 ml-6">Check if defects require dispatching a corrective maintenance work order.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnostic Details & Findings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">3. Diagnostic Checklist & Physical Observations</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label for="{{ form.checklist_summary.id_for_label }}" class="form-label">Diagnostic Checklist Scope</label>
+                {{ form.checklist_summary }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.findings.id_for_label }}" class="form-label">Defect & Physical Findings <span class="text-red-500">*</span></label>
+                {{ form.findings }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.recommendations.id_for_label }}" class="form-label">Engineering Recommendations & Mitigations</label>
+                {{ form.recommendations }}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:asset_condition_assessment_detail' assessment.pk %}{% else %}{% url 'assets:asset_condition_assessment_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Save Assessment{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
