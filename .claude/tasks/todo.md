@@ -7,6 +7,189 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.4: Depreciation & Financial Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.4.md` (2026-11-09)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, and 11.3.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0005_assetcategory_assetcriticalityassessment_assetmodel_and_more.py` (from 11.3), so **11.4 claims `0006`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.4.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetDepreciation/`
+> Template folder name: `templates/assets/asset_depreciation/{asset_depreciation_schedule,asset_revaluation,asset_transfer,capitalization_policy}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37)
+- **Depreciation & Financial Management Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between asset capital costs, accumulated depreciation, and asset retirement.
+  - Authoritative General Ledger Spine (`accounting.JournalEntry` [JE-], `accounting.GLAccount`): Periodic depreciation postings and impairment/revaluation adjustments post directly into the core financial ledger (balanced debits/credits via `JournalEntry` and `JournalLine`).
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Optional operational machine link (`"scm.Asset"`), ensuring alignment between financial book value and shopfloor equipment records.
+  - Core Spine Bindings: Reuses `core.OrgUnit` for department and cost center allocation, `core.Party` for certified appraisal firms and custodians, `scm.Location` for facility/plant locations, and `settings.AUTH_USER_MODEL` for approvals and posting audit.
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetDepreciationSchedule` -> `NUMBER_PREFIX = "ADEP"` (format: `ADEP-YYYYMM-XXXX`)
+    - `AssetRevaluation` -> `NUMBER_PREFIX = "AREV"` (format: `AREV-YYYYMM-XXXX`)
+    - `AssetTransfer` -> `NUMBER_PREFIX = "AXFR"` (format: `AXFR-YYYYMM-XXXX`)
+    - `CapitalizationPolicy` -> `NUMBER_PREFIX = "ACTH"` (format: `ACTH-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetDepreciationSchedule` [ADEP-]:
+      - Multi-period prospective depreciation schedules and execution history across Straight-Line, Declining Balance (150%/200%), Sum-of-Years'-Digits, and Units-of-Production methods, connecting directly to `accounting.JournalEntry` for GL posting.
+      - Identity & Asset Links: `asset` (FK `"accounting.FixedAsset"`, CASCADE, related_name="depreciation_schedules", help_text="Financial fixed asset record"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="depreciation_schedules", help_text="Operational equipment master").
+      - Fiscal Period & Method: `fiscal_year` (PositiveIntegerField, help_text="Fiscal year, e.g. 2026"), `fiscal_period` (PositiveSmallIntegerField, help_text="Fiscal period month 1..12 or 13 for year-end closing"), `schedule_date` (DateField, help_text="Target posting date for the period"), `method` (`straight_line`, `declining_balance_150`, `double_declining_200`, `sum_of_years`, `units_of_production`, default `straight_line`).
+      - Monetary Calculations: `cost_basis` (DecimalField 16, 2, gross asset carrying basis), `beginning_book_value` (DecimalField 16, 2, net book value at start of period), `depreciation_amount` (DecimalField 16, 2, calculated periodic expense), `accumulated_depreciation` (DecimalField 16, 2, cumulative depreciation after this period), `ending_book_value` (DecimalField 16, 2, net book value at end of period).
+      - Activity Units (for UOP): `units_produced` (DecimalField max_digits=14, decimal_places=2, default=0.00, help_text="Actual usage units in period"), `total_estimated_units` (DecimalField max_digits=14, decimal_places=2, default=0.00, help_text="Lifetime estimated units for UOP").
+      - General Ledger Integration: `expense_account` (FK `"accounting.GLAccount"`, PROTECT, related_name="depreciation_expense_schedules", help_text="Depreciation expense P&L debit account"), `accumulated_account` (FK `"accounting.GLAccount"`, PROTECT, related_name="accumulated_depreciation_schedules", help_text="Accumulated depreciation balance sheet credit contra-asset account"), `journal_entry` (FK `"accounting.JournalEntry"`, SET_NULL, null=True, blank=True, related_name="depreciation_schedules", help_text="Posted general ledger journal entry").
+      - Lifecycle & Audit: `status` (`scheduled`, `posted`, `skipped`, `reversed`, default `scheduled`), `posted_at` (DateTimeField null=True, blank=True), `posted_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="posted_depreciation_schedules"), `notes` (TextField blank=True).
+      - Status / Badge CSS: `scheduled -> badge-slate`, `posted -> badge-green`, `skipped -> badge-amber`, `reversed -> badge-red`.
+      - Business Logic & Actions:
+        - `calculate_depreciation()`: executes method calculation (Straight-Line, 150%/200% DB, SYD, or UOP) based on cost basis, salvage value, remaining life, and period units.
+        - Post Action (`asset_depreciation_schedule_post`): creates balanced `accounting.JournalEntry` (`Dr expense_account / Cr accumulated_account`), marks status `posted`, updates `FixedAsset.accumulated_depreciation`.
+        - Reverse Action (`asset_depreciation_schedule_reverse`): creates reversing `JournalEntry` and marks status `reversed`.
+        - Batch Generation Helper (`generate_depreciation_schedule(asset, method, periods)`): pre-computes multi-period schedule lines prospectively.
+      - Form exclusions: `tenant`, `number`, `status`, `journal_entry`, `posted_at`, `posted_by`, `created_at`, `updated_at`.
+    - `AssetRevaluation` [AREV-]:
+      - Fair value assessment, impairment testing (ASC 360 / IAS 36), upward revaluations (IFRS 13), appraisal documentation, and prospective depreciation schedule recalculation.
+      - Identity & Asset Links: `asset` (FK `"accounting.FixedAsset"`, CASCADE, related_name="revaluations"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="asset_revaluations").
+      - Valuation Classification & Methodology: `revaluation_type` (`downward_impairment`, `upward_revaluation`, `fair_value_adjustment`, `useful_life_revision`, default `downward_impairment`), `valuation_date` (DateField default=timezone.now), `valuation_method` (`independent_appraisal`, `market_comparable`, `discounted_cash_flow`, `depreciated_replacement_cost`, `management_assessment`, default `independent_appraisal`), `appraiser_name` (CharField 150 blank=True, help_text="Certified appraisal engineer / assessor"), `appraiser_firm` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="asset_revaluations", help_text="Accredited appraisal company"), `appraisal_certificate_ref` (CharField 100 blank=True, help_text="Valuation certificate / report ID").
+      - Valuation Financials: `pre_revaluation_cost` (DecimalField 16, 2), `pre_revaluation_accum_deprec` (DecimalField 16, 2), `pre_revaluation_nbv` (DecimalField 16, 2, carrying net book value prior to adjustment), `fair_market_value` (DecimalField 16, 2, newly appraised recoverable amount), `adjustment_amount` (DecimalField 16, 2, difference: positive = surplus, negative = impairment).
+      - GL Mapping & Accounting Entries: `revaluation_surplus_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="revaluation_surplus_entries", help_text="Equity surplus account for upward revaluation"), `impairment_loss_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="impairment_loss_entries", help_text="P&L loss account for downward impairment"), `journal_entry` (FK `"accounting.JournalEntry"`, SET_NULL, null=True, blank=True, related_name="asset_revaluations").
+      - Prospective Schedule Adjustment Parameters: `revised_useful_life_months` (PositiveIntegerField null=True, blank=True, help_text="Updated remaining useful life in months"), `revised_salvage_value` (DecimalField max_digits=16, decimal_places=2, null=True, blank=True, help_text="Updated residual salvage value"), `recalculate_future_schedule` (BooleanField default=True, help_text="Automatically regenerate remaining future depreciation lines prospectively").
+      - Lifecycle & Approval: `status` (`draft`, `approved`, `posted`, `cancelled`, default `draft`), `reason` (TextField, help_text="Business justification, economic obsolescence trigger, or physical damage description"), `approved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approved_asset_revaluations"), `approved_at` (DateTimeField null=True, blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `approved -> badge-info`, `posted -> badge-green`, `cancelled -> badge-red`.
+      - Business Logic & Actions:
+        - Approve Action (`asset_revaluation_approve`): sets status `approved`, sets `approved_by` and `approved_at`.
+        - Post Action (`asset_revaluation_post`): creates balanced `JournalEntry` (for impairment: `Dr impairment_loss_account / Cr accumulated_account` or asset cost; for surplus: `Dr asset_cost / Cr revaluation_surplus_account`), updates `FixedAsset` carrying cost / useful life / salvage value, and regenerates future unposted `AssetDepreciationSchedule` lines prospectively.
+      - Form exclusions: `tenant`, `number`, `status`, `adjustment_amount`, `journal_entry`, `approved_by`, `approved_at`, `created_at`, `updated_at`.
+    - `AssetTransfer` [AXFR-]:
+      - Inter-department, inter-facility, and inter-company asset relocations, cost center reallocations, custody handovers, and future depreciation expense rerouting.
+      - Identity & Asset Links: `title` (CharField 200), `fixed_asset` (FK `"accounting.FixedAsset"`, CASCADE, related_name="asset_transfers"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="financial_asset_transfers"), `transfer_type` (`inter_department`, `inter_facility`, `inter_company`, `cost_center_reallocation`, default `inter_department`).
+      - Dates: `transfer_date` (DateField default=timezone.now), `effective_date` (DateField default=timezone.now, help_text="Date from which expense reallocation takes effect").
+      - Source & Destination Hierarchy: `from_department` (FK `"core.OrgUnit"`, SET_NULL, null=True, blank=True, related_name="transfers_out"), `to_department` (FK `"core.OrgUnit"`, PROTECT, related_name="transfers_in"), `from_location` (FK `"scm.Location"`, SET_NULL, null=True, blank=True, related_name="transfers_from_location"), `to_location` (FK `"scm.Location"`, SET_NULL, null=True, blank=True, related_name="transfers_to_location"), `from_custodian` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="transfers_from_custodian"), `to_custodian` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="transfers_to_custodian").
+      - Expense Account & Cost Reallocation: `from_expense_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="transfers_from_expense"), `to_expense_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="transfers_to_expense"), `reallocate_future_depreciation` (BooleanField default=True, help_text="Reroute subsequent period depreciation debits to new expense account").
+      - Condition & Lifecycle: `asset_condition` (`excellent`, `good`, `fair`, `poor`, `damaged`, default `good`), `status` (`draft`, `pending_approval`, `approved`, `in_transit`, `completed`, `cancelled`, default `draft`), `transfer_reason` (TextField), `approved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approved_asset_transfers"), `approved_at` (DateTimeField null=True, blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `pending_approval -> badge-amber`, `approved -> badge-info`, `in_transit -> badge-info`, `completed -> badge-green`, `cancelled -> badge-red`.
+      - Business Logic & Actions:
+        - Submit Action (`asset_transfer_submit`): transitions `draft -> pending_approval`.
+        - Approve Action (`asset_transfer_approve`): transitions `pending_approval -> approved`.
+        - Complete Action (`asset_transfer_complete`): marks `completed`, updates `FixedAsset.custodian`, `FixedAsset.location`, and `FixedAsset.expense_account`; updates `scm.Asset.department` and `scm.Asset.location`; updates future unposted `AssetDepreciationSchedule` lines to charge `to_expense_account`.
+      - Form exclusions: `tenant`, `number`, `status`, `approved_by`, `approved_at`, `created_at`, `updated_at`.
+    - `CapitalizationPolicy` [ACTH-]:
+      - Category-based capitalization threshold rules, useful life criteria, CapEx vs. OpEx classification engine, de minimis safe harbor limits, and immediate expensing workflows.
+      - Policy Identity & Scope: `name` (CharField 150, help_text="e.g. Standard Machinery Capitalization Policy, IT Hardware Threshold Policy"), `policy_code` (CharField 32, db_index=True, help_text="Policy identifier, e.g. POL-CAPEX-MFG"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="capitalization_policies", help_text="Specific asset category or blank for global tenant fallback"), `category_type` (CharField 24 blank=True, choices matching `AssetCategory.CATEGORY_TYPE_CHOICES`, help_text="Category domain fallback").
+      - Threshold Criteria: `threshold_amount` (DecimalField max_digits=16, decimal_places=2, default=2500.00, help_text="Minimum acquisition cost required to capitalize onto balance sheet"), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="capitalization_policies"), `min_useful_life_months` (PositiveIntegerField default=12, help_text="Minimum useful economic lifespan required to capitalize (typically >= 12 months)").
+      - Accounting & Expensing Routing: `default_capitalization_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="cap_policy_asset_accounts", help_text="Target Fixed Asset balance sheet GL account"), `default_expense_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="cap_policy_expense_accounts", help_text="Target P&L operating expense GL account for sub-threshold purchases"), `immediate_expensing_allowed` (BooleanField default=True, help_text="Sub-threshold purchases automatically route to operating expense"), `requires_exception_approval` (BooleanField default=False, help_text="Sub-threshold capitalization requests require CFO/controller approval"), `de_minimis_safe_harbor` (BooleanField default=False, help_text="IRS Section 162 de minimis safe harbor election flag").
+      - Validity & Lifecycle: `effective_from` (DateField default=timezone.now), `effective_to` (DateField null=True, blank=True), `status` (`active`, `inactive`, `draft`, default `active`), `description` (TextField blank=True).
+      - Status / Badge CSS: `active -> badge-green`, `inactive -> badge-muted`, `draft -> badge-slate`.
+      - Business Logic:
+        - `evaluate_purchase(cost, useful_life_months)`: helper returning decision tuple `('capitalize'|'expense', reason)` based on policy threshold and useful life criteria.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `ADEP` (AssetDepreciationSchedule), `AREV` (AssetRevaluation), `AXFR` (AssetTransfer), `ACTH` (CapitalizationPolicy) verified 100% collision-free repository-wide.
+
+---
+
+## 11.4-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate financial general ledger** — All financial debit/credit postings reuse the authoritative accounting spine (`accounting.JournalEntry` [JE-] and `accounting.GLAccount`).
+- [ ] **NO duplicate fixed asset register** — The authoritative financial fixed asset register remains `accounting.FixedAsset` [FA-]; 11.4 extends it with prospective schedules, revaluation adjustments, and transfer governance.
+- [ ] **NO live external tax authority web-scraping / automated IRS MACRS API synchronizer** — Standard tax depreciation methods (MACRS percentages / bonus depreciation) are modeled via formulaic declining balance and straight-line parameters.
+- [ ] **NO continuous OCR invoice scanner / Document AI agent daemon** — Capitalization threshold evaluation operates on structured requisition, purchase order, and capitalization records.
+- [ ] **NO arbitrary runtime dynamic DB schema / ALTER TABLE DDL generation**.
+
+---
+
+## Sub-module 11.4 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.4.md` with exact model fields, forms, url names, context keys, choices, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetDepreciationSchedule (`ADEP`)**
+  - [ ] `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [ ] `apps/assets/forms/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [ ] `apps/assets/views/AssetDepreciation/AssetDepreciationSchedules.py` (CRUD + post + reverse + batch generate)
+  - [ ] `apps/assets/urls/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/list.html`
+  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/detail.html`
+  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/form.html`
+- [ ] **Entity 2: AssetRevaluation (`AREV`)**
+  - [ ] `apps/assets/models/AssetDepreciation/AssetRevaluations.py`
+  - [ ] `apps/assets/forms/AssetDepreciation/AssetRevaluations.py`
+  - [ ] `apps/assets/views/AssetDepreciation/AssetRevaluations.py` (CRUD + approve + post)
+  - [ ] `apps/assets/urls/AssetDepreciation/AssetRevaluations.py`
+  - [ ] `templates/assets/asset_depreciation/asset_revaluation/list.html`
+  - [ ] `templates/assets/asset_depreciation/asset_revaluation/detail.html`
+  - [ ] `templates/assets/asset_depreciation/asset_revaluation/form.html`
+- [ ] **Entity 3: AssetTransfer (`AXFR`)**
+  - [ ] `apps/assets/models/AssetDepreciation/AssetTransfers.py`
+  - [ ] `apps/assets/forms/AssetDepreciation/AssetTransfers.py`
+  - [ ] `apps/assets/views/AssetDepreciation/AssetTransfers.py` (CRUD + submit + approve + complete)
+  - [ ] `apps/assets/urls/AssetDepreciation/AssetTransfers.py`
+  - [ ] `templates/assets/asset_depreciation/asset_transfer/list.html`
+  - [ ] `templates/assets/asset_depreciation/asset_transfer/detail.html`
+  - [ ] `templates/assets/asset_depreciation/asset_transfer/form.html`
+- [ ] **Entity 4: CapitalizationPolicy (`ACTH`)**
+  - [ ] `apps/assets/models/AssetDepreciation/CapitalizationPolicies.py`
+  - [ ] `apps/assets/forms/AssetDepreciation/CapitalizationPolicies.py`
+  - [ ] `apps/assets/views/AssetDepreciation/CapitalizationPolicies.py` (CRUD + toggle_active + evaluate)
+  - [ ] `apps/assets/urls/AssetDepreciation/CapitalizationPolicies.py`
+  - [ ] `templates/assets/asset_depreciation/capitalization_policy/list.html`
+  - [ ] `templates/assets/asset_depreciation/capitalization_policy/detail.html`
+  - [ ] `templates/assets/asset_depreciation/capitalization_policy/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetDepreciation/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetDepreciation/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetDepreciation/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetDepreciation/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.4 models (`_seed_tenant_11_4`)
+- [ ] Add `LIVE_LINKS["11.4"]` in `apps/core/navigation.py`:
+  - `"Depreciation Schedule & Methods"`: `assets:asset_depreciation_schedule_list`
+  - `"Asset Valuation & Revaluation"`: `assets:asset_revaluation_list`
+  - `"Asset Transfer & Cost Allocation"`: `assets:asset_transfer_list`
+  - `"Capital vs. Expense Determination"`: `assets:capitalization_policy_list`
+  - `"Fixed Asset Reporting & Compliance"`: `assets:asset_depreciation_schedule_list`
+  - Plural & convenience aliases:
+    - `"Depreciation Schedules"`: `assets:asset_depreciation_schedule_list`
+    - `"Asset Revaluations"`: `assets:asset_revaluation_list`
+    - `"Asset Transfers"`: `assets:asset_transfer_list`
+    - `"Capitalization Policies"`: `assets:capitalization_policy_list`
+    - `"Depreciation & Financial Management"`: `assets:asset_depreciation_schedule_list`
+- [ ] Run `makemigrations assets` (generating `0006_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_4.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.4.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_assetdepreciation_models.py`
+- [ ] `test_assetdepreciation_forms.py`
+- [ ] `test_assetdepreciation_views.py`
+- [ ] `test_assetdepreciation_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/` (100% green)
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.4 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.4.md` (or declare None in review notes)
+
+---
+
 # Sub-module 11.3: Asset Classification & Categorization (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.3.md` (2026-11-08)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 and 11.2.
