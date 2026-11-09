@@ -91,6 +91,8 @@ def depreciation_schedule_detail(request, pk):
         pk=pk,
         select_related=[
             "fixed_asset",
+            "fixed_asset__expense_account",
+            "fixed_asset__accumulated_account",
             "operational_asset",
             "fiscal_period",
             "expense_account",
