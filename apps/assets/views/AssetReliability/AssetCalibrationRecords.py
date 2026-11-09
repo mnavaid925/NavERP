@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 from apps.assets.forms.AssetReliability.AssetCalibrationRecords import AssetCalibrationRecordForm
 from apps.assets.models.AssetReliability.AssetCalibrationRecords import AssetCalibrationRecord
 from apps.assets.views._common import assets_object, assets_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.models import Party
 from apps.core.utils import write_audit_log
 
@@ -164,6 +165,7 @@ def asset_calibration_record_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_calibration_record_quarantine(request, pk):
     calibration = assets_object(request, AssetCalibrationRecord, pk)
