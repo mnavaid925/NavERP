@@ -76,7 +76,7 @@ class AssetDowntimeLogForm(TenantUniqueMixin, forms.ModelForm):
         reject_foreign(
             self,
             cleaned,
-            ["fixed_asset", "operational_asset", "maintenance_request", "work_order", "department"],
+            ["fixed_asset", "operational_asset", "maintenance_request", "work_order", "department", "logged_by"],
         )
         started = cleaned.get("started_at")
         ended = cleaned.get("ended_at")
