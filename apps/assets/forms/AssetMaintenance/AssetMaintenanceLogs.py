@@ -76,8 +76,9 @@ class AssetMaintenanceLogForm(TenantUniqueMixin, forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
-        tenant = getattr(self, "tenant", None) or getattr(self.instance, "tenant", None)
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
         if tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant)
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant)
@@ -105,4 +106,8 @@ class AssetMaintenanceLogForm(TenantUniqueMixin, forms.ModelForm):
                 "expense_account",
             ],
         )
+        lead_tech = cleaned.get("lead_technician")
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
+        if lead_tech and tenant and getattr(lead_tech, "tenant_id", None) != tenant.pk:
+            self.add_error("lead_technician", "Lead technician belongs to another workspace.")
         return cleaned
