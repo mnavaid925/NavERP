@@ -159,6 +159,7 @@ def asset_condition_assessment_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_condition_assessment_delete(request, pk):
     assessment = assets_object(request, AssetConditionAssessment, pk)
