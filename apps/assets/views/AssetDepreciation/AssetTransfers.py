@@ -82,7 +82,10 @@ def transfer_detail(request, pk):
         pk=pk,
         select_related=[
             "fixed_asset",
+            "fixed_asset__location",
+            "fixed_asset__custodian",
             "operational_asset",
+            "operational_asset__location",
             "source_department",
             "source_location",
             "source_custodian",
