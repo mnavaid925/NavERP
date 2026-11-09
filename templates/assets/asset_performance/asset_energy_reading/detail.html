@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Energy Reading {{ reading.number }} — Asset Performance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_energy_reading_list' %}">Energy Readings</a>
+            <span>/</span>
+            <span>{{ reading.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ reading.number }}</h1>
+            <span class="badge {{ reading.utility_css }}">{{ reading.get_utility_type_display }}</span>
+            <span class="badge {{ reading.scope_css }}">{{ reading.get_ghg_scope_display }}</span>
+            <span class="badge {{ reading.status_css }}">{{ reading.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if reading.status == 'pending' %}
+        <form method="post" action="{% url 'assets:asset_energy_reading_validate' reading.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Validate Reading
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_energy_reading_edit' reading.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_energy_reading_delete' reading.pk %}" class="inline" onsubmit="return confirm('Delete energy reading {{ reading.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Primary Metric Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="zap"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Metered Consumption</div>
+            <div class="stat-value">{{ reading.consumption_value }} <span class="text-xs font-normal text-slate-500">{{ reading.unit_of_measure }}</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="cloud"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">GHG Carbon Footprint</div>
+            <div class="stat-value">{{ reading.carbon_emissions_kg_co2e|floatformat:2 }} <span class="text-xs font-normal text-slate-500">kg CO2e</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Hourly Intensity (SEC)</div>
+            <div class="stat-value">{{ reading.energy_intensity_per_hour|floatformat:3 }} <span class="text-xs font-normal text-slate-500">/hr</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Energy Cost</div>
+            <div class="stat-value">${{ reading.total_energy_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Electrical Telemetry & ESG Carbon Analysis -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Telemetry Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Meter Telemetry & Load Characteristics</h2>
+                <span class="text-xs text-slate-500">{{ reading.reading_timestamp|date:"F j, Y, H:i" }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-500">Peak Demand Load</span>
+                        <div class="font-mono font-semibold text-slate-900">
+                            {% if reading.peak_demand_kw %}{{ reading.peak_demand_kw }} kW{% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Power Factor (cos &phi;)</span>
+                        <div class="font-mono font-semibold text-slate-900">
+                            {% if reading.power_factor %}{{ reading.power_factor }}{% else %}—{% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Meter Serial #</span>
+                        <div class="font-mono text-slate-900">{{ reading.meter_serial_number|default:"Direct Ingestion" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Operating Machine Hours</span>
+                        <div class="font-mono font-semibold text-slate-900">{{ reading.operating_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Output Units Produced</span>
+                        <div class="font-mono font-semibold text-slate-900">{{ reading.units_produced }} units</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Per-Unit SEC Intensity</span>
+                        <div class="font-mono font-semibold text-slate-900">
+                            {% if reading.energy_intensity_per_unit > 0 %}
+                                {{ reading.energy_intensity_per_unit }} {{ reading.unit_of_measure }}/pc
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ESG & Carbon Footprint Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">GHG Protocol & Environmental Accounting</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-3 bg-slate-50 rounded-md border border-slate-100">
+                        <span class="text-xs text-slate-500">Scope Category</span>
+                        <div class="font-semibold text-slate-900 text-sm mt-1">{{ reading.get_ghg_scope_display }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-md border border-slate-100">
+                        <span class="text-xs text-slate-500">Grid Emission Factor</span>
+                        <div class="font-mono font-semibold text-slate-900 text-sm mt-1">{{ reading.emission_factor }} kg CO2e / unit</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-md border border-slate-100">
+                        <span class="text-xs text-slate-500">Tariff Unit Rate</span>
+                        <div class="font-mono font-semibold text-slate-900 text-sm mt-1">${{ reading.cost_per_unit }} / {{ reading.unit_of_measure }}</div>
+                    </div>
+                </div>
+
+                {% if reading.utility_provider %}
+                <div>
+                    <span class="text-xs text-slate-500">Utility Provider / Power Authority</span>
+                    <div class="text-sm font-medium text-slate-800">{{ reading.utility_provider.legal_name }}</div>
+                </div>
+                {% endif %}
+
+                {% if reading.notes %}
+                <div>
+                    <span class="text-xs text-slate-500">Audit & Telemetry Notes</span>
+                    <p class="text-slate-800 text-sm mt-1 bg-slate-50 p-3 rounded border border-slate-100 whitespace-pre-line">{{ reading.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Equipment Reference & Audit -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Target Asset</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if reading.fixed_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Fixed Asset</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ reading.fixed_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ reading.fixed_asset.asset_number }}</div>
+                </div>
+                {% endif %}
+
+                {% if reading.operational_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Operational Equipment</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ reading.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ reading.operational_asset.code }}</div>
+                </div>
+                {% endif %}
+
+                {% if not reading.fixed_asset and not reading.operational_asset %}
+                <p class="text-sm text-slate-400 italic">No asset linked.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Audit Information</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-slate-500">Logged By</span>
+                    <div class="text-slate-800 font-medium">
+                        {{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Ingestion" }}
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Captured At</span>
+                    <div class="text-slate-700">{{ reading.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Validated / Updated</span>
+                    <div class="text-slate-700">{{ reading.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
