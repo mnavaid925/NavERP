@@ -50,7 +50,7 @@ class AssetMaintenanceSchedule(TenantNumbered):
 
     SCHEDULE_TYPE_CSS = {
         "time_based": "badge-info",
-        "meter_based": "badge-purple",
+        "meter_based": "badge-info",
         "condition_based": "badge-amber",
         "seasonal_shutdown": "badge-slate",
     }
@@ -222,16 +222,22 @@ class AssetMaintenanceSchedule(TenantNumbered):
             self.next_due_date = base_date + timedelta(days=self.frequency_interval * 30)
         elif self.frequency_unit == "years":
             self.next_due_date = base_date + timedelta(days=self.frequency_interval * 365)
+        else:
+            self.next_due_date = None
 
         if from_meter is not None and self.meter_trigger_threshold:
             self.next_due_meter = from_meter + self.meter_trigger_threshold
         elif self.last_service_meter is not None and self.meter_trigger_threshold:
             self.next_due_meter = self.last_service_meter + self.meter_trigger_threshold
 
-    def record_completion(self, completion_date, completion_meter=None, user=None):
+    def record_completion(self, completion_date, completion_meter=None, user=None, notes=""):
         self.last_service_date = completion_date
         if completion_meter is not None:
             self.last_service_meter = completion_meter
+        if notes:
+            timestamp = timezone.now().strftime("%Y-%m-%d %H:%M")
+            addition = f"[{timestamp}] Completion note: {notes.strip()}"
+            self.notes = f"{self.notes}\n\n{addition}".strip() if self.notes else addition
         self.recalculate_next_due(from_date=completion_date, from_meter=completion_meter)
         self.status = "active"
         self.save()
