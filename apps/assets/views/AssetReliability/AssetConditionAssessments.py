@@ -22,7 +22,7 @@ def asset_condition_assessment_list(request):
             "fixed_asset",
             "operational_asset",
             "asset_category",
-        ),
+        ).defer("checklist_summary", "findings", "recommendations"),
         request,
     )
 
