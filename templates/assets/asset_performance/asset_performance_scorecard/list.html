@@ -138,7 +138,7 @@
                         </a>
                     </td>
                     <td>
-                        <span class="badge {{ sc.period_css }} text-2xs">{{ sc.get_period_type_display }}</span>
+                        <span class="badge {{ sc.period_css }} text-xs">{{ sc.get_period_type_display }}</span>
                         <div class="text-xs text-slate-500 mt-0.5">{{ sc.period_start|date:"M d" }} - {{ sc.period_end|date:"M d, Y" }}</div>
                     </td>
                     <td>
@@ -162,7 +162,7 @@
                     </td>
                     <td>
                         <div class="font-mono text-xs">{{ sc.mtbf_hours }} hrs</div>
-                        <div class="text-2xs text-slate-400">MTTR: {{ sc.mttr_hours }} hrs</div>
+                        <div class="text-xs text-slate-400">MTTR: {{ sc.mttr_hours }} hrs</div>
                     </td>
                     <td>
                         <div class="font-mono font-bold text-sm {% if sc.performance_index_score >= 90 %}text-green-600{% elif sc.performance_index_score >= 75 %}text-blue-600{% else %}text-amber-600{% endif %}">
