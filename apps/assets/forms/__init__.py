@@ -6,6 +6,12 @@ from apps.assets.forms.AssetClassification import (
     AssetModelForm,
     AssetSpecificationTemplateForm,
 )
+from apps.assets.forms.AssetDepreciation import (
+    AssetDepreciationScheduleForm,
+    AssetRevaluationForm,
+    AssetTransferForm,
+    CapitalizationPolicyForm,
+)
 from apps.assets.forms.AssetInventoryTracking import (
     AssetAuditForm,
     AssetCustodyLogForm,
@@ -34,4 +40,8 @@ __all__ = [
     "AssetModelForm",
     "AssetCriticalityAssessmentForm",
     "AssetSpecificationTemplateForm",
+    "AssetDepreciationScheduleForm",
+    "AssetRevaluationForm",
+    "AssetTransferForm",
+    "CapitalizationPolicyForm",
 ]
