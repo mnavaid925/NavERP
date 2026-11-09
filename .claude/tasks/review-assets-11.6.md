@@ -8,7 +8,27 @@
 
 ## 1. Code Reviewer Findings
 
-*(Pending review pass)*
+### Critical
+- **CR-C1**: `templates/assets/asset_performance/asset_downtime_log/detail.html:196` — Lesson L10 violation: `{{ log.logged_by.get_full_name|default:log.logged_by.username|default:"System" }}` raises `VariableDoesNotExist` and 500s when `log.logged_by` is `None`. Wrap with `{% if log.logged_by %}`.
+- **CR-C2**: `templates/assets/asset_performance/asset_energy_reading/detail.html:199` — Lesson L10 violation: `{{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Ingestion" }}` raises `VariableDoesNotExist` and 500s when `reading.recorded_by` is `None`. Wrap with `{% if reading.recorded_by %}`.
+- **CR-C3**: `templates/assets/asset_performance/asset_oee_record/detail.html:222` — Lesson L10 violation: `{{ record.recorded_by.get_full_name|default:record.recorded_by.username|default:"System" }}` raises `VariableDoesNotExist` and 500s when `record.recorded_by` is `None`. Wrap with `{% if record.recorded_by %}`.
+- **CR-C4**: `templates/assets/asset_performance/asset_performance_scorecard/detail.html:224` — Lesson L10 violation: `{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.username|default:"System Evaluator" }}` raises `VariableDoesNotExist` and 500s when `scorecard.evaluated_by` is `None`. Wrap with `{% if scorecard.evaluated_by %}`.
+- **CR-C5**: `templates/assets/asset_performance/asset_downtime_log/resolve.html:28` — Lesson L10 violation: `{{ log.fixed_asset.name|default:log.operational_asset.name|default:"Unassigned" }}` causes `VariableDoesNotExist` and 500s when `fixed_asset` is `None`. Use `{% if log.fixed_asset %}{{ log.fixed_asset.name }}{% elif log.operational_asset %}{{ log.operational_asset.name }}{% else %}Unassigned{% endif %}`.
+
+### Important
+- **CR-I1**: `templates/assets/asset_performance/asset_energy_reading/detail.html:148` — `reading.utility_provider.legal_name` accessed on `core.Party` where field is `name`. Utility provider renders blank. Change to `reading.utility_provider.name`.
+- **CR-I2**: `apps/assets/models/AssetPerformance/AssetOeeRecords.py:230, 238` — Unhandled `None` in `calculate_oee()` during arithmetic/comparison (`operating_time_minutes`, `total_units_produced`). Coalesce to `0` before calculating.
+- **CR-I3**: `apps/assets/models/AssetPerformance/AssetPerformanceScorecards.py:255, 277, 291` — Unhandled `None` in `calculate_scorecard()` during arithmetic (`actual_operating_hours`, `unplanned_downtime_hours`, `planned_downtime_hours`, `failure_event_count`, `average_oee_percentage`). Coalesce to `0`.
+- **CR-I4**: `apps/assets/models/AssetPerformance/AssetDowntimeLogs.py:220` — In `calculate_duration_and_cost()`, missing `else: self.total_downtime_cost = Decimal("0.00")` leaving stale cost if hourly rate is reset to 0.
+- **CR-I5**: `apps/assets/views/AssetPerformance/AssetOeeRecords.py:161-167` — Missing view status check in `asset_oee_record_finalize` (must reject if not `draft`).
+- **CR-I6**: `apps/assets/views/AssetPerformance/AssetEnergyReadings.py:170-175` — Missing view status check in `asset_energy_reading_validate` (must reject if not `pending`).
+- **CR-I7**: `apps/assets/views/AssetPerformance/AssetPerformanceScorecards.py:172-177` — Missing view status check in `asset_performance_scorecard_publish` (must reject if not `draft`).
+- **CR-I8**: `apps/assets/forms/AssetPerformance/` — Defense-in-depth: add `"logged_by"`, `"recorded_by"`, `"evaluated_by"` to `reject_foreign` in respective forms.
+
+### Minor
+- **CR-M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — `impact_choices` passed in context and parsed in view GET filter, but dropdown missing in template filter bar.
+- **CR-M2**: `apps/assets/models/AssetPerformance/` — Float casting in Decimal rounding calculations. Use `Decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`.
+- **CR-M3**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34` — Contract drift: `peer_category_ranking` was in contract exclusions but included in form fields.
 
 ---
 
