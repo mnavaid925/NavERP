@@ -9,6 +9,9 @@ from apps.assets.urls.AssetDepreciation import (
 from apps.assets.urls.AssetInventoryTracking import (
     urlpatterns as asset_inventory_tracking_urlpatterns,
 )
+from apps.assets.urls.AssetMaintenance import (
+    urlpatterns as asset_maintenance_urlpatterns,
+)
 from apps.assets.urls.AssetProcurement import (
     urlpatterns as asset_procurement_urlpatterns,
 )
@@ -24,4 +27,5 @@ urlpatterns = (
     + asset_inventory_tracking_urlpatterns
     + asset_classification_urlpatterns
     + asset_depreciation_urlpatterns
+    + asset_maintenance_urlpatterns
 )
