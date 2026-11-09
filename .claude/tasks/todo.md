@@ -7,6 +7,222 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.7: Asset Reliability & Condition Monitoring (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.7.md` (2026-11-09)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, 11.5, and 11.6.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0008_assetservicecontract_assetmaintenanceschedule_and_more.py` (or `0009_...` from 11.6), so **11.7 claims the next incremental migration** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.7.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetReliability/<Entity>.py`
+> Template folder name: `templates/assets/assetreliability/{asset_condition_assessment,asset_telemetry_reading,asset_failure_mode,asset_calibration_record}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Reliability & Condition Monitoring Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Register Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between financial capital assets and operational reliability.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational machinery and runtime equipment master in `apps/scm` via string FK (`"scm.Asset"`), supporting meter tracking, tag codes, serial numbers, and machine run hours.
+  - Authoritative Maintenance Request & Schedule Bindings:
+    - Links condition inspection defects and telemetry anomalies directly to repair intake tickets (`"assets.AssetMaintenanceRequest"` [AMRQ-]).
+    - Links FMEA mitigation tasks and calibration deadlines to preventive maintenance schedules (`"assets.AssetMaintenanceSchedule"` [AMSC-]).
+    - Interfaces with historical service logs (`"assets.AssetMaintenanceLog"` [AMLG-]).
+  - Asset Taxonomy & Criticality Integration: Reuses `"assets.AssetCategory"` [ACAT-] for class-level FMEA templates and condition assessment grouping, and `"assets.AssetCriticalityAssessment"` [ACRT-] for risk weighting.
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for external accredited NDT inspection agencies and ISO/IEC 17025 certified calibration laboratories.
+    - Reuses `"core.Document"` for attached digital calibration certificates and NDT inspection reports.
+    - Reuses `settings.AUTH_USER_MODEL` for internal examiners, metrologists, and reliability engineers.
+  - Collision-free 4-character uppercase prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetConditionAssessment` -> `NUMBER_PREFIX = "ACAS"` (format: `ACAS-YYYYMM-XXXX`)
+    - `AssetTelemetryReading` -> `NUMBER_PREFIX = "ATEL"` (format: `ATEL-YYYYMM-XXXX`)
+    - `AssetFailureMode` -> `NUMBER_PREFIX = "AFMA"` (format: `AFMA-YYYYMM-XXXX`)
+    - `AssetCalibrationRecord` -> `NUMBER_PREFIX = "ACAL"` (format: `ACAL-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetConditionAssessment` [ACAS-]:
+      - Systematic condition grading, visual inspections, NDT diagnostics (ultrasonic thickness, thermography, vibration pen, dye penetrant, magnetic particle, oil analysis), diagnostic checklists, 0–100 health index scoring, and automated maintenance request dispatching.
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="condition_assessments"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="condition_assessments"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="condition_assessments"), `inspector` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="conducted_asset_condition_assessments"), `external_inspector` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="contracted_asset_condition_assessments"), `triggered_maintenance_request` (FK `"assets.AssetMaintenanceRequest"`, SET_NULL, null=True, blank=True, related_name="triggering_condition_assessments").
+      - Inspection Data & Health Index: `title` (CharField max_length=255), `assessment_date` (DateField default=timezone.now), `assessment_type` (`visual_inspection`, `ndt_ultrasonic`, `ndt_thermography`, `ndt_vibration_pen`, `ndt_dye_penetrant`, `ndt_magnetic_particle`, `oil_analysis`, `diagnostic_checklist`, default `visual_inspection`, max_length=32), `condition_grade` (`grade_1_excellent`, `grade_2_good`, `grade_3_fair`, `grade_4_poor`, `grade_5_critical`, default `grade_2_good`, max_length=24), `health_score` (PositiveIntegerField default=85, validators `0..100`), `operating_status` (`normal_operation`, `operational_with_defects`, `reduced_capacity`, `quarantined_unsafe`, `decommission_recommended`, default `normal_operation`, max_length=32).
+      - Findings & Follow-up: `checklist_summary` (TextField blank=True), `findings` (TextField), `recommendations` (TextField blank=True), `followup_required` (BooleanField default=False), `status` (`draft`, `completed`, `reviewed`, `archived`, default `completed`, max_length=20).
+      - Status / Badge CSS: `draft -> badge-slate`, `completed -> badge-info`, `reviewed -> badge-green`, `archived -> badge-muted`.
+      - Condition Grade / Badge CSS: `grade_1_excellent -> badge-green`, `grade_2_good -> badge-info`, `grade_3_fair -> badge-amber`, `grade_4_poor -> badge-red`, `grade_5_critical -> badge-red`.
+      - Operating Status / Badge CSS: `normal_operation -> badge-green`, `operational_with_defects -> badge-amber`, `reduced_capacity -> badge-amber`, `quarantined_unsafe -> badge-red`, `decommission_recommended -> badge-red`.
+      - Assessment Type / Badge CSS: `visual_inspection -> badge-slate`, `ndt_ultrasonic -> badge-info`, `ndt_thermography -> badge-amber`, `ndt_vibration_pen -> badge-info`, `ndt_dye_penetrant -> badge-amber`, `ndt_magnetic_particle -> badge-amber`, `oil_analysis -> badge-info`, `diagnostic_checklist -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_condition_assessment_complete`: transitions `draft -> completed` and validates health score integrity.
+        - `asset_condition_assessment_review`: transitions `completed -> reviewed` upon supervisory sign-off.
+        - `asset_condition_assessment_trigger_request`: spawns linked `AssetMaintenanceRequest` with urgency dynamically mapped from `condition_grade` (`grade_5_critical -> critical`, `grade_4_poor -> high`, `grade_3_fair -> medium`, `grade_2_good/grade_1_excellent -> low`).
+      - Form exclusions: `tenant`, `number`, `status`, `triggered_maintenance_request`, `created_at`, `updated_at`.
+      - View context keys: `condition_assessments`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `condition_grade_choices`, `assessment_type_choices`, `operating_status_choices`, `category_list`, `total_assessments`, `critical_defect_count`, `average_health_score`, `followup_count`.
+    - `AssetTelemetryReading` [ATEL-]:
+      - Ingestion of multi-modal IoT sensor, SCADA historian, and handheld diagnostic readings (vibration RMS velocity, peak acceleration, acoustic ultrasound dB, temperature, pressure, current, oil viscosity), comparing against baseline limits, evaluating threshold envelopes (Normal, Warning, Critical), detecting anomalous signatures, and auto-dispatching repair requests.
+      - Identity & Source Links: `sensor_identifier` (CharField max_length=100 blank=True), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="telemetry_readings"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="telemetry_readings"), `recorded_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="recorded_asset_telemetry_readings"), `triggered_maintenance_request` (FK `"assets.AssetMaintenanceRequest"`, SET_NULL, null=True, blank=True, related_name="triggering_telemetry_readings"), `recorded_at` (DateTimeField default=timezone.now), `source` (`iot_sensor`, `scada_historian`, `manual_gauge`, `handheld_tester`, `analyst_entry`, default `iot_sensor`, max_length=24).
+      - Telemetry Metrics & Envelope: `metric_type` (`vibration_velocity_rms`, `vibration_peak_accel`, `bearing_temperature`, `acoustic_ultrasound`, `operating_pressure`, `oil_dielectric_viscosity`, `motor_current_amperage`, `ambient_temperature`, default `vibration_velocity_rms`, max_length=32), `metric_unit` (`mm_per_s`, `g_force`, `celsius`, `fahrenheit`, `decibel_uv`, `bar`, `psi`, `amperes`, `viscosity_cst`, default `mm_per_s`, max_length=20), `reading_value` (DecimalField max_digits=14 decimal_places=4), `baseline_value` (DecimalField max_digits=14 decimal_places=4 null=True, blank=True), `deviation_percentage` (DecimalField max_digits=8 decimal_places=2 null=True, blank=True), `threshold_status` (`normal`, `warning`, `critical`, `anomaly_detected`, default `normal`, max_length=20).
+      - Anomaly Detection: `is_anomaly` (BooleanField default=False), `anomaly_confidence` (DecimalField max_digits=5 decimal_places=2 null=True, blank=True, validators `0..100`), `alert_notes` (TextField blank=True).
+      - Status / Badge CSS: `normal -> badge-green`, `warning -> badge-amber`, `critical -> badge-red`, `anomaly_detected -> badge-red`.
+      - Source / Badge CSS: `iot_sensor -> badge-info`, `scada_historian -> badge-slate`, `manual_gauge -> badge-muted`, `handheld_tester -> badge-info`, `analyst_entry -> badge-slate`.
+      - Metric Type / Badge CSS: `vibration_velocity_rms -> badge-amber`, `vibration_peak_accel -> badge-amber`, `bearing_temperature -> badge-red`, `acoustic_ultrasound -> badge-info`, `operating_pressure -> badge-info`, `oil_dielectric_viscosity -> badge-slate`, `motor_current_amperage -> badge-amber`, `ambient_temperature -> badge-slate`.
+      - Anomaly / Badge CSS: `True -> badge-red`, `False -> badge-green`.
+      - Business Logic & Actions:
+        - `calculate_deviation_and_thresholds()`: computes `deviation_percentage = ((reading_value - baseline_value) / baseline_value) * 100` when baseline is set.
+        - `asset_telemetry_reading_trigger_request`: spawns linked `AssetMaintenanceRequest` with urgency determined by threshold severity (`critical / anomaly_detected -> critical / high`, `warning -> medium`).
+        - `asset_telemetry_reading_flag_anomaly`: toggles `is_anomaly=True` with confidence and diagnosis notes.
+      - Form exclusions: `tenant`, `number`, `deviation_percentage`, `threshold_status`, `triggered_maintenance_request`, `created_at`, `updated_at`.
+      - View context keys: `telemetry_readings`, `page_obj`, `paginator`, `is_paginated`, `source_choices`, `metric_type_choices`, `threshold_status_choices`, `total_readings`, `critical_reading_count`, `anomaly_reading_count`, `normal_reading_count`.
+    - `AssetFailureMode` [AFMA-]:
+      - Rigorous SAE JA1012 / ISO 14224 Failure Mode & Effects Analysis (FMEA), cataloging equipment components/subsystems, functional failures, physical failure mechanisms, and consequences; calculating deterministic Risk Priority Numbers (RPN = Severity × Occurrence × Detection, 1–1000); selecting Reliability-Centered Maintenance (RCM) strategies; and linking preventive tasks to maintenance schedules.
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="failure_modes"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="failure_modes"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="failure_modes"), `assessed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="assessed_asset_failure_modes"), `linked_maintenance_schedule` (FK `"assets.AssetMaintenanceSchedule"`, SET_NULL, null=True, blank=True, related_name="failure_modes").
+      - FMEA Functional Analysis: `component_subsystem` (CharField max_length=200), `function_description` (TextField), `functional_failure` (CharField max_length=255), `failure_mode` (CharField max_length=255), `failure_cause` (TextField), `failure_effect` (TextField).
+      - RPN Risk Scoring: `severity_score` (PositiveIntegerField default=5, validators `1..10`), `occurrence_score` (PositiveIntegerField default=5, validators `1..10`), `detection_score` (PositiveIntegerField default=5, validators `1..10`), `rpn` (PositiveIntegerField default=125, editable=False), `risk_level` (`low`, `medium`, `high`, `extreme`, default `medium`, editable=False, max_length=16).
+      - RCM Maintenance Strategy: `rcm_strategy` (`condition_based`, `time_based_pm`, `meter_based_pm`, `failure_finding`, `run_to_failure`, `redesign_required`, default `condition_based`, max_length=32), `strategy_rationale` (TextField blank=True), `mitigation_task` (TextField blank=True), `status` (`draft`, `active`, `superseded`, `archived`, default `active`, max_length=20).
+      - Risk Level / Badge CSS: `low -> badge-green`, `medium -> badge-info`, `high -> badge-amber`, `extreme -> badge-red`.
+      - RCM Strategy / Badge CSS: `condition_based -> badge-info`, `time_based_pm -> badge-slate`, `meter_based_pm -> badge-slate`, `failure_finding -> badge-amber`, `run_to_failure -> badge-muted`, `redesign_required -> badge-red`.
+      - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `superseded -> badge-amber`, `archived -> badge-muted`.
+      - Business Logic & Actions:
+        - `calculate_rpn()`: `rpn = severity_score * occurrence_score * detection_score` (1–1000); sets `risk_level` (`low` < 100, `medium` 100–250, `high` 251–500, `extreme` > 500).
+        - `asset_failure_mode_activate`: transitions `draft -> active`.
+        - `asset_failure_mode_archive`: transitions `active -> archived`.
+        - `asset_failure_mode_link_schedule`: connects mitigation task to an `AssetMaintenanceSchedule`.
+      - Form exclusions: `tenant`, `number`, `rpn`, `risk_level`, `created_at`, `updated_at`.
+      - View context keys: `failure_modes`, `page_obj`, `paginator`, `is_paginated`, `risk_level_choices`, `rcm_strategy_choices`, `status_choices`, `category_list`, `total_failure_modes`, `extreme_risk_count`, `high_risk_count`, `cbm_strategy_count`.
+    - `AssetCalibrationRecord` [ACAL-]:
+      - Metrological calibration compliance tracking for process instrumentation and test standards, managing calibration frequency cycles, NIST/ISO traceable reference standards, As-Found vs. As-Left measurement readings, allowable tolerance errors, Pass/Fail certification, and digital certificate document archival.
+      - Identity & Instrument Links: `instrument_tag` (CharField max_length=100), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="calibration_records"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="calibration_records"), `calibrated_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="performed_asset_calibrations"), `service_vendor` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="vendor_asset_calibrations"), `certificate_document` (FK `"core.Document"`, SET_NULL, null=True, blank=True, related_name="asset_calibration_records").
+      - Timing & Traceability: `calibration_date` (DateField default=timezone.now), `next_due_date` (DateField), `calibration_frequency_days` (PositiveIntegerField default=365), `reference_standard_used` (CharField max_length=255), `traceability_certificate_no` (CharField max_length=100 blank=True).
+      - Tolerance & Errors: `setpoint_nominal` (DecimalField max_digits=12 decimal_places=4), `allowable_tolerance` (DecimalField max_digits=8 decimal_places=4 default=Decimal("0.5000")), `tolerance_unit` (`percent_span`, `engineering_units`, `celsius`, `psi`, `bar`, `volts`, `milliamps`, default `percent_span`, max_length=20), `as_found_reading` (DecimalField max_digits=12 decimal_places=4), `as_left_reading` (DecimalField max_digits=12 decimal_places=4), `as_found_error` (DecimalField max_digits=10 decimal_places=4 null=True, blank=True), `as_left_error` (DecimalField max_digits=10 decimal_places=4 null=True, blank=True).
+      - Certification & Status: `calibration_result` (`pass`, `pass_with_adjustment`, `fail_out_of_tolerance`, `quarantined`, default `pass`, max_length=24), `certificate_number` (CharField max_length=100 blank=True), `certificate_expiry` (DateField null=True, blank=True), `status` (`valid`, `expiring_soon`, `expired`, `voided`, default `valid`, max_length=20), `notes` (TextField blank=True).
+      - Calibration Result / Badge CSS: `pass -> badge-green`, `pass_with_adjustment -> badge-info`, `fail_out_of_tolerance -> badge-red`, `quarantined -> badge-red`.
+      - Status / Badge CSS: `valid -> badge-green`, `expiring_soon -> badge-amber`, `expired -> badge-red`, `voided -> badge-muted`.
+      - Tolerance Unit / Badge CSS: `percent_span -> badge-info`, `engineering_units -> badge-slate`, `celsius -> badge-amber`, `psi -> badge-info`, `bar -> badge-info`, `volts -> badge-amber`, `milliamps -> badge-amber`.
+      - Business Logic & Actions:
+        - `calculate_errors()`: computes `as_found_error = as_found_reading - setpoint_nominal` and `as_left_error = as_left_reading - setpoint_nominal`; automatically evaluates if error exceeds `allowable_tolerance`; populates `next_due_date` from `calibration_date + timedelta(days=calibration_frequency_days)` if empty.
+        - `asset_calibration_record_record_adjustment`: updates As-Left readings, recalculates errors, flags result as `pass_with_adjustment`.
+        - `asset_calibration_record_quarantine`: flags instrument as `quarantined` and spawns urgent corrective maintenance ticket.
+      - Form exclusions: `tenant`, `number`, `as_found_error`, `as_left_error`, `status`, `created_at`, `updated_at`.
+      - View context keys: `calibration_records`, `page_obj`, `paginator`, `is_paginated`, `calibration_result_choices`, `status_choices`, `tolerance_unit_choices`, `vendor_list`, `total_calibrations`, `passed_count`, `failed_count`, `overdue_count`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `ACAS` (AssetConditionAssessment), `ATEL` (AssetTelemetryReading), `AFMA` (AssetFailureMode), `ACAL` (AssetCalibrationRecord) verified 100% collision-free repository-wide.
+- **Index Constraints & Length (L65)**: All index names <= 30 chars (`idx_acas_ten_date`, `idx_atel_ten_time`, `idx_afma_ten_rpn`, `idx_acal_ten_ndue`).
+- **Choice Field Lengths (L65)**: All `CharField` `max_length` strictly >= longest choice value (e.g., `decommission_recommended` = 26 <= 32; `fail_out_of_tolerance` = 22 <= 24; `vibration_velocity_rms` = 22 <= 32).
+
+---
+
+## 11.7-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO direct in-process MQTT / Kafka streaming broker daemons** — NavERP provides synchronous and REST-based telemetry ingestion endpoints; live streaming brokers run as external edge gateways that post to NavERP via API.
+- [ ] **NO in-app machine learning model retraining pipelines** — Sub-module 11.7 fully models predictive outputs (anomaly detection flags, anomaly confidence percentages, baseline deviation percentages, and threshold states); full ML model training pipelines belong to the data science / BI tier (Module 10).
+- [ ] **NO physical hardware calibrator serial/USB bus drivers** — NavERP manages calibration data, tolerances, and digital certificates; hardware device drivers run on client PCs or field calibrators.
+- [ ] **NO client-side audio DSP waterfall FFT spectrogram visualizers** — Standard numerical decibel (dB) metrics and threshold flags adequately govern maintenance triggers in ERP without requiring client-side audio DSP rendering libraries.
+- [ ] **NO duplicate maintenance work order dispatching engine** — Repair ticketing and technician dispatching reuse `assets.AssetMaintenanceRequest` [AMRQ-] and `assets.AssetMaintenanceSchedule` [AMSC-].
+
+---
+
+## Sub-module 11.7 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.7.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetConditionAssessment (`ACAS`)**
+  - [ ] `apps/assets/models/AssetReliability/AssetConditionAssessments.py`
+  - [ ] `apps/assets/forms/AssetReliability/AssetConditionAssessments.py`
+  - [ ] `apps/assets/views/AssetReliability/AssetConditionAssessments.py` (CRUD + complete + review + trigger_maintenance_request)
+  - [ ] `apps/assets/urls/AssetReliability/AssetConditionAssessments.py`
+  - [ ] `templates/assets/assetreliability/asset_condition_assessment/list.html`
+  - [ ] `templates/assets/assetreliability/asset_condition_assessment/detail.html`
+  - [ ] `templates/assets/assetreliability/asset_condition_assessment/form.html`
+- [ ] **Entity 2: AssetTelemetryReading (`ATEL`)**
+  - [ ] `apps/assets/models/AssetReliability/AssetTelemetryReadings.py`
+  - [ ] `apps/assets/forms/AssetReliability/AssetTelemetryReadings.py`
+  - [ ] `apps/assets/views/AssetReliability/AssetTelemetryReadings.py` (CRUD + trigger_maintenance_request + flag_anomaly)
+  - [ ] `apps/assets/urls/AssetReliability/AssetTelemetryReadings.py`
+  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/list.html`
+  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/detail.html`
+  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/form.html`
+- [ ] **Entity 3: AssetFailureMode (`AFMA`)**
+  - [ ] `apps/assets/models/AssetReliability/AssetFailureModes.py`
+  - [ ] `apps/assets/forms/AssetReliability/AssetFailureModes.py`
+  - [ ] `apps/assets/views/AssetReliability/AssetFailureModes.py` (CRUD + activate + archive + link_pm_schedule)
+  - [ ] `apps/assets/urls/AssetReliability/AssetFailureModes.py`
+  - [ ] `templates/assets/assetreliability/asset_failure_mode/list.html`
+  - [ ] `templates/assets/assetreliability/asset_failure_mode/detail.html`
+  - [ ] `templates/assets/assetreliability/asset_failure_mode/form.html`
+- [ ] **Entity 4: AssetCalibrationRecord (`ACAL`)**
+  - [ ] `apps/assets/models/AssetReliability/AssetCalibrationRecords.py`
+  - [ ] `apps/assets/forms/AssetReliability/AssetCalibrationRecords.py`
+  - [ ] `apps/assets/views/AssetReliability/AssetCalibrationRecords.py` (CRUD + record_adjustment + quarantine)
+  - [ ] `apps/assets/urls/AssetReliability/AssetCalibrationRecords.py`
+  - [ ] `templates/assets/assetreliability/asset_calibration_record/list.html`
+  - [ ] `templates/assets/assetreliability/asset_calibration_record/detail.html`
+  - [ ] `templates/assets/assetreliability/asset_calibration_record/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all 4 models in `apps/assets/models/AssetReliability/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all 4 forms in `apps/assets/forms/AssetReliability/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetReliability/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetReliability/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.7 models (`_seed_tenant_11_7`)
+- [ ] Add `LIVE_LINKS["11.7"]` in `apps/core/navigation.py`:
+  - `"Condition Assessment & Inspections"`: `assets:asset_condition_assessment_list`
+  - `"Predictive Maintenance & IoT Integration"`: `assets:asset_telemetry_reading_list`
+  - `"Failure Mode Analysis (FMEA)"`: `assets:asset_failure_mode_list`
+  - `"Lubrication & Calibration Management"`: `assets:asset_calibration_record_list`
+  - `"Reliability-Centered Maintenance (RCM)"`: `assets:asset_failure_mode_list`
+  - Plural & convenience aliases:
+    - `"Condition Assessments"`: `assets:asset_condition_assessment_list`
+    - `"Asset Condition Assessments"`: `assets:asset_condition_assessment_list`
+    - `"Telemetry Readings"`: `assets:asset_telemetry_reading_list`
+    - `"Asset Telemetry Readings"`: `assets:asset_telemetry_reading_list`
+    - `"Failure Modes (FMEA)"`: `assets:asset_failure_mode_list`
+    - `"Asset Failure Modes"`: `assets:asset_failure_mode_list`
+    - `"FMEA Registry"`: `assets:asset_failure_mode_list`
+    - `"Calibration Records"`: `assets:asset_calibration_record_list`
+    - `"Asset Calibration Records"`: `assets:asset_calibration_record_list`
+    - `"RCM Strategy"`: `assets:asset_failure_mode_list`
+    - `"Asset Reliability & Condition Monitoring"`: `assets:asset_condition_assessment_list`
+- [ ] Run `makemigrations assets` (generating next incremental migration) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_7.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.7.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_asset_reliability_models.py`
+- [ ] `test_asset_reliability_forms.py`
+- [ ] `test_asset_reliability_views.py`
+- [ ] `test_asset_reliability_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.7 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.7.md`
+
+## Later passes / deferred (Parked from research)
+- Real-time MQTT / Kafka streaming broker ingestion daemons (deferred to 11.15)
+- Automated in-app machine learning predictive model retraining pipelines (deferred to Module 10 / 11.14)
+- Direct serial / USB hardware bus calibrator protocol drivers (deferred to client-side instrumentation utilities)
+- Client-side audio DSP waterfall FFT spectrogram visualizer libraries (deferred to advanced diagnostic UI suite)
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 11.6: Asset Performance & Utilization (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.6.md` (2026-11-09)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, and 11.5.
