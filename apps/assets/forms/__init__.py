@@ -18,6 +18,18 @@ from apps.assets.forms.AssetInventoryTracking import (
     AssetIncidentReportForm,
     AssetMovementLogForm,
 )
+from apps.assets.forms.AssetMaintenance import (
+    AssetMaintenanceLogForm,
+    AssetMaintenanceRequestDispatchForm,
+    AssetMaintenanceRequestForm,
+    AssetMaintenanceRequestRejectForm,
+    AssetMaintenanceRequestResolveForm,
+    AssetMaintenanceRequestTriageForm,
+    AssetMaintenanceScheduleCompletionForm,
+    AssetMaintenanceScheduleForm,
+    AssetServiceContractForm,
+    AssetServiceContractRenewForm,
+)
 from apps.assets.forms.AssetProcurement import (
     AssetAcquisitionReceiptForm,
     AssetCapitalizationForm,
@@ -44,4 +56,14 @@ __all__ = [
     "AssetRevaluationForm",
     "AssetTransferForm",
     "CapitalizationPolicyForm",
+    "AssetMaintenanceRequestForm",
+    "AssetMaintenanceRequestTriageForm",
+    "AssetMaintenanceRequestDispatchForm",
+    "AssetMaintenanceRequestResolveForm",
+    "AssetMaintenanceRequestRejectForm",
+    "AssetMaintenanceScheduleForm",
+    "AssetMaintenanceScheduleCompletionForm",
+    "AssetServiceContractForm",
+    "AssetServiceContractRenewForm",
+    "AssetMaintenanceLogForm",
 ]
