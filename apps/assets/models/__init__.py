@@ -24,6 +24,12 @@ from apps.assets.models.AssetMaintenance import (
     AssetMaintenanceSchedule,
     AssetServiceContract,
 )
+from apps.assets.models.AssetPerformance import (
+    AssetDowntimeLog,
+    AssetEnergyReading,
+    AssetOeeRecord,
+    AssetPerformanceScorecard,
+)
 from apps.assets.models.AssetProcurement import (
     AssetAcquisitionReceipt,
     AssetCapitalization,
@@ -54,4 +60,8 @@ __all__ = [
     "AssetMaintenanceSchedule",
     "AssetServiceContract",
     "AssetMaintenanceLog",
+    "AssetDowntimeLog",
+    "AssetOeeRecord",
+    "AssetEnergyReading",
+    "AssetPerformanceScorecard",
 ]
