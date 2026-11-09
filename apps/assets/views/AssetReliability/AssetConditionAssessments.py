@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Avg, Q
+from django.db.models import Avg, Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -62,13 +62,19 @@ def asset_condition_assessment_list(request):
     if cat_filter and cat_filter.isdigit():
         qs = qs.filter(asset_category_id=int(cat_filter))
 
-    # Aggregates / Stats over tenant base
+    # Aggregates / Stats over tenant base in a single roundtrip
     tenant_base = AssetConditionAssessment.objects.filter(tenant=request.tenant)
-    total_assessments = tenant_base.count()
-    critical_defect_count = tenant_base.filter(condition_grade__in=["grade_4_poor", "grade_5_critical"]).count()
-    avg_score = tenant_base.aggregate(avg=Avg("health_score"))["avg"]
+    stats = tenant_base.aggregate(
+        total=Count("id"),
+        critical=Count("id", filter=Q(condition_grade__in=["grade_4_poor", "grade_5_critical"])),
+        avg_score=Avg("health_score"),
+        followup=Count("id", filter=Q(followup_required=True)),
+    )
+    total_assessments = stats["total"]
+    critical_defect_count = stats["critical"]
+    avg_score = stats["avg_score"]
     average_health_score = round(avg_score, 1) if avg_score is not None else 0.0
-    followup_count = tenant_base.filter(followup_required=True).count()
+    followup_count = stats["followup"]
 
     paginator = Paginator(qs, 20)
     page_number = request.GET.get("page")
