@@ -160,6 +160,9 @@ def asset_oee_record_delete(request, pk):
 @require_POST
 def asset_oee_record_finalize(request, pk):
     record = assets_object(request, AssetOeeRecord, pk)
+    if record.status != "draft":
+        messages.error(request, f"OEE entry {record.number} cannot be finalized because it is currently {record.get_status_display().lower()}.")
+        return redirect("assets:asset_oee_record_detail", pk=record.pk)
     record.status = "finalized"
     record.save()
     write_audit_log(request.user, record, "finalize", tenant=request.tenant)
