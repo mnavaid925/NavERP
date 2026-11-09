@@ -68,6 +68,7 @@ def transfer_list(request):
         "completed_count": agg["completed"] or 0,
         "total_transport_cost": agg["total_freight"] or Decimal("0.00"),
         "q": q,
+        "search_query": q,
         "selected_type": selected_type,
         "selected_status": selected_status,
     }
