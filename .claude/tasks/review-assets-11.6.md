@@ -34,7 +34,14 @@
 
 ## 2. Explorer / Contract Verification Findings
 
-*(Pending review pass)*
+### Important
+- **EX-I1**: `templates/assets/asset_performance/asset_energy_reading/list.html:59-103` — Contract drift: View passes `status_choices` and parses `request.GET.get("status")`, but filter bar omits `<select name="status">`. Add status dropdown to template.
+- **EX-I2**: `templates/assets/asset_performance/asset_performance_scorecard/list.html:59-103` — Contract drift: View passes `status_choices` and parses `request.GET.get("status")`, but filter bar omits `<select name="status">`. Add status dropdown to template.
+- **EX-I3**: `templates/assets/asset_performance/asset_energy_reading/detail.html:148` — `reading.utility_provider.legal_name` accessed on `core.Party` where field is `name`. Utility vendor name renders blank. Change to `reading.utility_provider.name`.
+
+### Minor
+- **EX-M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — Missing impact level dropdown in list filter bar and clear button.
+- **EX-M2**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34, 40-52` — Contract drift: `peer_category_ranking` was specified in form exclusions (Contract 1.4 & 2.4) but was included in `fields`. Remove from `fields` and add to `exclude`.
 
 ---
 
