@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from apps.accounting.models import FixedAsset
 from apps.assets.forms._common import TenantUniqueMixin, reject_foreign
 from apps.assets.models.AssetMaintenance.AssetMaintenanceRequests import AssetMaintenanceRequest
+from apps.assets.models.AssetMaintenance.AssetServiceContracts import AssetServiceContract
 from apps.core.models import OrgUnit, Party
 from apps.scm.models import Asset, MaintenanceWorkOrder
 
@@ -54,8 +55,9 @@ class AssetMaintenanceRequestForm(TenantUniqueMixin, forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
-        tenant = getattr(self, "tenant", None) or getattr(self.instance, "tenant", None)
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
         if tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant)
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant)
@@ -65,6 +67,10 @@ class AssetMaintenanceRequestForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "department"])
+        requester = cleaned.get("requester")
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
+        if requester and tenant and getattr(requester, "tenant_id", None) != tenant.pk:
+            self.add_error("requester", "Requester user belongs to another workspace.")
         if cleaned.get("is_breakdown") and not cleaned.get("downtime_started_at"):
             # Set default downtime started if breakdown marked
             pass
@@ -93,6 +99,11 @@ class AssetMaintenanceRequestDispatchForm(forms.Form):
         required=False,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    service_contract = forms.ModelChoiceField(
+        queryset=AssetServiceContract.objects.none(),
+        required=False,
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     dispatched_work_order = forms.ModelChoiceField(
         queryset=MaintenanceWorkOrder.objects.none(),
         required=False,
@@ -104,6 +115,7 @@ class AssetMaintenanceRequestDispatchForm(forms.Form):
         if tenant:
             self.fields["assigned_technician"].queryset = User.objects.filter(tenant=tenant)
             self.fields["assigned_vendor"].queryset = Party.objects.filter(tenant=tenant)
+            self.fields["service_contract"].queryset = AssetServiceContract.objects.filter(tenant=tenant)
             self.fields["dispatched_work_order"].queryset = MaintenanceWorkOrder.objects.filter(tenant=tenant)
 
 
