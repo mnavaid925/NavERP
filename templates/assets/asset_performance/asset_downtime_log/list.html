@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Downtime Logs — Asset Performance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Performance & Utilization</span>
+            <span>/</span>
+            <span>Downtime Tracking</span>
+        </div>
+        <h1 class="page-title">Asset Downtime & Outage Logs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_downtime_log_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log Stoppage
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Outages</div>
+            <div class="stat-value">{{ agg.total_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Stoppages</div>
+            <div class="stat-value">{{ agg.active_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Downtime</div>
+            <div class="stat-value">{{ agg.total_duration|default:"0" }} <span class="text-xs font-normal text-slate-500">min</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Financial Loss</div>
+            <div class="stat-value">${{ agg.total_cost|default:"0.00"|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ q }}" placeholder="Number, symptom, asset..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Category</label>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Fixed Asset</label>
+                <select name="fixed_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for fa in fixed_assets %}
+                    <option value="{{ fa.pk }}" {% if fixed_asset_id == fa.pk|stringformat:"d" %}selected{% endif %}>{{ fa.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="search" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if q or status or category or fixed_asset_id %}
+                <a href="{% url 'assets:asset_downtime_log_list' %}" class="btn btn-outline text-slate-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Data Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Event #</th>
+                    <th>Asset</th>
+                    <th>Category</th>
+                    <th>Impact</th>
+                    <th>Started</th>
+                    <th>Duration</th>
+                    <th>Loss Cost</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in page_obj %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_downtime_log_detail' log.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ log.number }}
+                        </a>
+                        {% if log.root_cause_code %}
+                        <div class="text-xs text-slate-400 font-mono">{{ log.root_cause_code }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if log.fixed_asset %}
+                            <div class="font-medium text-slate-900">{{ log.fixed_asset.name }}</div>
+                            <div class="text-xs text-slate-400">{{ log.fixed_asset.asset_number }}</div>
+                        {% elif log.operational_asset %}
+                            <div class="font-medium text-slate-900">{{ log.operational_asset.name }}</div>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ log.category_css }}">
+                            {{ log.get_downtime_category_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ log.impact_css }}">
+                            {{ log.get_impact_level_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ log.started_at|date:"M d, Y H:i" }}
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">{{ log.duration_minutes }} min</span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-sm">${{ log.total_downtime_cost|floatformat:2 }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ log.status_css }}">
+                            {{ log.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-end table-actions">
+                        {% if log.status == 'active' %}
+                        <a href="{% url 'assets:asset_downtime_log_resolve' log.pk %}" class="btn btn-sm btn-outline text-green-600 hover:bg-green-50" title="Resolve Stoppage">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'assets:asset_downtime_log_detail' log.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_downtime_log_edit' log.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_downtime_log_delete' log.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete downtime record {{ log.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="check-circle-2" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-700">No Downtime Logs Found</h3>
+                            <p class="text-sm text-slate-400 mt-1">No equipment outages have been recorded matching your criteria.</p>
+                            <a href="{% url 'assets:asset_downtime_log_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log Stoppage
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm">
+        <span class="text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} records)
+        </span>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if fixed_asset_id %}&fixed_asset={{ fixed_asset_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if category %}&category={{ category }}{% endif %}{% if fixed_asset_id %}&fixed_asset={{ fixed_asset_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
