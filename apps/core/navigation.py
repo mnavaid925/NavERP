@@ -3207,6 +3207,19 @@ LIVE_LINKS = {
         "Service Agreements": "assets:asset_service_contract_list",
         "Maintenance & Repair Management": "assets:asset_maintenance_request_list",
     },
+    "11.6": {
+        "Uptime & Downtime Tracking": "assets:asset_downtime_log_list",
+        "OEE & Productivity Metrics": "assets:asset_oee_record_list",
+        "Utilization Rate Monitoring": "assets:asset_performance_scorecard_list",
+        "Energy Consumption Tracking": "assets:asset_energy_reading_list",
+        "Performance Benchmarking & KPIs": "assets:asset_performance_scorecard_list",
+        # Plural and convenience aliases
+        "Downtime Logs": "assets:asset_downtime_log_list",
+        "OEE Records": "assets:asset_oee_record_list",
+        "Energy Readings": "assets:asset_energy_reading_list",
+        "Performance Scorecards": "assets:asset_performance_scorecard_list",
+        "Asset Performance & Utilization": "assets:asset_performance_scorecard_list",
+    },
 
 
 
