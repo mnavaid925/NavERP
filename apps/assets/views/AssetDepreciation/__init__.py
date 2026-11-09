@@ -1,1 +1,61 @@
-"""AssetDepreciation views package."""
+from apps.assets.views.AssetDepreciation.AssetDepreciationSchedules import (
+    depreciation_schedule_calculate,
+    depreciation_schedule_create,
+    depreciation_schedule_delete,
+    depreciation_schedule_detail,
+    depreciation_schedule_edit,
+    depreciation_schedule_list,
+    depreciation_schedule_post,
+)
+from apps.assets.views.AssetDepreciation.AssetRevaluations import (
+    revaluation_approve,
+    revaluation_create,
+    revaluation_delete,
+    revaluation_detail,
+    revaluation_edit,
+    revaluation_list,
+)
+from apps.assets.views.AssetDepreciation.AssetTransfers import (
+    transfer_complete,
+    transfer_create,
+    transfer_delete,
+    transfer_detail,
+    transfer_dispatch,
+    transfer_edit,
+    transfer_list,
+)
+from apps.assets.views.AssetDepreciation.CapitalizationPolicies import (
+    capitalization_policy_create,
+    capitalization_policy_delete,
+    capitalization_policy_detail,
+    capitalization_policy_edit,
+    capitalization_policy_list,
+)
+
+__all__ = [
+    "depreciation_schedule_list",
+    "depreciation_schedule_detail",
+    "depreciation_schedule_create",
+    "depreciation_schedule_edit",
+    "depreciation_schedule_delete",
+    "depreciation_schedule_calculate",
+    "depreciation_schedule_post",
+    "revaluation_list",
+    "revaluation_detail",
+    "revaluation_create",
+    "revaluation_edit",
+    "revaluation_delete",
+    "revaluation_approve",
+    "transfer_list",
+    "transfer_detail",
+    "transfer_create",
+    "transfer_edit",
+    "transfer_delete",
+    "transfer_dispatch",
+    "transfer_complete",
+    "capitalization_policy_list",
+    "capitalization_policy_detail",
+    "capitalization_policy_create",
+    "capitalization_policy_edit",
+    "capitalization_policy_delete",
+]
