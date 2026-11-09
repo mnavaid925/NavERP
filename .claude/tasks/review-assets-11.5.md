@@ -170,6 +170,34 @@
   - **Problem**: When a modal action form fails validation (e.g., negative completion meter), views redirect back with `messages.error(request, ...)` showing the first form error, but the modal does not auto-reopen.
   - **Fix**: Standard NavERP pattern handles modal flash messages cleanly, but appending query parameter `?action_error=triage` allows frontend script to auto-reopen modal if needed.
 
+---
+
+## Reviewer 6: `security-reviewer` Findings
+
+### Critical
+- **[SEC-C1] Cross-Tenant FK Injection Vulnerability via Unscoped Form Instantiation**
+  - **Files**: All 4 ModelForms in `apps/assets/forms/AssetMaintenance/`.
+  - **Problem**: All 4 forms fail to accept or extract `tenant` in `__init__` before `super().__init__()`, leaving foreign key querysets unfiltered across all tenants in `create` GET/POST.
+  - **Fix**: Accept `tenant` in `__init__` and pass `tenant=request.tenant` from create views.
+
+- **[SEC-C2] Missing Tenant Verification on User Foreign Keys in ModelForms**
+  - **Files**: `AssetMaintenanceRequests.py`, `AssetMaintenanceSchedules.py`, `AssetMaintenanceLogs.py` forms.
+  - **Problem**: `clean()` validates models via `reject_foreign()` but omits User foreign keys (`requester`, `assigned_technician`, `lead_technician`).
+  - **Fix**: Explicitly validate that user foreign keys belong to `request.tenant`.
+
+### Important
+- **[SEC-I1] Table Action Delete Buttons in List Templates Lack is_tenant_admin Guard**
+  - **Files**: All 4 list templates (`templates/assets/asset_maintenance/*/list.html`).
+  - **Problem**: Delete form buttons are rendered without `{% if is_tenant_admin %}`, causing non-admin users to receive 403 Forbidden errors when submitting.
+  - **Fix**: Wrap delete `<form>` blocks in `{% if is_tenant_admin %}`.
+
+### Minor
+- **[SEC-M1] Audit Logging for Contract Termination and Schedule State Toggle**
+  - **Files**: `AssetServiceContracts.py` (terminate view), `AssetMaintenanceSchedules.py` (toggle view).
+  - **Problem**: Ensure `write_audit_log` records state toggles and terminations with user remarks.
+  - **Fix**: Verify audit logging is active on state transitions.
+
+
 
 
 
