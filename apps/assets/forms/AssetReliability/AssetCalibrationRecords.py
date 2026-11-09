@@ -62,7 +62,7 @@ class AssetCalibrationRecordForm(TenantUniqueMixin, TenantModelForm):
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
             self.fields["service_vendor"].queryset = Party.objects.filter(
                 tenant=self.tenant,
-                party_roles__role="vendor",
+                roles__role="vendor",
             ).distinct()
             self.fields["certificate_document"].queryset = Document.objects.filter(tenant=self.tenant)
 
