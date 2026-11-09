@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}FMEA & RCM Register — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Reliability & Condition</span>
+            <span>/</span>
+            <span>FMEA & RCM Register</span>
+        </div>
+        <h1 class="page-title">Failure Mode Analysis (FMEA & RCM)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_failure_mode_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Failure Mode
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Failure Modes</div>
+            <div class="stat-value">{{ total_failure_modes }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="flame"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Extreme Risk (RPN > 500)</div>
+            <div class="stat-value">{{ extreme_risk_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">High Risk (RPN 251–500)</div>
+            <div class="stat-value">{{ high_risk_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Condition-Based (CBM)</div>
+            <div class="stat-value">{{ cbm_strategy_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Component, failure mode, cause..." class="form-input">
+            </div>
+            <div>
+                <label for="risk-filter" class="form-label">Risk Tier (RPN)</label>
+                <select id="risk-filter" name="risk_level" class="form-select">
+                    <option value="">All Risk Tiers</option>
+                    {% for val, label in risk_level_choices %}
+                    <option value="{{ val }}" {% if request.GET.risk_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="strat-filter" class="form-label">RCM Maintenance Strategy</label>
+                <select id="strat-filter" name="rcm_strategy" class="form-select">
+                    <option value="">All Strategies</option>
+                    {% for val, label in rcm_strategy_choices %}
+                    <option value="{{ val }}" {% if request.GET.rcm_strategy == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="category-filter" class="form-label">Asset Category</label>
+                <select id="category-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in category_list %}
+                    <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_failure_mode_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>FMEA #</th>
+                        <th>Component / Assembly</th>
+                        <th>Failure Mode</th>
+                        <th>S × O × D</th>
+                        <th>RPN Score</th>
+                        <th>Risk Tier</th>
+                        <th>RCM Strategy</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fm in failure_modes %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'assets:asset_failure_mode_detail' fm.pk %}" class="text-blue-600 hover:underline">
+                                {{ fm.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-900">{{ fm.component_subsystem }}</div>
+                            <div class="text-xs text-slate-500">
+                                {% if fm.fixed_asset %}
+                                    FA: {{ fm.fixed_asset.name }}
+                                {% elif fm.operational_asset %}
+                                    AST: {{ fm.operational_asset.name }}
+                                {% else %}
+                                    Class: {{ fm.asset_category.name|default:"General" }}
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="text-slate-800 text-sm font-medium">{{ fm.failure_mode }}</div>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ fm.failure_cause }}</div>
+                        </td>
+                        <td class="text-xs text-slate-600 font-mono">
+                            {{ fm.severity_score }} × {{ fm.occurrence_score }} × {{ fm.detection_score }}
+                        </td>
+                        <td class="font-bold text-slate-900">
+                            {{ fm.rpn }}
+                        </td>
+                        <td>
+                            <span class="badge {{ fm.risk_level_css }}">
+                                {{ fm.get_risk_level_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ fm.rcm_strategy_css }}">
+                                {{ fm.get_rcm_strategy_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ fm.status_css }}">
+                                {{ fm.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-end table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'assets:asset_failure_mode_detail' fm.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'assets:asset_failure_mode_edit' fm.pk %}" class="btn btn-icon btn-outline" title="Edit Failure Mode">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_failure_mode_delete' fm.pk %}" class="inline" onsubmit="return confirm('Delete failure mode {{ fm.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Failure Mode">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9">
+                            <div class="empty-state py-12 text-center">
+                                <div class="empty-state-icon mx-auto text-slate-300 mb-3">
+                                    <i data-lucide="shield-alert" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-800">No FMEA failure modes defined</h3>
+                                <p class="text-sm text-slate-500 mt-1">Catalog equipment components, failure causes, effects, RPN scores, and RCM strategies.</p>
+                                <div class="mt-4">
+                                    <a href="{% url 'assets:asset_failure_mode_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First Failure Mode
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.risk_level %}&risk_level={{ request.GET.risk_level }}{% endif %}{% if request.GET.rcm_strategy %}&rcm_strategy={{ request.GET.rcm_strategy }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.risk_level %}&risk_level={{ request.GET.risk_level }}{% endif %}{% if request.GET.rcm_strategy %}&rcm_strategy={{ request.GET.rcm_strategy }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
