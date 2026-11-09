@@ -146,16 +146,16 @@
                         <span class="badge {{ item.status_css }}">{{ item.is_active|yesno:"Active,Archived" }}</span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'assets:capitalization_policy_detail' item.pk %}" class="btn btn-icon" title="View Detail / Test Evaluation">
+                        <a href="{% url 'assets:capitalization_policy_detail' item.pk %}" class="btn btn-icon" title="View Detail / Test Evaluation" aria-label="View Detail / Test Evaluation">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'assets:capitalization_policy_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                        <a href="{% url 'assets:capitalization_policy_edit' item.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
                         {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'assets:capitalization_policy_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete policy {{ item.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red" title="Delete">
+                            <button type="submit" class="btn btn-icon text-red" title="Delete" aria-label="Delete">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
