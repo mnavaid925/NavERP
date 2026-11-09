@@ -175,9 +175,12 @@ def asset_maintenance_log_submit_review(request, pk):
 
 
 @require_POST
-@login_required
+@tenant_admin_required
 def asset_maintenance_log_approve(request, pk):
     obj = assets_object(request, AssetMaintenanceLog, pk)
+    if obj.status in ["approved", "posted"]:
+        messages.warning(request, f"Maintenance Log {obj.number} is already {obj.get_status_display().lower()}.")
+        return redirect("assets:asset_maintenance_log_detail", pk=obj.pk)
     obj.approve(request.user)
     write_audit_log(request.user, obj, "update", changes={"action": "approve"}, tenant=request.tenant)
     messages.success(request, f"Log {obj.number} approved.")
@@ -188,6 +191,9 @@ def asset_maintenance_log_approve(request, pk):
 @tenant_admin_required
 def asset_maintenance_log_post_gl(request, pk):
     obj = assets_object(request, AssetMaintenanceLog, pk)
+    if obj.status != "approved":
+        messages.error(request, "Only approved maintenance logs can be posted to the General Ledger.")
+        return redirect("assets:asset_maintenance_log_detail", pk=obj.pk)
     obj.post_to_gl(request.user)
     write_audit_log(request.user, obj, "update", changes={"action": "post_to_gl"}, tenant=request.tenant)
     messages.success(request, f"Maintenance Log {obj.number} posted to General Ledger and linked records updated.")
