@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Calibration {{ calibration.number }}{% else %}New Calibration Record{% endif %} — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_calibration_record_list' %}">Calibration Records</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ calibration.number }}{% else %}New Record{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Calibration Record: {{ calibration.number }}{% else %}Record Instrument Calibration Compliance{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body py-3 text-sm text-red-700">
+            <div class="font-semibold mb-1">Please correct the following errors:</div>
+            <ul class="list-disc list-inside">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li>{{ field.label }}: {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Instrument & Asset Target -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">1. Instrument & Equipment Identification</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="{{ form.instrument_tag.id_for_label }}" class="form-label">Instrument Tag / Loop ID <span class="text-red-500">*</span></label>
+                {{ form.instrument_tag }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.reference_standard_used.id_for_label }}" class="form-label">Reference Standard Instrument <span class="text-red-500">*</span></label>
+                {{ form.reference_standard_used }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                {{ form.fixed_asset }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                {{ form.operational_asset }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.calibrated_by.id_for_label }}" class="form-label">Internal Metrologist / Tech</label>
+                {{ form.calibrated_by }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.service_vendor.id_for_label }}" class="form-label">External ISO 17025 Calibration Lab</label>
+                {{ form.service_vendor }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cycle & Deadlines -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">2. Calibration Dates & Recalibration Cycle</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.calibration_date.id_for_label }}" class="form-label">Calibration Date <span class="text-red-500">*</span></label>
+                {{ form.calibration_date }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.calibration_frequency_days.id_for_label }}" class="form-label">Recalibration Cycle (Days) <span class="text-red-500">*</span></label>
+                {{ form.calibration_frequency_days }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.next_due_date.id_for_label }}" class="form-label">Next Due Deadline <span class="text-red-500">*</span></label>
+                {{ form.next_due_date }}
+                <p class="text-xs text-slate-500 mt-1">Leave empty to auto-calculate from cycle</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tolerances and Readings -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">3. Tolerances & Metrological Readings</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.setpoint_nominal.id_for_label }}" class="form-label">Setpoint Nominal <span class="text-red-500">*</span></label>
+                {{ form.setpoint_nominal }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.allowable_tolerance.id_for_label }}" class="form-label">Allowable Tolerance (±) <span class="text-red-500">*</span></label>
+                {{ form.allowable_tolerance }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.tolerance_unit.id_for_label }}" class="form-label">Tolerance Unit <span class="text-red-500">*</span></label>
+                {{ form.tolerance_unit }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.as_found_reading.id_for_label }}" class="form-label">As-Found Reading <span class="text-red-500">*</span></label>
+                {{ form.as_found_reading }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.as_left_reading.id_for_label }}" class="form-label">As-Left Reading <span class="text-red-500">*</span></label>
+                {{ form.as_left_reading }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.calibration_result.id_for_label }}" class="form-label">Calibration Result <span class="text-red-500">*</span></label>
+                {{ form.calibration_result }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Certification & Docs -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">4. Certification & Audit Traceability</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.traceability_certificate_no.id_for_label }}" class="form-label">Traceability Standard Cert #</label>
+                {{ form.traceability_certificate_no }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.certificate_number.id_for_label }}" class="form-label">Calibration Certificate Number</label>
+                {{ form.certificate_number }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.certificate_expiry.id_for_label }}" class="form-label">Certificate Expiration Date</label>
+                {{ form.certificate_expiry }}
+            </div>
+
+            <div class="form-group md:col-span-3">
+                <label for="{{ form.certificate_document.id_for_label }}" class="form-label">Digital Calibration Certificate Document</label>
+                {{ form.certificate_document }}
+            </div>
+
+            <div class="form-group md:col-span-3">
+                <label for="{{ form.notes.id_for_label }}" class="form-label">Calibration Procedure & Environmental Notes</label>
+                {{ form.notes }}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:asset_calibration_record_detail' calibration.pk %}{% else %}{% url 'assets:asset_calibration_record_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Save Calibration Record{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
