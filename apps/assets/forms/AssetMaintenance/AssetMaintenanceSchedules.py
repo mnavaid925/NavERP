@@ -65,8 +65,9 @@ class AssetMaintenanceScheduleForm(TenantUniqueMixin, forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
-        tenant = getattr(self, "tenant", None) or getattr(self.instance, "tenant", None)
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
         if tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant)
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant)
@@ -83,6 +84,10 @@ class AssetMaintenanceScheduleForm(TenantUniqueMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "asset_category", "preferred_vendor", "service_contract"])
+        assigned_tech = cleaned.get("assigned_technician")
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
+        if assigned_tech and tenant and getattr(assigned_tech, "tenant_id", None) != tenant.pk:
+            self.add_error("assigned_technician", "Assigned technician belongs to another workspace.")
         return cleaned
 
 
