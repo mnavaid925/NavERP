@@ -197,6 +197,18 @@ class AssetDowntimeLog(TenantNumbered):
             asset_name = f" - {self.operational_asset.name}"
         return f"{self.number}{asset_name} ({self.get_downtime_category_display()})"
 
+    @property
+    def status_css(self):
+        return self.STATUS_CSS.get(self.status, "badge-slate")
+
+    @property
+    def category_css(self):
+        return self.CATEGORY_CSS.get(self.downtime_category, "badge-slate")
+
+    @property
+    def impact_css(self):
+        return self.IMPACT_CSS.get(self.impact_level, "badge-slate")
+
     def calculate_duration_and_cost(self):
         if self.started_at and self.ended_at and self.ended_at >= self.started_at:
             delta_seconds = (self.ended_at - self.started_at).total_seconds()
