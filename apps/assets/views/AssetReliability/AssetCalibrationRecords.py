@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -54,13 +54,19 @@ def asset_calibration_record_list(request):
     if vendor_filter and vendor_filter.isdigit():
         qs = qs.filter(service_vendor_id=int(vendor_filter))
 
-    # KPI counts over tenant
+    # KPI counts over tenant in a single roundtrip
     today = timezone.now().date()
     tenant_base = AssetCalibrationRecord.objects.filter(tenant=request.tenant)
-    total_calibrations = tenant_base.count()
-    passed_count = tenant_base.filter(calibration_result__in=["pass", "pass_with_adjustment"]).count()
-    failed_count = tenant_base.filter(calibration_result="fail_out_of_tolerance").count()
-    overdue_count = tenant_base.filter(Q(status="expired") | Q(next_due_date__lt=today)).count()
+    stats = tenant_base.aggregate(
+        total=Count("id"),
+        passed=Count("id", filter=Q(calibration_result__in=["pass", "pass_with_adjustment"])),
+        failed=Count("id", filter=Q(calibration_result="fail_out_of_tolerance")),
+        overdue=Count("id", filter=Q(status="expired") | Q(next_due_date__lt=today)),
+    )
+    total_calibrations = stats["total"]
+    passed_count = stats["passed"]
+    failed_count = stats["failed"]
+    overdue_count = stats["overdue"]
 
     paginator = Paginator(qs, 20)
     page_number = request.GET.get("page")
