@@ -101,10 +101,45 @@
 
 ## 6. Security & Multi-Tenancy Reviewer Findings
 
-*(Pending review pass)*
+### Critical / High
+- **SEC-C1**: `apps/assets/views/AssetPerformance/` (`AssetDowntimeLogs.py:168`, `AssetOeeRecords.py:161`, `AssetEnergyReadings.py:169`, `AssetPerformanceScorecards.py:171`) — Missing view-level status precondition guards on state transitions (`resolve`, `finalize`, `validate`, `publish`), allowing direct POST to transition records in cancelled/archived states. Add status validation and redirect with error.
+
+### Important
+- **SEC-I1**: `apps/assets/forms/AssetPerformance/` (`AssetDowntimeLogs.py:76`, `AssetOeeRecords.py:82`, `AssetEnergyReadings.py:81`, `AssetPerformanceScorecards.py:88`) — Cross-tenant defense-in-depth omission: user foreign key fields (`logged_by`, `recorded_by`, `evaluated_by`) are omitted from `reject_foreign`. Add them to `reject_foreign` in all 4 forms.
+- **SEC-I2**: `apps/assets/forms/AssetPerformance/` (all 4 forms) — Workflow bypass via form `status` mass assignment: remove `status` from form `fields` or exclude it where appropriate to ensure state changes occur through dedicated transition views.
+
+### Minor
+- **SEC-M1**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34` — Contract drift: `peer_category_ranking` included in `fields` instead of `exclude`.
+- **SEC-M2**: `apps/assets/models/AssetPerformance/` (`AssetOeeRecords.py:230`, `AssetPerformanceScorecards.py:255`) — Unhandled `None` in arithmetic calculations can trigger `TypeError` and 500 error on save.
 
 ---
 
 ## Consolidated & Prioritized Findings Register
 
-*(To be compiled after all 6 passes complete)*
+### Critical Findings (Must Fix Before Release)
+- [ ] **C1**: `templates/assets/asset_performance/asset_downtime_log/resolve.html:28` — Lesson L10: `{{ log.fixed_asset.name|default:log.operational_asset.name|default:"Unassigned" }}` causes `VariableDoesNotExist` and 500 when `fixed_asset` is None. Replace with `{% if log.fixed_asset %}{{ log.fixed_asset.name }}{% elif log.operational_asset %}{{ log.operational_asset.name }}{% else %}Unassigned{% endif %}`.
+- [ ] **C2**: `templates/assets/asset_performance/asset_downtime_log/detail.html:196` — Lesson L10: `{{ log.logged_by.get_full_name|default:log.logged_by.username|default:"System" }}` raises `VariableDoesNotExist` and 500s when `log.logged_by` is None. Wrap in `{% if log.logged_by %}{{ log.logged_by.get_full_name|default:log.logged_by.username }}{% else %}System{% endif %}`.
+- [ ] **C3**: `templates/assets/asset_performance/asset_oee_record/detail.html:222` — Lesson L10: `{{ record.recorded_by.get_full_name|default:record.recorded_by.username|default:"System" }}` raises `VariableDoesNotExist` and 500s when `record.recorded_by` is None. Wrap in `{% if record.recorded_by %}{{ record.recorded_by.get_full_name|default:record.recorded_by.username }}{% else %}System{% endif %}`.
+- [ ] **C4**: `templates/assets/asset_performance/asset_energy_reading/detail.html:199` — Lesson L10: `{{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Ingestion" }}` raises `VariableDoesNotExist` and 500s when `reading.recorded_by` is None. Wrap in `{% if reading.recorded_by %}{{ reading.recorded_by.get_full_name|default:reading.recorded_by.username }}{% else %}System Ingestion{% endif %}`.
+- [ ] **C5**: `templates/assets/asset_performance/asset_performance_scorecard/detail.html:224` — Lesson L10: `{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.username|default:"System Evaluator" }}` raises `VariableDoesNotExist` and 500s when `scorecard.evaluated_by` is None. Wrap in `{% if scorecard.evaluated_by %}{{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.username }}{% else %}System Evaluator{% endif %}`.
+- [ ] **C6**: `apps/assets/views/AssetPerformance/` (`AssetDowntimeLogs.py:168`, `AssetOeeRecords.py:161`, `AssetEnergyReadings.py:169`, `AssetPerformanceScorecards.py:171`) — Missing view-level status precondition guards in state transition views (`resolve` must require `active`, `finalize` must require `draft`, `validate` must require `pending` or `flagged_anomaly`, `publish` must require `draft`). Reject with error message + redirect otherwise.
+
+### Important Findings (High Priority)
+- [ ] **I1**: `templates/assets/asset_performance/asset_energy_reading/detail.html:148` — `reading.utility_provider.legal_name` accessed on `core.Party` where actual field is `name`. Utility provider renders blank. Change to `reading.utility_provider.name`.
+- [ ] **I2**: `apps/assets/models/AssetPerformance/` (`AssetDowntimeLogs:54`, `AssetEnergyReadings:50`, `AssetPerformanceScorecards:48`) — Lesson L33: Non-existent badge class `badge-purple` used in model CSS dictionaries for `setup_changeover`, `natural_gas`, and `monthly`. `theme.css` has only green, red, amber, info, muted, slate. Replace `badge-purple` with `badge-info`.
+- [ ] **I3**: `apps/assets/forms/AssetPerformance/` (`AssetDowntimeLogs.py:76`, `AssetOeeRecords.py:82`, `AssetEnergyReadings.py:81`, `AssetPerformanceScorecards.py:88`) — Defense-in-depth: add `"logged_by"`, `"recorded_by"`, `"evaluated_by"` to `reject_foreign(self, cleaned, [...])` in each form.
+- [ ] **I4**: `apps/assets/models/AssetPerformance/AssetOeeRecords.py:230,238` & `AssetPerformanceScorecards.py:255,277,289` — Unhandled `None` arithmetic in `calculate_oee()` and `calculate_scorecard()`. Coalesce nullable numeric inputs with `(val or Decimal("0"))` before math.
+- [ ] **I5**: `apps/assets/models/AssetPerformance/AssetDowntimeLogs.py:220` — Missing `else: self.total_downtime_cost = Decimal("0.00")` when hourly cost rate is 0/None.
+- [ ] **I6**: `templates/assets/asset_performance/` list templates (`asset_energy_reading/list.html`, `asset_performance_scorecard/list.html`) — Filter bar contract drift: missing `<select name="status">` dropdown for lifecycle status filtering. Add status dropdown to both templates.
+- [ ] **I7**: `apps/assets/models/AssetPerformance/` — Missing compound indexes: add standard `(tenant, status)` (`idx_aoee_ten_stat`, `idx_aeng_ten_stat`, `idx_apsc_ten_stat`) to OEE, Energy, and Scorecard models, plus ordering indexes `(tenant, -started_at)` (`idx_adwn_ten_start`) on DowntimeLog and `(tenant, -period_end)` (`idx_apsc_ten_pend`) on Scorecard.
+- [ ] **I8**: `apps/assets/views/AssetPerformance/` (all 4 list views) & `AssetDowntimeLogs.py:169` — ORM optimization: add `select_related=["fixed_asset", "operational_asset"]` to `assets_object` in `asset_downtime_log_resolve` view; prune list view `select_related` to only the FKs rendered in the list tables (`fixed_asset`, `operational_asset`).
+- [ ] **I9**: `templates/assets/asset_performance/asset_energy_reading/list.html:166`, `asset_performance_scorecard/list.html:132,156` — Lesson L13: Invented utility class `text-2xs` not in theme.css or Tailwind CDN. Replace with `text-xs`.
+
+### Minor Findings (Quality Polish)
+- [ ] **M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — Missing `impact` level dropdown in filter bar and clear filter condition.
+- [ ] **M2**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34, 40-52` — Contract drift: `peer_category_ranking` was specified in form exclusions (Contract 1.4 & 2.4). Remove from `fields` and add to `exclude`.
+- [ ] **M3**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Add `.only("id", "name")` to `FixedAsset.objects.filter(tenant=request.tenant)` dropdown queries in list views.
+- [ ] **M4**: `templates/assets/asset_performance/` (all 4 list templates) — Filter clear "X" buttons lack accessibility attributes (`title="Clear filters" aria-label="Clear filters"`).
+- [ ] **M5**: `templates/assets/asset_performance/` (all 4 list templates) — Filter bar `<label>` elements lack `for` attributes and matching `<input>`/`<select>` `id` attributes.
+- [ ] **M6**: `apps/assets/models/AssetPerformance/` — Float casting in Decimal rounding calculations. Use `Decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`.
+
