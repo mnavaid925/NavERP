@@ -79,7 +79,7 @@ class AssetOeeRecordForm(TenantUniqueMixin, forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset"])
+        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "recorded_by"])
 
         planned = cleaned.get("planned_production_time_minutes")
         operating = cleaned.get("operating_time_minutes")
