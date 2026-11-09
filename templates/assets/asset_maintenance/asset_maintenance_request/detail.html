@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block title %}Request {{ maintenance_request.number }} — Maintenance & Repair — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_maintenance_request_list' %}">Requests</a>
+            <span>/</span>
+            <span>{{ maintenance_request.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ maintenance_request.number }}</h1>
+            <span class="badge {{ maintenance_request.status_css }}">{{ maintenance_request.get_status_display }}</span>
+            <span class="badge {{ maintenance_request.urgency_css }}">{{ maintenance_request.get_urgency_display }}</span>
+            {% if maintenance_request.is_breakdown %}
+            <span class="badge badge-red flex items-center gap-1">
+                <i data-lucide="alert-octagon" class="w-3.5 h-3.5"></i> Equipment Down
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if maintenance_request.status == "submitted" %}
+        <button type="button" onclick="document.getElementById('triage-modal').classList.remove('hidden')" class="btn btn-outline">
+            <i data-lucide="clipboard-check" class="w-4 h-4 mr-1"></i> Triage
+        </button>
+        {% endif %}
+
+        {% if maintenance_request.status in "submitted,triaged" %}
+        <button type="button" onclick="document.getElementById('dispatch-modal').classList.remove('hidden')" class="btn btn-primary">
+            <i data-lucide="send" class="w-4 h-4 mr-1"></i> Dispatch Tech
+        </button>
+        {% endif %}
+
+        {% if maintenance_request.status == "assigned" %}
+        <form method="post" action="{% url 'assets:asset_maintenance_request_start' maintenance_request.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="play" class="w-4 h-4 mr-1"></i> Start Work
+            </button>
+        </form>
+        {% endif %}
+
+        {% if maintenance_request.status in "assigned,in_progress" %}
+        <button type="button" onclick="document.getElementById('resolve-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
+            <i data-lucide="check" class="w-4 h-4 mr-1"></i> Resolve
+        </button>
+        {% endif %}
+
+        {% if maintenance_request.status == "resolved" %}
+        <form method="post" action="{% url 'assets:asset_maintenance_request_close' maintenance_request.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-slate-700 hover:bg-slate-100">
+                <i data-lucide="archive" class="w-4 h-4 mr-1"></i> Verify & Close
+            </button>
+        </form>
+        {% endif %}
+
+        {% if maintenance_request.status in "submitted,triaged" %}
+        <button type="button" onclick="document.getElementById('reject-modal').classList.remove('hidden')" class="btn btn-outline text-red-600 hover:bg-red-50">
+            <i data-lucide="x-circle" class="w-4 h-4 mr-1"></i> Reject
+        </button>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_maintenance_request_edit' maintenance_request.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+
+        <form method="post" action="{% url 'assets:asset_maintenance_request_delete' maintenance_request.pk %}" class="inline" onsubmit="return confirm('Delete maintenance request {{ maintenance_request.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Overview Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Issue Overview & Symptoms</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Title / Problem Summary</div>
+                    <div class="text-lg font-semibold text-slate-900 mt-0.5">{{ maintenance_request.title }}</div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
+                    <div>
+                        <div class="text-xs text-slate-500">Request Type</div>
+                        <div class="mt-1">
+                            <span class="badge {{ maintenance_request.request_type_css }}">{{ maintenance_request.get_request_type_display }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Urgency Level</div>
+                        <div class="mt-1">
+                            <span class="badge {{ maintenance_request.urgency_css }}">{{ maintenance_request.get_urgency_display }}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Breakdown Status</div>
+                        <div class="mt-1 text-sm font-medium {% if maintenance_request.is_breakdown %}text-red-600{% else %}text-slate-700{% endif %}">
+                            {% if maintenance_request.is_breakdown %}
+                            Equipment Inoperable
+                            {% else %}
+                            Operational / Running
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if maintenance_request.downtime_started_at %}
+                    <div>
+                        <div class="text-xs text-slate-500">Downtime Started</div>
+                        <div class="text-sm font-medium text-slate-900 mt-1">{{ maintenance_request.downtime_started_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <div class="text-xs text-slate-500">Submitted On</div>
+                        <div class="text-sm text-slate-900 mt-1">{{ maintenance_request.created_at|date:"M d, Y H:i" }}</div>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Symptom Description</div>
+                    <div class="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 whitespace-pre-line leading-relaxed">
+                        {{ maintenance_request.symptom_description }}
+                    </div>
+                </div>
+
+                {% if maintenance_request.triage_notes %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Triage & Prioritization Notes</div>
+                    <div class="text-sm text-slate-800 bg-amber-50 p-3 rounded border border-amber-200 whitespace-pre-line leading-relaxed">
+                        {{ maintenance_request.triage_notes }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_request.resolution_summary %}
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Resolution Summary</div>
+                    <div class="text-sm text-slate-800 bg-emerald-50 p-3 rounded border border-emerald-200 whitespace-pre-line leading-relaxed">
+                        {{ maintenance_request.resolution_summary }}
+                    </div>
+                    <div class="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                        {% if maintenance_request.resolved_by %}
+                        <span>Resolved by: <strong>{{ maintenance_request.resolved_by.get_full_name|default:maintenance_request.resolved_by.username }}</strong></span>
+                        {% endif %}
+                        {% if maintenance_request.resolved_at %}
+                        <span>Resolved on: <strong>{{ maintenance_request.resolved_at|date:"M d, Y H:i" }}</strong></span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Service Logs -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Maintenance & Repair Service Logs</h3>
+                <a href="{% url 'assets:asset_maintenance_log_create' %}?maintenance_request={{ maintenance_request.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Log Service Work
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Log #</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Lead Tech / Vendor</th>
+                            <th>Downtime</th>
+                            <th>Cost</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in linked_logs %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'assets:asset_maintenance_log_detail' log.pk %}" class="text-blue-600 hover:underline">
+                                    {{ log.number }}
+                                </a>
+                            </td>
+                            <td>{{ log.service_date|date:"M d, Y" }}</td>
+                            <td><span class="badge {{ log.maintenance_type_css }}">{{ log.get_maintenance_type_display }}</span></td>
+                            <td>
+                                {{ log.lead_technician.get_full_name|default:log.lead_technician.username|default:log.service_vendor.name|default:"—" }}
+                            </td>
+                            <td>{{ log.downtime_hours }} hrs</td>
+                            <td class="font-medium">${{ log.total_cost|floatformat:2 }}</td>
+                            <td><span class="badge {{ log.status_css }}">{{ log.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-slate-500 text-sm">
+                                No service records logged yet for this request.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Asset & Assignment Context -->
+    <div class="space-y-6">
+        <!-- Asset Identification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Asset Context</h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if maintenance_request.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Fixed Asset Master</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ maintenance_request.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-slate-500">{{ maintenance_request.fixed_asset.number }}</div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_request.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500">Operational Equipment</div>
+                    <div class="text-sm font-semibold text-slate-900 mt-0.5">{{ maintenance_request.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-500">{{ maintenance_request.operational_asset.asset_tag|default:"No Tag" }}</div>
+                </div>
+                {% endif %}
+
+                {% if not maintenance_request.fixed_asset and not maintenance_request.operational_asset %}
+                <div class="text-sm text-slate-500 italic">No specific asset record attached.</div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100">
+                    <div class="text-xs text-slate-500">Requesting Department</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {{ maintenance_request.department.name|default:"Unspecified Cost Center" }}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-slate-500">Submitted By</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {{ maintenance_request.requester.get_full_name|default:maintenance_request.requester.username|default:"System" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dispatch & Contractor Context -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Dispatch & Assignment</h3>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500">Assigned Internal Technician</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {% if maintenance_request.assigned_technician %}
+                        {{ maintenance_request.assigned_technician.get_full_name|default:maintenance_request.assigned_technician.username }}
+                        {% else %}
+                        <span class="text-slate-400 italic">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs text-slate-500">Assigned Service Vendor / OEM</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {% if maintenance_request.assigned_vendor %}
+                        {{ maintenance_request.assigned_vendor.name }}
+                        {% else %}
+                        <span class="text-slate-400 italic">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if maintenance_request.service_contract %}
+                <div>
+                    <div class="text-xs text-slate-500">Covered By Service Contract</div>
+                    <div class="text-sm font-medium text-blue-600 mt-0.5">
+                        <a href="{% url 'assets:asset_service_contract_detail' maintenance_request.service_contract.pk %}" class="hover:underline">
+                            {{ maintenance_request.service_contract.number }} ({{ maintenance_request.service_contract.contract_number }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if maintenance_request.dispatched_work_order %}
+                <div>
+                    <div class="text-xs text-slate-500">Operational Work Order</div>
+                    <div class="text-sm font-medium text-slate-900 mt-0.5">
+                        {{ maintenance_request.dispatched_work_order.number }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Triage -->
+<div id="triage-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Triage Maintenance Request</h3>
+        <form method="post" action="{% url 'assets:asset_maintenance_request_triage' maintenance_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Urgency Assessment</label>
+                    {{ triage_form.urgency }}
+                </div>
+                <div>
+                    <label class="form-label">Triage & Hazard Notes</label>
+                    {{ triage_form.triage_notes }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('triage-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Accept & Set Triaged</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Dispatch -->
+<div id="dispatch-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Dispatch Technician or Vendor</h3>
+        <form method="post" action="{% url 'assets:asset_maintenance_request_dispatch' maintenance_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Internal Technician</label>
+                    {{ dispatch_form.assigned_technician }}
+                </div>
+                <div>
+                    <label class="form-label">Or External Service Vendor</label>
+                    {{ dispatch_form.assigned_vendor }}
+                </div>
+                <div>
+                    <label class="form-label">Operational Work Order (Optional)</label>
+                    {{ dispatch_form.dispatched_work_order }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('dispatch-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Dispatch Request</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Resolve -->
+<div id="resolve-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4">Record Repair Resolution</h3>
+        <form method="post" action="{% url 'assets:asset_maintenance_request_resolve' maintenance_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Corrective Actions & Resolution Details</label>
+                    {{ resolve_form.resolution_summary }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('resolve-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">Mark Resolved</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Reject -->
+<div id="reject-modal" class="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+        <h3 class="text-lg font-bold text-slate-900 mb-4 text-red-600">Reject Maintenance Request</h3>
+        <form method="post" action="{% url 'assets:asset_maintenance_request_reject' maintenance_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Rejection Reason</label>
+                    {{ reject_form.rejection_reason }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button type="button" onclick="document.getElementById('reject-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">Confirm Rejection</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
