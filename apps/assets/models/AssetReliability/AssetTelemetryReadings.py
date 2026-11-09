@@ -191,6 +191,7 @@ class AssetTelemetryReading(TenantNumbered):
             models.Index(fields=["tenant", "threshold_status"], name="idx_atel_ten_stat"),
             models.Index(fields=["tenant", "metric_type"], name="idx_atel_ten_type"),
             models.Index(fields=["tenant", "is_anomaly"], name="idx_atel_ten_anom"),
+            models.Index(fields=["tenant", "source"], name="idx_atel_ten_src"),
         ]
 
     def __str__(self):
