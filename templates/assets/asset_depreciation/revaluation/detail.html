@@ -196,7 +196,7 @@
                 </div>
                 <div>
                     <div class="text-xs text-muted">Approved By</div>
-                    <div class="font-medium text-slate-800">{{ revaluation.approved_by.get_full_name|default:revaluation.approved_by.username|default:"—" }}</div>
+                    <div class="font-medium text-slate-800">{% if revaluation.approved_by %}{{ revaluation.approved_by.get_full_name|default:revaluation.approved_by.username }}{% else %}—{% endif %}</div>
                 </div>
                 <div class="pt-3 border-t border-slate-200 text-xs text-muted">
                     <div>Created: {{ revaluation.created_at|date:"Y-m-d H:i" }}</div>
