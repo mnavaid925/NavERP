@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Downtime Event {{ log.number }} — Asset Performance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_downtime_log_list' %}">Downtime Logs</a>
+            <span>/</span>
+            <span>{{ log.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ log.number }}</h1>
+            <span class="badge {{ log.status_css }}">{{ log.get_status_display }}</span>
+            <span class="badge {{ log.category_css }}">{{ log.get_downtime_category_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if log.status == 'active' %}
+        <a href="{% url 'assets:asset_downtime_log_resolve' log.pk %}" class="btn btn-primary">
+            <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Resolve Stoppage
+        </a>
+        {% endif %}
+        <a href="{% url 'assets:asset_downtime_log_edit' log.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_downtime_log_delete' log.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete downtime record {{ log.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Metrics Quick View -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Duration</div>
+            <div class="stat-value">{{ log.duration_minutes }} <span class="text-xs font-normal text-slate-500">min</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Loss Cost</div>
+            <div class="stat-value">${{ log.total_downtime_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Hourly Cost Rate</div>
+            <div class="stat-value">${{ log.hourly_cost_rate|floatformat:2 }}/hr</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon {% if log.is_mtbf_failure %}orange{% else %}slate{% endif %}"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">MTBF Failure Event</div>
+            <div class="stat-value">{% if log.is_mtbf_failure %}Yes{% else %}No{% endif %}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Stoppage Breakdown & Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Event Overview Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Stoppage Diagnostics</h2>
+                <span class="badge {{ log.impact_css }}">{{ log.get_impact_level_display }}</span>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Failure Symptom / Alarm</h3>
+                    <p class="text-slate-800 bg-slate-50 p-4 rounded-md border border-slate-100 text-sm whitespace-pre-line leading-relaxed">{{ log.failure_description }}</p>
+                </div>
+
+                {% if log.resolution_notes %}
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Corrective Action & Resolution Notes</h3>
+                    <p class="text-slate-800 bg-emerald-50/50 p-4 rounded-md border border-emerald-100 text-sm whitespace-pre-line leading-relaxed">{{ log.resolution_notes }}</p>
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <span class="text-xs text-slate-500">Root Cause Code (ISO 14224 / FMEA)</span>
+                        <div class="font-mono text-sm text-slate-900 font-medium">{{ log.root_cause_code|default:"Unclassified" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Department / Workshop</span>
+                        <div class="text-sm text-slate-900 font-medium">{{ log.department.name|default:"General Facility" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Timeline Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Incident Timeline</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-slate-500">Stoppage Started</span>
+                        <div class="text-sm font-medium text-slate-900">{{ log.started_at|date:"F j, Y, H:i" }}</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Resumed / Resolved</span>
+                        <div class="text-sm font-medium text-slate-900">
+                            {% if log.ended_at %}
+                                {{ log.ended_at|date:"F j, Y, H:i" }}
+                            {% else %}
+                                <span class="text-red-600 font-semibold flex items-center gap-1">
+                                    <span class="w-2 h-2 rounded-full bg-red-600 animate-pulse"></span>
+                                    Machine Currently Stopped
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Associated Masters & Metadata -->
+    <div class="space-y-6">
+        <!-- Target Equipment Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Target Asset</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if log.fixed_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Fixed Asset</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ log.fixed_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ log.fixed_asset.asset_number }}</div>
+                </div>
+                {% endif %}
+
+                {% if log.operational_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Operational Equipment</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ log.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ log.operational_asset.code }}</div>
+                </div>
+                {% endif %}
+
+                {% if not log.fixed_asset and not log.operational_asset %}
+                <p class="text-sm text-slate-400 italic">No specific asset linked to this stoppage event.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Cross-Module Links -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Linked Records</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-slate-500">Maintenance Request</span>
+                    <div>
+                        {% if log.maintenance_request %}
+                        <a href="{% url 'assets:asset_maintenance_request_detail' log.maintenance_request.pk %}" class="text-blue-600 hover:underline font-mono">
+                            {{ log.maintenance_request.number }}
+                        </a>
+                        {% else %}
+                        <span class="text-slate-400">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Work Order</span>
+                    <div>
+                        {% if log.work_order %}
+                        <span class="font-mono text-slate-800">{{ log.work_order }}</span>
+                        {% else %}
+                        <span class="text-slate-400">None</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Logged By</span>
+                    <div class="text-slate-800 font-medium">
+                        {{ log.logged_by.get_full_name|default:log.logged_by.username|default:"System" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
