@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Condition Assessments — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Reliability & Condition</span>
+            <span>/</span>
+            <span>Condition Assessments</span>
+        </div>
+        <h1 class="page-title">Asset Condition Assessments</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_condition_assessment_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Assessment
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="clipboard-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Assessments</div>
+            <div class="stat-value">{{ total_assessments }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Defects</div>
+            <div class="stat-value">{{ critical_defect_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="heart-pulse"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Avg Health Score</div>
+            <div class="stat-value">{{ average_health_score }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Follow-up Required</div>
+            <div class="stat-value">{{ followup_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Number, title, findings..." class="form-input">
+            </div>
+            <div>
+                <label for="grade-filter" class="form-label">Condition Grade</label>
+                <select id="grade-filter" name="condition_grade" class="form-select">
+                    <option value="">All Grades</option>
+                    {% for val, label in condition_grade_choices %}
+                    <option value="{{ val }}" {% if request.GET.condition_grade == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Assessment Type</label>
+                <select id="type-filter" name="assessment_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in assessment_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.assessment_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="category-filter" class="form-label">Category</label>
+                <select id="category-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in category_list %}
+                    <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_condition_assessment_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assessments Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Assessment #</th>
+                        <th>Title / Asset</th>
+                        <th>Type</th>
+                        <th>Inspection Date</th>
+                        <th>Condition Grade</th>
+                        <th>Health Score</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for assessment in condition_assessments %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'assets:asset_condition_assessment_detail' assessment.pk %}" class="text-blue-600 hover:underline">
+                                {{ assessment.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ assessment.title }}</div>
+                            <div class="text-xs text-slate-500">
+                                {% if assessment.fixed_asset %}
+                                    FA: {{ assessment.fixed_asset.asset_number }} ({{ assessment.fixed_asset.name }})
+                                {% elif assessment.operational_asset %}
+                                    AST: {{ assessment.operational_asset.asset_tag }}
+                                {% else %}
+                                    Category: {{ assessment.asset_category.name|default:"General" }}
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ assessment.assessment_type_css }}">
+                                {{ assessment.get_assessment_type_display }}
+                            </span>
+                        </td>
+                        <td class="text-slate-600 text-sm">
+                            {{ assessment.assessment_date|date:"M d, Y" }}
+                        </td>
+                        <td>
+                            <span class="badge {{ assessment.condition_grade_css }}">
+                                {{ assessment.get_condition_grade_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <span class="font-semibold text-sm">{{ assessment.health_score }}%</span>
+                                <div class="w-16 bg-slate-200 rounded-full h-2">
+                                    <div class="{% if assessment.health_score < 40 %}bg-red-500{% elif assessment.health_score < 70 %}bg-amber-500{% else %}bg-green-500{% endif %} h-2 rounded-full" style="width: {{ assessment.health_score }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ assessment.status_css }}">
+                                {{ assessment.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-end table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'assets:asset_condition_assessment_detail' assessment.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'assets:asset_condition_assessment_edit' assessment.pk %}" class="btn btn-icon btn-outline" title="Edit Assessment">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_condition_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Delete condition assessment {{ assessment.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Assessment">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state py-12 text-center">
+                                <div class="empty-state-icon mx-auto text-slate-300 mb-3">
+                                    <i data-lucide="clipboard-check" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-800">No condition assessments found</h3>
+                                <p class="text-sm text-slate-500 mt-1">Record physical inspections, ultrasonic thickness measurements, or thermography surveys.</p>
+                                <div class="mt-4">
+                                    <a href="{% url 'assets:asset_condition_assessment_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First Assessment
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.condition_grade %}&condition_grade={{ request.GET.condition_grade }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.condition_grade %}&condition_grade={{ request.GET.condition_grade }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
