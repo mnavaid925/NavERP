@@ -225,6 +225,8 @@ class AssetPerformanceScorecard(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_apsc_ten_stat"),
+            models.Index(fields=["tenant", "-period_end"], name="idx_apsc_ten_pend"),
             models.Index(fields=["tenant", "period_type"], name="idx_apsc_ten_per"),
             models.Index(fields=["tenant", "benchmark_grade"], name="idx_apsc_ten_grd"),
             models.Index(fields=["tenant", "fixed_asset"], name="idx_apsc_ten_fa"),
