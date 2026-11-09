@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.db import models
@@ -251,36 +251,43 @@ class AssetPerformanceScorecard(TenantNumbered):
         return self.GRADE_CSS.get(self.benchmark_grade, "badge-slate")
 
     def calculate_scorecard(self):
+        actual_hours = self.actual_operating_hours or Decimal("0.00")
+        unplanned_hours = self.unplanned_downtime_hours or Decimal("0.00")
+        planned_down = self.planned_downtime_hours or Decimal("0.00")
+        planned_op = self.planned_operating_hours or Decimal("0.00")
+        failures = self.failure_event_count or 0
+        avg_oee = self.average_oee_percentage or Decimal("0.00")
+
         # 1. Idle capacity hours = planned - (actual + unplanned downtime + planned downtime)
-        accounted = self.actual_operating_hours + self.unplanned_downtime_hours + self.planned_downtime_hours
-        if self.planned_operating_hours and self.planned_operating_hours > accounted:
-            self.idle_capacity_hours = self.planned_operating_hours - accounted
+        accounted = actual_hours + unplanned_hours + planned_down
+        if planned_op > accounted:
+            self.idle_capacity_hours = (planned_op - accounted).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         else:
             self.idle_capacity_hours = Decimal("0.00")
 
         # 2. Capacity Utilization Rate (%) = actual / planned * 100
-        if self.planned_operating_hours and self.planned_operating_hours > 0:
-            util = (self.actual_operating_hours / self.planned_operating_hours) * Decimal("100.0")
-            self.capacity_utilization_rate = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(util), 2)))))
+        if planned_op > Decimal("0.00"):
+            util = (actual_hours / planned_op) * Decimal("100.0")
+            self.capacity_utilization_rate = min(Decimal("100.00"), max(Decimal("0.00"), util.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
         else:
             self.capacity_utilization_rate = Decimal("0.00")
 
         # 3. Availability Rate (%) = actual / (actual + unplanned) * 100
-        active_and_down = self.actual_operating_hours + self.unplanned_downtime_hours
-        if active_and_down > 0:
-            avail = (self.actual_operating_hours / active_and_down) * Decimal("100.0")
-            self.availability_rate = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(avail), 2)))))
+        active_and_down = actual_hours + unplanned_hours
+        if active_and_down > Decimal("0.00"):
+            avail = (actual_hours / active_and_down) * Decimal("100.0")
+            self.availability_rate = min(Decimal("100.00"), max(Decimal("0.00"), avail.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
         else:
             self.availability_rate = Decimal("0.00")
 
         # 4. MTBF & MTTR
-        if self.failure_event_count > 0:
-            mtbf = self.actual_operating_hours / Decimal(str(self.failure_event_count))
-            self.mtbf_hours = Decimal(str(round(float(mtbf), 2)))
-            mttr = self.unplanned_downtime_hours / Decimal(str(self.failure_event_count))
-            self.mttr_hours = Decimal(str(round(float(mttr), 2)))
+        if failures > 0:
+            mtbf = actual_hours / Decimal(str(failures))
+            self.mtbf_hours = mtbf.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            mttr = unplanned_hours / Decimal(str(failures))
+            self.mttr_hours = mttr.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         else:
-            self.mtbf_hours = self.actual_operating_hours
+            self.mtbf_hours = actual_hours.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             self.mttr_hours = Decimal("0.00")
 
         # 5. Composite Performance Index Score (0-100)
@@ -288,9 +295,9 @@ class AssetPerformanceScorecard(TenantNumbered):
         score = (
             (self.capacity_utilization_rate * Decimal("0.35"))
             + (self.availability_rate * Decimal("0.35"))
-            + (self.average_oee_percentage * Decimal("0.30"))
+            + (avg_oee * Decimal("0.30"))
         )
-        self.performance_index_score = min(Decimal("100.00"), max(Decimal("0.00"), Decimal(str(round(float(score), 2)))))
+        self.performance_index_score = min(Decimal("100.00"), max(Decimal("0.00"), score.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)))
 
         # 6. Benchmark Grade
         if self.performance_index_score >= Decimal("90.00"):
