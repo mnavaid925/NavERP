@@ -103,4 +103,41 @@
   - **Problem**: Views pass `q` but omit `"search_query": q` in context.
   - **Fix**: Pass `"search_query": q` in list contexts.
 
+---
+
+## Reviewer 3: `frontend-reviewer` Findings
+
+### Important
+- **[FE-I1] Non-Existent Theme Badge Classes (badge-purple and badge-blue)**
+  - **Files**: `apps/assets/models/AssetMaintenance/AssetMaintenanceSchedules.py` (53), `AssetServiceContracts.py` (53, 55), `AssetMaintenanceLogs.py` (60, 66).
+  - **Problem**: `static/css/theme.css` has NO `.badge-purple` and NO `.badge-blue`. Renders unstyled plain pill outlines.
+  - **Fix**: Replace `badge-purple` with `badge-info`/`badge-slate` and `badge-blue` with `badge-info`.
+
+- **[FE-I2] RTL Spacing Utility Violations (mr-* and ml-* used instead of logical me-* and ms-*)**
+  - **Files**: All 12 templates under `templates/assets/asset_maintenance/`.
+  - **Problem**: Physical direction margins break spacing in RTL locales.
+  - **Fix**: Replace all `mr-1` with `me-1`, and all `ml-1` with `ms-1`.
+
+- **[FE-I3] Accessibility: Missing for Attributes on Modal Form label Elements**
+  - **Files**: `templates/assets/asset_maintenance/asset_maintenance_request/detail.html` (323, 327, 347, 351, 355, 375, 395), `asset_maintenance_schedule/detail.html` (275, 279, 283), `asset_service_contract/detail.html` (269, 273, 277).
+  - **Problem**: Action modal labels lack `for="..."` linking to inputs.
+  - **Fix**: Add `for="{{ form.<field>.id_for_label }}"` to modal labels.
+
+### Minor
+- **[FE-M1] Accessibility: Missing aria-label on Icon-Only Action Buttons**
+  - **Files**: All 4 list templates (view, edit, delete buttons) and detail back buttons.
+  - **Problem**: Icon buttons have `title` but lack `aria-label`.
+  - **Fix**: Add `aria-label` attributes to icon-only buttons.
+
+- **[FE-M2] Query Parameter Preservation in Request List Pagination**
+  - **Files**: `templates/assets/asset_maintenance/asset_maintenance_request/list.html` (215, 221).
+  - **Problem**: Pagination links omit `&is_breakdown={{ request.GET.is_breakdown }}`.
+  - **Fix**: Preserve `is_breakdown` parameter in pagination links.
+
+- **[FE-M3] Use Theme .btn-icon.danger Class on Delete Actions**
+  - **Files**: All 4 list templates delete buttons.
+  - **Problem**: Missing `.danger` modifier class from `theme.css`.
+  - **Fix**: Add `.danger` modifier to delete button classes.
+
+
 
