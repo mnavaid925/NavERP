@@ -18,7 +18,7 @@
     </div>
     <div class="page-actions">
         <a href="{% if is_edit %}{% url 'assets:asset_maintenance_request_detail' maintenance_request.pk %}{% else %}{% url 'assets:asset_maintenance_request_list' %}{% endif %}" class="btn btn-outline">
-            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+            <i data-lucide="x" class="w-4 h-4 me-1"></i> Cancel
         </a>
     </div>
 </div>
@@ -126,7 +126,7 @@
             Cancel
         </a>
         <button type="submit" class="btn btn-primary">
-            <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+            <i data-lucide="check" class="w-4 h-4 me-1"></i>
             {% if is_edit %}Save Changes{% else %}Submit Maintenance Request{% endif %}
         </button>
     </div>
