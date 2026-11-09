@@ -125,6 +125,12 @@ def asset_criticality_assessment_create(request):
 @login_required
 def asset_criticality_assessment_edit(request, pk):
     assessment = assets_object(request, AssetCriticalityAssessment, pk=pk)
+    if assessment.assessment_status in ("approved", "superseded"):
+        messages.error(
+            request,
+            f"Assessment {assessment.number} is {assessment.get_assessment_status_display()} and cannot be edited.",
+        )
+        return redirect("assets:asset_criticality_assessment_detail", pk=assessment.pk)
     if request.method == "POST":
         form = AssetCriticalityAssessmentForm(request.POST, instance=assessment, tenant=request.tenant)
         if form.is_valid():
