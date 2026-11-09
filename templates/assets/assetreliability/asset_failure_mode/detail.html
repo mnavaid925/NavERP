@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ failure_mode.number }} — FMEA Record — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_failure_mode_list' %}">FMEA Registry</a>
+            <span>/</span>
+            <span>{{ failure_mode.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ failure_mode.component_subsystem }}: {{ failure_mode.failure_mode }}</h1>
+            <span class="badge {{ failure_mode.status_css }}">{{ failure_mode.get_status_display }}</span>
+            <span class="badge {{ failure_mode.risk_level_css }}">{{ failure_mode.get_risk_level_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_failure_mode_edit' failure_mode.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+
+        {% if failure_mode.status != 'active' %}
+        <form method="post" action="{% url 'assets:asset_failure_mode_activate' failure_mode.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate FMEA
+            </button>
+        </form>
+        {% endif %}
+
+        {% if failure_mode.status == 'active' and request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_failure_mode_archive' failure_mode.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-slate-600">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_failure_mode_delete' failure_mode.pk %}" class="inline" onsubmit="return confirm('Permanently delete failure mode {{ failure_mode.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: FMEA Breakdown & RCM Strategy -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- RPN Calculation & Risk Scoring -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="calculator" class="w-4 h-4 text-purple-600"></i> Risk Priority Number (RPN) Scoring
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Severity (S)</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">{{ failure_mode.severity_score }} / 10</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Consequence Impact</div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Occurrence (O)</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">{{ failure_mode.occurrence_score }} / 10</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Frequency / Rate</div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Detection (D)</div>
+                        <div class="text-2xl font-bold text-slate-900 mt-1">{{ failure_mode.detection_score }} / 10</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Prior Observability</div>
+                    </div>
+
+                    <div class="p-3 bg-purple-50 rounded border border-purple-200">
+                        <div class="text-xs uppercase tracking-wider text-purple-700 font-bold">RPN Score</div>
+                        <div class="text-3xl font-extrabold text-purple-900 mt-1">{{ failure_mode.rpn }}</div>
+                        <div class="text-xs text-purple-700 font-medium mt-0.5">S × O × D (Max 1000)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Failure Modes & Effects Analysis -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="shield-alert" class="w-4 h-4 text-blue-600"></i> Functional Analysis & Failure Effects
+                </h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Component Function Description</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-slate-800">
+                        {{ failure_mode.function_description }}
+                    </div>
+                </div>
+
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Functional Failure (Loss of Function)</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-slate-800 font-medium">
+                        {{ failure_mode.functional_failure }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Failure Mechanism & Causes</h4>
+                        <div class="p-3 bg-slate-50 rounded border border-slate-200 text-slate-700 whitespace-pre-line">
+                            {{ failure_mode.failure_cause }}
+                        </div>
+                    </div>
+
+                    <div>
+                        <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Operational & Safety Effects</h4>
+                        <div class="p-3 bg-slate-50 rounded border border-slate-200 text-slate-700 whitespace-pre-line">
+                            {{ failure_mode.failure_effect }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RCM Maintenance Strategy & Mitigation -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="wrench" class="w-4 h-4 text-green-600"></i> RCM Strategy & Proactive Mitigation
+                </h3>
+            </div>
+            <div class="card-body space-y-4 text-sm">
+                <div class="flex items-center gap-3">
+                    <span class="text-slate-500 text-xs uppercase font-semibold">Selected RCM Strategy:</span>
+                    <span class="badge {{ failure_mode.rcm_strategy_css }} text-sm py-1 px-3">
+                        {{ failure_mode.get_rcm_strategy_display }}
+                    </span>
+                </div>
+
+                {% if failure_mode.strategy_rationale %}
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Strategy Justification & Rationale</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-slate-800">
+                        {{ failure_mode.strategy_rationale }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if failure_mode.mitigation_task %}
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Prescribed Mitigation Task / SOP</h4>
+                    <div class="p-3 bg-green-50 rounded border border-green-200 text-green-900 whitespace-pre-line">
+                        {{ failure_mode.mitigation_task }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if failure_mode.linked_maintenance_schedule %}
+                <div class="p-4 bg-blue-50 rounded border border-blue-200 flex items-center justify-between">
+                    <div>
+                        <span class="font-semibold text-blue-900">Enforcing Maintenance Schedule:</span>
+                        <div class="text-sm text-blue-800 font-mono mt-0.5">
+                            {{ failure_mode.linked_maintenance_schedule.number }} — {{ failure_mode.linked_maintenance_schedule.name }}
+                        </div>
+                    </div>
+                    <a href="{% url 'assets:asset_maintenance_schedule_detail' failure_mode.linked_maintenance_schedule.pk %}" class="btn btn-outline btn-sm bg-white">
+                        View Schedule <i data-lucide="external-link" class="w-3.5 h-3.5 ms-1"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Asset Metadata & Taxonomy -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-blue-600"></i> Target Asset & Hierarchy
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Component / Subsystem</span>
+                    <div class="font-semibold text-slate-900 text-base">{{ failure_mode.component_subsystem }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Asset Category Taxonomy</span>
+                    <div class="font-medium text-slate-800">{{ failure_mode.asset_category.name|default:"General / Unassigned" }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Financial Fixed Asset</span>
+                    {% if failure_mode.fixed_asset %}
+                        <div class="font-medium text-slate-900">{{ failure_mode.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ failure_mode.fixed_asset.asset_number }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Operational Machinery</span>
+                    {% if failure_mode.operational_asset %}
+                        <div class="font-medium text-slate-900">{{ failure_mode.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ failure_mode.operational_asset.asset_tag }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Assessed By</span>
+                    <div class="font-medium text-slate-800">
+                        {{ failure_mode.assessed_by.get_full_name|default:failure_mode.assessed_by.username|default:"—" }}
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 text-xs text-slate-400">
+                    Created: {{ failure_mode.created_at|date:"M d, Y H:i" }}<br>
+                    Updated: {{ failure_mode.updated_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
