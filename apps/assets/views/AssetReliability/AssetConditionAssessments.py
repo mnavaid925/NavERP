@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Avg, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -216,22 +217,23 @@ def asset_condition_assessment_trigger_request(request, pk):
     urgency = urgency_map.get(assessment.condition_grade, "medium")
     is_breakdown = assessment.operating_status in ["quarantined_unsafe", "decommission_recommended"]
 
-    req = AssetMaintenanceRequest.objects.create(
-        tenant=request.tenant,
-        title=f"Corrective Repair - {assessment.title[:180]}",
-        fixed_asset=assessment.fixed_asset,
-        operational_asset=assessment.operational_asset,
-        requester=request.user,
-        request_type="preventive_inspection" if assessment.condition_grade in ["grade_1_excellent", "grade_2_good"] else "breakdown_repair",
-        urgency=urgency,
-        is_breakdown=is_breakdown,
-        symptom_description=f"Automated maintenance ticket triggered from Condition Assessment {assessment.number}.\nFindings: {assessment.findings}\nRecommendations: {assessment.recommendations}",
-    )
-    assessment.triggered_maintenance_request = req
-    assessment.followup_required = True
-    assessment.save(update_fields=["triggered_maintenance_request", "followup_required", "updated_at"])
-    write_audit_log(request.user, assessment, "update", tenant=request.tenant)
-    write_audit_log(request.user, req, "create", tenant=request.tenant)
+    with transaction.atomic():
+        req = AssetMaintenanceRequest.objects.create(
+            tenant=request.tenant,
+            title=f"Corrective Repair - {assessment.title[:180]}",
+            fixed_asset=assessment.fixed_asset,
+            operational_asset=assessment.operational_asset,
+            requester=request.user,
+            request_type="preventive_inspection" if assessment.condition_grade in ["grade_1_excellent", "grade_2_good"] else "breakdown_repair",
+            urgency=urgency,
+            is_breakdown=is_breakdown,
+            symptom_description=f"Automated maintenance ticket triggered from Condition Assessment {assessment.number}.\nFindings: {assessment.findings}\nRecommendations: {assessment.recommendations}",
+        )
+        assessment.triggered_maintenance_request = req
+        assessment.followup_required = True
+        assessment.save(update_fields=["triggered_maintenance_request", "followup_required", "updated_at"])
+        write_audit_log(request.user, assessment, "update", tenant=request.tenant)
+        write_audit_log(request.user, req, "create", tenant=request.tenant)
 
     messages.success(request, f"Created Maintenance Request {req.number} from Assessment {assessment.number}.")
     return redirect("assets:asset_maintenance_request_detail", pk=req.pk)
