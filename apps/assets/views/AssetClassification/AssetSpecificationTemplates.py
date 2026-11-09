@@ -59,6 +59,7 @@ def asset_specification_template_list(request):
         "data_types": AssetSpecificationTemplate.DATA_TYPE_CHOICES,
         "categories": categories,
         "q": q,
+        "search_query": q,
         "selected_type": dtype,
         "selected_category": category_id,
         "total_count": counts["total"] or 0,
