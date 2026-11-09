@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Performance Scorecards — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Performance & Utilization</span>
+            <span>/</span>
+            <span>Scorecards & Benchmarks</span>
+        </div>
+        <h1 class="page-title">Asset Performance Scorecards & KPIs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_performance_scorecard_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Generate Scorecard
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Average Utilization</div>
+            <div class="stat-value">{{ agg.avg_utilization|default:"0.0"|floatformat:1 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Average MTBF</div>
+            <div class="stat-value">{{ agg.avg_mtbf|default:"0.0"|floatformat:1 }} <span class="text-xs font-normal text-slate-500">hrs</span></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="award"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Grade A Leaders</div>
+            <div class="stat-value">{{ agg.grade_a_count|default:"0" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon slate"><i data-lucide="file-text"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Scorecards</div>
+            <div class="stat-value">{{ agg.total_scorecards|default:"0" }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ q }}" placeholder="Number, asset, department..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Period Type</label>
+                <select name="period_type" class="form-select">
+                    <option value="">All Periods</option>
+                    {% for val, label in period_choices %}
+                    <option value="{{ val }}" {% if period_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Benchmark Grade</label>
+                <select name="grade" class="form-select">
+                    <option value="">All Grades</option>
+                    {% for val, label in grade_choices %}
+                    <option value="{{ val }}" {% if grade == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Fixed Asset</label>
+                <select name="fixed_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for fa in fixed_assets %}
+                    <option value="{{ fa.pk }}" {% if fixed_asset_id == fa.pk|stringformat:"d" %}selected{% endif %}>{{ fa.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="search" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if q or status or period_type or grade or fixed_asset_id %}
+                <a href="{% url 'assets:asset_performance_scorecard_list' %}" class="btn btn-outline text-slate-500">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Data Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scorecard #</th>
+                    <th>Period</th>
+                    <th>Asset</th>
+                    <th>Utilization</th>
+                    <th>Availability</th>
+                    <th>MTBF</th>
+                    <th>API Score</th>
+                    <th>Grade</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sc in page_obj %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_performance_scorecard_detail' sc.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ sc.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge {{ sc.period_css }} text-2xs">{{ sc.get_period_type_display }}</span>
+                        <div class="text-xs text-slate-500 mt-0.5">{{ sc.period_start|date:"M d" }} - {{ sc.period_end|date:"M d, Y" }}</div>
+                    </td>
+                    <td>
+                        {% if sc.fixed_asset %}
+                            <div class="font-medium text-slate-900">{{ sc.fixed_asset.name }}</div>
+                        {% elif sc.operational_asset %}
+                            <div class="font-medium text-slate-900">{{ sc.operational_asset.name }}</div>
+                        {% else %}
+                            <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-semibold {% if sc.capacity_utilization_rate >= 80 %}text-green-600{% elif sc.capacity_utilization_rate >= 60 %}text-slate-700{% else %}text-red-600{% endif %}">
+                            {{ sc.capacity_utilization_rate }}%
+                        </span>
+                    </td>
+                    <td>
+                        <span class="font-mono text-xs font-semibold {% if sc.availability_rate >= 90 %}text-green-600{% elif sc.availability_rate >= 75 %}text-slate-700{% else %}text-red-600{% endif %}">
+                            {{ sc.availability_rate }}%
+                        </span>
+                    </td>
+                    <td>
+                        <div class="font-mono text-xs">{{ sc.mtbf_hours }} hrs</div>
+                        <div class="text-2xs text-slate-400">MTTR: {{ sc.mttr_hours }} hrs</div>
+                    </td>
+                    <td>
+                        <div class="font-mono font-bold text-sm {% if sc.performance_index_score >= 90 %}text-green-600{% elif sc.performance_index_score >= 75 %}text-blue-600{% else %}text-amber-600{% endif %}">
+                            {{ sc.performance_index_score }}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ sc.grade_css }}">
+                            {{ sc.get_benchmark_grade_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ sc.status_css }}">
+                            {{ sc.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-end table-actions">
+                        <a href="{% url 'assets:asset_performance_scorecard_detail' sc.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_performance_scorecard_edit' sc.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_performance_scorecard_delete' sc.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ sc.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state text-center py-12">
+                            <i data-lucide="award" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                            <h3 class="text-base font-medium text-slate-700">No Scorecards Found</h3>
+                            <p class="text-sm text-slate-400 mt-1">Generate comprehensive reliability, capacity, and OEE performance scorecards.</p>
+                            <a href="{% url 'assets:asset_performance_scorecard_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Generate Scorecard
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200 text-sm">
+        <span class="text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} records)
+        </span>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if period_type %}&period_type={{ period_type }}{% endif %}{% if grade %}&grade={{ grade }}{% endif %}{% if fixed_asset_id %}&fixed_asset={{ fixed_asset_id }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if period_type %}&period_type={{ period_type }}{% endif %}{% if grade %}&grade={{ grade }}{% endif %}{% if fixed_asset_id %}&fixed_asset={{ fixed_asset_id }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
