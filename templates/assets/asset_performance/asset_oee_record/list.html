@@ -58,12 +58,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ q }}" placeholder="Number, shift, asset..." class="form-input">
+                <label for="filter-oee-q" class="form-label text-xs">Search</label>
+                <input id="filter-oee-q" type="text" name="q" value="{{ q }}" placeholder="Number, shift, asset..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select">
+                <label for="filter-oee-status" class="form-label text-xs">Status</label>
+                <select id="filter-oee-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
@@ -71,8 +71,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Benchmark Tier</label>
-                <select name="tier" class="form-select">
+                <label for="filter-oee-tier" class="form-label text-xs">Benchmark Tier</label>
+                <select id="filter-oee-tier" name="tier" class="form-select">
                     <option value="">All Tiers</option>
                     {% for val, label in tier_choices %}
                     <option value="{{ val }}" {% if tier == val %}selected{% endif %}>{{ label }}</option>
@@ -80,8 +80,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Fixed Asset</label>
-                <select name="fixed_asset" class="form-select">
+                <label for="filter-oee-fixed-asset" class="form-label text-xs">Fixed Asset</label>
+                <select id="filter-oee-fixed-asset" name="fixed_asset" class="form-select">
                     <option value="">All Assets</option>
                     {% for fa in fixed_assets %}
                     <option value="{{ fa.pk }}" {% if fixed_asset_id == fa.pk|stringformat:"d" %}selected{% endif %}>{{ fa.name }}</option>
@@ -93,7 +93,7 @@
                     <i data-lucide="search" class="w-4 h-4 me-1"></i> Filter
                 </button>
                 {% if q or status or tier or fixed_asset_id %}
-                <a href="{% url 'assets:asset_oee_record_list' %}" class="btn btn-outline text-slate-500">
+                <a href="{% url 'assets:asset_oee_record_list' %}" class="btn btn-outline text-slate-500" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
