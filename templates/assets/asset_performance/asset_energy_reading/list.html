@@ -56,10 +56,19 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <input type="text" name="q" value="{{ q }}" placeholder="Number, serial, asset..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <label class="form-label text-xs">Utility Type</label>
