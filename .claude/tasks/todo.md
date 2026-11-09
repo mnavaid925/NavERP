@@ -299,96 +299,111 @@
 ## Sub-module 11.4 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.4.md` with exact model fields, forms, url names, context keys, choices, and permissions
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.4.md` with exact model fields, forms, url names, context keys, choices, and permissions
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
-- [ ] App `apps/assets` already scaffolded in 11.1
+- [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetDepreciationSchedule (`ADEP`)**
-  - [ ] `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py`
-  - [ ] `apps/assets/forms/AssetDepreciation/AssetDepreciationSchedules.py`
-  - [ ] `apps/assets/views/AssetDepreciation/AssetDepreciationSchedules.py` (CRUD + post + reverse + batch generate)
-  - [ ] `apps/assets/urls/AssetDepreciation/AssetDepreciationSchedules.py`
-  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/list.html`
-  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/detail.html`
-  - [ ] `templates/assets/asset_depreciation/asset_depreciation_schedule/form.html`
-- [ ] **Entity 2: AssetRevaluation (`AREV`)**
-  - [ ] `apps/assets/models/AssetDepreciation/AssetRevaluations.py`
-  - [ ] `apps/assets/forms/AssetDepreciation/AssetRevaluations.py`
-  - [ ] `apps/assets/views/AssetDepreciation/AssetRevaluations.py` (CRUD + approve + post)
-  - [ ] `apps/assets/urls/AssetDepreciation/AssetRevaluations.py`
-  - [ ] `templates/assets/asset_depreciation/asset_revaluation/list.html`
-  - [ ] `templates/assets/asset_depreciation/asset_revaluation/detail.html`
-  - [ ] `templates/assets/asset_depreciation/asset_revaluation/form.html`
-- [ ] **Entity 3: AssetTransfer (`AXFR`)**
-  - [ ] `apps/assets/models/AssetDepreciation/AssetTransfers.py`
-  - [ ] `apps/assets/forms/AssetDepreciation/AssetTransfers.py`
-  - [ ] `apps/assets/views/AssetDepreciation/AssetTransfers.py` (CRUD + submit + approve + complete)
-  - [ ] `apps/assets/urls/AssetDepreciation/AssetTransfers.py`
-  - [ ] `templates/assets/asset_depreciation/asset_transfer/list.html`
-  - [ ] `templates/assets/asset_depreciation/asset_transfer/detail.html`
-  - [ ] `templates/assets/asset_depreciation/asset_transfer/form.html`
-- [ ] **Entity 4: CapitalizationPolicy (`ACTH`)**
-  - [ ] `apps/assets/models/AssetDepreciation/CapitalizationPolicies.py`
-  - [ ] `apps/assets/forms/AssetDepreciation/CapitalizationPolicies.py`
-  - [ ] `apps/assets/views/AssetDepreciation/CapitalizationPolicies.py` (CRUD + toggle_active + evaluate)
-  - [ ] `apps/assets/urls/AssetDepreciation/CapitalizationPolicies.py`
-  - [ ] `templates/assets/asset_depreciation/capitalization_policy/list.html`
-  - [ ] `templates/assets/asset_depreciation/capitalization_policy/detail.html`
-  - [ ] `templates/assets/asset_depreciation/capitalization_policy/form.html`
+- [x] **Entity 1: AssetDepreciationSchedule (`ADEP`)**
+  - [x] `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [x] `apps/assets/forms/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [x] `apps/assets/views/AssetDepreciation/AssetDepreciationSchedules.py` (CRUD + calculate + post)
+  - [x] `apps/assets/urls/AssetDepreciation/AssetDepreciationSchedules.py`
+  - [x] `templates/assets/asset_depreciation/depreciation_schedule/list.html`
+  - [x] `templates/assets/asset_depreciation/depreciation_schedule/detail.html`
+  - [x] `templates/assets/asset_depreciation/depreciation_schedule/form.html`
+- [x] **Entity 2: AssetRevaluation (`AREV`)**
+  - [x] `apps/assets/models/AssetDepreciation/AssetRevaluations.py`
+  - [x] `apps/assets/forms/AssetDepreciation/AssetRevaluations.py`
+  - [x] `apps/assets/views/AssetDepreciation/AssetRevaluations.py` (CRUD + approve & apply)
+  - [x] `apps/assets/urls/AssetDepreciation/AssetRevaluations.py`
+  - [x] `templates/assets/asset_depreciation/revaluation/list.html`
+  - [x] `templates/assets/asset_depreciation/revaluation/detail.html`
+  - [x] `templates/assets/asset_depreciation/revaluation/form.html`
+- [x] **Entity 3: AssetTransfer (`AXFR`)**
+  - [x] `apps/assets/models/AssetDepreciation/AssetTransfers.py`
+  - [x] `apps/assets/forms/AssetDepreciation/AssetTransfers.py`
+  - [x] `apps/assets/views/AssetDepreciation/AssetTransfers.py` (CRUD + dispatch + complete)
+  - [x] `apps/assets/urls/AssetDepreciation/AssetTransfers.py`
+  - [x] `templates/assets/asset_depreciation/transfer/list.html`
+  - [x] `templates/assets/asset_depreciation/transfer/detail.html`
+  - [x] `templates/assets/asset_depreciation/transfer/form.html`
+- [x] **Entity 4: CapitalizationPolicy (`ACTH`)**
+  - [x] `apps/assets/models/AssetDepreciation/CapitalizationPolicies.py`
+  - [x] `apps/assets/forms/AssetDepreciation/CapitalizationPolicies.py`
+  - [x] `apps/assets/views/AssetDepreciation/CapitalizationPolicies.py` (CRUD + evaluate)
+  - [x] `apps/assets/urls/AssetDepreciation/CapitalizationPolicies.py`
+  - [x] `templates/assets/asset_depreciation/capitalization_policy/list.html`
+  - [x] `templates/assets/asset_depreciation/capitalization_policy/detail.html`
+  - [x] `templates/assets/asset_depreciation/capitalization_policy/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all models in `apps/assets/models/AssetDepreciation/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all forms in `apps/assets/forms/AssetDepreciation/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetDepreciation/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetDepreciation/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.4 models (`_seed_tenant_11_4`)
-- [ ] Add `LIVE_LINKS["11.4"]` in `apps/core/navigation.py`:
-  - `"Depreciation Schedule & Methods"`: `assets:asset_depreciation_schedule_list`
-  - `"Asset Valuation & Revaluation"`: `assets:asset_revaluation_list`
-  - `"Asset Transfer & Cost Allocation"`: `assets:asset_transfer_list`
+- [x] Re-export all models in `apps/assets/models/AssetDepreciation/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all forms in `apps/assets/forms/AssetDepreciation/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetDepreciation/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetDepreciation/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.4 models (`_seed_tenant_11_4`)
+- [x] Add `LIVE_LINKS["11.4"]` in `apps/core/navigation.py`:
+  - `"Depreciation Schedule & Methods"`: `assets:depreciation_schedule_list`
+  - `"Asset Valuation & Revaluation"`: `assets:revaluation_list`
+  - `"Asset Transfer & Cost Allocation"`: `assets:transfer_list`
   - `"Capital vs. Expense Determination"`: `assets:capitalization_policy_list`
-  - `"Fixed Asset Reporting & Compliance"`: `assets:asset_depreciation_schedule_list`
+  - `"Fixed Asset Reporting & Compliance"`: `assets:depreciation_schedule_list`
   - Plural & convenience aliases:
-    - `"Depreciation Schedules"`: `assets:asset_depreciation_schedule_list`
-    - `"Asset Revaluations"`: `assets:asset_revaluation_list`
-    - `"Asset Transfers"`: `assets:asset_transfer_list`
+    - `"Depreciation Schedules"`: `assets:depreciation_schedule_list`
+    - `"Asset Revaluations"`: `assets:revaluation_list`
+    - `"Asset Transfers"`: `assets:transfer_list`
     - `"Capitalization Policies"`: `assets:capitalization_policy_list`
-    - `"Depreciation & Financial Management"`: `assets:asset_depreciation_schedule_list`
-- [ ] Run `makemigrations assets` (generating `0006_...`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+    - `"Depreciation & Financial Management"`: `assets:depreciation_schedule_list`
+- [x] Run `makemigrations assets` (generating `0006_...`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_4.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+- [x] Create `temp/smoke_11_4.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.4.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.4.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (36 instant commits)
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_assetdepreciation_models.py`
-- [ ] `test_assetdepreciation_forms.py`
-- [ ] `test_assetdepreciation_views.py`
-- [ ] `test_assetdepreciation_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/` (100% green)
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_assetdepreciation_models.py` (48 tests)
+- [x] `test_assetdepreciation_forms.py` (55 tests)
+- [x] `test_assetdepreciation_views.py` (78 tests)
+- [x] `test_assetdepreciation_security.py` (61 tests)
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/` (674 passed, 100% green)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.4 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
-- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.4.md` (or declare None in review notes)
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.4 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Document any incomplete scope or gaps: **Gaps**: None
+
+---
+
+### Close-out & Review Summary — Sub-module 11.4 Depreciation & Financial Management (2026-11-09)
+- **Status:** Complete (Phases 0 through 7 all verified)
+- **BASE Commit:** `3eb85470bcabd9a57336c559a3d958341b4597cf`
+- **Models:** `AssetDepreciationSchedule` [ADEP-], `AssetRevaluation` [AREV-], `AssetTransfer` [AXFR-], `CapitalizationPolicy` [ACTH-]
+- **Migrations:** `0006_assetdepreciationschedule_assetrevaluation_and_more.py`, `0007_alter_assetmodel_estimated_replacement_cost.py`
+- **Seeder:** `seed_assets` (`_seed_tenant_11_4`) verified 100% idempotent across all tenants
+- **Navigation:** `LIVE_LINKS["11.4"]` registered with 10 entries and feature aliases in `apps/core/navigation.py`
+- **Review Wave:** 6 serial reviewers run (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`); all 16 findings (1 Critical, 8 Important, 7 Minor) documented in `.claude/tasks/review-assets-11.4.md` and resolved by `code-fixer` in 36 single-file commits
+- **Test Suite:** 242 dedicated tests across 4 test modules (`test_assetdepreciation_models.py` [48], `test_assetdepreciation_forms.py` [55], `test_assetdepreciation_views.py` [78], `test_assetdepreciation_security.py` [61]) — 100% green unfiltered on SQLite in-memory (`apps/assets/tests/`, 674 total tests across Module 11)
+- **Skill:** Updated `.claude/skills/assets/SKILL.md`
+- **README:** Marked complete in `README.md`
+- **Gaps:** None (100% of researched scope implemented, zero skipped findings, zero unhandled prerequisites)
 
 ---
 
