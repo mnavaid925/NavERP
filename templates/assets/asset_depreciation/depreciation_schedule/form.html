@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Schedule {{ schedule.number }}{% else %}New Depreciation Schedule{% endif %} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:depreciation_schedule_list' %}">Depreciation Schedules</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ schedule.number }}{% else %}New Schedule{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Schedule {{ schedule.number }}{% else %}New Depreciation Schedule Run{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:depreciation_schedule_detail' schedule.pk %}{% else %}{% url 'assets:depreciation_schedule_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card p-4 bg-red-50 border-red-200 text-red text-sm mb-4">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Asset Selection & Period Timing</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset *</label>
+                {{ form.fixed_asset }}
+                {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Asset (Optional)</label>
+                {{ form.operational_asset }}
+                {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fiscal_period.id_for_label }}" class="form-label">Accounting Fiscal Period</label>
+                {{ form.fiscal_period }}
+                {% if form.fiscal_period.errors %}<div class="form-error">{{ form.fiscal_period.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fiscal_year.id_for_label }}" class="form-label">Fiscal Year *</label>
+                {{ form.fiscal_year }}
+                {% if form.fiscal_year.errors %}<div class="form-error">{{ form.fiscal_year.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.period_number.id_for_label }}" class="form-label">Period Number (1-12) *</label>
+                {{ form.period_number }}
+                {% if form.period_number.errors %}<div class="form-error">{{ form.period_number.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.period_frequency.id_for_label }}" class="form-label">Frequency *</label>
+                {{ form.period_frequency }}
+                {% if form.period_frequency.errors %}<div class="form-error">{{ form.period_frequency.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.schedule_date.id_for_label }}" class="form-label">Schedule Calculation Date *</label>
+                {{ form.schedule_date }}
+                {% if form.schedule_date.errors %}<div class="form-error">{{ form.schedule_date.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Depreciation Method & Calculations</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.depreciation_method.id_for_label }}" class="form-label">Depreciation Method *</label>
+                {{ form.depreciation_method }}
+                {% if form.depreciation_method.errors %}<div class="form-error">{{ form.depreciation_method.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.starting_book_value.id_for_label }}" class="form-label">Starting Book Value ($)</label>
+                {{ form.starting_book_value }}
+                <div class="text-xs text-muted mt-1">Leave 0 to auto-calculate from Fixed Asset Net Book Value.</div>
+                {% if form.starting_book_value.errors %}<div class="form-error">{{ form.starting_book_value.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.depreciation_amount.id_for_label }}" class="form-label">Override Period Amount ($)</label>
+                {{ form.depreciation_amount }}
+                <div class="text-xs text-muted mt-1">Leave 0 to auto-calculate based on method formula.</div>
+                {% if form.depreciation_amount.errors %}<div class="form-error">{{ form.depreciation_amount.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.total_units_expected.id_for_label }}" class="form-label">Total Units Expected (UOP)</label>
+                {{ form.total_units_expected }}
+                {% if form.total_units_expected.errors %}<div class="form-error">{{ form.total_units_expected.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.units_produced_period.id_for_label }}" class="form-label">Units Produced in Period (UOP)</label>
+                {{ form.units_produced_period }}
+                {% if form.units_produced_period.errors %}<div class="form-error">{{ form.units_produced_period.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">General Ledger Accounts & Cost Center</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.expense_account.id_for_label }}" class="form-label">Depreciation Expense GL</label>
+                {{ form.expense_account }}
+                <div class="text-xs text-muted mt-1">Optional override; defaults to Asset expense account.</div>
+                {% if form.expense_account.errors %}<div class="form-error">{{ form.expense_account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.accumulated_account.id_for_label }}" class="form-label">Accumulated Deprec. GL</label>
+                {{ form.accumulated_account }}
+                <div class="text-xs text-muted mt-1">Optional override; defaults to Asset accumulated account.</div>
+                {% if form.accumulated_account.errors %}<div class="form-error">{{ form.accumulated_account.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.cost_center.id_for_label }}" class="form-label">Cost Center (OrgUnit)</label>
+                {{ form.cost_center }}
+                {% if form.cost_center.errors %}<div class="form-error">{{ form.cost_center.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-3">
+                <label for="{{ form.notes.id_for_label }}" class="form-label">Schedule Notes & Audit Memo</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:depreciation_schedule_detail' schedule.pk %}{% else %}{% url 'assets:depreciation_schedule_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check" class="w-4 h-4 mr-1"></i> {% if is_edit %}Save Changes{% else %}Create & Calculate{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
