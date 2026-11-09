@@ -1,9 +1,12 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from apps.accounting.models import FixedAsset
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
 from apps.assets.models.AssetReliability.AssetTelemetryReadings import AssetTelemetryReading
 from apps.scm.models import Asset as OperationalAsset
+
+User = get_user_model()
 
 
 class AssetTelemetryReadingForm(TenantUniqueMixin, TenantModelForm):
@@ -45,8 +48,9 @@ class AssetTelemetryReadingForm(TenantUniqueMixin, TenantModelForm):
         if self.tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
+            self.fields["recorded_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["fixed_asset", "operational_asset"])
+        reject_foreign(self, cleaned_data, ["fixed_asset", "operational_asset", "recorded_by"])
         return cleaned_data
