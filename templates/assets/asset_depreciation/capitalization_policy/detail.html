@@ -121,7 +121,7 @@
                     <div class="flex items-center gap-2 mb-1">
                         <i data-lucide="{% if eval_result.classification == 'capitalize' %}check-circle-2{% else %}alert-circle{% endif %}" class="w-5 h-5 {% if eval_result.classification == 'capitalize' %}text-ok{% else %}text-warn{% endif %}"></i>
                         <span class="font-bold text-base {% if eval_result.classification == 'capitalize' %}text-ok{% else %}text-warn{% endif %}">
-                            Classification: {% if eval_result.classification == 'capitalize' %}CAPITALIZE AS ASSET (CapEx){% else %}EXPENSE IMMEDIATELY (OpEx){% endif %}
+                            Classification: {% if eval_result.classification == 'capitalize' %}CAPITALIZE AS ASSET (CapEx){% elif eval_result.classification == 'manual_review' %}FLAG FOR CONTROLLER MANUAL REVIEW{% else %}EXPENSE IMMEDIATELY (OpEx){% endif %}
                         </span>
                     </div>
                     <p class="text-sm text-slate-700 ml-7">{{ eval_result.reason }}</p>
