@@ -204,7 +204,7 @@
                     <td><span class="badge {{ spec.data_type_css }}">{{ spec.get_data_type_display }}</span></td>
                     <td>{{ spec.unit_of_measure|default:"—" }}</td>
                     <td>{% if spec.is_required %}<span class="text-red font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
-                    <td>{% if spec.is_filterable %}<span class="text-green font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
+                    <td>{% if spec.is_filterable %}<span class="text-ok font-medium">Yes</span>{% else %}<span class="text-muted">No</span>{% endif %}</td>
                     <td class="text-right table-actions">
                         <a href="{% url 'assets:asset_specification_template_detail' spec.pk %}" class="btn btn-icon" title="View"><i data-lucide="eye"></i></a>
                     </td>
