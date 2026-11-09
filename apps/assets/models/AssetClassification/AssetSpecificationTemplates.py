@@ -24,7 +24,7 @@ class AssetSpecificationTemplate(TenantNumbered):
         "number": "badge-green",
         "boolean": "badge-amber",
         "date": "badge-slate",
-        "select": "badge-purple",
+        "select": "badge-info",
     }
 
     attribute_key = models.CharField(
