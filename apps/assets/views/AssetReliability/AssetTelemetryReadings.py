@@ -23,7 +23,7 @@ def asset_telemetry_reading_list(request):
         AssetTelemetryReading.objects.select_related(
             "fixed_asset",
             "operational_asset",
-        ),
+        ).defer("alert_notes"),
         request,
     )
 
