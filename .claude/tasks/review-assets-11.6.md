@@ -141,5 +141,5 @@
 - [x] **M3**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Add `.only("id", "name")` to `FixedAsset.objects.filter(tenant=request.tenant)` dropdown queries in list views. (fixed: 95e6fcf8, 5f50f026, 52ecccd5, 63358d0a)
 - [x] **M4**: `templates/assets/asset_performance/` (all 4 list templates) — Filter clear "X" buttons lack accessibility attributes (`title="Clear filters" aria-label="Clear filters"`). (fixed: b28d92e2, 61df1689, 66a7aefb, 41d1a40d)
 - [x] **M5**: `templates/assets/asset_performance/` (all 4 list templates) — Filter bar `<label>` elements lack `for` attributes and matching `<input>`/`<select>` `id` attributes. (fixed: b28d92e2, 61df1689, 66a7aefb, 41d1a40d)
-- [ ] **M6**: `apps/assets/models/AssetPerformance/` — Float casting in Decimal rounding calculations. Use `Decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`.
+- [x] **M6**: `apps/assets/models/AssetPerformance/` — Float casting in Decimal rounding calculations. Use `Decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`. (fixed: 061ffb14, 70ed96c4, 4856cdfc, 0495f588)
 
