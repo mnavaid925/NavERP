@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from apps.accounting.models import Currency, GLAccount
+from apps.accounting.models import Currency, GLAccount, FixedAsset
 from apps.core.models import OrgUnit, Party, PartyRole
 from apps.scm.models import Asset, Location, PurchaseOrder
 from apps.assets.models import (
@@ -19,6 +19,10 @@ from apps.assets.models import (
     AssetModel,
     AssetCriticalityAssessment,
     AssetSpecificationTemplate,
+    AssetDepreciationSchedule,
+    AssetRevaluation,
+    AssetTransfer,
+    CapitalizationPolicy,
 )
 
 
@@ -607,4 +611,267 @@ def spec_template_b(db, tenant_b, category_root_b):
         unit_of_measure="Ah",
         is_required=False,
     )
+
+
+# ==============================================================================
+# Sub-module 11.4 Asset Depreciation & Financial Management Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def expense_account_a(db, tenant_a):
+    return GLAccount.objects.create(
+        tenant=tenant_a,
+        code="6100-A",
+        name="Depreciation Expense - Machinery",
+        account_type="expense",
+        normal_balance="debit",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def accum_account_a(db, tenant_a):
+    return GLAccount.objects.create(
+        tenant=tenant_a,
+        code="1510-A",
+        name="Accumulated Depreciation - Machinery",
+        account_type="asset",
+        normal_balance="credit",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def surplus_account_a(db, tenant_a):
+    return GLAccount.objects.create(
+        tenant=tenant_a,
+        code="3200-A",
+        name="Asset Revaluation Surplus",
+        account_type="equity",
+        normal_balance="credit",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def expense_account_b(db, tenant_b):
+    return GLAccount.objects.create(
+        tenant=tenant_b,
+        code="6100-B",
+        name="Globex Depreciation Expense",
+        account_type="expense",
+        normal_balance="debit",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def accum_account_b(db, tenant_b):
+    return GLAccount.objects.create(
+        tenant=tenant_b,
+        code="1510-B",
+        name="Globex Accumulated Depreciation",
+        account_type="asset",
+        normal_balance="credit",
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def fixed_asset_a(db, tenant_a, asset_account_a, accum_account_a, expense_account_a):
+    return FixedAsset.objects.create(
+        tenant=tenant_a,
+        name="Haas 5-Axis Machining Center VF-4",
+        category="Machinery",
+        acquisition_cost=Decimal("120000.00"),
+        salvage_value=Decimal("12000.00"),
+        useful_life_months=60,
+        method="straight_line",
+        status="active",
+        asset_account=asset_account_a,
+        accumulated_account=accum_account_a,
+        expense_account=expense_account_a,
+        in_service_date=timezone.now().date() - timezone.timedelta(days=365),
+    )
+
+
+@pytest.fixture
+def fixed_asset_b(db, tenant_b, accum_account_b, expense_account_b):
+    return FixedAsset.objects.create(
+        tenant=tenant_b,
+        name="Globex Warehouse Stacker 2000",
+        category="Vehicle",
+        acquisition_cost=Decimal("45000.00"),
+        salvage_value=Decimal("5000.00"),
+        useful_life_months=48,
+        method="straight_line",
+        status="active",
+        accumulated_account=accum_account_b,
+        expense_account=expense_account_b,
+        in_service_date=timezone.now().date() - timezone.timedelta(days=180),
+    )
+
+
+@pytest.fixture
+def capitalization_policy_a(db, tenant_a, category_root_a, cip_account_a, expense_account_a):
+    return CapitalizationPolicy.objects.create(
+        tenant=tenant_a,
+        name="Acme Machinery CapEx Policy",
+        policy_scope="category_override",
+        category=category_root_a,
+        minimum_cost_threshold=Decimal("5000.00"),
+        minimum_useful_life_months=12,
+        default_classification="capitalize",
+        de_minimis_safe_harbor=False,
+        default_cip_account=cip_account_a,
+        default_expense_account=expense_account_a,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def capitalization_policy_b(db, tenant_b, category_root_b, expense_account_b):
+    return CapitalizationPolicy.objects.create(
+        tenant=tenant_b,
+        name="Globex De Minimis Policy",
+        policy_scope="tax_book_safe_harbor",
+        category=category_root_b,
+        minimum_cost_threshold=Decimal("2500.00"),
+        minimum_useful_life_months=12,
+        default_classification="expense_immediately",
+        de_minimis_safe_harbor=True,
+        default_expense_account=expense_account_b,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def depreciation_schedule_a(db, tenant_a, fixed_asset_a, operational_asset_a, expense_account_a, accum_account_a):
+    sched = AssetDepreciationSchedule.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        fiscal_year=2026,
+        period_number=1,
+        period_frequency="monthly",
+        schedule_date=timezone.now().date(),
+        depreciation_method="straight_line",
+        asset_cost_basis=Decimal("120000.00"),
+        salvage_value=Decimal("12000.00"),
+        accumulated_depreciation_prior=Decimal("0.00"),
+        useful_life_months_total=60,
+        depreciation_amount=Decimal("1800.00"),
+        accumulated_depreciation_after=Decimal("1800.00"),
+        net_book_value_after=Decimal("118200.00"),
+        expense_account=expense_account_a,
+        accumulated_account=accum_account_a,
+        status="draft",
+    )
+    return sched
+
+
+@pytest.fixture
+def depreciation_schedule_b(db, tenant_b, fixed_asset_b, operational_asset_b, expense_account_b, accum_account_b):
+    return AssetDepreciationSchedule.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        fiscal_year=2026,
+        period_number=1,
+        period_frequency="monthly",
+        schedule_date=timezone.now().date(),
+        depreciation_method="straight_line",
+        asset_cost_basis=Decimal("45000.00"),
+        salvage_value=Decimal("5000.00"),
+        accumulated_depreciation_prior=Decimal("0.00"),
+        useful_life_months_total=48,
+        depreciation_amount=Decimal("833.33"),
+        accumulated_depreciation_after=Decimal("833.33"),
+        net_book_value_after=Decimal("44166.67"),
+        expense_account=expense_account_b,
+        accumulated_account=accum_account_b,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def revaluation_a(db, tenant_a, fixed_asset_a, operational_asset_a, vendor_party_a, expense_account_a, surplus_account_a):
+    return AssetRevaluation.objects.create(
+        tenant=tenant_a,
+        title="Acme CNC Annual Appraisal",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        event_type="revaluation_up",
+        valuation_method="independent_appraisal",
+        valuation_date=timezone.now().date(),
+        appraiser=vendor_party_a,
+        historical_cost=Decimal("120000.00"),
+        accumulated_depreciation_before=Decimal("20000.00"),
+        carrying_value_before=Decimal("100000.00"),
+        new_fair_market_value=Decimal("115000.00"),
+        revaluation_adjustment=Decimal("15000.00"),
+        impairment_loss_account=expense_account_a,
+        revaluation_surplus_account=surplus_account_a,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def revaluation_b(db, tenant_b, fixed_asset_b, operational_asset_b, vendor_party_b, expense_account_b):
+    return AssetRevaluation.objects.create(
+        tenant=tenant_b,
+        title="Globex Stacker Impairment Assessment",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        event_type="impairment",
+        valuation_method="market_approach",
+        valuation_date=timezone.now().date(),
+        appraiser=vendor_party_b,
+        historical_cost=Decimal("45000.00"),
+        accumulated_depreciation_before=Decimal("10000.00"),
+        carrying_value_before=Decimal("35000.00"),
+        new_fair_market_value=Decimal("28000.00"),
+        revaluation_adjustment=Decimal("-7000.00"),
+        impairment_loss_account=expense_account_b,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def transfer_a(db, tenant_a, fixed_asset_a, operational_asset_a, location_a, location_a2, org_unit_a, vendor_party_a, admin_user):
+    return AssetTransfer.objects.create(
+        tenant=tenant_a,
+        title="Inter-Facility Transfer CNC Mill",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        transfer_type="inter_facility",
+        transfer_date=timezone.now().date(),
+        source_location=location_a,
+        destination_location=location_a2,
+        source_department=org_unit_a,
+        source_custodian=vendor_party_a,
+        transferred_by=admin_user,
+        freight_cost=Decimal("750.00"),
+        status="draft",
+    )
+
+
+@pytest.fixture
+def transfer_b(db, tenant_b, fixed_asset_b, operational_asset_b, location_b, location_b2, org_unit_b, vendor_party_b, admin_b):
+    return AssetTransfer.objects.create(
+        tenant=tenant_b,
+        title="Relocation Stacker to Yard",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        transfer_type="cost_center",
+        transfer_date=timezone.now().date(),
+        source_location=location_b,
+        destination_location=location_b2,
+        source_department=org_unit_b,
+        source_custodian=vendor_party_b,
+        transferred_by=admin_b,
+        freight_cost=Decimal("250.00"),
+        status="draft",
+    )
+
 
