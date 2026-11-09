@@ -179,15 +179,15 @@
                         </td>
                         <td class="text-end table-actions">
                             <div class="flex items-center justify-end gap-1">
-                                <a href="{% url 'assets:asset_telemetry_reading_detail' r.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                <a href="{% url 'assets:asset_telemetry_reading_detail' r.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                <a href="{% url 'assets:asset_telemetry_reading_edit' r.pk %}" class="btn btn-icon btn-outline" title="Edit Reading">
+                                <a href="{% url 'assets:asset_telemetry_reading_edit' r.pk %}" class="btn btn-icon btn-outline" title="Edit Reading" aria-label="Edit Reading">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
                                 <form method="post" action="{% url 'assets:asset_telemetry_reading_delete' r.pk %}" class="inline" onsubmit="return confirm('Delete telemetry reading {{ r.number }}?');">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Reading">
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Reading" aria-label="Delete Reading">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
