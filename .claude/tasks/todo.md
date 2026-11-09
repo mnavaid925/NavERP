@@ -322,64 +322,64 @@
 ---
 
 ## 11.6-0 - Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate maintenance work order execution engine** — Repair ticketing and shopfloor job execution reuse `scm.MaintenanceWorkOrder` [MWO-] and `assets.AssetMaintenanceRequest` [AMRQ-].
-- [ ] **NO direct continuous daemon PLC listeners (OPC-UA / MQTT)** — Real-time machine daemon polling is deferred to Sub-module 11.15; 11.6 delivers the authoritative data schema and web API endpoints.
-- [ ] **NO live sensor vibration / acoustic FFT spectrum analysis** — High-frequency NDT condition telemetry belongs to Sub-module 11.7 (Asset Reliability & Condition Monitoring).
-- [ ] **NO external carbon credit brokerage / offset market trading ledger** — Environmental accounting in 11.6 calculates Scope 1 and Scope 2 $kg CO_2e$ emissions; carbon offset trading belongs to external ESG reporting.
-- [ ] **NO vehicle fleet GPS / telematics tracking** — Vehicle GPS routes, fuel card integrations, and driver MPG belong to Sub-module 11.19 (Fleet & Vehicle Management).
+- [x] **NO duplicate maintenance work order execution engine** — Repair ticketing and shopfloor job execution reuse `scm.MaintenanceWorkOrder` [MWO-] and `assets.AssetMaintenanceRequest` [AMRQ-].
+- [x] **NO direct continuous daemon PLC listeners (OPC-UA / MQTT)** — Real-time machine daemon polling is deferred to Sub-module 11.15; 11.6 delivers the authoritative data schema and web API endpoints.
+- [x] **NO live sensor vibration / acoustic FFT spectrum analysis** — High-frequency NDT condition telemetry belongs to Sub-module 11.7 (Asset Reliability & Condition Monitoring).
+- [x] **NO external carbon credit brokerage / offset market trading ledger** — Environmental accounting in 11.6 calculates Scope 1 and Scope 2 $kg CO_2e$ emissions; carbon offset trading belongs to external ESG reporting.
+- [x] **NO vehicle fleet GPS / telematics tracking** — Vehicle GPS routes, fuel card integrations, and driver MPG belong to Sub-module 11.19 (Fleet & Vehicle Management).
 
 ---
 
 ## Sub-module 11.6 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.6.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.6.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
-- [ ] App `apps/assets` already scaffolded in 11.1
+- [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetDowntimeLog (`ADWN`)**
-  - [ ] `apps/assets/models/AssetPerformance/AssetDowntimeLogs.py`
-  - [ ] `apps/assets/forms/AssetPerformance/AssetDowntimeLogs.py`
-  - [ ] `apps/assets/views/AssetPerformance/AssetDowntimeLogs.py` (CRUD + resolve + cancel)
-  - [ ] `apps/assets/urls/AssetPerformance/AssetDowntimeLogs.py`
-  - [ ] `templates/assets/asset_performance/asset_downtime_log/list.html`
-  - [ ] `templates/assets/asset_performance/asset_downtime_log/detail.html`
-  - [ ] `templates/assets/asset_performance/asset_downtime_log/form.html`
-- [ ] **Entity 2: AssetOeeRecord (`AOEE`)**
-  - [ ] `apps/assets/models/AssetPerformance/AssetOeeRecords.py`
-  - [ ] `apps/assets/forms/AssetPerformance/AssetOeeRecords.py`
-  - [ ] `apps/assets/views/AssetPerformance/AssetOeeRecords.py` (CRUD + submit + verify)
-  - [ ] `apps/assets/urls/AssetPerformance/AssetOeeRecords.py`
-  - [ ] `templates/assets/asset_performance/asset_oee_record/list.html`
-  - [ ] `templates/assets/asset_performance/asset_oee_record/detail.html`
-  - [ ] `templates/assets/asset_performance/asset_oee_record/form.html`
-- [ ] **Entity 3: AssetEnergyReading (`AENG`)**
-  - [ ] `apps/assets/models/AssetPerformance/AssetEnergyReadings.py`
-  - [ ] `apps/assets/forms/AssetPerformance/AssetEnergyReadings.py`
-  - [ ] `apps/assets/views/AssetPerformance/AssetEnergyReadings.py` (CRUD + verify + flag_anomaly)
-  - [ ] `apps/assets/urls/AssetPerformance/AssetEnergyReadings.py`
-  - [ ] `templates/assets/asset_performance/asset_energy_reading/list.html`
-  - [ ] `templates/assets/asset_performance/asset_energy_reading/detail.html`
-  - [ ] `templates/assets/asset_performance/asset_energy_reading/form.html`
-- [ ] **Entity 4: AssetPerformanceScorecard (`APSC`)**
-  - [ ] `apps/assets/models/AssetPerformance/AssetPerformanceScorecards.py`
-  - [ ] `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py`
-  - [ ] `apps/assets/views/AssetPerformance/AssetPerformanceScorecards.py` (CRUD + finalize + publish)
-  - [ ] `apps/assets/urls/AssetPerformance/AssetPerformanceScorecards.py`
-  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/list.html`
-  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/detail.html`
-  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/form.html`
+- [x] **Entity 1: AssetDowntimeLog (`ADWN`)**
+  - [x] `apps/assets/models/AssetPerformance/AssetDowntimeLogs.py`
+  - [x] `apps/assets/forms/AssetPerformance/AssetDowntimeLogs.py`
+  - [x] `apps/assets/views/AssetPerformance/AssetDowntimeLogs.py` (CRUD + resolve + cancel)
+  - [x] `apps/assets/urls/AssetPerformance/AssetDowntimeLogs.py`
+  - [x] `templates/assets/asset_performance/asset_downtime_log/list.html`
+  - [x] `templates/assets/asset_performance/asset_downtime_log/detail.html`
+  - [x] `templates/assets/asset_performance/asset_downtime_log/form.html`
+- [x] **Entity 2: AssetOeeRecord (`AOEE`)**
+  - [x] `apps/assets/models/AssetPerformance/AssetOeeRecords.py`
+  - [x] `apps/assets/forms/AssetPerformance/AssetOeeRecords.py`
+  - [x] `apps/assets/views/AssetPerformance/AssetOeeRecords.py` (CRUD + submit + verify)
+  - [x] `apps/assets/urls/AssetPerformance/AssetOeeRecords.py`
+  - [x] `templates/assets/asset_performance/asset_oee_record/list.html`
+  - [x] `templates/assets/asset_performance/asset_oee_record/detail.html`
+  - [x] `templates/assets/asset_performance/asset_oee_record/form.html`
+- [x] **Entity 3: AssetEnergyReading (`AENG`)**
+  - [x] `apps/assets/models/AssetPerformance/AssetEnergyReadings.py`
+  - [x] `apps/assets/forms/AssetPerformance/AssetEnergyReadings.py`
+  - [x] `apps/assets/views/AssetPerformance/AssetEnergyReadings.py` (CRUD + verify + flag_anomaly)
+  - [x] `apps/assets/urls/AssetPerformance/AssetEnergyReadings.py`
+  - [x] `templates/assets/asset_performance/asset_energy_reading/list.html`
+  - [x] `templates/assets/asset_performance/asset_energy_reading/detail.html`
+  - [x] `templates/assets/asset_performance/asset_energy_reading/form.html`
+- [x] **Entity 4: AssetPerformanceScorecard (`APSC`)**
+  - [x] `apps/assets/models/AssetPerformance/AssetPerformanceScorecards.py`
+  - [x] `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py`
+  - [x] `apps/assets/views/AssetPerformance/AssetPerformanceScorecards.py` (CRUD + finalize + publish)
+  - [x] `apps/assets/urls/AssetPerformance/AssetPerformanceScorecards.py`
+  - [x] `templates/assets/asset_performance/asset_performance_scorecard/list.html`
+  - [x] `templates/assets/asset_performance/asset_performance_scorecard/detail.html`
+  - [x] `templates/assets/asset_performance/asset_performance_scorecard/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all models in `apps/assets/models/AssetPerformance/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all forms in `apps/assets/forms/AssetPerformance/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetPerformance/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetPerformance/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.6 models (`_seed_tenant_11_6`)
-- [ ] Add `LIVE_LINKS["11.6"]` in `apps/core/navigation.py`:
+- [x] Re-export all models in `apps/assets/models/AssetPerformance/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all forms in `apps/assets/forms/AssetPerformance/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetPerformance/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetPerformance/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.6 models (`_seed_tenant_11_6`)
+- [x] Add `LIVE_LINKS["11.6"]` in `apps/core/navigation.py`:
   - `"Uptime & Downtime Tracking"`: `assets:asset_downtime_log_list`
   - `"OEE & Productivity Metrics"`: `assets:asset_oee_record_list`
   - `"Utilization Rate Monitoring"`: `assets:asset_performance_scorecard_list`
@@ -395,38 +395,38 @@
     - `"Asset OEE"`: `assets:asset_oee_record_list`
     - `"Asset Energy"`: `assets:asset_energy_reading_list`
     - `"Asset Scorecards"`: `assets:asset_performance_scorecard_list`
-- [ ] Run `makemigrations assets` (generating `0009_...`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (generating `0009_...`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_6.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+- [x] Create `temp/smoke_11_6.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.6.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.6.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_asset_performance_models.py`
-- [ ] `test_asset_performance_forms.py`
-- [ ] `test_asset_performance_views.py`
-- [ ] `test_asset_performance_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_asset_performance_models.py`
+- [x] `test_asset_performance_forms.py`
+- [x] `test_asset_performance_views.py`
+- [x] `test_asset_performance_security.py`
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/`
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.6 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
-- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.6.md`
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.6 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.6.md` (Gaps: None)
 
 ## Later passes / deferred (Parked from research)
 - Direct industrial protocol (OPC-UA / MQTT) daemon listeners (deferred to 11.15)
@@ -435,7 +435,30 @@
 - External carbon credit trading and ESG registry export (deferred to Module 2 / Module 10)
 
 ## Review notes
-(filled in at the end)
+- **Completed**: Sub-module 11.6 (Asset Performance & Utilization)
+- **Base SHA**: `1db222f9a77b24592c4bea504c1b0bb3280f3bb0`
+- **Models**:
+  - `AssetDowntimeLog` [ADWN-] (`apps/assets/models/AssetPerformance/AssetDowntimeLogs.py`)
+  - `AssetOeeRecord` [AOEE-] (`apps/assets/models/AssetPerformance/AssetOeeRecords.py`)
+  - `AssetEnergyReading` [AENG-] (`apps/assets/models/AssetPerformance/AssetEnergyReadings.py`)
+  - `AssetPerformanceScorecard` [APSC-] (`apps/assets/models/AssetPerformance/AssetPerformanceScorecards.py`)
+- **Database Migrations**:
+  - `0009_assetdowntimelog_assetenergyreading_and_more.py`
+  - `0010_assetdowntimelog_idx_adwn_ten_start_and_more.py`
+- **Review Passes**: 6 serial reviewers (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`). All 21 findings (`C1`–`C6`, `I1`–`I9`, `M1`–`M6`) documented in `.claude/tasks/review-assets-11.6.md` burned down by `code-fixer` and marked `[x]`.
+- **Test Suite**:
+  - `test_assetperformance_models.py` (13 tests passed)
+  - `test_assetperformance_forms.py` (14 tests passed)
+  - `test_assetperformance_views.py` (19 tests passed)
+  - `test_assetperformance_security.py` (9 tests passed)
+  - Full unfiltered test suite `pytest apps/assets/tests/`: **821 passed, 0 failed** in 132.53s.
+- **Documentation**:
+  - Pre-build contract: `.claude/tasks/contract-assets-11.6.md`
+  - Research catalog: `.claude/tasks/research-assets-11.6.md`
+  - Findings register: `.claude/tasks/review-assets-11.6.md`
+  - Module skill: `.claude/skills/assets/SKILL.md`
+  - Master catalog: `README.md`
+- **Gaps**: None. All contracted features, formulas, lifecycle action routes, multi-tenant boundaries, audit logging, and tests are 100% complete.
 
 ---
 # Sub-module 11.5: Maintenance & Repair Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.5.md` (2026-11-09)
