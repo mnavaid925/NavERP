@@ -1442,7 +1442,7 @@ class Command(BaseCommand):
         fa_secondary = FixedAsset.objects.filter(tenant=tenant).last()
         oa_primary = Asset.objects.filter(tenant=tenant).first()
         cat = AssetCategory.objects.filter(tenant=tenant).first()
-        vendor = Party.objects.filter(tenant=tenant, party_roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
         sched = AssetMaintenanceSchedule.objects.filter(tenant=tenant).first()
 
         with transaction.atomic():
