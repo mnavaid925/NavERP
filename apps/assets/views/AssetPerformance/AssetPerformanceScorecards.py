@@ -170,6 +170,9 @@ def asset_performance_scorecard_delete(request, pk):
 @require_POST
 def asset_performance_scorecard_publish(request, pk):
     scorecard = assets_object(request, AssetPerformanceScorecard, pk)
+    if scorecard.status != "draft":
+        messages.error(request, f"Scorecard {scorecard.number} cannot be published because it is currently {scorecard.get_status_display().lower()}.")
+        return redirect("assets:asset_performance_scorecard_detail", pk=scorecard.pk)
     scorecard.status = "published"
     scorecard.save()
     write_audit_log(request.user, scorecard, "publish", tenant=request.tenant)
