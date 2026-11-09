@@ -514,9 +514,10 @@ def asset_model_a(db, tenant_a, category_root_a, vendor_party_a):
         category=category_root_a,
         manufacturer=vendor_party_a,
         estimated_replacement_cost=Decimal("175000.00"),
-        expected_life_years=10,
-        warranty_duration_months=24,
-        metering_type="hours",
+        expected_useful_life_months=120,
+        standard_warranty_months=24,
+        default_meter_name="Operating Hours",
+        default_meter_unit="h",
         model_status="active",
     )
 
@@ -530,27 +531,29 @@ def asset_model_b(db, tenant_b, category_root_b, vendor_party_b):
         category=category_root_b,
         manufacturer=vendor_party_b,
         estimated_replacement_cost=Decimal("38000.00"),
-        expected_life_years=7,
-        warranty_duration_months=12,
-        metering_type="hours",
+        expected_useful_life_months=84,
+        standard_warranty_months=12,
+        default_meter_name="Operating Hours",
+        default_meter_unit="h",
         model_status="active",
     )
 
 
 @pytest.fixture
-def criticality_assessment_a(db, tenant_a, operational_asset_a, admin_user):
+def criticality_assessment_a(db, tenant_a, operational_asset_a, vendor_party_a):
     assessment = AssetCriticalityAssessment(
         tenant=tenant_a,
+        title="Acme CNC Criticality Review",
         asset=operational_asset_a,
-        assessor=admin_user,
-        production_impact=5,
+        assessor=vendor_party_a,
+        operational_downtime_impact=5,
         safety_impact=4,
         environmental_impact=3,
-        regulatory_impact=3,
-        maintenance_cost_impact=4,
-        single_point_of_failure=True,
+        regulatory_compliance_impact=3,
+        financial_impact=4,
+        is_single_point_of_failure=True,
         assessment_status="draft",
-        notes="Primary critical bottleneck asset.",
+        findings_and_mitigation="Primary critical bottleneck asset.",
     )
     assessment.calculate_composite_score()
     assessment.save()
@@ -558,17 +561,18 @@ def criticality_assessment_a(db, tenant_a, operational_asset_a, admin_user):
 
 
 @pytest.fixture
-def criticality_assessment_b(db, tenant_b, operational_asset_b, admin_b):
+def criticality_assessment_b(db, tenant_b, operational_asset_b, vendor_party_b):
     assessment = AssetCriticalityAssessment(
         tenant=tenant_b,
+        title="Globex Forklift Criticality Review",
         asset=operational_asset_b,
-        assessor=admin_b,
-        production_impact=2,
+        assessor=vendor_party_b,
+        operational_downtime_impact=2,
         safety_impact=1,
         environmental_impact=1,
-        regulatory_impact=1,
-        maintenance_cost_impact=2,
-        single_point_of_failure=False,
+        regulatory_compliance_impact=1,
+        financial_impact=2,
+        is_single_point_of_failure=False,
         assessment_status="draft",
     )
     assessment.calculate_composite_score()
