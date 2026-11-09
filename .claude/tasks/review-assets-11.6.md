@@ -63,7 +63,16 @@
 
 ## 4. Performance & Query Reviewer Findings
 
-*(Pending review pass)*
+### Important
+- **PR-I1**: `apps/assets/models/AssetPerformance/` (`AssetOeeRecords.py:199`, `AssetEnergyReadings.py:207`, `AssetPerformanceScorecards.py:227`) — Missing standard `(tenant, status)` compound indexes on operational models. Add `idx_aoee_ten_stat`, `idx_aeng_ten_stat`, `idx_apsc_ten_stat` to `Meta.indexes`.
+- **PR-I2**: `apps/assets/models/AssetPerformance/` (`AssetDowntimeLogs.py:179`, `AssetPerformanceScorecards.py:220`) — Missing ordering compound indexes on `(tenant, -started_at)` (`idx_adwn_ten_start`) and `(tenant, -period_end)` (`idx_apsc_ten_pend`) causing filesorts on list queries.
+- **PR-I3**: `apps/assets/views/AssetPerformance/AssetDowntimeLogs.py:169` — Missing `select_related=["fixed_asset", "operational_asset"]` on `assets_object` in `asset_downtime_log_resolve` view, causing lazy FK lookups when rendering `resolve.html:28`.
+- **PR-I4**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Unused relation joins in list querysets (`department`, `logged_by`, `recorded_by`, `utility_provider`, `work_order`, `maintenance_request`). Prune list view `select_related` to only the FKs rendered in list tables (`fixed_asset`, `operational_asset`).
+
+### Minor
+- **PR-M1**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Unprojected `FixedAsset` dropdown queries loading 16 columns including TextFields. Add `.only("id", "name")` to `FixedAsset.objects.filter(...)` in list views.
+- **PR-M2**: `apps/assets/views/AssetPerformance/` — `write_audit_log` triggers `str(obj)` lazy lookups in transition views without `select_related`. Specify `select_related=["fixed_asset", "operational_asset"]` in `assets_object` calls.
+- **PR-M3**: `apps/assets/models/AssetPerformance/` — Missing compound indexes on `(tenant, operational_asset)` on all 4 models.
 
 ---
 
