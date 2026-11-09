@@ -237,14 +237,14 @@
                 <div>
                     <div class="text-xs text-slate-500">Assigned Internal Technician</div>
                     <div class="text-sm font-medium text-slate-900 mt-0.5">
-                        {{ maintenance_schedule.assigned_technician.get_full_name|default:maintenance_schedule.assigned_technician.username|default:"Unassigned" }}
+                        {% if maintenance_schedule.assigned_technician %}{{ maintenance_schedule.assigned_technician.get_full_name|default:maintenance_schedule.assigned_technician.username }}{% else %}Unassigned{% endif %}
                     </div>
                 </div>
 
                 <div>
                     <div class="text-xs text-slate-500">Preferred External Vendor</div>
                     <div class="text-sm font-medium text-slate-900 mt-0.5">
-                        {{ maintenance_schedule.preferred_vendor.name|default:"Internal Only" }}
+                        {% if maintenance_schedule.preferred_vendor %}{{ maintenance_schedule.preferred_vendor.name }}{% else %}Internal Only{% endif %}
                     </div>
                 </div>
 
