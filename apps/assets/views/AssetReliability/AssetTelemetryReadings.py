@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -172,29 +173,30 @@ def asset_telemetry_reading_trigger_request(request, pk):
     urgency = "critical" if reading.threshold_status == "critical" else "high"
     is_breakdown = reading.threshold_status == "critical"
 
-    req = AssetMaintenanceRequest.objects.create(
-        tenant=request.tenant,
-        title=f"Telemetry Alert ({reading.get_metric_type_display()}): {reading.reading_value} {reading.metric_unit}",
-        fixed_asset=reading.fixed_asset,
-        operational_asset=reading.operational_asset,
-        requester=request.user,
-        request_type="breakdown_repair" if is_breakdown else "preventive_inspection",
-        urgency=urgency,
-        is_breakdown=is_breakdown,
-        symptom_description=(
-            f"Automated alert triggered from telemetry reading {reading.number}.\n"
-            f"Sensor ID: {reading.sensor_identifier or 'Unspecified'}\n"
-            f"Metric: {reading.get_metric_type_display()}\n"
-            f"Measured Value: {reading.reading_value} {reading.metric_unit} (Baseline: {reading.baseline_value or 'N/A'})\n"
-            f"Deviation: {reading.deviation_percentage or 0}%\n"
-            f"Threshold Status: {reading.get_threshold_status_display()}\n"
-            f"Notes: {reading.alert_notes}"
-        ),
-    )
-    reading.triggered_maintenance_request = req
-    reading.save(update_fields=["triggered_maintenance_request", "updated_at"])
-    write_audit_log(request.user, reading, "update", tenant=request.tenant)
-    write_audit_log(request.user, req, "create", tenant=request.tenant)
+    with transaction.atomic():
+        req = AssetMaintenanceRequest.objects.create(
+            tenant=request.tenant,
+            title=f"Telemetry Alert ({reading.get_metric_type_display()}): {reading.reading_value} {reading.metric_unit}",
+            fixed_asset=reading.fixed_asset,
+            operational_asset=reading.operational_asset,
+            requester=request.user,
+            request_type="breakdown_repair" if is_breakdown else "preventive_inspection",
+            urgency=urgency,
+            is_breakdown=is_breakdown,
+            symptom_description=(
+                f"Automated alert triggered from telemetry reading {reading.number}.\n"
+                f"Sensor ID: {reading.sensor_identifier or 'Unspecified'}\n"
+                f"Metric: {reading.get_metric_type_display()}\n"
+                f"Measured Value: {reading.reading_value} {reading.metric_unit} (Baseline: {reading.baseline_value or 'N/A'})\n"
+                f"Deviation: {reading.deviation_percentage or 0}%\n"
+                f"Threshold Status: {reading.get_threshold_status_display()}\n"
+                f"Notes: {reading.alert_notes}"
+            ),
+        )
+        reading.triggered_maintenance_request = req
+        reading.save(update_fields=["triggered_maintenance_request", "updated_at"])
+        write_audit_log(request.user, reading, "update", tenant=request.tenant)
+        write_audit_log(request.user, req, "create", tenant=request.tenant)
 
     messages.success(request, f"Created Maintenance Request {req.number} from Telemetry Reading {reading.number}.")
     return redirect("assets:asset_maintenance_request_detail", pk=req.pk)
