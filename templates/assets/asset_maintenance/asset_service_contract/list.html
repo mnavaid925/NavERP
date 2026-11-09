@@ -16,7 +16,7 @@
     </div>
     <div class="page-actions">
         <a href="{% url 'assets:asset_service_contract_create' %}" class="btn btn-primary">
-            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Service Contract
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Service Contract
         </a>
     </div>
 </div>
@@ -169,18 +169,20 @@
                         <span class="badge {{ contract.status_css }}">{{ contract.get_status_display }}</span>
                     </td>
                     <td class="table-actions text-right">
-                        <a href="{% url 'assets:asset_service_contract_detail' contract.pk %}" class="btn btn-icon" title="View Details">
+                        <a href="{% url 'assets:asset_service_contract_detail' contract.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                             <i data-lucide="eye"></i>
                         </a>
-                        <a href="{% url 'assets:asset_service_contract_edit' contract.pk %}" class="btn btn-icon" title="Edit Contract">
+                        <a href="{% url 'assets:asset_service_contract_edit' contract.pk %}" class="btn btn-icon" title="Edit Contract" aria-label="Edit Contract">
                             <i data-lucide="pencil"></i>
                         </a>
+                        {% if is_tenant_admin %}
                         <form method="post" action="{% url 'assets:asset_service_contract_delete' contract.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ contract.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Contract">
+                            <button type="submit" class="btn btn-icon danger text-red-600 hover:text-red-700" title="Delete Contract" aria-label="Delete Contract">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
@@ -191,7 +193,7 @@
                             <div class="empty-title">No service contracts found</div>
                             <div class="empty-text">No vendor maintenance agreements or warranties match your criteria.</div>
                             <a href="{% url 'assets:asset_service_contract_create' %}" class="btn btn-primary mt-4">
-                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Register Service Contract
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Service Contract
                             </a>
                         </div>
                     </td>
@@ -210,13 +212,13 @@
         <div class="pagination-controls">
             {% if page_obj.has_previous %}
             <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.contract_type %}&contract_type={{ request.GET.contract_type }}{% endif %}{% if request.GET.billing_frequency %}&billing_frequency={{ request.GET.billing_frequency }}{% endif %}" class="btn btn-outline btn-sm">
-                <i data-lucide="chevron-left" class="w-4 h-4 mr-1"></i> Previous
+                <i data-lucide="chevron-left" class="w-4 h-4 me-1"></i> Previous
             </a>
             {% endif %}
             <span class="text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
             {% if page_obj.has_next %}
             <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.contract_type %}&contract_type={{ request.GET.contract_type }}{% endif %}{% if request.GET.billing_frequency %}&billing_frequency={{ request.GET.billing_frequency }}{% endif %}" class="btn btn-outline btn-sm">
-                Next <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+                Next <i data-lucide="chevron-right" class="w-4 h-4 ms-1"></i>
             </a>
             {% endif %}
         </div>
