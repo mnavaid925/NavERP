@@ -23,18 +23,18 @@
     </div>
     <div class="page-actions">
         <a href="{% url 'assets:asset_category_edit' category.pk %}" class="btn btn-outline">
-            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit Category
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit Category
         </a>
         {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_category_delete' category.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete category {{ category.code }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
-                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
         {% endif %}
         <a href="{% url 'assets:asset_category_list' %}" class="btn btn-outline">
-            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List
         </a>
     </div>
 </div>
@@ -198,7 +198,7 @@
             <i data-lucide="cpu" class="w-4 h-4 text-brand"></i> Equipment Models in this Category ({{ models|length }})
         </h2>
         <a href="{% url 'assets:asset_model_create' %}" class="btn btn-sm btn-outline">
-            <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Add Model
+            <i data-lucide="plus" class="w-3 h-3 me-1"></i> Add Model
         </a>
     </div>
     <div class="table-wrap">
@@ -244,7 +244,7 @@
             <i data-lucide="sliders" class="w-4 h-4 text-brand"></i> Inherited Specification Attributes ({{ spec_templates|length }})
         </h2>
         <a href="{% url 'assets:asset_specification_template_create' %}" class="btn btn-sm btn-outline">
-            <i data-lucide="plus" class="w-3 h-3 mr-1"></i> Add Spec Attribute
+            <i data-lucide="plus" class="w-3 h-3 me-1"></i> Add Spec Attribute
         </a>
     </div>
     <div class="table-wrap">
