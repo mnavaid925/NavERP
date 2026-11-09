@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}{{ transfer.number }} — Asset Transfer — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:transfer_list' %}">Transfers & Cost Allocation</a>
+            <span>/</span>
+            <span>{{ transfer.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ transfer.number }}</h1>
+            <span class="badge {{ transfer.status_css }}">{{ transfer.get_status_display }}</span>
+            <span class="badge {{ transfer.transfer_type_css }}">{{ transfer.get_transfer_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if transfer.status == 'draft' %}
+        <form method="post" action="{% url 'assets:transfer_dispatch' transfer.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="truck" class="w-4 h-4 mr-1"></i> Dispatch (In Transit)
+            </button>
+        </form>
+        {% endif %}
+        {% if transfer.status != 'completed' %}
+        <form method="post" action="{% url 'assets:transfer_complete' transfer.pk %}" class="inline" onsubmit="return confirm('Complete transfer {{ transfer.number }}? This updates the fixed asset department, custodian, and expense GL routing.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check" class="w-4 h-4 mr-1"></i> Complete & Accept
+            </button>
+        </form>
+        <a href="{% url 'assets:transfer_edit' transfer.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:transfer_delete' transfer.pk %}" class="inline" onsubmit="return confirm('Delete transfer {{ transfer.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:transfer_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Source vs Destination Reallocation -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Reallocation Side-by-Side Card -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-800">{{ transfer.title }}</h2>
+                    <div class="text-xs text-muted">Transfer Date: {{ transfer.transfer_date|date:"Y-m-d" }} · Type: {{ transfer.get_transfer_type_display }}</div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-slate-50 rounded-lg border border-slate-200 mb-6">
+                    <!-- Source Node -->
+                    <div class="space-y-3">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-muted flex items-center gap-1.5">
+                            <i data-lucide="log-out" class="w-4 h-4 text-slate-500"></i> Source Origin
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Department / OrgUnit</div>
+                            <div class="font-medium text-slate-900">{{ transfer.source_department.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Physical Location</div>
+                            <div class="font-medium text-slate-900">{{ transfer.source_location.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Custodian / Custody Party</div>
+                            <div class="font-medium text-slate-900">{{ transfer.source_custodian.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Depreciation Expense GL</div>
+                            <div class="font-medium text-slate-900">{{ transfer.source_expense_account.code|default:"—" }} — {{ transfer.source_expense_account.name|default:"Default" }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Destination Node -->
+                    <div class="space-y-3 border-t md:border-t-0 md:border-l border-slate-200 md:pl-6 pt-3 md:pt-0">
+                        <div class="text-xs font-semibold uppercase tracking-wider text-brand flex items-center gap-1.5">
+                            <i data-lucide="log-in" class="w-4 h-4 text-brand"></i> Destination Target
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Department / OrgUnit</div>
+                            <div class="font-bold text-slate-900">{{ transfer.destination_department.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Physical Location</div>
+                            <div class="font-medium text-slate-900">{{ transfer.destination_location.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Custodian / Custody Party</div>
+                            <div class="font-medium text-slate-900">{{ transfer.destination_custodian.name|default:"Unassigned" }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Depreciation Expense GL</div>
+                            <div class="font-medium text-slate-900">{{ transfer.destination_expense_account.code|default:"—" }} — {{ transfer.destination_expense_account.name|default:"Default" }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Financial Values -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-3 bg-white rounded border border-slate-200">
+                        <div class="text-xs text-muted">Carrying NBV at Transfer</div>
+                        <div class="text-lg font-bold font-mono text-slate-900">${{ transfer.carrying_value_at_transfer|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-white rounded border border-slate-200">
+                        <div class="text-xs text-muted">Freight & Moving Cost</div>
+                        <div class="text-lg font-bold font-mono text-slate-900">${{ transfer.transportation_cost|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-white rounded border border-slate-200">
+                        <div class="text-xs text-muted">Transfer Status</div>
+                        <span class="badge {{ transfer.status_css }} mt-1">{{ transfer.get_status_display }}</span>
+                    </div>
+                </div>
+
+                {% if transfer.reason %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Operational Justification & Logistics Notes</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200">{{ transfer.reason }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Fixed Asset Master Information -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Fixed Asset Subject</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted">Asset Name & Number</div>
+                    <div class="font-bold text-slate-900 text-base">{{ transfer.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ transfer.fixed_asset.number }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Acquisition Cost</div>
+                    <div class="font-medium font-mono text-slate-900">${{ transfer.fixed_asset.acquisition_cost|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Net Book Value</div>
+                    <div class="font-medium font-mono text-slate-900">${{ transfer.fixed_asset.book_value|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Active Fixed Asset Location (OrgUnit)</div>
+                    <div class="font-medium text-slate-800">{{ transfer.fixed_asset.location.name|default:"Unassigned" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Active Fixed Asset Custodian</div>
+                    <div class="font-medium text-slate-800">{{ transfer.fixed_asset.custodian.name|default:"Unassigned" }}</div>
+                </div>
+                {% if transfer.operational_asset %}
+                <div class="pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted">Operational Asset Register</div>
+                    <div class="font-medium text-slate-900">{{ transfer.operational_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ transfer.operational_asset.number }}</div>
+                    <div class="text-xs text-muted mt-1">Current Plant Loc: {{ transfer.operational_asset.current_location.name|default:"—" }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Chain of Custody & Execution</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted">Dispatched / Initiated By</div>
+                    <div class="font-medium text-slate-800">{{ transfer.transferred_by.get_full_name|default:transfer.transferred_by.username|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Received & Accepted By</div>
+                    <div class="font-medium text-slate-800">{{ transfer.received_by.get_full_name|default:transfer.received_by.username|default:"Pending Acceptance" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Completed Timestamp</div>
+                    <div class="font-medium text-slate-800">{{ transfer.completed_at|date:"Y-m-d H:i"|default:"Not Completed" }}</div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-muted">
+                    <div>Created: {{ transfer.created_at|date:"Y-m-d H:i" }}</div>
+                    <div>Updated: {{ transfer.updated_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
