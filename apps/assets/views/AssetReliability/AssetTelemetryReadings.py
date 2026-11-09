@@ -72,7 +72,7 @@ def asset_telemetry_reading_list(request):
     anomaly_reading_count = stats["anomaly"]
     normal_reading_count = stats["normal"]
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
