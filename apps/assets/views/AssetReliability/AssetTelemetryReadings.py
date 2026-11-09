@@ -32,8 +32,10 @@ def asset_telemetry_reading_list(request):
             Q(number__icontains=q)
             | Q(sensor_identifier__icontains=q)
             | Q(alert_notes__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
-            | Q(operational_asset__asset_tag__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
+            | Q(fixed_asset__name__icontains=q)
+            | Q(operational_asset__tag_code__icontains=q)
+            | Q(operational_asset__name__icontains=q)
         )
 
     # Filters
