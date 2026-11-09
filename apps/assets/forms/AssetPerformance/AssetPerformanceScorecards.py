@@ -81,7 +81,7 @@ class AssetPerformanceScorecardForm(TenantUniqueMixin, forms.ModelForm):
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant).order_by("name")
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant).order_by("name")
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=tenant).order_by("name")
-            self.fields["evaluated_by"].queryset = User.objects.filter(tenant_memberships__tenant=tenant).distinct().order_by("first_name", "last_name", "username")
+            self.fields["evaluated_by"].queryset = User.objects.filter(tenant=tenant, is_active=True).order_by("first_name", "last_name", "username")
 
     def clean(self):
         cleaned = super().clean()
