@@ -47,7 +47,7 @@ class AssetEnergyReading(TenantNumbered):
 
     UTILITY_CSS = {
         "electricity": "badge-info",
-        "natural_gas": "badge-purple",
+        "natural_gas": "badge-info",
         "diesel": "badge-amber",
         "heavy_fuel_oil": "badge-slate",
         "steam": "badge-slate",
