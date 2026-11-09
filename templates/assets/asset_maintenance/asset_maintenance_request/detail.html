@@ -197,7 +197,7 @@
                             <td>{{ log.service_date|date:"M d, Y" }}</td>
                             <td><span class="badge {{ log.maintenance_type_css }}">{{ log.get_maintenance_type_display }}</span></td>
                             <td>
-                                {{ log.lead_technician.get_full_name|default:log.lead_technician.username|default:log.service_vendor.name|default:"—" }}
+                                {% if log.lead_technician %}{{ log.lead_technician.get_full_name|default:log.lead_technician.username }}{% elif log.service_vendor %}{{ log.service_vendor.name }}{% else %}—{% endif %}
                             </td>
                             <td>{{ log.downtime_hours }} hrs</td>
                             <td class="font-medium">${{ log.total_cost|floatformat:2 }}</td>
