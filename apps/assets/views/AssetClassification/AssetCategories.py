@@ -62,6 +62,7 @@ def asset_category_list(request):
         "category_types": AssetCategory.CATEGORY_TYPE_CHOICES,
         "parent_categories": parent_categories,
         "q": q,
+        "search_query": q,
         "selected_type": cat_type,
         "selected_parent": parent_id,
         "total_count": counts["total"] or 0,
