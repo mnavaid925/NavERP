@@ -200,14 +200,16 @@ def test_asset_maintenance_log_creation_and_numbering(maintenance_log_a):
 
 @pytest.mark.django_db
 def test_asset_maintenance_log_cost_calculation(maintenance_log_a):
-    calculated = maintenance_log_a.calculate_total_cost()
-    assert calculated == Decimal("800.00")
+    maintenance_log_a.labor_cost = Decimal("500.00")
+    maintenance_log_a.parts_cost = Decimal("200.00")
+    maintenance_log_a.vendor_invoice_cost = Decimal("100.00")
+    maintenance_log_a.save()
     assert maintenance_log_a.total_cost == Decimal("800.00")
 
 
 @pytest.mark.django_db
 def test_asset_maintenance_log_review_approval_flow(maintenance_log_a, admin_user):
-    maintenance_log_a.submit_for_review()
+    maintenance_log_a.submit_review()
     maintenance_log_a.refresh_from_db()
     assert maintenance_log_a.status == "in_review"
 
