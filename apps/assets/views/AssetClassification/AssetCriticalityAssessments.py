@@ -12,6 +12,7 @@ from apps.assets.models.AssetClassification.AssetCriticalityAssessments import A
 from apps.assets.views._common import assets_object
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
+from apps.scm.models import Asset
 
 
 @login_required
@@ -206,8 +207,9 @@ def asset_criticality_assessment_approve(request, pk):
         elif assessment.abc_rating == "C":
             operational_criticality = "low"
 
-        assessment.asset.criticality = operational_criticality
-        assessment.asset.save(update_fields=["criticality"])
+        Asset.objects.filter(tenant=request.tenant, pk=assessment.asset_id).update(
+            criticality=operational_criticality
+        )
 
         write_audit_log(request.user, assessment, "approve", tenant=request.tenant)
 
