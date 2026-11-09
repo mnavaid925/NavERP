@@ -80,7 +80,7 @@ class AssetTransferForm(TenantUniqueMixin, forms.ModelForm):
             gl_accounts = GLAccount.objects.filter(tenant=self.tenant).order_by("code")
             self.fields["source_expense_account"].queryset = gl_accounts
             self.fields["destination_expense_account"].queryset = gl_accounts
-            self.fields["transferred_by"].queryset = User.objects.filter(tenants=self.tenant).order_by("username")
+            self.fields["transferred_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
     def clean(self):
         cleaned_data = super().clean()
