@@ -97,6 +97,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_3(tenant)
             self._seed_tenant_11_4(tenant)
             self._seed_tenant_11_5(tenant)
+            self._seed_tenant_11_6(tenant)
             self._seed_tenant_11_7(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
@@ -1213,16 +1214,30 @@ class Command(BaseCommand):
                 approved_at=timezone.now() - timezone.timedelta(days=14),
             )
 
-        # =========================================================================
-        # 11.6 Asset Performance & Utilization (Idempotent)
-        # =========================================================================
-        if not AssetDowntimeLog.objects.filter(tenant=tenant).exists():
-            self.stdout.write(f"[{tenant.name}] Seeding 11.6 Asset Performance & Utilization...")
 
+
+        self.stdout.write(f"[{tenant.name}] 11.5 Seeding complete (2 contracts, 2 schedules, 3 requests, 2 logs).")
+
+
+
+
+    def _seed_tenant_11_6(self, tenant):
+        if AssetDowntimeLog.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.6 Performance & Utilization data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.6 Asset Performance & Utilization...")
+        user = User.objects.filter(tenant=tenant).first()
+        fa_primary = FixedAsset.objects.filter(tenant=tenant).first()
+        oa_primary = Asset.objects.filter(tenant=tenant).first()
+        dept = OrgUnit.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
             down1 = AssetDowntimeLog.objects.create(
                 tenant=tenant,
                 fixed_asset=fa_primary,
                 operational_asset=oa_primary,
+                department=dept,
                 downtime_category="unplanned_breakdown",
                 impact_level="full_shutdown",
                 root_cause_code="ISO-14224 MECH-VALVE-SEIZE",
@@ -1240,6 +1255,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 fixed_asset=fa_primary,
                 operational_asset=oa_primary,
+                department=dept,
                 downtime_category="setup_changeover",
                 impact_level="cell_idle",
                 root_cause_code="SETUP-TOOL-CALIB",
@@ -1257,6 +1273,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 fixed_asset=fa_primary,
                 operational_asset=oa_primary,
+                department=dept,
                 downtime_category="utility_outage",
                 impact_level="minor_stop",
                 root_cause_code="UTIL-VOLT-SAG",
@@ -1382,6 +1399,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 fixed_asset=fa_primary,
                 operational_asset=oa_primary,
+                department=dept,
                 period_type="monthly",
                 period_start=(timezone.now().date() - timezone.timedelta(days=35)).replace(day=1),
                 period_end=timezone.now().date().replace(day=1) - timezone.timedelta(days=1),
@@ -1405,6 +1423,7 @@ class Command(BaseCommand):
                 tenant=tenant,
                 fixed_asset=fa_primary,
                 operational_asset=oa_primary,
+                department=dept,
                 period_type="monthly",
                 period_start=timezone.now().date().replace(day=1),
                 period_end=timezone.now().date(),
@@ -1424,9 +1443,7 @@ class Command(BaseCommand):
                 evaluated_by=user,
             )
 
-            self.stdout.write(f"[{tenant.name}] 11.6 Seeding complete (3 downtimes, 2 OEE records, 3 energy readings, 2 scorecards).")
-
-        self.stdout.write(f"[{tenant.name}] 11.5 Seeding complete (2 contracts, 2 schedules, 3 requests, 2 logs).")
+        self.stdout.write(f"[{tenant.name}] 11.6 Seeding complete (3 downtimes, 2 OEE records, 3 energy readings, 2 scorecards).")
 
 
     def _seed_tenant_11_7(self, tenant):
