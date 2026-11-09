@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit FMEA {{ failure_mode.number }}{% else %}New FMEA Record{% endif %} — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_failure_mode_list' %}">FMEA Registry</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ failure_mode.number }}{% else %}New Failure Mode{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Failure Mode: {{ failure_mode.number }}{% else %}Catalog New Failure Mode (FMEA & RCM){% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body py-3 text-sm text-red-700">
+            <div class="font-semibold mb-1">Please correct the following errors:</div>
+            <ul class="list-disc list-inside">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li>{{ field.label }}: {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Target Equipment & Taxonomy -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">1. Target Equipment & Component Hierarchy</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="{{ form.component_subsystem.id_for_label }}" class="form-label">Component / Assembly <span class="text-red-500">*</span></label>
+                {{ form.component_subsystem }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.asset_category.id_for_label }}" class="form-label">Asset Category Taxonomy</label>
+                {{ form.asset_category }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                {{ form.fixed_asset }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                {{ form.operational_asset }}
+            </div>
+
+            <div class="md:col-span-2 form-group">
+                <label for="{{ form.function_description.id_for_label }}" class="form-label">Primary Engineering Function <span class="text-red-500">*</span></label>
+                {{ form.function_description }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Failure Modes and Mechanisms -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">2. Failure Analysis & Effects</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.functional_failure.id_for_label }}" class="form-label">Functional Failure <span class="text-red-500">*</span></label>
+                    {{ form.functional_failure }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.failure_mode.id_for_label }}" class="form-label">Physical Failure Mode <span class="text-red-500">*</span></label>
+                    {{ form.failure_mode }}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.failure_cause.id_for_label }}" class="form-label">Root / Proximate Cause <span class="text-red-500">*</span></label>
+                    {{ form.failure_cause }}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.failure_effect.id_for_label }}" class="form-label">Failure Effect on Operations & Safety <span class="text-red-500">*</span></label>
+                    {{ form.failure_effect }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RPN Scoring -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">3. Risk Priority Number (RPN) Ranking (1–10)</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.severity_score.id_for_label }}" class="form-label">Severity Score (1–10) <span class="text-red-500">*</span></label>
+                {{ form.severity_score }}
+                <p class="text-xs text-slate-500 mt-1">1=Minor to 10=Hazardous without warning</p>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.occurrence_score.id_for_label }}" class="form-label">Occurrence Score (1–10) <span class="text-red-500">*</span></label>
+                {{ form.occurrence_score }}
+                <p class="text-xs text-slate-500 mt-1">1=Nearly impossible to 10=Persistent failure</p>
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.detection_score.id_for_label }}" class="form-label">Detection Score (1–10) <span class="text-red-500">*</span></label>
+                {{ form.detection_score }}
+                <p class="text-xs text-slate-500 mt-1">1=Certain detection to 10=Undetectable</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- RCM Strategy & Mitigation Task -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">4. RCM Maintenance Strategy & Mitigation</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="{{ form.rcm_strategy.id_for_label }}" class="form-label">RCM Maintenance Policy <span class="text-red-500">*</span></label>
+                {{ form.rcm_strategy }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.status.id_for_label }}" class="form-label">Registry Status <span class="text-red-500">*</span></label>
+                {{ form.status }}
+            </div>
+
+            <div class="md:col-span-2 form-group">
+                <label for="{{ form.strategy_rationale.id_for_label }}" class="form-label">Strategy Justification & Technical Rationale</label>
+                {{ form.strategy_rationale }}
+            </div>
+
+            <div class="md:col-span-2 form-group">
+                <label for="{{ form.mitigation_task.id_for_label }}" class="form-label">Proactive Mitigation Task / Inspection SOP</label>
+                {{ form.mitigation_task }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.linked_maintenance_schedule.id_for_label }}" class="form-label">Linked Maintenance Schedule</label>
+                {{ form.linked_maintenance_schedule }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.assessed_by.id_for_label }}" class="form-label">Reliability Engineer</label>
+                {{ form.assessed_by }}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:asset_failure_mode_detail' failure_mode.pk %}{% else %}{% url 'assets:asset_failure_mode_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Save Failure Mode{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
