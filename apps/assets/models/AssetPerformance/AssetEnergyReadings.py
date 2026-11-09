@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.db import models
@@ -233,30 +233,30 @@ class AssetEnergyReading(TenantNumbered):
 
     def calculate_energy_metrics(self):
         # 1. Hourly Intensity (SEC/hr)
-        if self.operating_hours and self.operating_hours > 0 and self.consumption_value:
+        if self.operating_hours and self.operating_hours > Decimal("0.00") and self.consumption_value:
             intensity_hr = self.consumption_value / self.operating_hours
-            self.energy_intensity_per_hour = Decimal(str(round(float(intensity_hr), 4)))
+            self.energy_intensity_per_hour = intensity_hr.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
         else:
             self.energy_intensity_per_hour = Decimal("0.0000")
 
         # 2. Per-Unit Intensity (SEC/unit)
         if self.units_produced and self.units_produced > 0 and self.consumption_value:
             intensity_unit = self.consumption_value / Decimal(str(self.units_produced))
-            self.energy_intensity_per_unit = Decimal(str(round(float(intensity_unit), 4)))
+            self.energy_intensity_per_unit = intensity_unit.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
         else:
             self.energy_intensity_per_unit = Decimal("0.0000")
 
         # 3. Carbon Emissions (kg CO2e) = Consumption * Emission Factor
         if self.consumption_value and self.emission_factor:
             emissions = self.consumption_value * self.emission_factor
-            self.carbon_emissions_kg_co2e = Decimal(str(round(float(emissions), 4)))
+            self.carbon_emissions_kg_co2e = emissions.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
         else:
             self.carbon_emissions_kg_co2e = Decimal("0.0000")
 
         # 4. Total Energy Cost = Consumption * Cost per unit
         if self.consumption_value and self.cost_per_unit:
             cost = self.consumption_value * self.cost_per_unit
-            self.total_energy_cost = Decimal(str(round(float(cost), 2)))
+            self.total_energy_cost = cost.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         else:
             self.total_energy_cost = Decimal("0.00")
 
