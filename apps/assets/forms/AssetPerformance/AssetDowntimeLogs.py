@@ -69,7 +69,7 @@ class AssetDowntimeLogForm(TenantUniqueMixin, forms.ModelForm):
             self.fields["maintenance_request"].queryset = AssetMaintenanceRequest.objects.filter(tenant=tenant).order_by("-id")
             self.fields["work_order"].queryset = MaintenanceWorkOrder.objects.filter(tenant=tenant).order_by("-id")
             self.fields["department"].queryset = OrgUnit.objects.filter(tenant=tenant).order_by("name")
-            self.fields["logged_by"].queryset = User.objects.filter(tenant_memberships__tenant=tenant).distinct().order_by("first_name", "last_name", "username")
+            self.fields["logged_by"].queryset = User.objects.filter(tenant=tenant, is_active=True).order_by("first_name", "last_name", "username")
 
     def clean(self):
         cleaned = super().clean()
