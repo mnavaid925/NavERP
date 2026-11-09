@@ -183,7 +183,7 @@
                     <span class="text-slate-500 block text-xs uppercase">Operational Equipment</span>
                     {% if assessment.operational_asset %}
                         <div class="font-medium text-slate-900">{{ assessment.operational_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ assessment.operational_asset.asset_tag }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ assessment.operational_asset.tag_code|default:assessment.operational_asset.number }}</div>
                     {% else %}
                         <span class="text-slate-400 italic">None linked</span>
                     {% endif %}
