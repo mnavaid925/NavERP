@@ -9,10 +9,14 @@ from apps.assets.models import (
     AssetCustodyLog,
     AssetDepreciationSchedule,
     AssetIncidentReport,
+    AssetMaintenanceLog,
+    AssetMaintenanceRequest,
+    AssetMaintenanceSchedule,
     AssetModel,
     AssetMovementLog,
     AssetRequisition,
     AssetRevaluation,
+    AssetServiceContract,
     AssetSpecificationTemplate,
     AssetTag,
     AssetTransfer,
@@ -146,3 +150,36 @@ class CapitalizationPolicyAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "category")
     list_filter = ("policy_scope", "de_minimis_safe_harbor", "is_active")
     search_fields = ("number", "name", "applicable_gaap_standard")
+
+
+@admin.register(AssetMaintenanceRequest)
+class AssetMaintenanceRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "request_type", "urgency", "is_breakdown", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "assigned_technician", "assigned_vendor")
+    list_filter = ("status", "urgency", "request_type", "is_breakdown")
+    search_fields = ("number", "title", "symptom_description")
+
+
+@admin.register(AssetMaintenanceSchedule)
+class AssetMaintenanceScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "schedule_type", "frequency_interval", "frequency_unit", "next_due_date", "is_active", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "assigned_technician")
+    list_filter = ("status", "schedule_type", "frequency_unit", "is_active", "is_mandatory")
+    search_fields = ("number", "name", "service_checklist")
+
+
+@admin.register(AssetServiceContract)
+class AssetServiceContractAdmin(admin.ModelAdmin):
+    list_display = ("number", "contract_number", "title", "vendor", "contract_type", "contract_value", "end_date", "status", "tenant")
+    list_select_related = ("tenant", "vendor", "fixed_asset", "operational_asset")
+    list_filter = ("status", "contract_type", "billing_frequency", "auto_renew")
+    search_fields = ("number", "contract_number", "title", "vendor__name")
+
+
+@admin.register(AssetMaintenanceLog)
+class AssetMaintenanceLogAdmin(admin.ModelAdmin):
+    list_display = ("number", "service_date", "maintenance_type", "failure_code", "downtime_hours", "total_cost", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "lead_technician", "service_vendor")
+    list_filter = ("status", "maintenance_type", "failure_code")
+    search_fields = ("number", "parts_consumed_summary", "action_taken")
+
