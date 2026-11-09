@@ -78,7 +78,7 @@ class AssetEnergyReadingForm(TenantUniqueMixin, forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "utility_provider"])
+        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "utility_provider", "recorded_by"])
 
         pf = cleaned.get("power_factor")
         if pf is not None and (pf < Decimal("0.000") or pf > Decimal("1.000")):
