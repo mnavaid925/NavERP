@@ -134,7 +134,7 @@
                             <div class="font-semibold text-slate-800">{{ r.sensor_identifier|default:"Unlabeled Sensor" }}</div>
                             <div class="text-xs text-slate-500">
                                 {% if r.fixed_asset %}
-                                    FA: {{ r.fixed_asset.asset_number }} ({{ r.fixed_asset.name }})
+                                    FA: {{ r.fixed_asset.number }} ({{ r.fixed_asset.name }})
                                 {% elif r.operational_asset %}
                                     AST: {{ r.operational_asset.asset_tag }}
                                 {% else %}
