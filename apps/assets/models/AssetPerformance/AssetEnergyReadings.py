@@ -205,6 +205,7 @@ class AssetEnergyReading(TenantNumbered):
             ),
         ]
         indexes = [
+            models.Index(fields=["tenant", "status"], name="idx_aeng_ten_stat"),
             models.Index(fields=["tenant", "reading_timestamp"], name="idx_aeng_ten_time"),
             models.Index(fields=["tenant", "utility_type"], name="idx_aeng_ten_util"),
             models.Index(fields=["tenant", "fixed_asset"], name="idx_aeng_ten_fa"),
