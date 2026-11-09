@@ -18,7 +18,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def asset_performance_scorecard_list(request):
     qs = AssetPerformanceScorecard.objects.filter(tenant=request.tenant).select_related(
-        "fixed_asset", "operational_asset", "department", "evaluated_by"
+        "fixed_asset", "operational_asset"
     )
 
     q = request.GET.get("q", "").strip()
@@ -58,7 +58,7 @@ def asset_performance_scorecard_list(request):
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).order_by("name")
+    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
@@ -158,7 +158,7 @@ def asset_performance_scorecard_edit(request, pk):
 @login_required
 @require_POST
 def asset_performance_scorecard_delete(request, pk):
-    scorecard = assets_object(request, AssetPerformanceScorecard, pk)
+    scorecard = assets_object(request, AssetPerformanceScorecard, pk, select_related=["fixed_asset", "operational_asset"])
     number = scorecard.number
     write_audit_log(request.user, scorecard, "delete", tenant=request.tenant)
     scorecard.delete()
@@ -169,7 +169,7 @@ def asset_performance_scorecard_delete(request, pk):
 @login_required
 @require_POST
 def asset_performance_scorecard_publish(request, pk):
-    scorecard = assets_object(request, AssetPerformanceScorecard, pk)
+    scorecard = assets_object(request, AssetPerformanceScorecard, pk, select_related=["fixed_asset", "operational_asset"])
     if scorecard.status != "draft":
         messages.error(request, f"Scorecard {scorecard.number} cannot be published because it is currently {scorecard.get_status_display().lower()}.")
         return redirect("assets:asset_performance_scorecard_detail", pk=scorecard.pk)
