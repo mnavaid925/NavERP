@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, and technical specification templates). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, and capitalization threshold policies). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -48,6 +48,11 @@ apps/assets/
       AssetModels.py                          <- AssetModel [AMOD-]
       AssetCriticalityAssessments.py          <- AssetCriticalityAssessment [ACRT-]
       AssetSpecificationTemplates.py          <- AssetSpecificationTemplate [ASPC-]
+    AssetDepreciation/                        <- Sub-module 11.4 models
+      AssetDepreciationSchedules.py           <- AssetDepreciationSchedule [ADEP-]
+      AssetRevaluations.py                    <- AssetRevaluation [AREV-]
+      AssetTransfers.py                       <- AssetTransfer [AXFR-]
+      CapitalizationPolicies.py               <- CapitalizationPolicy [ACTH-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -66,6 +71,11 @@ apps/assets/
       AssetModels.py                          <- AssetModelForm
       AssetCriticalityAssessments.py          <- AssetCriticalityAssessmentForm
       AssetSpecificationTemplates.py          <- AssetSpecificationTemplateForm
+    AssetDepreciation/                        <- Sub-module 11.4 forms
+      AssetDepreciationSchedules.py           <- AssetDepreciationScheduleForm
+      AssetRevaluations.py                    <- AssetRevaluationForm
+      AssetTransfers.py                       <- AssetTransferForm
+      CapitalizationPolicies.py               <- CapitalizationPolicyForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -85,6 +95,11 @@ apps/assets/
       AssetModels.py                          <- Model CRUD
       AssetCriticalityAssessments.py          <- Criticality CRUD + approve & sync to scm.Asset
       AssetSpecificationTemplates.py          <- Spec Template CRUD
+    AssetDepreciation/                        <- Sub-module 11.4 views
+      AssetDepreciationSchedules.py           <- Depreciation Schedule CRUD + calculate, post to GL
+      AssetRevaluations.py                    <- Revaluation & Impairment CRUD + approve & apply
+      AssetTransfers.py                       <- Asset Transfer CRUD + dispatch, complete & update assets
+      CapitalizationPolicies.py               <- Capitalization Policy CRUD + interactive evaluator
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -102,9 +117,14 @@ apps/assets/
       AssetModels.py
       AssetCriticalityAssessments.py
       AssetSpecificationTemplates.py
+    AssetDepreciation/                        <- Sub-module 11.4 URL route definitions
+      AssetDepreciationSchedules.py
+      AssetRevaluations.py
+      AssetTransfers.py
+      CapitalizationPolicies.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2 & 11.3)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3 & 11.4)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -119,6 +139,10 @@ apps/assets/
     test_assetclassification_forms.py         <- 11.3 Form validation, mass-assignment exclusions, reject_foreign
     test_assetclassification_views.py         <- 11.3 View context contracts, filters, status guards, sync
     test_assetclassification_security.py      <- 11.3 IDOR (404), RBAC gates (403), method safety (405)
+    test_assetdepreciation_models.py          <- 11.4 Multi-method formulas, GL journal generation, step-up/impairment
+    test_assetdepreciation_forms.py           <- 11.4 Form validations, system exclusions, reject_foreign
+    test_assetdepreciation_views.py           <- 11.4 View contracts, filters, status guards, actions, evaluator
+    test_assetdepreciation_security.py        <- 11.4 IDOR (404), RBAC admin gates (403), mass-assignment, audits
 ```
 
 ---
@@ -159,9 +183,55 @@ apps/assets/
    - **Fields:** `number`, `category` (FK `AssetCategory`), `model` (FK `AssetModel`), `attribute_name`, `attribute_key` (snake_case slug), `data_type` (`text`, `numeric`, `boolean`, `date`, `select`), `unit_of_measure`, `min_numeric_value`, `max_numeric_value`, `validation_regex`, `select_choices`, `is_required`, `is_searchable`, `is_filterable`.
    - **Invariants:** Must attach to either Category or Model. Validates regex syntax with `re.compile()` in `clean()`. Numeric bound validation (`min <= max`).
 
+### 11.4 Asset Depreciation & Financial Management
+1. **`AssetDepreciationSchedule`** (`ADEP-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `fiscal_period` (FK `accounting.FiscalPeriod`), `fiscal_year`, `period_number`, `period_frequency` (`monthly`, `quarterly`, `semi_annual`, `annual`), `schedule_date`, `depreciation_method` (`straight_line`, `declining_balance_200`, `declining_balance_150`, `sum_of_years`, `units_of_production`), `starting_book_value`, `depreciation_amount`, `accumulated_depreciation_after`, `ending_book_value`, `total_units_expected`, `units_produced_period`, `expense_account` (FK `accounting.GLAccount`), `accumulated_account` (FK `accounting.GLAccount`), `cost_center` (FK `core.OrgUnit`), `status` (`draft`, `calculated`, `posted`, `cancelled`), `journal_entry` (FK `accounting.JournalEntry`), `posted_at`, `posted_by` (FK `User`), `notes`.
+   - **Invariants:** Automatic multi-method depreciation calculation with manual override preservation unless `force=True`. GL posting (`post_to_gl`) creates a balanced `JournalEntry` (Dr Expense / Cr Accumulated Depreciation), advances `fixed_asset.accumulated_depreciation` and `last_depreciation_date`, and validates required GL accounts. Status guards prevent modifying/deleting posted runs.
+2. **`AssetRevaluation`** (`AREV-`):
+   - **Fields:** `number`, `title`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `event_type` (`impairment`, `revaluation_up`, `reversal_impairment`, `salvage_revision`), `valuation_method` (`independent_appraisal`, `market_approach`, `discounted_cash_flow`, `replacement_cost_depreciated`), `valuation_date`, `appraiser` (FK `core.Party`), `appraiser_name_fallback`, `historical_cost`, `accumulated_depreciation_before`, `carrying_value_before`, `new_fair_market_value`, `revaluation_adjustment`, `new_salvage_value`, `remaining_useful_life_months`, `impairment_loss_account` (FK `accounting.GLAccount`), `revaluation_surplus_account` (FK `accounting.GLAccount`), `status` (`draft`, `submitted`, `approved`, `rejected`), `journal_entry` (FK `accounting.JournalEntry`), `approved_by` (FK `User`), `approved_at`, `justification`, `notes`.
+   - **Invariants:** Net adjustment computed as `new_fair_market_value - carrying_value_before`. Execution (`execute_revaluation`) creates balanced `JournalEntry` (Dr Impairment Loss / Cr Acc Deprec for impairments; Dr FixedAsset Cost / Cr Revaluation Surplus for step-ups), updates asset prospective salvage and useful life, and enforces GL account presence.
+3. **`AssetTransfer`** (`AXFR-`):
+   - **Fields:** `number`, `title`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `transfer_type` (`cost_center`, `inter_department`, `inter_facility`, `custodian_reassignment`, `inter_company`), `transfer_date`, `source_department` / `destination_department` (FK `core.OrgUnit`), `source_location` / `destination_location` (FK `scm.Location`), `source_custodian` / `destination_custodian` (FK `core.Party`), `source_expense_account` / `destination_expense_account` (FK `accounting.GLAccount`), `transferred_by` / `received_by` (FK `User`), `transportation_cost`, `carrier_reference`, `carrying_value_at_transfer`, `status` (`draft`, `in_transit`, `completed`, `cancelled`), `completed_at`, `transfer_notes`.
+   - **Invariants:** Dispatch transitions status to `in_transit`. Completion (`complete_transfer`) updates `fixed_asset` location, custodian, and expense account, plus operational `scm.Asset` (`location`, `custodian`, `org_unit`) atomically.
+4. **`CapitalizationPolicy`** (`ACTH-`):
+   - **Fields:** `number`, `name`, `policy_scope` (`global_default`, `category_override`, `tax_book_safe_harbor`), `category` (FK `AssetCategory`), `minimum_cost_threshold`, `minimum_useful_life_months`, `default_classification` (`capitalize`, `expense_immediately`, `manual_review`), `de_minimis_safe_harbor` (Bool), `applicable_gaap_standard`, `default_cip_account` (FK `accounting.GLAccount`), `default_expense_account` (FK `accounting.GLAccount`), `policy_notes`, `effective_from`, `effective_to`, `is_active`.
+   - **Invariants:** Capitalization decision engine `evaluate_asset(cost, useful_life_months)` evaluates CapEx vs OpEx vs manual review with safe-harbor compliance checks and robust numeric guarding against invalid, infinite, or negative inputs.
+
 ---
 
-## Key URLs & Routes (11.2 & 11.3)
+## Key URLs & Routes (11.2, 11.3 & 11.4)
+
+### 11.4 Asset Depreciation & Financial Management
+Namespace: `assets:`
+- **Depreciation Schedules:**
+  - `assets:depreciation_schedule_list`: `/assets/depreciation/`
+  - `assets:depreciation_schedule_create`: `/assets/depreciation/create/`
+  - `assets:depreciation_schedule_detail`: `/assets/depreciation/<pk>/`
+  - `assets:depreciation_schedule_edit`: `/assets/depreciation/<pk>/edit/` [Draft only]
+  - `assets:depreciation_schedule_delete`: `/assets/depreciation/<pk>/delete/` [POST, Admin, Draft only]
+  - `assets:depreciation_schedule_calculate`: `/assets/depreciation/<pk>/calculate/` [POST, Draft only]
+  - `assets:depreciation_schedule_post`: `/assets/depreciation/<pk>/post/` [POST, Admin, Draft only]
+- **Revaluations:**
+  - `assets:revaluation_list`: `/assets/revaluations/`
+  - `assets:revaluation_create`: `/assets/revaluations/create/`
+  - `assets:revaluation_detail`: `/assets/revaluations/<pk>/`
+  - `assets:revaluation_edit`: `/assets/revaluations/<pk>/edit/` [Draft only]
+  - `assets:revaluation_delete`: `/assets/revaluations/<pk>/delete/` [POST, Admin, Draft only]
+  - `assets:revaluation_approve`: `/assets/revaluations/<pk>/approve/` [POST, Admin, Draft only]
+- **Transfers:**
+  - `assets:transfer_list`: `/assets/transfers/`
+  - `assets:transfer_create`: `/assets/transfers/create/`
+  - `assets:transfer_detail`: `/assets/transfers/<pk>/`
+  - `assets:transfer_edit`: `/assets/transfers/<pk>/edit/` [Draft only]
+  - `assets:transfer_delete`: `/assets/transfers/<pk>/delete/` [POST, Admin, Draft only]
+  - `assets:transfer_dispatch`: `/assets/transfers/<pk>/dispatch/` [POST, Draft only]
+  - `assets:transfer_complete`: `/assets/transfers/<pk>/complete/` [POST, Admin, in_transit only]
+- **Capitalization Policies:**
+  - `assets:capitalization_policy_list`: `/assets/capitalization-policies/`
+  - `assets:capitalization_policy_create`: `/assets/capitalization-policies/create/`
+  - `assets:capitalization_policy_detail`: `/assets/capitalization-policies/<pk>/` (includes interactive CapEx evaluator)
+  - `assets:capitalization_policy_edit`: `/assets/capitalization-policies/<pk>/edit/`
+  - `assets:capitalization_policy_delete`: `/assets/capitalization-policies/<pk>/delete/` [POST, Admin]
 
 ### 11.3 Asset Classification & Categorization
 Namespace: `assets:`
@@ -269,4 +339,13 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (432 passing tests across 11.1, 11.2, and 11.3).
+Unfiltered run on SQLite in-memory test database (674 passing tests across 11.1, 11.2, 11.3, and 11.4).
+
+---
+
+## Sidebar Wiring (`apps/core/navigation.py`)
+- `11.1`: Asset Procurement & Capitalization (`assets:asset_requisition_list`)
+- `11.2`: Inventory Audits & Tracking (`assets:asset_audit_list`)
+- `11.3`: Classification & Taxonomy (`assets:asset_category_list`)
+- `11.4`: Depreciation & Financials (`assets:depreciation_schedule_list`)
+
