@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ reading.number }} — Telemetry Reading — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_telemetry_reading_list' %}">Telemetry Readings</a>
+            <span>/</span>
+            <span>{{ reading.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ reading.number }}</h1>
+            <span class="badge {{ reading.metric_type_css }}">{{ reading.get_metric_type_display }}</span>
+            <span class="badge {{ reading.threshold_status_css }}">{{ reading.get_threshold_status_display }}</span>
+            {% if reading.is_anomaly %}
+            <span class="badge badge-purple">Statistical Anomaly</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_telemetry_reading_edit' reading.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+
+        {% if not reading.is_anomaly %}
+        <form method="post" action="{% url 'assets:asset_telemetry_reading_flag_anomaly' reading.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-purple-600 hover:bg-purple-50" title="Flag as Statistical Anomaly">
+                <i data-lucide="zap" class="w-4 h-4 me-1"></i> Flag Anomaly
+            </button>
+        </form>
+        {% endif %}
+
+        {% if not reading.triggered_maintenance_request %}
+        <form method="post" action="{% url 'assets:asset_telemetry_reading_trigger_request' reading.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Dispatch Corrective Maintenance Request">
+                <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Dispatch Repair Ticket
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_telemetry_reading_delete' reading.pk %}" class="inline" onsubmit="return confirm('Permanently delete reading {{ reading.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if reading.triggered_maintenance_request %}
+<div class="card bg-amber-50 border-amber-200 mb-6">
+    <div class="card-body flex items-center justify-between py-3">
+        <div class="flex items-center gap-3 text-amber-900">
+            <i data-lucide="wrench" class="w-5 h-5 text-amber-600"></i>
+            <div>
+                <span class="font-semibold">Linked Maintenance Request:</span>
+                <span class="font-mono text-sm ml-1">{{ reading.triggered_maintenance_request.number }}</span>
+                — {{ reading.triggered_maintenance_request.title }}
+                <span class="badge {{ reading.triggered_maintenance_request.status_css }} ml-2">{{ reading.triggered_maintenance_request.get_status_display }}</span>
+            </div>
+        </div>
+        <a href="{% url 'assets:asset_maintenance_request_detail' reading.triggered_maintenance_request.pk %}" class="btn btn-outline btn-sm bg-white">
+            View Request <i data-lucide="external-link" class="w-3.5 h-3.5 ms-1"></i>
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Telemetry & Envelope Analytics -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Measurement Metrics Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="activity" class="w-4 h-4 text-blue-600"></i> Physical Telemetry Values
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Measured Value</div>
+                        <div class="text-3xl font-extrabold text-slate-900 mt-1">
+                            {{ reading.reading_value }}
+                        </div>
+                        <div class="text-xs text-slate-500 font-medium mt-1">{{ reading.metric_unit }}</div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Expected Baseline</div>
+                        <div class="text-3xl font-bold text-slate-700 mt-1">
+                            {{ reading.baseline_value|default:"—" }}
+                        </div>
+                        <div class="text-xs text-slate-500 font-medium mt-1">{{ reading.metric_unit }}</div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Baseline Deviation</div>
+                        <div class="text-3xl font-bold mt-1 {% if reading.deviation_percentage > 20 %}text-red-600{% elif reading.deviation_percentage < -20 %}text-amber-600{% else %}text-green-600{% endif %}">
+                            {% if reading.deviation_percentage is not None %}
+                                {% if reading.deviation_percentage > 0 %}+{% endif %}{{ reading.deviation_percentage }}%
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-500 font-medium mt-1">Tolerance Envelope</div>
+                    </div>
+                </div>
+
+                {% if reading.alert_notes %}
+                <div class="mt-6">
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Diagnostic Analysis & Alert Notes</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-line text-slate-800">
+                        {{ reading.alert_notes }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Anomaly Detection Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-purple-600"></i> Automated Anomaly Classification
+                </h3>
+            </div>
+            <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                    <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold block">Anomaly Classification Status</span>
+                    <div class="mt-2">
+                        {% if reading.is_anomaly %}
+                            <span class="badge badge-purple text-sm py-1 px-3">Statistical Anomaly Detected</span>
+                        {% else %}
+                            <span class="badge badge-green text-sm py-1 px-3">Normal Operating Pattern</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded border border-slate-200">
+                    <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold block">Classification Confidence</span>
+                    <div class="text-2xl font-bold text-slate-900 mt-1">
+                        {{ reading.anomaly_confidence|default:"N/A" }}{% if reading.anomaly_confidence %}%{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Asset Links & Channel Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="radio" class="w-4 h-4 text-blue-600"></i> Sensor Channel & Equipment
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Sensor Identifier</span>
+                    <div class="font-mono font-semibold text-slate-900 text-base">
+                        {{ reading.sensor_identifier|default:"Direct Input / Unassigned" }}
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Telemetry Source</span>
+                    <span class="badge {{ reading.source_css }} mt-1">{{ reading.get_source_display }}</span>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Financial Fixed Asset</span>
+                    {% if reading.fixed_asset %}
+                        <div class="font-medium text-slate-900">{{ reading.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ reading.fixed_asset.asset_number }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Operational Machinery</span>
+                    {% if reading.operational_asset %}
+                        <div class="font-medium text-slate-900">{{ reading.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ reading.operational_asset.asset_tag }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Captured Timestamp</span>
+                    <div class="font-medium text-slate-800">{{ reading.recorded_at|date:"F d, Y H:i:s" }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Ingested By</span>
+                    <div class="font-medium text-slate-800">
+                        {{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Gateway" }}
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-slate-100 text-xs text-slate-400">
+                    Created: {{ reading.created_at|date:"M d, Y H:i" }}<br>
+                    Updated: {{ reading.updated_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
