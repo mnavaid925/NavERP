@@ -155,6 +155,22 @@
   - **Problem**: Computes KPIs on filtered `qs` while Schedules, Contracts, and Logs aggregate on `all_tenant_*` (workspace total).
   - **Fix**: Align to `all_tenant_requests.aggregate(...)` to show workspace-wide maintenance metrics consistently with sibling dashboards.
 
+---
+
+## Reviewer 5: `qa-smoke-tester` Findings
+
+### Verification Status: PASS (32/32 tests green)
+- **Standard Endpoints (24 passed)**: List, filtered list, junk-param list, create GET, detail GET, and edit GET for all 4 models (`AssetMaintenanceRequest`, `AssetMaintenanceSchedule`, `AssetServiceContract`, `AssetMaintenanceLog`).
+- **Cross-Tenant IDOR (8 passed)**: Attempting to access ACME entities with Globex credentials returns 404 across all detail and edit endpoints.
+- **CSRF & HTTP Method Safety**: All 14 mutation endpoints require `@require_POST`, with delete and approval actions protected by `@tenant_admin_required`.
+
+### Minor Findings
+- **[QA-M1] Form Validation Error Feedback in Modal Actions**
+  - **Files**: Action endpoints in `AssetMaintenanceRequests.py`, `AssetMaintenanceSchedules.py`, `AssetServiceContracts.py`.
+  - **Problem**: When a modal action form fails validation (e.g., negative completion meter), views redirect back with `messages.error(request, ...)` showing the first form error, but the modal does not auto-reopen.
+  - **Fix**: Standard NavERP pattern handles modal flash messages cleanly, but appending query parameter `?action_error=triage` allows frontend script to auto-reopen modal if needed.
+
+
 
 
 
