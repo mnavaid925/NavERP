@@ -135,7 +135,7 @@
                     <td class="text-right font-mono text-sm font-semibold text-slate-900">
                         ${{ item.new_fair_market_value|floatformat:2 }}
                     </td>
-                    <td class="text-right font-mono text-sm font-semibold {% if item.revaluation_adjustment < 0 %}text-red{% else %}text-green{% endif %}">
+                    <td class="text-right font-mono text-sm font-semibold {% if item.revaluation_adjustment < 0 %}text-red{% else %}text-ok{% endif %}">
                         {% if item.revaluation_adjustment > 0 %}+{% endif %}${{ item.revaluation_adjustment|floatformat:2 }}
                     </td>
                     <td>
