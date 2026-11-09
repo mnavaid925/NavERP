@@ -167,7 +167,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        {{ sched.assigned_technician.get_full_name|default:sched.assigned_technician.username|default:sched.preferred_vendor.name|default:"—" }}
+                        {% if sched.assigned_technician %}{{ sched.assigned_technician.get_full_name|default:sched.assigned_technician.username }}{% elif sched.preferred_vendor %}{{ sched.preferred_vendor.name }}{% else %}—{% endif %}
                     </td>
                     <td>
                         <span class="badge {{ sched.status_css }}">{{ sched.get_status_display }}</span>
