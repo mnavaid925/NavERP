@@ -51,7 +51,7 @@ class AssetDowntimeLog(TenantNumbered):
     CATEGORY_CSS = {
         "unplanned_breakdown": "badge-red",
         "planned_maintenance": "badge-info",
-        "setup_changeover": "badge-purple",
+        "setup_changeover": "badge-info",
         "tooling_adjustment": "badge-slate",
         "process_interruption": "badge-amber",
         "utility_outage": "badge-red",
