@@ -202,7 +202,11 @@
                 <div>
                     <span class="text-slate-500 block text-xs uppercase">Ingested By</span>
                     <div class="font-medium text-slate-800">
-                        {{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Gateway" }}
+                        {% if reading.recorded_by %}
+                            {{ reading.recorded_by.get_full_name|default:reading.recorded_by.username }}
+                        {% else %}
+                            System Gateway
+                        {% endif %}
                     </div>
                 </div>
 
