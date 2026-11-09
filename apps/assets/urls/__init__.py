@@ -18,6 +18,9 @@ from apps.assets.urls.AssetPerformance import (
 from apps.assets.urls.AssetProcurement import (
     urlpatterns as asset_procurement_urlpatterns,
 )
+from apps.assets.urls.AssetReliability import (
+    urlpatterns as asset_reliability_urlpatterns,
+)
 from apps.assets.views.overview import overview
 
 app_name = "assets"
@@ -32,4 +35,5 @@ urlpatterns = (
     + asset_depreciation_urlpatterns
     + asset_maintenance_urlpatterns
     + asset_performance_urlpatterns
+    + asset_reliability_urlpatterns
 )
