@@ -229,11 +229,14 @@ class AssetTransfer(TenantNumbered):
             if oa:
                 update_oa_fields = []
                 if self.destination_location:
-                    oa.current_location = self.destination_location
-                    update_oa_fields.append("current_location")
+                    oa.location = self.destination_location
+                    update_oa_fields.append("location")
                 if self.destination_custodian:
-                    oa.assigned_to = self.destination_custodian
-                    update_oa_fields.append("assigned_to")
+                    oa.custodian = self.destination_custodian
+                    update_oa_fields.append("custodian")
+                if self.destination_department:
+                    oa.org_unit = self.destination_department
+                    update_oa_fields.append("org_unit")
                 if update_oa_fields:
                     oa.save(update_fields=update_oa_fields)
 
