@@ -151,6 +151,7 @@ def asset_failure_mode_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_failure_mode_delete(request, pk):
     failure_mode = assets_object(request, AssetFailureMode, pk)
