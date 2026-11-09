@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, and capitalization threshold policies). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, and maintenance work history logs with GL posting). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -20,7 +20,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.2 Asset Inventory & Tracking**: Scheduled cycle counts, wall-to-wall physical audits, discrepancy reconciliation, facility/room/bin spatial relocations, tool crib equipment check-in/out lending with electronic signatures, and lost/stolen incident reporting with loss write-offs.
 - **11.3 Asset Classification & Categorization**: Hierarchies, UNSPSC taxonomy, manufacturer model specs, criticality scoring.
 - **11.4 Asset Depreciation & Accounting**: Depreciation runs, revaluations, impairment testing, salvage adjustments (interconnected with Module 2 ledger).
-- **11.5 Asset Maintenance & Repair**: Work orders, preventive maintenance calendars, meter readings, spare parts allocation.
+- **11.5 Asset Maintenance & Repair**: Breakdown tickets, triage, work orders, preventive maintenance calendars, runtime meter triggers, vendor AMC/SLA agreements, and work history logs with wrench time, ISO failure codes, and GL cost accounting.
 - **11.6 Asset Disposal & Decommissioning**: Asset retirement, scrap, auctions, trade-ins, write-offs, gain/loss calculation.
 
 ---
@@ -53,6 +53,11 @@ apps/assets/
       AssetRevaluations.py                    <- AssetRevaluation [AREV-]
       AssetTransfers.py                       <- AssetTransfer [AXFR-]
       CapitalizationPolicies.py               <- CapitalizationPolicy [ACTH-]
+    AssetMaintenance/                         <- Sub-module 11.5 models
+      AssetMaintenanceRequests.py             <- AssetMaintenanceRequest [AMRQ-]
+      AssetMaintenanceSchedules.py            <- AssetMaintenanceSchedule [AMSC-]
+      AssetServiceContracts.py                <- AssetServiceContract [ASVC-]
+      AssetMaintenanceLogs.py                 <- AssetMaintenanceLog [AMLG-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -76,6 +81,11 @@ apps/assets/
       AssetRevaluations.py                    <- AssetRevaluationForm
       AssetTransfers.py                       <- AssetTransferForm
       CapitalizationPolicies.py               <- CapitalizationPolicyForm
+    AssetMaintenance/                         <- Sub-module 11.5 forms
+      AssetMaintenanceRequests.py             <- AssetMaintenanceRequestForm, TriageForm, DispatchForm, ResolveForm, RejectForm
+      AssetMaintenanceSchedules.py            <- AssetMaintenanceScheduleForm, RecordCompletionForm
+      AssetServiceContracts.py                <- AssetServiceContractForm, RenewForm
+      AssetMaintenanceLogs.py                 <- AssetMaintenanceLogForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -100,6 +110,11 @@ apps/assets/
       AssetRevaluations.py                    <- Revaluation & Impairment CRUD + approve & apply
       AssetTransfers.py                       <- Asset Transfer CRUD + dispatch, complete & update assets
       CapitalizationPolicies.py               <- Capitalization Policy CRUD + interactive evaluator
+    AssetMaintenance/                         <- Sub-module 11.5 views
+      AssetMaintenanceRequests.py             <- Request CRUD + triage, dispatch, resolve, close, reject
+      AssetMaintenanceSchedules.py            <- Schedule CRUD + pause, activate, generate_request, record_completion
+      AssetServiceContracts.py                <- Contract CRUD + record_visit, renew, terminate
+      AssetMaintenanceLogs.py                 <- Log CRUD + submit_review, approve, post_gl
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -122,11 +137,16 @@ apps/assets/
       AssetRevaluations.py
       AssetTransfers.py
       CapitalizationPolicies.py
+    AssetMaintenance/                         <- Sub-module 11.5 URL route definitions
+      AssetMaintenanceRequests.py
+      AssetMaintenanceSchedules.py
+      AssetServiceContracts.py
+      AssetMaintenanceLogs.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3 & 11.4)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4 & 11.5)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -143,6 +163,10 @@ apps/assets/
     test_assetdepreciation_forms.py           <- 11.4 Form validations, system exclusions, reject_foreign
     test_assetdepreciation_views.py           <- 11.4 View contracts, filters, status guards, actions, evaluator
     test_assetdepreciation_security.py        <- 11.4 IDOR (404), RBAC admin gates (403), mass-assignment, audits
+    test_asset_maintenance_models.py          <- 11.5 Model invariants, auto-numbering, lifecycle flows, cost calculation
+    test_asset_maintenance_forms.py           <- 11.5 Form validations, tenant kwargs, foreign key isolation
+    test_asset_maintenance_views.py           <- 11.5 View contracts, filters, action endpoints, pagination
+    test_asset_maintenance_security.py        <- 11.5 IDOR (404), RBAC gates (403), cross-tenant FK injection, status guards
 ```
 
 ---
@@ -197,9 +221,66 @@ apps/assets/
    - **Fields:** `number`, `name`, `policy_scope` (`global_default`, `category_override`, `tax_book_safe_harbor`), `category` (FK `AssetCategory`), `minimum_cost_threshold`, `minimum_useful_life_months`, `default_classification` (`capitalize`, `expense_immediately`, `manual_review`), `de_minimis_safe_harbor` (Bool), `applicable_gaap_standard`, `default_cip_account` (FK `accounting.GLAccount`), `default_expense_account` (FK `accounting.GLAccount`), `policy_notes`, `effective_from`, `effective_to`, `is_active`.
    - **Invariants:** Capitalization decision engine `evaluate_asset(cost, useful_life_months)` evaluates CapEx vs OpEx vs manual review with safe-harbor compliance checks and robust numeric guarding against invalid, infinite, or negative inputs.
 
+### 11.5 Asset Maintenance & Repair
+1. **`AssetMaintenanceRequest`** (`AMRQ-`):
+   - **Fields:** `number`, `title`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `requester` (FK `User`), `department` (FK `core.OrgUnit`), `request_type` (`breakdown_repair`, `preventive_service`, `safety_hazard`, `calibration_request`, `inspection_finding`), `urgency` (`low`, `medium`, `high`, `critical`), `is_breakdown` (Bool), `downtime_started_at`, `symptom_description`, `triage_notes`, `assigned_technician` (FK `User`), `assigned_vendor` (FK `core.Party`), `service_contract` (FK `AssetServiceContract`), `dispatched_work_order` (FK `scm.MaintenanceWorkOrder`), `status` (`submitted`, `triaged`, `assigned`, `in_progress`, `resolved`, `closed`, `rejected`), `resolution_summary`, `resolved_at`, `resolved_by` (FK `User`).
+   - **Invariants:** Operator emergency tickets, supervisor triage, dispatch to internal technician or external vendor with optional SLA contract linkage, lifecycle state machine (`submitted` -> `triaged` -> `assigned` -> `in_progress` -> `resolved` -> `closed` or `rejected`).
+2. **`AssetMaintenanceSchedule`** (`AMSC-`):
+   - **Fields:** `number`, `name`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `asset_category` (FK `AssetCategory`), `schedule_type` (`time_based`, `meter_based`, `condition_based`, `seasonal_shutdown`), `frequency_interval`, `frequency_unit` (`days`, `weeks`, `months`, `years`, `runtime_hours`, `cycles_count`), `meter_trigger_threshold`, `lead_time_days`, `last_service_date`, `last_service_meter`, `next_due_date`, `next_due_meter`, `assigned_technician` (FK `User`), `preferred_vendor` (FK `core.Party`), `service_contract` (FK `AssetServiceContract`), `service_checklist`, `is_mandatory` (Bool), `is_active` (Bool), `status` (`active`, `overdue`, `paused`, `completed`, `retired`), `notes`.
+   - **Invariants:** Automatic recurrence advancement on completion (`record_completion`), meter delta tracking, SOP markdown/text checklist parsing, on-demand maintenance request spawning (`generate_request`).
+3. **`AssetServiceContract`** (`ASVC-`):
+   - **Fields:** `number`, `contract_reference`, `title`, `vendor` (FK `core.Party`), `contract_type` (`comprehensive_amc`, `labor_only_amc`, `oem_warranty`, `extended_warranty`, `preventive_inspection_only`, `on_call_sla`), `sla_tier` (`platinum_24_7`, `gold_same_day`, `silver_next_day`, `bronze`), `start_date`, `end_date`, `contract_value`, `currency` (FK `accounting.Currency`), `billing_frequency` (`annual`, `semi_annual`, `quarterly`, `monthly`), `response_time_sla_hours`, `resolution_time_sla_hours`, `included_routine_visits`, `routine_visits_completed`, `included_emergency_visits`, `emergency_visits_completed`, `parts_discount_percent`, `labor_discount_percent`, `contact_person`, `contact_phone`, `contact_email`, `status` (`draft`, `active`, `expiring_soon`, `expired`, `renewed`, `terminated`), `renewal_notes`, `termination_reason`, `notes`.
+   - **Invariants:** Quota tracking for routine/emergency visits, SLA compliance monitoring, early termination gated by `@tenant_admin_required`, contract renewal with auto-rollover.
+4. **`AssetMaintenanceLog`** (`AMLG-`):
+   - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `maintenance_request` (FK `AssetMaintenanceRequest`), `maintenance_schedule` (FK `AssetMaintenanceSchedule`), `service_contract` (FK `AssetServiceContract`), `work_order` (FK `scm.MaintenanceWorkOrder`), `service_date`, `completion_date`, `maintenance_type` (`corrective_repair`, `preventive_service`, `emergency_breakdown`, `calibration`, `inspection`, `overhaul`), `failure_code` (`mechanical_wear`, `electrical_short`, `hydraulic_leak`, `software_fault`, `operator_error`, `corrosion`, `thermal_overload`, `lubrication_failure`, `normal_wear`, `other`), `downtime_hours`, `meter_reading`, `lead_technician` (FK `User`), `service_vendor` (FK `core.Party`), `labor_hours`, `labor_cost`, `parts_consumed_summary`, `parts_cost`, `vendor_invoice_cost`, `total_cost`, `expense_account` (FK `accounting.GLAccount`), `root_cause_analysis`, `action_taken`, `status` (`draft`, `in_review`, `approved`, `posted`), `approved_by` (FK `User`), `approved_at`.
+   - **Invariants:** Cost roll-up (`labor_cost + parts_cost + vendor_invoice_cost = total_cost`), ISO 14224 failure categorization, supervisory approval workflow, GL posting with synchronized updates across linked schedule, request, and contract.
+
 ---
 
-## Key URLs & Routes (11.2, 11.3 & 11.4)
+## Key URLs & Routes (11.2, 11.3, 11.4 & 11.5)
+
+### 11.5 Asset Maintenance & Repair
+Namespace: `assets:`
+- **Maintenance Requests:**
+  - `assets:asset_maintenance_request_list`: `/assets/maintenance-requests/`
+  - `assets:asset_maintenance_request_create`: `/assets/maintenance-requests/create/`
+  - `assets:asset_maintenance_request_detail`: `/assets/maintenance-requests/<pk>/`
+  - `assets:asset_maintenance_request_edit`: `/assets/maintenance-requests/<pk>/edit/`
+  - `assets:asset_maintenance_request_delete`: `/assets/maintenance-requests/<pk>/delete/` [POST, Admin]
+  - `assets:asset_maintenance_request_triage`: `/assets/maintenance-requests/<pk>/triage/` [POST]
+  - `assets:asset_maintenance_request_dispatch`: `/assets/maintenance-requests/<pk>/dispatch/` [POST]
+  - `assets:asset_maintenance_request_resolve`: `/assets/maintenance-requests/<pk>/resolve/` [POST]
+  - `assets:asset_maintenance_request_close`: `/assets/maintenance-requests/<pk>/close/` [POST]
+  - `assets:asset_maintenance_request_reject`: `/assets/maintenance-requests/<pk>/reject/` [POST]
+- **Maintenance Schedules:**
+  - `assets:asset_maintenance_schedule_list`: `/assets/schedules/`
+  - `assets:asset_maintenance_schedule_create`: `/assets/schedules/create/`
+  - `assets:asset_maintenance_schedule_detail`: `/assets/schedules/<pk>/`
+  - `assets:asset_maintenance_schedule_edit`: `/assets/schedules/<pk>/edit/`
+  - `assets:asset_maintenance_schedule_delete`: `/assets/schedules/<pk>/delete/` [POST, Admin]
+  - `assets:asset_maintenance_schedule_activate`: `/assets/schedules/<pk>/activate/` [POST]
+  - `assets:asset_maintenance_schedule_pause`: `/assets/schedules/<pk>/pause/` [POST]
+  - `assets:asset_maintenance_schedule_generate_request`: `/assets/schedules/<pk>/generate-request/` [POST]
+  - `assets:asset_maintenance_schedule_record_completion`: `/assets/schedules/<pk>/record-completion/` [POST]
+- **Service Contracts:**
+  - `assets:asset_service_contract_list`: `/assets/service-contracts/`
+  - `assets:asset_service_contract_create`: `/assets/service-contracts/create/`
+  - `assets:asset_service_contract_detail`: `/assets/service-contracts/<pk>/`
+  - `assets:asset_service_contract_edit`: `/assets/service-contracts/<pk>/edit/`
+  - `assets:asset_service_contract_delete`: `/assets/service-contracts/<pk>/delete/` [POST, Admin]
+  - `assets:asset_service_contract_activate`: `/assets/service-contracts/<pk>/activate/` [POST]
+  - `assets:asset_service_contract_record_visit`: `/assets/service-contracts/<pk>/record-visit/` [POST]
+  - `assets:asset_service_contract_renew`: `/assets/service-contracts/<pk>/renew/` [POST]
+  - `assets:asset_service_contract_terminate`: `/assets/service-contracts/<pk>/terminate/` [POST, Admin]
+- **Maintenance Logs:**
+  - `assets:asset_maintenance_log_list`: `/assets/logs/`
+  - `assets:asset_maintenance_log_create`: `/assets/logs/create/`
+  - `assets:asset_maintenance_log_detail`: `/assets/logs/<pk>/`
+  - `assets:asset_maintenance_log_edit`: `/assets/logs/<pk>/edit/`
+  - `assets:asset_maintenance_log_delete`: `/assets/logs/<pk>/delete/` [POST, Admin]
+  - `assets:asset_maintenance_log_submit_review`: `/assets/logs/<pk>/submit-review/` [POST]
+  - `assets:asset_maintenance_log_approve`: `/assets/logs/<pk>/approve/` [POST, Admin]
+  - `assets:asset_maintenance_log_post_gl`: `/assets/logs/<pk>/post-gl/` [POST, Admin]
 
 ### 11.4 Asset Depreciation & Financial Management
 Namespace: `assets:`
@@ -339,7 +420,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (674 passing tests across 11.1, 11.2, 11.3, and 11.4).
+Unfiltered run on SQLite in-memory test database (766 passing tests across 11.1, 11.2, 11.3, 11.4, and 11.5).
 
 ---
 
@@ -348,4 +429,5 @@ Unfiltered run on SQLite in-memory test database (674 passing tests across 11.1,
 - `11.2`: Inventory Audits & Tracking (`assets:asset_audit_list`)
 - `11.3`: Classification & Taxonomy (`assets:asset_category_list`)
 - `11.4`: Depreciation & Financials (`assets:depreciation_schedule_list`)
+- `11.5`: Maintenance & Repair (`assets:asset_maintenance_request_list`)
 
