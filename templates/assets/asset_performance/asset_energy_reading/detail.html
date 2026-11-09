@@ -196,7 +196,7 @@
                 <div>
                     <span class="text-xs text-slate-500">Logged By</span>
                     <div class="text-slate-800 font-medium">
-                        {{ reading.recorded_by.get_full_name|default:reading.recorded_by.username|default:"System Ingestion" }}
+                        {% if reading.recorded_by %}{{ reading.recorded_by.get_full_name|default:reading.recorded_by.username }}{% else %}System Ingestion{% endif %}
                     </div>
                 </div>
                 <div>
