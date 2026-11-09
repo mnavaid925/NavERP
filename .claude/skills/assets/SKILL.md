@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, and technical specification templates). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -43,6 +43,11 @@ apps/assets/
       AssetMovementLogs.py                    <- AssetMovementLog [AMOV-]
       AssetCustodyLogs.py                     <- AssetCustodyLog [ACHK-]
       AssetIncidentReports.py                 <- AssetIncidentReport [AINC-]
+    AssetClassification/                      <- Sub-module 11.3 models
+      AssetCategories.py                      <- AssetCategory [ACAT-]
+      AssetModels.py                          <- AssetModel [AMOD-]
+      AssetCriticalityAssessments.py          <- AssetCriticalityAssessment [ACRT-]
+      AssetSpecificationTemplates.py          <- AssetSpecificationTemplate [ASPC-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -56,6 +61,11 @@ apps/assets/
       AssetMovementLogs.py                    <- AssetMovementLogForm
       AssetCustodyLogs.py                     <- AssetCustodyLogForm
       AssetIncidentReports.py                 <- AssetIncidentReportForm
+    AssetClassification/                      <- Sub-module 11.3 forms
+      AssetCategories.py                      <- AssetCategoryForm
+      AssetModels.py                          <- AssetModelForm
+      AssetCriticalityAssessments.py          <- AssetCriticalityAssessmentForm
+      AssetSpecificationTemplates.py          <- AssetSpecificationTemplateForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -70,6 +80,11 @@ apps/assets/
       AssetMovementLogs.py                    <- Movement CRUD + dispatch, receive, cancel
       AssetCustodyLogs.py                     <- Custody CRUD + checkin, extend, mark_lost
       AssetIncidentReports.py                 <- Incident CRUD + investigate, resolve_recovered, authorize_write_off, close
+    AssetClassification/                      <- Sub-module 11.3 views
+      AssetCategories.py                      <- Category CRUD
+      AssetModels.py                          <- Model CRUD
+      AssetCriticalityAssessments.py          <- Criticality CRUD + approve & sync to scm.Asset
+      AssetSpecificationTemplates.py          <- Spec Template CRUD
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -82,9 +97,14 @@ apps/assets/
       AssetMovementLogs.py
       AssetCustodyLogs.py
       AssetIncidentReports.py
+    AssetClassification/                      <- Sub-module 11.3 URL route definitions
+      AssetCategories.py
+      AssetModels.py
+      AssetCriticalityAssessments.py
+      AssetSpecificationTemplates.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1 & 11.2)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2 & 11.3)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -95,11 +115,15 @@ apps/assets/
     test_assetinventorytracking_forms.py      <- 11.2 Form validation, system field exclusion, reject_foreign
     test_assetinventorytracking_views.py      <- 11.2 View context contracts, filters, lifecycle actions
     test_assetinventorytracking_security.py   <- 11.2 IDOR (404), RBAC admin gates (403), method safety (405)
+    test_assetclassification_models.py        <- 11.3 Model invariants, hierarchy cycles, composite scoring
+    test_assetclassification_forms.py         <- 11.3 Form validation, mass-assignment exclusions, reject_foreign
+    test_assetclassification_views.py         <- 11.3 View context contracts, filters, status guards, sync
+    test_assetclassification_security.py      <- 11.3 IDOR (404), RBAC gates (403), method safety (405)
 ```
 
 ---
 
-## Models & Data Dictionary (11.1 & 11.2)
+## Models & Data Dictionary (11.1, 11.2, 11.3)
 
 ### 11.1 Asset Procurement
 1. **`AssetRequisition`** (`AREQ-`): CapEx purchase requests with budget codes, segregation of duties approval, and PO conversion.
@@ -120,6 +144,52 @@ apps/assets/
 4. **`AssetIncidentReport`** (`AINC-`):
    - **Fields:** `number`, `title`, `asset` (FK `scm.Asset`), `incident_type` (`lost`, `stolen`, `damaged_beyond_repair`, `missing_in_audit`, `vandalism`, `natural_disaster`), `severity` (`low`, `medium`, `high`, `critical`), `status` (`reported`, `under_investigation`, `confirmed_lost`, `recovered`, `write_off_pending`, `written_off`, `closed`), `resolution_action` (`pending`, `recovered`, `replacement_sourced`, `written_off`, `unresolved_closed`), `incident_date`, `last_known_location` (FK `scm.Location`), `custodian_at_loss` (FK `core.Party`), `investigator` (FK `User`), `police_report_filed`, `police_report_number`, `police_precinct`, `police_filing_date`, `insurance_claim_filed`, `insurance_carrier`, `insurance_claim_number`, `estimated_loss_value`, `insurance_claimed_amount`, `insurance_settled_amount`, `incident_description`, `investigation_findings`, `write_off_authorized_by`, `write_off_date`, `write_off_notes`.
    - **Invariants:** Write-off authorization requires `@tenant_admin_required`, sets operational `scm.Asset.status = 'disposed'`, and is guarded in UI via `request.user.is_tenant_admin`.
+
+### 11.3 Asset Classification & Categorization
+1. **`AssetCategory`** (`ACAT-`):
+   - **Fields:** `code`, `name`, `parent` (FK `self`), `category_type` (`machinery`, `facility`, `vehicle`, `it_hardware`, `tooling`, `office`), `default_depreciation_method` (`straight_line`, `reducing_balance`, `units_of_production`), `default_useful_life_months`, `unspsc_code`, `iso_55000_class`, `is_active`, `description`.
+   - **Invariants:** Cycle detection in `clean()` (prevents self-parenting and recursive loops), tenant isolation enforcement in hierarchy traversal, uppercase `code`.
+2. **`AssetModel`** (`AMOD-`):
+   - **Fields:** `model_number`, `name`, `category` (FK `AssetCategory`), `manufacturer` (FK `core.Party`), `manufacturer_name_fallback`, `estimated_replacement_cost` (non-negative `MinValueValidator`), `expected_life_years`, `warranty_duration_months`, `metering_type` (`none`, `hours`, `odometer_km`, `cycles`), `model_status` (`active`, `phase_out`, `obsolete`).
+   - **Properties:** `display_manufacturer` with Party name and fallback text resolution.
+3. **`AssetCriticalityAssessment`** (`ACRT-`):
+   - **Fields:** `number`, `asset` (FK `scm.Asset`), `assessor` (FK `core.Party`), `assessment_date`, `production_impact`, `safety_impact`, `environmental_impact`, `regulatory_impact`, `maintenance_cost_impact` (scores 1-5), `single_point_of_failure` (Bool), `composite_score`, `abc_rating` (`A`, `B`, `C`), `assessment_status` (`draft`, `approved`, `superseded`), `approved_by` (FK `User`), `approved_at`, `notes`.
+   - **Invariants:** Composite scoring with +5 SPOF bonus and auto-tier derivation. Approval requires `@tenant_admin_required`, supersedes prior approved assessments for the asset, and syncs operational `scm.Asset.criticality` (`critical`, `high`, `medium`, `low`) inside an atomic transaction. Status guards prevent edit/delete of `approved`/`superseded` records.
+4. **`AssetSpecificationTemplate`** (`ASPC-`):
+   - **Fields:** `number`, `category` (FK `AssetCategory`), `model` (FK `AssetModel`), `attribute_name`, `attribute_key` (snake_case slug), `data_type` (`text`, `numeric`, `boolean`, `date`, `select`), `unit_of_measure`, `min_numeric_value`, `max_numeric_value`, `validation_regex`, `select_choices`, `is_required`, `is_searchable`, `is_filterable`.
+   - **Invariants:** Must attach to either Category or Model. Validates regex syntax with `re.compile()` in `clean()`. Numeric bound validation (`min <= max`).
+
+---
+
+## Key URLs & Routes (11.2 & 11.3)
+
+### 11.3 Asset Classification & Categorization
+Namespace: `assets:`
+- **Categories:**
+  - `assets:asset_category_list`: `/assets/classification/categories/`
+  - `assets:asset_category_create`: `/assets/classification/categories/create/`
+  - `assets:asset_category_detail`: `/assets/classification/categories/<pk>/`
+  - `assets:asset_category_edit`: `/assets/classification/categories/<pk>/edit/`
+  - `assets:asset_category_delete`: `/assets/classification/categories/<pk>/delete/` [POST, Admin]
+- **Models:**
+  - `assets:asset_model_list`: `/assets/classification/models/`
+  - `assets:asset_model_create`: `/assets/classification/models/create/`
+  - `assets:asset_model_detail`: `/assets/classification/models/<pk>/`
+  - `assets:asset_model_edit`: `/assets/classification/models/<pk>/edit/`
+  - `assets:asset_model_delete`: `/assets/classification/models/<pk>/delete/` [POST, Admin]
+- **Criticality Assessments:**
+  - `assets:asset_criticality_assessment_list`: `/assets/classification/criticality-assessments/`
+  - `assets:asset_criticality_assessment_create`: `/assets/classification/criticality-assessments/create/`
+  - `assets:asset_criticality_assessment_detail`: `/assets/classification/criticality-assessments/<pk>/`
+  - `assets:asset_criticality_assessment_edit`: `/assets/classification/criticality-assessments/<pk>/edit/` [Draft only]
+  - `assets:asset_criticality_assessment_delete`: `/assets/classification/criticality-assessments/<pk>/delete/` [POST, Admin, Draft only]
+  - `assets:asset_criticality_assessment_approve`: `/assets/classification/criticality-assessments/<pk>/approve/` [POST, Admin]
+- **Specification Templates:**
+  - `assets:asset_specification_template_list`: `/assets/classification/spec-templates/`
+  - `assets:asset_specification_template_create`: `/assets/classification/spec-templates/create/`
+  - `assets:asset_specification_template_detail`: `/assets/classification/spec-templates/<pk>/`
+  - `assets:asset_specification_template_edit`: `/assets/classification/spec-templates/<pk>/edit/`
+  - `assets:asset_specification_template_delete`: `/assets/classification/spec-templates/<pk>/delete/` [POST, Admin]
 
 ---
 
@@ -199,4 +269,4 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (238 passing tests).
+Unfiltered run on SQLite in-memory test database (432 passing tests across 11.1, 11.2, and 11.3).
