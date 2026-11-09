@@ -144,6 +144,8 @@ class AssetCategory(TenantNumbered):
             curr = self.parent
             depth = 0
             while curr:
+                if self.tenant_id and curr.tenant_id != self.tenant_id:
+                    raise ValidationError({"parent": "Parent category belongs to another workspace."})
                 depth += 1
                 if depth > 10:
                     raise ValidationError({"parent": "Maximum category hierarchy depth (10 levels) exceeded."})
