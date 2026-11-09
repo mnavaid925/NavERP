@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
 from django.db import models
@@ -211,15 +211,17 @@ class AssetDowntimeLog(TenantNumbered):
 
     def calculate_duration_and_cost(self):
         if self.started_at and self.ended_at and self.ended_at >= self.started_at:
-            delta_seconds = (self.ended_at - self.started_at).total_seconds()
-            self.duration_minutes = Decimal(str(round(delta_seconds / 60.0, 2)))
+            delta_seconds = Decimal(str((self.ended_at - self.started_at).total_seconds()))
+            self.duration_minutes = (delta_seconds / Decimal("60.0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         elif not self.ended_at and self.started_at:
-            delta_seconds = max(0, (timezone.now() - self.started_at).total_seconds())
-            self.duration_minutes = Decimal(str(round(delta_seconds / 60.0, 2)))
+            delta_seconds = Decimal(str(max(0.0, (timezone.now() - self.started_at).total_seconds())))
+            self.duration_minutes = (delta_seconds / Decimal("60.0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         if self.hourly_cost_rate and self.duration_minutes:
             hours = self.duration_minutes / Decimal("60.0")
-            self.total_downtime_cost = Decimal(str(round(float(hours * self.hourly_cost_rate), 2)))
+            self.total_downtime_cost = (hours * self.hourly_cost_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            self.total_downtime_cost = Decimal("0.00")
 
     def save(self, *args, **kwargs):
         self.calculate_duration_and_cost()
