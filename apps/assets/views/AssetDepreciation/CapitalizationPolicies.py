@@ -64,6 +64,7 @@ def capitalization_policy_list(request):
         "safe_harbor_count": agg["safe_harbor"] or 0,
         "override_count": agg["overrides"] or 0,
         "q": q,
+        "search_query": q,
         "selected_scope": selected_scope,
         "selected_category": selected_category,
     }
