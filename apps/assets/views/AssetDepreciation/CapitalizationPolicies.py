@@ -1,3 +1,5 @@
+from decimal import InvalidOperation
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -91,7 +93,7 @@ def capitalization_policy_detail(request, pk):
                 "cost": eval_cost,
                 "life": eval_life or "12",
             }
-        except (ValueError, TypeError):
+        except (InvalidOperation, ValueError, TypeError):
             eval_result = None
 
     context = {
