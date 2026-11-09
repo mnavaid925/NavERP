@@ -159,6 +159,12 @@ def asset_criticality_assessment_edit(request, pk):
 @tenant_admin_required
 def asset_criticality_assessment_delete(request, pk):
     assessment = assets_object(request, AssetCriticalityAssessment, pk=pk)
+    if assessment.assessment_status in ("approved", "superseded"):
+        messages.error(
+            request,
+            f"Assessment {assessment.number} cannot be deleted because it is {assessment.get_assessment_status_display()}.",
+        )
+        return redirect("assets:asset_criticality_assessment_detail", pk=assessment.pk)
     number = assessment.number
     write_audit_log(request.user, assessment, "delete", tenant=request.tenant)
     assessment.delete()
