@@ -60,9 +60,9 @@
             <i data-lucide="wrench" class="w-5 h-5 text-amber-600"></i>
             <div>
                 <span class="font-semibold">Linked Maintenance Request:</span>
-                <span class="font-mono text-sm ml-1">{{ reading.triggered_maintenance_request.number }}</span>
+                <span class="font-mono text-sm ms-1">{{ reading.triggered_maintenance_request.number }}</span>
                 — {{ reading.triggered_maintenance_request.title }}
-                <span class="badge {{ reading.triggered_maintenance_request.status_css }} ml-2">{{ reading.triggered_maintenance_request.get_status_display }}</span>
+                <span class="badge {{ reading.triggered_maintenance_request.status_css }} ms-2">{{ reading.triggered_maintenance_request.get_status_display }}</span>
             </div>
         </div>
         <a href="{% url 'assets:asset_maintenance_request_detail' reading.triggered_maintenance_request.pk %}" class="btn btn-outline btn-sm bg-white">
