@@ -41,3 +41,21 @@ None.
 - `templates/assets/assetreliability/asset_condition_assessment/list.html:217,220` — Pagination query parameters omit `category`, `assessment_type`, and `operating_status`. Fix: preserve all query filters in pagination links.
 - `asset_telemetry_reading/list.html`, `asset_failure_mode/list.html`, and `asset_calibration_record/list.html` — Secondary filter parameters dropped in pagination links. Fix: preserve all GET parameters in pagination links.
 
+---
+
+## Pass 3: Frontend Reviewer Findings
+
+### Critical
+- `templates/assets/assetreliability/asset_condition_assessment/detail.html:222` — Unguarded `assessment.inspector.get_full_name|default:assessment.inspector.username` crashes with 500 when inspector is None (Lesson L10). Fix: wrap in `{% if assessment.inspector %}...{% else %}—{% endif %}`. (Applies also to `asset_telemetry_reading/detail.html:205` for `recorded_by`, `asset_failure_mode/detail.html:224` for `assessed_by`, and `asset_calibration_record/detail.html:218` for `calibrated_by`).
+
+### Important
+- `templates/assets/assetreliability/asset_telemetry_reading/{list.html:174, detail.html:20, 139}` — Non-existent theme.css badge class `badge-purple` used for anomaly indicator (Lesson L33). Fix: replace `badge-purple` with `badge-amber`.
+- `templates/assets/assetreliability/` list templates omit GET filter parameters in pagination links (Rule 6 / L9). Fix: preserve `assessment_type`, `category`, `metric_type`, `source`, `is_anomaly`, `status`, `vendor` across pagination links.
+
+### Minor
+- `templates/assets/assetreliability/asset_calibration_record/detail.html:91` — Conflicting verification banner logic for quarantined calibration result. Fix: include `quarantined` alongside `fail_out_of_tolerance` in condition.
+- `templates/assets/assetreliability/asset_telemetry_reading/detail.html:105` — When `deviation_percentage` is None, fallback colors dash green instead of muted. Fix: add `is None` guard.
+- Non-directional spacing classes `ml-*` in detail/form templates. Fix: replace with `ms-*` for RTL compatibility.
+- Add matching `aria-label` to table icon buttons alongside `title`.
+
+
