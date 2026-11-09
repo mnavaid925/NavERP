@@ -34,8 +34,10 @@ def asset_calibration_record_list(request):
             | Q(instrument_tag__icontains=q)
             | Q(reference_standard_used__icontains=q)
             | Q(certificate_number__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
-            | Q(operational_asset__asset_tag__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
+            | Q(fixed_asset__name__icontains=q)
+            | Q(operational_asset__tag_code__icontains=q)
+            | Q(operational_asset__name__icontains=q)
         )
 
     # Filters
@@ -48,8 +50,8 @@ def asset_calibration_record_list(request):
         qs = qs.filter(status=status_filter)
 
     vendor_filter = request.GET.get("vendor", "").strip()
-    if vendor_filter:
-        qs = qs.filter(service_vendor_id=vendor_filter)
+    if vendor_filter and vendor_filter.isdigit():
+        qs = qs.filter(service_vendor_id=int(vendor_filter))
 
     # KPI counts over tenant
     today = timezone.now().date()
