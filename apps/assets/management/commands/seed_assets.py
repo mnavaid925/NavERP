@@ -16,10 +16,14 @@ from apps.assets.models import (
     AssetCustodyLog,
     AssetDepreciationSchedule,
     AssetIncidentReport,
+    AssetMaintenanceLog,
+    AssetMaintenanceRequest,
+    AssetMaintenanceSchedule,
     AssetModel,
     AssetMovementLog,
     AssetRequisition,
     AssetRevaluation,
+    AssetServiceContract,
     AssetSpecificationTemplate,
     AssetTag,
     AssetTransfer,
@@ -44,6 +48,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetMaintenanceLog.objects.all().delete()
+            AssetMaintenanceRequest.objects.all().delete()
+            AssetMaintenanceSchedule.objects.all().delete()
+            AssetServiceContract.objects.all().delete()
             AssetDepreciationSchedule.objects.all().delete()
             AssetRevaluation.objects.all().delete()
             AssetTransfer.objects.all().delete()
@@ -72,6 +80,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_2(tenant)
             self._seed_tenant_11_3(tenant)
             self._seed_tenant_11_4(tenant)
+            self._seed_tenant_11_5(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -965,3 +974,227 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write(f"[{tenant.name}] 11.4 Seeding complete (2 policies, 2 schedules, 1 revaluation, 1 transfer).")
+
+    def _seed_tenant_11_5(self, tenant):
+        # Idempotency guard for 11.5
+        if AssetMaintenanceRequest.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.5 Maintenance data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.5 Maintenance & Repair Management...")
+
+        user = User.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(is_active=True).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first() or Party.objects.filter(tenant=tenant).first()
+        fa_primary = FixedAsset.objects.filter(tenant=tenant).first()
+        oa_primary = Asset.objects.filter(tenant=tenant).first()
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        expense_acc = GLAccount.objects.filter(tenant=tenant, account_type="expense").first() or GLAccount.objects.filter(tenant=tenant).first()
+        category = AssetCategory.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Service Contracts
+            svc1 = AssetServiceContract.objects.create(
+                tenant=tenant,
+                contract_number="AMC-2026-CAT-01",
+                title=f"Comprehensive Hydraulic & Mechanical SLA - {fa_primary.name if fa_primary else 'Plant Equipment'}",
+                vendor=vendor,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                contract_type="comprehensive_amc",
+                start_date=timezone.now().date() - timezone.timedelta(days=60),
+                end_date=timezone.now().date() + timezone.timedelta(days=305),
+                contract_value=Decimal("18500.00"),
+                currency=currency,
+                billing_frequency="annual",
+                sla_response_hours=4,
+                sla_resolution_hours=24,
+                pm_visits_included=4,
+                pm_visits_completed=1,
+                coverage_terms="Comprehensive parts and labor maintenance agreement including routine quarterly inspections and 24/7 emergency breakdown coverage with 4-hour on-site response guarantee.",
+                auto_renew=True,
+                contact_person="Marcus Vance",
+                contact_phone="+1-555-882-9901",
+                contact_email="service@acmevendors.com",
+                status="active",
+                notes="Primary plant floor equipment service agreement. Priority hotline SLA active.",
+            )
+
+            svc2 = AssetServiceContract.objects.create(
+                tenant=tenant,
+                contract_number="OEM-EXT-2026-09",
+                title="Critical Spindle OEM Extended Warranty Agreement",
+                vendor=vendor,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                contract_type="oem_warranty_extension",
+                start_date=timezone.now().date() - timezone.timedelta(days=15),
+                end_date=timezone.now().date() + timezone.timedelta(days=350),
+                contract_value=Decimal("6200.00"),
+                currency=currency,
+                billing_frequency="annual",
+                sla_response_hours=2,
+                sla_resolution_hours=12,
+                pm_visits_included=2,
+                pm_visits_completed=0,
+                coverage_terms="Factory-certified spindle cartridge replacement guarantee covering manufacturing defects, thermal runout, and high-frequency sensor errors.",
+                auto_renew=False,
+                contact_person="Helena Cross",
+                contact_phone="+1-555-443-1200",
+                contact_email="warranty@haasoem.com",
+                status="active",
+            )
+
+            # 2. PM Schedules
+            sched1 = AssetMaintenanceSchedule.objects.create(
+                tenant=tenant,
+                name=f"Monthly Hydraulic Filter & Fluid Check - {fa_primary.name if fa_primary else 'Equipment'}",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=category,
+                schedule_type="time_based",
+                frequency_interval=30,
+                frequency_unit="days",
+                lead_time_days=7,
+                last_service_date=timezone.now().date() - timezone.timedelta(days=25),
+                next_due_date=timezone.now().date() + timezone.timedelta(days=5),
+                assigned_technician=user,
+                preferred_vendor=vendor,
+                service_contract=svc1,
+                service_checklist="1. Inspect fluid reservoir levels and color.\n2. Measure operating pressure at idle and load.\n3. Replace 10-micron return line cartridge filter.\n4. Check fittings and manifold seals for weepage.",
+                is_mandatory=True,
+                is_active=True,
+                status="active",
+                notes="Critical preventive maintenance procedure. Do not bypass filter change interval.",
+            )
+
+            sched2 = AssetMaintenanceSchedule.objects.create(
+                tenant=tenant,
+                name="Quarterly High-Speed Spindle Bearing & Thermal Check",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=category,
+                schedule_type="time_based",
+                frequency_interval=90,
+                frequency_unit="days",
+                lead_time_days=14,
+                last_service_date=timezone.now().date() - timezone.timedelta(days=100),
+                next_due_date=timezone.now().date() - timezone.timedelta(days=10),
+                assigned_technician=user,
+                preferred_vendor=vendor,
+                service_contract=svc1,
+                service_checklist="1. Clean and inspect spindle taper.\n2. Perform dynamic vibration baseline check.\n3. Verify chiller coolant circulation and temperature delta.\n4. Check tool clamp pneumatic retention force.",
+                is_mandatory=True,
+                is_active=True,
+                status="overdue",
+                notes="Overdue for statutory quarterly safety compliance inspection.",
+            )
+
+            # 3. Maintenance Requests
+            req1 = AssetMaintenanceRequest.objects.create(
+                tenant=tenant,
+                title="Main Hydraulic Pump Seal Leakage - Pressure Drop",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                requester=user,
+                department=org_unit,
+                request_type="breakdown_repair",
+                urgency="critical",
+                is_breakdown=True,
+                downtime_started_at=timezone.now() - timezone.timedelta(hours=6),
+                symptom_description="Hydraulic pump pressure dropped from 210 bar to 85 bar during roughing pass. Visible fluid pooling under main valve block. Production stopped.",
+                triage_notes="Emergency repair authorized. Seal kit pulled from central stores. Technician dispatched immediately.",
+                assigned_technician=user,
+                assigned_vendor=vendor,
+                service_contract=svc1,
+                status="in_progress",
+            )
+
+            req2 = AssetMaintenanceRequest.objects.create(
+                tenant=tenant,
+                title="High-Speed Spindle Vibration Anomaly During Finishing",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                requester=user,
+                department=org_unit,
+                request_type="preventive_inspection",
+                urgency="high",
+                is_breakdown=False,
+                symptom_description="Audible high-pitch hum at 10,000+ RPM. Surface finish showing minor chatter marks on aerospace titanium brackets.",
+                triage_notes="Scheduled for vibration diagnostic inspection during end-of-shift window.",
+                assigned_technician=user,
+                status="assigned",
+            )
+
+            req3 = AssetMaintenanceRequest.objects.create(
+                tenant=tenant,
+                title="Coolant Tank Filtration Screen Cleaning & Pump Flush",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                requester=user,
+                department=org_unit,
+                request_type="facility_upkeep",
+                urgency="medium",
+                is_breakdown=False,
+                symptom_description="Sludge accumulation in bottom chip pan. Coolant flow rate reduced by 30%.",
+                status="resolved",
+                resolution_summary="Reservoir drained, chip screen cleared, fresh semi-synthetic coolant filled at 8% refractometer concentration. Flow rate restored.",
+                resolved_by=user,
+                resolved_at=timezone.now() - timezone.timedelta(days=3),
+            )
+
+            # 4. Maintenance Logs
+            log1 = AssetMaintenanceLog.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                maintenance_request=req3,
+                maintenance_schedule=sched1,
+                service_contract=svc1,
+                service_date=timezone.now().date() - timezone.timedelta(days=3),
+                completion_date=timezone.now() - timezone.timedelta(days=3, hours=-2),
+                maintenance_type="preventive_service",
+                failure_code="normal_wear",
+                downtime_hours=Decimal("2.50"),
+                meter_reading=Decimal("1420.50"),
+                lead_technician=user,
+                labor_hours=Decimal("2.50"),
+                labor_cost=Decimal("187.50"),
+                parts_consumed_summary="2x Coolant Filter Cartridge #CF-100\n1x Sump Gasket #SG-44\n20L Cutting Fluid Concentrate #CF-PRO",
+                parts_cost=Decimal("345.00"),
+                vendor_invoice_cost=Decimal("0.00"),
+                expense_account=expense_acc,
+                root_cause_analysis="Routine operational coolant bio-degradation and fine particulate loading on intake screens.",
+                action_taken="Full reservoir suction cleanout, flushed return lines, calibrated coolant refractometer, ran 30-minute circulation test without pressure drop.",
+                status="approved",
+                approved_by=user,
+                approved_at=timezone.now() - timezone.timedelta(days=2),
+            )
+
+            log2 = AssetMaintenanceLog.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                service_date=timezone.now().date() - timezone.timedelta(days=15),
+                completion_date=timezone.now() - timezone.timedelta(days=15, hours=-4),
+                maintenance_type="corrective_repair",
+                failure_code="hydraulic_leak",
+                downtime_hours=Decimal("4.00"),
+                meter_reading=Decimal("1380.00"),
+                lead_technician=user,
+                service_vendor=vendor,
+                labor_hours=Decimal("4.00"),
+                labor_cost=Decimal("300.00"),
+                parts_consumed_summary="1x High-Pressure Hydraulic Hose 3/8-inch #HH-38-02\n2x JIC Steel Swivel Fittings",
+                parts_cost=Decimal("180.00"),
+                vendor_invoice_cost=Decimal("250.00"),
+                expense_account=expense_acc,
+                root_cause_analysis="Hose outer jacket rubbed against cable carrier tray causing premature fatigue wear.",
+                action_taken="Replaced failed hose segment, installed spiral protective wrap, rerouted clearance away from sheet metal lip, leak check verified at 250 bar.",
+                status="posted",
+                approved_by=user,
+                approved_at=timezone.now() - timezone.timedelta(days=14),
+            )
+
+        self.stdout.write(f"[{tenant.name}] 11.5 Seeding complete (2 contracts, 2 schedules, 3 requests, 2 logs).")
+
