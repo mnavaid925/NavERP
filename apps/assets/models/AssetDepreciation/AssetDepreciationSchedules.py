@@ -193,7 +193,7 @@ class AssetDepreciationSchedule(TenantNumbered):
     def method_css(self):
         return self.METHOD_CSS.get(self.depreciation_method, "badge-slate")
 
-    def calculate_depreciation(self):
+    def calculate_depreciation(self, force=False):
         """Perform exact mathematical depreciation computation."""
         fa = self.fixed_asset
         acq_cost = fa.acquisition_cost or Decimal("0.00")
@@ -215,7 +215,9 @@ class AssetDepreciationSchedule(TenantNumbered):
         method = self.depreciation_method
         calculated_amount = Decimal("0.00")
 
-        if method == "straight_line":
+        if not force and self.depreciation_amount and self.depreciation_amount > Decimal("0.00"):
+            calculated_amount = self.depreciation_amount
+        elif method == "straight_line":
             if months > 0:
                 monthly_rate = depreciable_base / Decimal(months)
                 calculated_amount = (monthly_rate * factor).quantize(Decimal("0.01"))
