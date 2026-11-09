@@ -185,6 +185,7 @@ class AssetDowntimeLog(TenantNumbered):
         ]
         indexes = [
             models.Index(fields=["tenant", "status"], name="idx_adwn_ten_stat"),
+            models.Index(fields=["tenant", "-started_at"], name="idx_adwn_ten_start"),
             models.Index(fields=["tenant", "downtime_category"], name="idx_adwn_ten_cat"),
             models.Index(fields=["tenant", "fixed_asset"], name="idx_adwn_ten_fa"),
         ]
