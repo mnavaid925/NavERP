@@ -177,8 +177,11 @@ def asset_criticality_assessment_delete(request, pk):
 @tenant_admin_required
 def asset_criticality_assessment_approve(request, pk):
     assessment = assets_object(request, AssetCriticalityAssessment, pk=pk, select_related=["asset"])
-    if assessment.assessment_status == "approved":
-        messages.info(request, f"Assessment {assessment.number} is already approved.")
+    if assessment.assessment_status in ("approved", "superseded"):
+        messages.warning(
+            request,
+            f"Assessment {assessment.number} cannot be approved because it is {assessment.get_assessment_status_display()}.",
+        )
         return redirect("assets:asset_criticality_assessment_detail", pk=assessment.pk)
 
     with transaction.atomic():
