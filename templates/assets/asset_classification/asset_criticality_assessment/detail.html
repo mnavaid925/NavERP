@@ -24,22 +24,28 @@
     </div>
     <div class="page-actions">
         {% if assessment.assessment_status != "approved" and assessment.assessment_status != "superseded" %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_criticality_assessment_approve' assessment.pk %}" class="inline" onsubmit="return confirm('Authorize and approve this criticality assessment? Operational criticality for asset {{ assessment.asset.number }} will be updated.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
                 <i data-lucide="check-circle-2" class="w-4 h-4 mr-1"></i> Approve & Sync to Asset
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_criticality_assessment_edit' assessment.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
         </a>
         {% endif %}
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
+        {% if assessment.assessment_status != "approved" and assessment.assessment_status != "superseded" %}
         <form method="post" action="{% url 'assets:asset_criticality_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Delete assessment {{ assessment.number }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
             </button>
         </form>
+        {% endif %}
+        {% endif %}
         <a href="{% url 'assets:asset_criticality_assessment_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
         </a>
