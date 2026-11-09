@@ -20,9 +20,6 @@ def asset_calibration_record_list(request):
         AssetCalibrationRecord.objects.select_related(
             "fixed_asset",
             "operational_asset",
-            "calibrated_by",
-            "service_vendor",
-            "certificate_document",
         ),
         request,
     )
