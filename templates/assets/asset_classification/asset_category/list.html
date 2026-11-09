@@ -162,12 +162,14 @@
                         <a href="{% url 'assets:asset_category_edit' cat.pk %}" class="btn btn-icon" title="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'assets:asset_category_delete' cat.pk %}" class="inline" onsubmit="return confirm('Delete category {{ cat.code }}? This action cannot be undone.');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red" title="Delete">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
