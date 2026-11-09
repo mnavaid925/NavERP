@@ -206,6 +206,7 @@ class AssetCalibrationRecord(TenantNumbered):
             models.Index(fields=["tenant", "calibration_result"], name="idx_acal_ten_res"),
             models.Index(fields=["tenant", "status"], name="idx_acal_ten_stat"),
             models.Index(fields=["tenant", "instrument_tag"], name="idx_acal_ten_tag"),
+            models.Index(fields=["tenant", "calibration_date"], name="idx_acal_ten_cdate"),
         ]
 
     def __str__(self):
