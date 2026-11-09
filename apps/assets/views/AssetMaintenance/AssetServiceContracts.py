@@ -227,7 +227,7 @@ def asset_service_contract_renew(request, pk):
 
 
 @require_POST
-@login_required
+@tenant_admin_required
 def asset_service_contract_terminate(request, pk):
     obj = assets_object(request, AssetServiceContract, pk)
     obj.terminate()
