@@ -18,6 +18,12 @@ from apps.assets.models.AssetInventoryTracking import (
     AssetIncidentReport,
     AssetMovementLog,
 )
+from apps.assets.models.AssetMaintenance import (
+    AssetMaintenanceLog,
+    AssetMaintenanceRequest,
+    AssetMaintenanceSchedule,
+    AssetServiceContract,
+)
 from apps.assets.models.AssetProcurement import (
     AssetAcquisitionReceipt,
     AssetCapitalization,
@@ -44,4 +50,8 @@ __all__ = [
     "AssetRevaluation",
     "AssetTransfer",
     "CapitalizationPolicy",
+    "AssetMaintenanceRequest",
+    "AssetMaintenanceSchedule",
+    "AssetServiceContract",
+    "AssetMaintenanceLog",
 ]
