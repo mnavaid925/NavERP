@@ -88,7 +88,7 @@
                     </div>
                     <p class="text-sm mt-1">
                         As-Left error ({{ calibration.as_left_error }}) is
-                        {% if calibration.calibration_result == 'fail_out_of_tolerance' %}outside allowable limits (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument must be adjusted or replaced.{% else %}within acceptable bounds (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument certified for process service.{% endif %}
+                        {% if calibration.calibration_result == 'fail_out_of_tolerance' or calibration.calibration_result == 'quarantined' %}outside allowable limits (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument must be adjusted or replaced.{% else %}within acceptable bounds (±{{ calibration.allowable_tolerance }} {{ calibration.get_tolerance_unit_display }}). Instrument certified for process service.{% endif %}
                     </p>
                 </div>
 
