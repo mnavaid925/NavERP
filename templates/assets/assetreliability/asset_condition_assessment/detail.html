@@ -219,7 +219,11 @@
                 <div>
                     <span class="text-slate-500 block text-xs uppercase">Internal Inspector</span>
                     <div class="font-medium text-slate-800">
-                        {{ assessment.inspector.get_full_name|default:assessment.inspector.username|default:"—" }}
+                        {% if assessment.inspector %}
+                            {{ assessment.inspector.get_full_name|default:assessment.inspector.username }}
+                        {% else %}
+                            —
+                        {% endif %}
                     </div>
                 </div>
 
