@@ -116,53 +116,53 @@
 ## Sub-module 11.7 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.7.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.7.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
-- [ ] App `apps/assets` already scaffolded in 11.1
+- [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetConditionAssessment (`ACAS`)**
-  - [ ] `apps/assets/models/AssetReliability/AssetConditionAssessments.py`
-  - [ ] `apps/assets/forms/AssetReliability/AssetConditionAssessments.py`
-  - [ ] `apps/assets/views/AssetReliability/AssetConditionAssessments.py` (CRUD + complete + review + trigger_maintenance_request)
-  - [ ] `apps/assets/urls/AssetReliability/AssetConditionAssessments.py`
-  - [ ] `templates/assets/assetreliability/asset_condition_assessment/list.html`
-  - [ ] `templates/assets/assetreliability/asset_condition_assessment/detail.html`
-  - [ ] `templates/assets/assetreliability/asset_condition_assessment/form.html`
-- [ ] **Entity 2: AssetTelemetryReading (`ATEL`)**
-  - [ ] `apps/assets/models/AssetReliability/AssetTelemetryReadings.py`
-  - [ ] `apps/assets/forms/AssetReliability/AssetTelemetryReadings.py`
-  - [ ] `apps/assets/views/AssetReliability/AssetTelemetryReadings.py` (CRUD + trigger_maintenance_request + flag_anomaly)
-  - [ ] `apps/assets/urls/AssetReliability/AssetTelemetryReadings.py`
-  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/list.html`
-  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/detail.html`
-  - [ ] `templates/assets/assetreliability/asset_telemetry_reading/form.html`
-- [ ] **Entity 3: AssetFailureMode (`AFMA`)**
-  - [ ] `apps/assets/models/AssetReliability/AssetFailureModes.py`
-  - [ ] `apps/assets/forms/AssetReliability/AssetFailureModes.py`
-  - [ ] `apps/assets/views/AssetReliability/AssetFailureModes.py` (CRUD + activate + archive + link_pm_schedule)
-  - [ ] `apps/assets/urls/AssetReliability/AssetFailureModes.py`
-  - [ ] `templates/assets/assetreliability/asset_failure_mode/list.html`
-  - [ ] `templates/assets/assetreliability/asset_failure_mode/detail.html`
-  - [ ] `templates/assets/assetreliability/asset_failure_mode/form.html`
-- [ ] **Entity 4: AssetCalibrationRecord (`ACAL`)**
-  - [ ] `apps/assets/models/AssetReliability/AssetCalibrationRecords.py`
-  - [ ] `apps/assets/forms/AssetReliability/AssetCalibrationRecords.py`
-  - [ ] `apps/assets/views/AssetReliability/AssetCalibrationRecords.py` (CRUD + record_adjustment + quarantine)
-  - [ ] `apps/assets/urls/AssetReliability/AssetCalibrationRecords.py`
-  - [ ] `templates/assets/assetreliability/asset_calibration_record/list.html`
-  - [ ] `templates/assets/assetreliability/asset_calibration_record/detail.html`
-  - [ ] `templates/assets/assetreliability/asset_calibration_record/form.html`
+- [x] **Entity 1: AssetConditionAssessment (`ACAS`)**
+  - [x] `apps/assets/models/AssetReliability/AssetConditionAssessments.py`
+  - [x] `apps/assets/forms/AssetReliability/AssetConditionAssessments.py`
+  - [x] `apps/assets/views/AssetReliability/AssetConditionAssessments.py` (CRUD + complete + review + trigger_maintenance_request)
+  - [x] `apps/assets/urls/AssetReliability/AssetConditionAssessments.py`
+  - [x] `templates/assets/assetreliability/asset_condition_assessment/list.html`
+  - [x] `templates/assets/assetreliability/asset_condition_assessment/detail.html`
+  - [x] `templates/assets/assetreliability/asset_condition_assessment/form.html`
+- [x] **Entity 2: AssetTelemetryReading (`ATEL`)**
+  - [x] `apps/assets/models/AssetReliability/AssetTelemetryReadings.py`
+  - [x] `apps/assets/forms/AssetReliability/AssetTelemetryReadings.py`
+  - [x] `apps/assets/views/AssetReliability/AssetTelemetryReadings.py` (CRUD + trigger_maintenance_request + flag_anomaly)
+  - [x] `apps/assets/urls/AssetReliability/AssetTelemetryReadings.py`
+  - [x] `templates/assets/assetreliability/asset_telemetry_reading/list.html`
+  - [x] `templates/assets/assetreliability/asset_telemetry_reading/detail.html`
+  - [x] `templates/assets/assetreliability/asset_telemetry_reading/form.html`
+- [x] **Entity 3: AssetFailureMode (`AFMA`)**
+  - [x] `apps/assets/models/AssetReliability/AssetFailureModes.py`
+  - [x] `apps/assets/forms/AssetReliability/AssetFailureModes.py`
+  - [x] `apps/assets/views/AssetReliability/AssetFailureModes.py` (CRUD + activate + archive + link_pm_schedule)
+  - [x] `apps/assets/urls/AssetReliability/AssetFailureModes.py`
+  - [x] `templates/assets/assetreliability/asset_failure_mode/list.html`
+  - [x] `templates/assets/assetreliability/asset_failure_mode/detail.html`
+  - [x] `templates/assets/assetreliability/asset_failure_mode/form.html`
+- [x] **Entity 4: AssetCalibrationRecord (`ACAL`)**
+  - [x] `apps/assets/models/AssetReliability/AssetCalibrationRecords.py`
+  - [x] `apps/assets/forms/AssetReliability/AssetCalibrationRecords.py`
+  - [x] `apps/assets/views/AssetReliability/AssetCalibrationRecords.py` (CRUD + record_adjustment + quarantine)
+  - [x] `apps/assets/urls/AssetReliability/AssetCalibrationRecords.py`
+  - [x] `templates/assets/assetreliability/asset_calibration_record/list.html`
+  - [x] `templates/assets/assetreliability/asset_calibration_record/detail.html`
+  - [x] `templates/assets/assetreliability/asset_calibration_record/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all 4 models in `apps/assets/models/AssetReliability/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all 4 forms in `apps/assets/forms/AssetReliability/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetReliability/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetReliability/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.7 models (`_seed_tenant_11_7`)
-- [ ] Add `LIVE_LINKS["11.7"]` in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/assets/models/AssetReliability/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all 4 forms in `apps/assets/forms/AssetReliability/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetReliability/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetReliability/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.7 models (`_seed_tenant_11_7`)
+- [x] Add `LIVE_LINKS["11.7"]` in `apps/core/navigation.py`:
   - `"Condition Assessment & Inspections"`: `assets:asset_condition_assessment_list`
   - `"Predictive Maintenance & IoT Integration"`: `assets:asset_telemetry_reading_list`
   - `"Failure Mode Analysis (FMEA)"`: `assets:asset_failure_mode_list`
@@ -180,38 +180,38 @@
     - `"Asset Calibration Records"`: `assets:asset_calibration_record_list`
     - `"RCM Strategy"`: `assets:asset_failure_mode_list`
     - `"Asset Reliability & Condition Monitoring"`: `assets:asset_condition_assessment_list`
-- [ ] Run `makemigrations assets` (generating next incremental migration) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (generating next incremental migration) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_7.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+- [x] Create `temp/smoke_11_7.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.7.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.7.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_asset_reliability_models.py`
-- [ ] `test_asset_reliability_forms.py`
-- [ ] `test_asset_reliability_views.py`
-- [ ] `test_asset_reliability_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_asset_reliability_models.py`
+- [x] `test_asset_reliability_forms.py`
+- [x] `test_asset_reliability_views.py`
+- [x] `test_asset_reliability_security.py`
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/`
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.7 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
-- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.7.md`
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.7 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.7.md`
 
 ## Later passes / deferred (Parked from research)
 - Real-time MQTT / Kafka streaming broker ingestion daemons (deferred to 11.15)
@@ -220,7 +220,15 @@
 - Client-side audio DSP waterfall FFT spectrogram visualizer libraries (deferred to advanced diagnostic UI suite)
 
 ## Review notes
-(filled in at the end)
+- **Review Summary**: All 6 sequential review passes (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`) conducted over `BASE...HEAD`.
+- **Review Findings File**: `.claude/tasks/review-assets-11.7.md` contains 20 findings:
+  - 2 Critical: C1 (nullable user FK template filter crashes), C2 (cross-tenant User FK disclosure in forms).
+  - 10 Important: I1 (`@tenant_admin_required` on quarantine), I2 (`@tenant_admin_required` on delete views), I3 (`status` mass-assignment in failure mode form), I4 (`Party.name` attribute), I5 (`FixedAsset.number` attribute), I6 (`Asset.tag_code` attribute), I7 (`badge-purple` color replacement), I8 (atomic transaction wrappers for maintenance ticket creation), I9 (combined `.aggregate()` KPI queries), I10 (composite database indexes on hot filter columns).
+  - 8 Minor: M1 (pagination query preservation), M2 (Decimal literal), M3 (select_related pruning), M4 (page size standard 15), M5 (deferred text fields), M6 (quarantined verification banner), M7 (null deviation color guard), M8 (RTL `ms-*` & aria labels).
+- **Code Fixer**: 100% of findings fixed, verified, and committed one file per commit.
+- **Test Suite**: 227 tests in Sub-module 11.7 (`test_asset_reliability_models.py`: 33, `test_asset_reliability_forms.py`: 56, `test_asset_reliability_views.py`: 77, `test_asset_reliability_security.py`: 61) running in under 50 seconds on SQLite in-memory, 100% green. Total Asset suite: 1,048 tests.
+- **Gaps**: None. Registered in `.agents/tasks/gaps-assets-11.7.md`.
+
 
 ---
 # Sub-module 11.6: Asset Performance & Utilization (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.6.md` (2026-11-09)
