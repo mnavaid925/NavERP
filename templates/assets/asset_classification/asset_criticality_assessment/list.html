@@ -201,7 +201,7 @@
 
     <!-- Pagination -->
     {% if is_paginated %}
-    <div class="card-footer flex items-center justify-between">
+    <div class="card-footer flex items-center justify-between p-4 border-t border-slate-100">
         <div class="text-sm text-muted">
             Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} assessments
         </div>
