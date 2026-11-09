@@ -18,7 +18,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def asset_energy_reading_list(request):
     qs = AssetEnergyReading.objects.filter(tenant=request.tenant).select_related(
-        "fixed_asset", "operational_asset", "utility_provider", "recorded_by"
+        "fixed_asset", "operational_asset"
     )
 
     q = request.GET.get("q", "").strip()
@@ -58,7 +58,7 @@ def asset_energy_reading_list(request):
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).order_by("name")
+    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
@@ -156,7 +156,7 @@ def asset_energy_reading_edit(request, pk):
 @login_required
 @require_POST
 def asset_energy_reading_delete(request, pk):
-    reading = assets_object(request, AssetEnergyReading, pk)
+    reading = assets_object(request, AssetEnergyReading, pk, select_related=["fixed_asset", "operational_asset"])
     number = reading.number
     write_audit_log(request.user, reading, "delete", tenant=request.tenant)
     reading.delete()
@@ -167,7 +167,7 @@ def asset_energy_reading_delete(request, pk):
 @login_required
 @require_POST
 def asset_energy_reading_validate(request, pk):
-    reading = assets_object(request, AssetEnergyReading, pk)
+    reading = assets_object(request, AssetEnergyReading, pk, select_related=["fixed_asset", "operational_asset"])
     if reading.status not in ("pending", "flagged_anomaly"):
         messages.error(request, f"Energy reading {reading.number} cannot be validated because it is currently {reading.get_status_display().lower()}.")
         return redirect("assets:asset_energy_reading_detail", pk=reading.pk)
