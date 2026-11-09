@@ -31,8 +31,8 @@ class CapitalizationPolicy(TenantNumbered):
     }
 
     SCOPE_CSS = {
-        "global_default": "badge-blue",
-        "category_override": "badge-purple",
+        "global_default": "badge-info",
+        "category_override": "badge-slate",
         "tax_book_safe_harbor": "badge-amber",
         "project_capex": "badge-slate",
     }
