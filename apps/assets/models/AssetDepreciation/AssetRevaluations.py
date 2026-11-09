@@ -211,9 +211,20 @@ class AssetRevaluation(TenantNumbered):
         adj = self.revaluation_adjustment
         fa = self.fixed_asset
 
+        if adj < Decimal("0.00"):
+            if not (self.impairment_loss_account and fa.accumulated_account):
+                raise ValidationError(
+                    "Both Impairment Loss GL account and Fixed Asset accumulated depreciation account are required to post impairment adjustment."
+                )
+        elif adj > Decimal("0.00"):
+            if not (self.revaluation_surplus_account and fa.asset_account):
+                raise ValidationError(
+                    "Both Revaluation Surplus GL account and Fixed Asset cost account are required to post revaluation surplus."
+                )
+
         with transaction.atomic():
             je = None
-            if adj < Decimal("0.00") and self.impairment_loss_account and fa.accumulated_account:
+            if adj < Decimal("0.00"):
                 loss_amount = abs(adj)
                 je = JournalEntry.objects.create(
                     tenant=self.tenant,
@@ -242,7 +253,7 @@ class AssetRevaluation(TenantNumbered):
                     credit=loss_amount,
                     description=f"Impairment Allowance - {fa.name}",
                 )
-            elif adj > Decimal("0.00") and self.revaluation_surplus_account and fa.asset_account:
+            elif adj > Decimal("0.00"):
                 surplus_amount = adj
                 je = JournalEntry.objects.create(
                     tenant=self.tenant,
