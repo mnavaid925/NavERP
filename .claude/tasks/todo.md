@@ -7,6 +7,208 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.5: Maintenance & Repair Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.5.md` (2026-11-09)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, and 11.4.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0007_alter_assetmodel_estimated_replacement_cost.py` (from 11.3/11.4), so **11.5 claims `0008`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.5.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetMaintenance/`
+> Template folder name: `templates/assets/asset_maintenance/{asset_maintenance_request,asset_maintenance_schedule,asset_service_contract,asset_maintenance_log}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Maintenance & Repair Management Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Register Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between physical repair logs, maintenance capitalized costs, and asset life status.
+  - Authoritative General Ledger Spine (`accounting.JournalEntry` [JE-], `accounting.GLAccount`): Maintenance expense allocations and third-party contractor service billings post directly into the core general ledger.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational machinery/equipment master in `apps/scm` via string FK (`"scm.Asset"`), supporting runtime meter tracking, machine serial numbers, and equipment maintenance history.
+  - Core Spine & SCM Bindings: Reuses `core.OrgUnit` for requesting department and cost center allocation, `core.Party` for service contractors/OEM vendors, `scm.MaintenanceWorkOrder` [MWO-] for operational shopfloor dispatch, `settings.AUTH_USER_MODEL` for requesters, technicians, and approvers, and `accounting.Currency` for service contract valuations.
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetMaintenanceRequest` -> `NUMBER_PREFIX = "AMRQ"` (format: `AMRQ-YYYYMM-XXXX`)
+    - `AssetMaintenanceSchedule` -> `NUMBER_PREFIX = "AMSC"` (format: `AMSC-YYYYMM-XXXX`)
+    - `AssetServiceContract` -> `NUMBER_PREFIX = "ASVC"` (format: `ASVC-YYYYMM-XXXX`)
+    - `AssetMaintenanceLog` -> `NUMBER_PREFIX = "AMLG"` (format: `AMLG-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetMaintenanceRequest` [AMRQ-]:
+      - Self-service breakdown reporting, anomaly ticketing, urgency triage, downtime stoppage detection, and technician/vendor dispatching.
+      - Identity & Asset Links: `title` (CharField 255), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="maintenance_requests"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="maintenance_requests"), `requester` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="submitted_asset_maintenance_requests"), `department` (FK `"core.OrgUnit"`, SET_NULL, null=True, blank=True, related_name="asset_maintenance_requests").
+      - Triage & Urgency: `request_type` (`breakdown_repair`, `preventive_inspection`, `safety_hazard`, `calibration`, `facility_upkeep`, default `breakdown_repair`, max_length=32), `urgency` (`low`, `medium`, `high`, `critical`, default `medium`, max_length=20), `is_breakdown` (BooleanField default=False, flag for complete asset stoppage), `downtime_started_at` (DateTimeField null=True, blank=True), `symptom_description` (TextField), `triage_notes` (TextField blank=True).
+      - Dispatch & Routing: `assigned_technician` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="assigned_asset_maintenance_requests"), `assigned_vendor` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="assigned_asset_maintenance_requests"), `service_contract` (FK `"assets.AssetServiceContract"`, SET_NULL, null=True, blank=True, related_name="maintenance_requests"), `dispatched_work_order` (FK `"scm.MaintenanceWorkOrder"`, SET_NULL, null=True, blank=True, related_name="asset_maintenance_requests").
+      - Lifecycle & Resolution: `status` (`submitted`, `triaged`, `assigned`, `in_progress`, `resolved`, `rejected`, `closed`, default `submitted`, max_length=20), `resolution_summary` (TextField blank=True), `resolved_at` (DateTimeField null=True, blank=True), `resolved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="resolved_asset_maintenance_requests").
+      - Status / Badge CSS: `submitted -> badge-info`, `triaged -> badge-slate`, `assigned -> badge-amber`, `in_progress -> badge-amber`, `resolved -> badge-green`, `rejected -> badge-red`, `closed -> badge-muted`.
+      - Urgency / Badge CSS: `critical -> badge-red`, `high -> badge-amber`, `medium -> badge-info`, `low -> badge-slate`.
+      - Business Logic & Actions:
+        - Triage Action (`asset_maintenance_request_triage`): updates triage notes and urgency, transitions `submitted -> triaged`.
+        - Dispatch Action (`asset_maintenance_request_dispatch`): assigns technician or external vendor, transitions `triaged -> assigned`.
+        - Start Work Action (`asset_maintenance_request_start`): transitions `assigned -> in_progress`.
+        - Resolve Action (`asset_maintenance_request_resolve`): records resolution summary, sets `resolved_at` and `resolved_by`, transitions `in_progress / assigned -> resolved`.
+        - Close Action (`asset_maintenance_request_close`): verifies resolution and transitions `resolved -> closed`.
+        - Reject Action (`asset_maintenance_request_reject`): supervisor rejects invalid ticket with justification, transitions `submitted / triaged -> rejected`.
+      - Form exclusions: `tenant`, `number`, `status`, `triage_notes`, `assigned_technician`, `assigned_vendor`, `service_contract`, `dispatched_work_order`, `resolution_summary`, `resolved_at`, `resolved_by`, `created_at`, `updated_at`.
+      - View context keys: `maintenance_requests`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `urgency_choices`, `request_type_choices`, `total_requests`, `breakdown_count`, `critical_count`, `open_count`.
+    - `AssetMaintenanceSchedule` [AMSC-]:
+      - Time-based, meter-based, and condition-based preventive maintenance calendars, recurring intervals, statutory inspection checklists, and lead-time service reminders.
+      - Identity & Asset Links: `name` (CharField 255), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules").
+      - Scheduling Parameters: `schedule_type` (`time_based`, `meter_based`, `condition_based`, `seasonal_shutdown`, default `time_based`, max_length=32), `frequency_interval` (PositiveIntegerField default=30), `frequency_unit` (`days`, `weeks`, `months`, `years`, `runtime_hours`, `cycles_count`, default `days`, max_length=20), `meter_trigger_threshold` (DecimalField 16, 2, null=True, blank=True), `lead_time_days` (PositiveIntegerField default=7).
+      - Service Tracking & Next Due: `last_service_date` (DateField null=True, blank=True), `last_service_meter` (DecimalField 16, 2, null=True, blank=True), `next_due_date` (DateField null=True, blank=True), `next_due_meter` (DecimalField 16, 2, null=True, blank=True).
+      - Assignment & Standards: `assigned_technician` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules"), `preferred_vendor` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules"), `service_contract` (FK `"assets.AssetServiceContract"`, SET_NULL, null=True, blank=True, related_name="maintenance_schedules"), `service_checklist` (TextField blank=True), `is_mandatory` (BooleanField default=True), `is_active` (BooleanField default=True).
+      - Lifecycle & Audit: `status` (`active`, `overdue`, `paused`, `completed`, `retired`, default `active`, max_length=20), `notes` (TextField blank=True).
+      - Status / Badge CSS: `active -> badge-green`, `overdue -> badge-red`, `paused -> badge-amber`, `completed -> badge-info`, `retired -> badge-muted`.
+      - Business Logic & Actions:
+        - Activate Action (`asset_maintenance_schedule_activate`): sets `is_active=True`, status `active`.
+        - Pause Action (`asset_maintenance_schedule_pause`): sets `is_active=False`, status `paused`.
+        - Generate Request Action (`asset_maintenance_schedule_generate_request`): spawns linked `AssetMaintenanceRequest` ticket for upcoming service window.
+        - Record Completion Action (`asset_maintenance_schedule_record_completion`): updates `last_service_date` and `last_service_meter`, recalculates `next_due_date` and `next_due_meter` based on frequency rules.
+      - Form exclusions: `tenant`, `number`, `status`, `last_service_date`, `last_service_meter`, `next_due_date`, `next_due_meter`, `created_at`, `updated_at`.
+      - View context keys: `maintenance_schedules`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `schedule_type_choices`, `frequency_unit_choices`, `total_schedules`, `active_count`, `overdue_count`, `paused_count`.
+    - `AssetServiceContract` [ASVC-]:
+      - Third-party vendor maintenance agreements (AMC), OEM warranty extensions, SLA performance guarantees (response/resolution hours), visit quotas, and outsourced maintenance cost tracking.
+      - Contract Identity & Parties: `contract_number` (CharField 100), `title` (CharField 255), `vendor` (FK `"core.Party"`, PROTECT, related_name="asset_service_contracts"), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="service_contracts"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="service_contracts").
+      - Coverage & Terms: `contract_type` (`comprehensive_amc`, `labor_only`, `parts_and_labor`, `on_call_support`, `oem_warranty_extension`, default `comprehensive_amc`, max_length=32), `start_date` (DateField), `end_date` (DateField), `contract_value` (DecimalField 16, 2, default=0.00), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_service_contracts"), `billing_frequency` (`monthly`, `quarterly`, `semi_annual`, `annual`, `per_visit`, default `annual`, max_length=20).
+      - SLA & Quotas: `sla_response_hours` (PositiveIntegerField default=4), `sla_resolution_hours` (PositiveIntegerField default=24), `pm_visits_included` (PositiveIntegerField default=4), `pm_visits_completed` (PositiveIntegerField default=0), `coverage_terms` (TextField blank=True), `auto_renew` (BooleanField default=False).
+      - Vendor Contacts & Status: `contact_person` (CharField 150 blank=True), `contact_phone` (CharField 50 blank=True), `contact_email` (EmailField blank=True), `status` (`draft`, `active`, `expiring_soon`, `expired`, `terminated`, default `draft`, max_length=20), `notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `expiring_soon -> badge-amber`, `expired -> badge-red`, `terminated -> badge-muted`.
+      - Business Logic & Actions:
+        - Activate Action (`asset_service_contract_activate`): transitions `draft -> active`.
+        - Record Visit Action (`asset_service_contract_record_visit`): increments `pm_visits_completed` counter.
+        - Renew Action (`asset_service_contract_renew`): extends `end_date` by contract duration and resets visit counter.
+        - Terminate Action (`asset_service_contract_terminate`): marks contract `terminated`.
+      - Form exclusions: `tenant`, `number`, `status`, `pm_visits_completed`, `created_at`, `updated_at`.
+      - View context keys: `service_contracts`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `contract_type_choices`, `billing_frequency_choices`, `total_contracts`, `active_count`, `expiring_soon_count`, `total_contract_value`.
+    - `AssetMaintenanceLog` [AMLG-]:
+      - Authoritative equipment service ledger, ISO 14224 / FMEA failure code classification, breakdown downtime tracking, labor wrench hours, parts consumed, and financial repair cost allocation to general ledger.
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `maintenance_request` (FK `"assets.AssetMaintenanceRequest"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `maintenance_schedule` (FK `"assets.AssetMaintenanceSchedule"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `service_contract` (FK `"assets.AssetServiceContract"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `work_order` (FK `"scm.MaintenanceWorkOrder"`, SET_NULL, null=True, blank=True, related_name="asset_maintenance_logs").
+      - Service Execution & Failure Mode: `service_date` (DateField), `completion_date` (DateTimeField null=True, blank=True), `maintenance_type` (`corrective_repair`, `preventive_service`, `emergency_breakdown`, `calibration`, `inspection`, `overhaul`, default `corrective_repair`, max_length=32), `failure_code` (`mechanical_wear`, `electrical_short`, `hydraulic_leak`, `software_fault`, `operator_error`, `corrosion`, `thermal_overload`, `lubrication_failure`, `normal_wear`, `other`, default `normal_wear`, max_length=32), `downtime_hours` (DecimalField 8, 2, default=0.00), `meter_reading` (DecimalField 16, 2, null=True, blank=True).
+      - Personnel & Costs: `lead_technician` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `service_vendor` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="maintenance_logs"), `labor_hours` (DecimalField 8, 2, default=0.00), `labor_cost` (DecimalField 16, 2, default=0.00), `parts_consumed_summary` (TextField blank=True), `parts_cost` (DecimalField 16, 2, default=0.00), `vendor_invoice_cost` (DecimalField 16, 2, default=0.00), `total_cost` (DecimalField 16, 2, default=0.00, auto-calculated labor + parts + vendor), `expense_account` (FK `"accounting.GLAccount"`, SET_NULL, null=True, blank=True, related_name="asset_maintenance_expenses").
+      - Diagnostics & Lifecycle: `root_cause_analysis` (TextField blank=True), `action_taken` (TextField), `status` (`draft`, `in_review`, `approved`, `posted`, default `draft`, max_length=20), `approved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approved_asset_maintenance_logs"), `approved_at` (DateTimeField null=True, blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `in_review -> badge-amber`, `approved -> badge-info`, `posted -> badge-green`.
+      - Business Logic & Actions:
+        - Submit Review Action (`asset_maintenance_log_submit_review`): transitions `draft -> in_review`.
+        - Approve Action (`asset_maintenance_log_approve`): records `approved_by` and `approved_at`, transitions `in_review -> approved`.
+        - Post GL Action (`asset_maintenance_log_post_gl`): creates balanced `JournalEntry` for maintenance expenses, updates asset lifetime maintenance expenditure, increments linked contract visits, and rolls over linked PM schedule. Transitions `approved -> posted`.
+      - Form exclusions: `tenant`, `number`, `status`, `total_cost`, `approved_by`, `approved_at`, `created_at`, `updated_at`.
+      - View context keys: `maintenance_logs`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `maintenance_type_choices`, `failure_code_choices`, `total_logs`, `posted_count`, `total_downtime_hours`, `total_maintenance_cost`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `AMRQ` (AssetMaintenanceRequest), `AMSC` (AssetMaintenanceSchedule), `ASVC` (AssetServiceContract), `AMLG` (AssetMaintenanceLog) verified 100% collision-free repository-wide.
+- **Index Constraints & Length (L65)**: All index names <= 30 chars (`idx_amrq_ten_stat`, `idx_amsc_ten_due`, `idx_asvc_ten_vend`, `idx_amlg_ten_date`).
+- **Choice Field Lengths (L65)**: All `CharField` `max_length` strictly >= longest choice value (e.g., `preventive_inspection` = 21 <= 32).
+
+---
+
+## 11.5-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate operational work order engine** — Plant floor job shop scheduling reuses `scm.MaintenanceWorkOrder` [MWO-] and `scm.MaintenancePlan` [PM-].
+- [ ] **NO duplicate financial general ledger** — All maintenance financial debit/credit postings reuse the authoritative accounting spine (`accounting.JournalEntry` [JE-] and `accounting.GLAccount`).
+- [ ] **NO live IoT streaming telemetry ingestion engine / MQTT daemon** — Real-time sensor streaming, vibration data parsing, and condition monitoring belong to **11.7 Asset Reliability & Condition Monitoring**.
+- [ ] **NO physical warehouse bin picking & parts reservation lock** — Spare parts warehouse stock allocation is handled by Module 5 (Inventory) and SCM 4.4 (WMS); 11.5 records consumption and cost.
+- [ ] **NO full-blown external vendor portal login / customer ticket portal** — External contractor access is managed through standard staff assignment and party relationships; contractor self-service portal is out of scope.
+
+---
+
+## Sub-module 11.5 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.5.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetMaintenanceRequest (`AMRQ`)**
+  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (CRUD + triage + dispatch + resolve + close + reject)
+  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/list.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/detail.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/form.html`
+- [ ] **Entity 2: AssetMaintenanceSchedule (`AMSC`)**
+  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceSchedules.py` (CRUD + activate + pause + generate_request + record_completion)
+  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/list.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/detail.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/form.html`
+- [ ] **Entity 3: AssetServiceContract (`ASVC`)**
+  - [ ] `apps/assets/models/AssetMaintenance/AssetServiceContracts.py`
+  - [ ] `apps/assets/forms/AssetMaintenance/AssetServiceContracts.py`
+  - [ ] `apps/assets/views/AssetMaintenance/AssetServiceContracts.py` (CRUD + activate + record_visit + renew + terminate)
+  - [ ] `apps/assets/urls/AssetMaintenance/AssetServiceContracts.py`
+  - [ ] `templates/assets/asset_maintenance/asset_service_contract/list.html`
+  - [ ] `templates/assets/asset_maintenance/asset_service_contract/detail.html`
+  - [ ] `templates/assets/asset_maintenance/asset_service_contract/form.html`
+- [ ] **Entity 4: AssetMaintenanceLog (`AMLG`)**
+  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceLogs.py` (CRUD + submit_review + approve + post_gl)
+  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/list.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/detail.html`
+  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetMaintenance/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetMaintenance/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetMaintenance/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetMaintenance/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.5 models (`_seed_tenant_11_5`)
+- [ ] Add `LIVE_LINKS["11.5"]` in `apps/core/navigation.py`:
+  - `"Preventive Maintenance (PM) Scheduling"`: `assets:asset_maintenance_schedule_list`
+  - `"Work Order Creation & Dispatch"`: `assets:asset_maintenance_request_list`
+  - `"Spare Parts & Inventory Control"`: `assets:asset_maintenance_log_list`
+  - `"Maintenance History & Logs"`: `assets:asset_maintenance_log_list`
+  - `"Vendor & Contract Maintenance"`: `assets:asset_service_contract_list`
+  - Plural & convenience aliases:
+    - `"Maintenance Requests"`: `assets:asset_maintenance_request_list`
+    - `"Maintenance Schedules"`: `assets:asset_maintenance_schedule_list`
+    - `"Service Contracts"`: `assets:asset_service_contract_list`
+    - `"Maintenance Logs"`: `assets:asset_maintenance_log_list`
+    - `"Maintenance & Repair Management"`: `assets:asset_maintenance_request_list`
+    - `"PM Scheduling"`: `assets:asset_maintenance_schedule_list`
+- [ ] Run `makemigrations assets` (generating `0008_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_5.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.5.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_assetmaintenance_models.py`
+- [ ] `test_assetmaintenance_forms.py`
+- [ ] `test_assetmaintenance_views.py`
+- [ ] `test_assetmaintenance_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/` (100% green)
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.5 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.5.md` (or declare None in review notes)
+
+## Later passes / deferred (Parked from research)
+- IoT Telemetry Live Auto-Trigger (deferred to 11.7)
+- Mobile QR Code Scan-to-Request PWA (deferred to mobile frontend)
+- Automated Vendor AP Bill OCR Matching (deferred to AI Document Processing)
+
+## Review notes
+(filled in at the end)
+
+---
+
 # Sub-module 11.4: Depreciation & Financial Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.4.md` (2026-11-09)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, and 11.3.
