@@ -46,8 +46,8 @@ class AssetDepreciationSchedule(TenantNumbered):
     METHOD_CSS = {
         "straight_line": "badge-info",
         "declining_balance_150": "badge-amber",
-        "declining_balance_200": "badge-purple",
-        "sum_of_years": "badge-blue",
+        "declining_balance_200": "badge-slate",
+        "sum_of_years": "badge-info",
         "units_of_production": "badge-slate",
     }
 
