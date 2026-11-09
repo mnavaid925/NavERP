@@ -31,7 +31,6 @@ class AssetPerformanceScorecardForm(TenantUniqueMixin, forms.ModelForm):
             "total_energy_consumption_kwh",
             "total_carbon_emissions_kg",
             "total_downtime_cost",
-            "peer_category_ranking",
             "status",
             "department",
             "evaluated_by",
@@ -47,6 +46,7 @@ class AssetPerformanceScorecardForm(TenantUniqueMixin, forms.ModelForm):
             "mttr_hours",
             "performance_index_score",
             "benchmark_grade",
+            "peer_category_ranking",
             "created_at",
             "updated_at",
         ]
@@ -66,7 +66,6 @@ class AssetPerformanceScorecardForm(TenantUniqueMixin, forms.ModelForm):
             "total_energy_consumption_kwh": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "total_carbon_emissions_kg": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
             "total_downtime_cost": forms.NumberInput(attrs={"class": "form-input", "step": "0.01"}),
-            "peer_category_ranking": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "department": forms.Select(attrs={"class": "form-select"}),
             "evaluated_by": forms.Select(attrs={"class": "form-select"}),
