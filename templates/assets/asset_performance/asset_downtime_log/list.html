@@ -56,7 +56,7 @@
 <!-- Filter Bar -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
             <div>
                 <label class="form-label text-xs">Search</label>
                 <input type="text" name="q" value="{{ q }}" placeholder="Number, symptom, asset..." class="form-input">
@@ -80,6 +80,15 @@
                 </select>
             </div>
             <div>
+                <label class="form-label text-xs">Impact</label>
+                <select name="impact" class="form-select">
+                    <option value="">All Impacts</option>
+                    {% for val, label in impact_choices %}
+                    <option value="{{ val }}" {% if impact == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
                 <label class="form-label text-xs">Fixed Asset</label>
                 <select name="fixed_asset" class="form-select">
                     <option value="">All Assets</option>
@@ -92,7 +101,7 @@
                 <button type="submit" class="btn btn-outline flex-1">
                     <i data-lucide="search" class="w-4 h-4 me-1"></i> Filter
                 </button>
-                {% if q or status or category or fixed_asset_id %}
+                {% if q or status or category or impact or fixed_asset_id %}
                 <a href="{% url 'assets:asset_downtime_log_list' %}" class="btn btn-outline text-slate-500">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
