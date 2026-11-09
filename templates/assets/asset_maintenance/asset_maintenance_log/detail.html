@@ -183,7 +183,7 @@
                 <div class="pt-2 border-t border-slate-100">
                     <div class="text-xs text-slate-500">Lead Technician</div>
                     <div class="text-sm font-medium text-slate-900 mt-0.5">
-                        {{ maintenance_log.lead_technician.get_full_name|default:maintenance_log.lead_technician.username|default:"Unassigned" }}
+                        {% if maintenance_log.lead_technician %}{{ maintenance_log.lead_technician.get_full_name|default:maintenance_log.lead_technician.username }}{% else %}Unassigned{% endif %}
                     </div>
                 </div>
 
@@ -257,7 +257,7 @@
                 <div>
                     <div class="text-xs text-slate-500">Approved By Supervisor</div>
                     <div class="font-medium text-slate-900 mt-0.5">
-                        {{ maintenance_log.approved_by.get_full_name|default:maintenance_log.approved_by.username|default:"Pending Approval" }}
+                        {% if maintenance_log.approved_by %}{{ maintenance_log.approved_by.get_full_name|default:maintenance_log.approved_by.username }}{% else %}Pending Approval{% endif %}
                     </div>
                 </div>
                 {% if maintenance_log.approved_at %}
