@@ -170,15 +170,15 @@
                         </td>
                         <td class="text-end table-actions">
                             <div class="flex items-center justify-end gap-1">
-                                <a href="{% url 'assets:asset_condition_assessment_detail' assessment.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                <a href="{% url 'assets:asset_condition_assessment_detail' assessment.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                <a href="{% url 'assets:asset_condition_assessment_edit' assessment.pk %}" class="btn btn-icon btn-outline" title="Edit Assessment">
+                                <a href="{% url 'assets:asset_condition_assessment_edit' assessment.pk %}" class="btn btn-icon btn-outline" title="Edit Assessment" aria-label="Edit Assessment">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
                                 <form method="post" action="{% url 'assets:asset_condition_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Delete condition assessment {{ assessment.number }}?');">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Assessment">
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Assessment" aria-label="Delete Assessment">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
