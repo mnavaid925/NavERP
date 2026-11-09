@@ -204,6 +204,8 @@ class AssetConditionAssessment(TenantNumbered):
             models.Index(fields=["tenant", "condition_grade"], name="idx_acas_ten_grade"),
             models.Index(fields=["tenant", "status"], name="idx_acas_ten_stat"),
             models.Index(fields=["tenant", "fixed_asset"], name="idx_acas_ten_fa"),
+            models.Index(fields=["tenant", "assessment_type"], name="idx_acas_ten_type"),
+            models.Index(fields=["tenant", "operating_status"], name="idx_acas_ten_opstat"),
         ]
 
     def __str__(self):
