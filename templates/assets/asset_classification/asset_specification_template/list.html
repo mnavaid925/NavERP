@@ -164,12 +164,14 @@
                         <a href="{% url 'assets:asset_specification_template_edit' tpl.pk %}" class="btn btn-icon" title="Edit">
                             <i data-lucide="pencil"></i>
                         </a>
+                        {% if request.user.is_superuser or request.user.is_tenant_admin %}
                         <form method="post" action="{% url 'assets:asset_specification_template_delete' tpl.pk %}" class="inline" onsubmit="return confirm('Delete specification template {{ tpl.attribute_key }}?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-icon text-red" title="Delete">
                                 <i data-lucide="trash-2"></i>
                             </button>
                         </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
