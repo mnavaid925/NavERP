@@ -123,7 +123,12 @@ class AssetCriticalityAssessmentForm(TenantUniqueMixin, forms.ModelForm):
             "regulatory_compliance_impact",
         ]:
             val = cleaned_data.get(fld)
-            if val is not None and (int(val) < 1 or int(val) > 5):
-                self.add_error(fld, "Consequence score must be between 1 and 5.")
+            if val is not None:
+                try:
+                    ival = int(val)
+                    if ival < 1 or ival > 5:
+                        self.add_error(fld, "Consequence score must be between 1 and 5.")
+                except (ValueError, TypeError):
+                    self.add_error(fld, "Consequence score must be an integer between 1 and 5.")
 
         return cleaned_data
