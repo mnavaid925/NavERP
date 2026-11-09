@@ -22,9 +22,6 @@ def asset_condition_assessment_list(request):
             "fixed_asset",
             "operational_asset",
             "asset_category",
-            "inspector",
-            "external_inspector",
-            "triggered_maintenance_request",
         ),
         request,
     )
