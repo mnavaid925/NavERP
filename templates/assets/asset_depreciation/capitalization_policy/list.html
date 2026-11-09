@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Capitalization Policies & Safe Harbor — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Depreciation & Financial Management</span>
+            <span>/</span>
+            <span>Capitalization Policies</span>
+        </div>
+        <h1 class="page-title">Capitalization Threshold Policies (CapEx vs OpEx)</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:capitalization_policy_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Policy Rule
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Policies</div>
+            <div class="stat-value">{{ total_policies }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Rules</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="award"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Safe Harbor Rules</div>
+            <div class="stat-value">{{ safe_harbor_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="layers"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Category Overrides</div>
+            <div class="stat-value">{{ override_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ q }}" placeholder="Policy name, standard, notes..." class="form-input">
+            </div>
+            <div>
+                <label for="scope-filter" class="form-label">Policy Scope</label>
+                <select id="scope-filter" name="scope" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for val, label in scope_choices %}
+                    <option value="{{ val }}" {% if selected_scope == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="cat-filter" class="form-label">Category</label>
+                <select id="cat-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk|stringformat:'d' }}" {% if selected_category == cat.pk|stringformat:'d' %}selected{% endif %}>{{ cat.code }} — {{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="search" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:capitalization_policy_list' %}" class="btn btn-outline">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Policies Table -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Policy #</th>
+                    <th>Policy Name & Standard</th>
+                    <th>Scope</th>
+                    <th>Category Target</th>
+                    <th class="text-right">Cost Threshold</th>
+                    <th>Min. Life</th>
+                    <th>Safe Harbor</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in policies %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:capitalization_policy_detail' item.pk %}" class="font-medium text-brand hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.name }}</div>
+                        <div class="text-xs text-muted">{{ item.applicable_gaap_standard }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.scope_css }}">{{ item.get_policy_scope_display }}</span>
+                    </td>
+                    <td>
+                        {% if item.category %}
+                        <div class="text-xs font-medium text-slate-800">{{ item.category.code }}</div>
+                        <div class="text-xs text-muted truncate max-w-xs">{{ item.category.name }}</div>
+                        {% else %}
+                        <span class="text-xs text-muted">All Categories (Global)</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right font-mono text-sm font-semibold text-slate-900">
+                        ${{ item.minimum_cost_threshold|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="text-xs font-medium text-slate-800">≥ {{ item.minimum_useful_life_months }} mos</span>
+                    </td>
+                    <td>
+                        {% if item.de_minimis_safe_harbor %}
+                        <span class="badge badge-green">IRS Safe Harbor</span>
+                        {% else %}
+                        <span class="text-xs text-muted">Custom GAAP</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_css }}">{{ item.is_active|yesno:"Active,Archived" }}</span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:capitalization_policy_detail' item.pk %}" class="btn btn-icon" title="View Detail / Test Evaluation">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:capitalization_policy_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:capitalization_policy_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete policy {{ item.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red" title="Delete">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-muted mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Capitalization Policies Found</h3>
+                            <p class="text-sm text-muted mb-4">No capitalization policy rules match the filter criteria or none have been established.</p>
+                            <a href="{% url 'assets:capitalization_policy_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Policy Rule
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex items-center justify-between">
+        <div class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} policies
+        </div>
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_scope %}&scope={{ selected_scope }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            <span class="text-sm text-muted px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if selected_scope %}&scope={{ selected_scope }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
