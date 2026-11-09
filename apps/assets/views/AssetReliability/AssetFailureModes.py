@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -58,12 +58,18 @@ def asset_failure_mode_list(request):
     if cat_filter and cat_filter.isdigit():
         qs = qs.filter(asset_category_id=int(cat_filter))
 
-    # KPI counts over tenant
+    # KPI counts over tenant in a single roundtrip
     tenant_base = AssetFailureMode.objects.filter(tenant=request.tenant)
-    total_failure_modes = tenant_base.count()
-    extreme_risk_count = tenant_base.filter(risk_level="extreme").count()
-    high_risk_count = tenant_base.filter(risk_level="high").count()
-    cbm_strategy_count = tenant_base.filter(rcm_strategy="condition_based").count()
+    stats = tenant_base.aggregate(
+        total=Count("id"),
+        extreme=Count("id", filter=Q(risk_level="extreme")),
+        high=Count("id", filter=Q(risk_level="high")),
+        cbm=Count("id", filter=Q(rcm_strategy="condition_based")),
+    )
+    total_failure_modes = stats["total"]
+    extreme_risk_count = stats["extreme"]
+    high_risk_count = stats["high"]
+    cbm_strategy_count = stats["cbm"]
 
     paginator = Paginator(qs, 20)
     page_number = request.GET.get("page")
