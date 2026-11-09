@@ -67,6 +67,7 @@ def asset_criticality_assessment_list(request):
         "abc_choices": AssetCriticalityAssessment.ABC_RATING_CHOICES,
         "status_choices": AssetCriticalityAssessment.STATUS_CHOICES,
         "q": q,
+        "search_query": q,
         "selected_abc": abc,
         "selected_status": status,
         "total_count": counts["total"] or 0,
