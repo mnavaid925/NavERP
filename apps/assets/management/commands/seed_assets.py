@@ -8,6 +8,10 @@ from django.utils import timezone
 from apps.accounting.models import Currency, FixedAsset, GLAccount
 from apps.accounting.models import FiscalPeriod
 from apps.assets.models import (
+    AssetCalibrationRecord,
+    AssetConditionAssessment,
+    AssetFailureMode,
+    AssetTelemetryReading,
     AssetAcquisitionReceipt,
     AssetAudit,
     AssetCapitalization,
@@ -52,6 +56,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetCalibrationRecord.objects.all().delete()
+            AssetFailureMode.objects.all().delete()
+            AssetTelemetryReading.objects.all().delete()
+            AssetConditionAssessment.objects.all().delete()
             AssetPerformanceScorecard.objects.all().delete()
             AssetEnergyReading.objects.all().delete()
             AssetOeeRecord.objects.all().delete()
@@ -89,6 +97,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_3(tenant)
             self._seed_tenant_11_4(tenant)
             self._seed_tenant_11_5(tenant)
+            self._seed_tenant_11_7(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -1419,3 +1428,293 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] 11.5 Seeding complete (2 contracts, 2 schedules, 3 requests, 2 logs).")
 
+
+    def _seed_tenant_11_7(self, tenant):
+        # Idempotency guard for 11.7
+        if AssetConditionAssessment.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.7 Reliability & Condition data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.7 Asset Reliability & Condition Monitoring...")
+
+        user = User.objects.filter(tenant=tenant).first()
+        fa_primary = FixedAsset.objects.filter(tenant=tenant).first()
+        fa_secondary = FixedAsset.objects.filter(tenant=tenant).last()
+        oa_primary = Asset.objects.filter(tenant=tenant).first()
+        cat = AssetCategory.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, party_roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+        sched = AssetMaintenanceSchedule.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            # 1. Condition Assessments
+            AssetConditionAssessment.objects.create(
+                tenant=tenant,
+                title="Baseline Ultrasonic Thickness & Shell Integrity Survey",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                inspector=user,
+                external_inspector=vendor,
+                assessment_date=timezone.now().date() - timezone.timedelta(days=10),
+                assessment_type="ndt_ultrasonic",
+                condition_grade="grade_2_good",
+                health_score=88,
+                operating_status="normal_operation",
+                checklist_summary="1. Ultrasonic wall thickness gauge check at 8 quadrants\n2. Paint adhesion test\n3. Anchor bolt torque audit",
+                findings="Nominal wall thickness measured at 12.4mm (spec: 12.7mm). Zero deep corrosion pitting detected. Flange gasket surface smooth.",
+                recommendations="Continue routine 12-month ultrasonic surveys. Next inspection scheduled for Q4.",
+                followup_required=False,
+                status="completed",
+            )
+
+            AssetConditionAssessment.objects.create(
+                tenant=tenant,
+                title="Infrared Thermography Scan on Main Transformer & Bushings",
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                inspector=user,
+                external_inspector=vendor,
+                assessment_date=timezone.now().date() - timezone.timedelta(days=5),
+                assessment_type="ndt_thermography",
+                condition_grade="grade_4_poor",
+                health_score=42,
+                operating_status="operational_with_defects",
+                checklist_summary="1. Phase A, B, C primary bushing thermal gradients\n2. Tap changer radiator fin delta-T\n3. Neutral grounding bus connection",
+                findings="Hotspot detected on Phase B high-voltage termination: 84.5°C under 60% rated load (ambient 24°C). Delta-T of 38°C indicates high-resistance contact.",
+                recommendations="Immediate de-energization and retorque/refacing of Phase B terminal lug. Avoid operating above 70% load until serviced.",
+                followup_required=True,
+                status="reviewed",
+                reviewed_by=user,
+                reviewed_at=timezone.now() - timezone.timedelta(days=4),
+            )
+
+            AssetConditionAssessment.objects.create(
+                tenant=tenant,
+                title="Monthly Vibration Screening Pen Check - Hydraulic Drive",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                inspector=user,
+                assessment_date=timezone.now().date() - timezone.timedelta(days=2),
+                assessment_type="ndt_vibration_pen",
+                condition_grade="grade_1_excellent",
+                health_score=96,
+                operating_status="normal_operation",
+                checklist_summary="1. Motor drive-end horizontal RMS velocity\n2. Motor non-drive end axial velocity\n3. Pump casing vertical acceleration",
+                findings="Overall velocity RMS measured at 1.1 mm/s across all bearing points. ISO 10816 Class II Zone A (As New). Zero high-frequency bearing distress.",
+                recommendations="Equipment in pristine operating condition. Standard preventive maintenance schedule remains appropriate.",
+                followup_required=False,
+                status="completed",
+            )
+
+            # 2. Telemetry Readings
+            AssetTelemetryReading.objects.create(
+                tenant=tenant,
+                sensor_identifier="VIB-PUMP-01-AXIAL",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                recorded_by=user,
+                recorded_at=timezone.now() - timezone.timedelta(hours=6),
+                source="iot_sensor",
+                metric_type="vibration_velocity_rms",
+                metric_unit="mm_per_s",
+                reading_value=Decimal("2.4500"),
+                baseline_value=Decimal("2.2000"),
+                threshold_status="normal",
+                is_anomaly=False,
+                alert_notes="Steady state running velocity within normal baseline ISO limits.",
+            )
+
+            AssetTelemetryReading.objects.create(
+                tenant=tenant,
+                sensor_identifier="RTD-MOTOR-DE-02",
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                recorded_by=user,
+                recorded_at=timezone.now() - timezone.timedelta(hours=4),
+                source="scada_historian",
+                metric_type="bearing_temperature",
+                metric_unit="celsius",
+                reading_value=Decimal("78.5000"),
+                baseline_value=Decimal("60.0000"),
+                threshold_status="warning",
+                is_anomaly=False,
+                alert_notes="Bearing operating temperature 30.8% above baseline limit. Lubrication re-greasing recommended.",
+            )
+
+            AssetTelemetryReading.objects.create(
+                tenant=tenant,
+                sensor_identifier="USOUND-VALVE-04",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                recorded_by=user,
+                recorded_at=timezone.now() - timezone.timedelta(hours=2),
+                source="iot_sensor",
+                metric_type="acoustic_ultrasound",
+                metric_unit="decibel_uv",
+                reading_value=Decimal("48.2000"),
+                baseline_value=Decimal("25.0000"),
+                threshold_status="anomaly_detected",
+                is_anomaly=True,
+                anomaly_confidence=Decimal("92.50"),
+                alert_notes="High-frequency acoustic signature indicates internal seat bypass turbulence / passing valve cavitation.",
+            )
+
+            AssetTelemetryReading.objects.create(
+                tenant=tenant,
+                sensor_identifier="PT-LINE-DISCHARGE",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                recorded_by=user,
+                recorded_at=timezone.now() - timezone.timedelta(minutes=30),
+                source="handheld_tester",
+                metric_type="operating_pressure",
+                metric_unit="bar",
+                reading_value=Decimal("120.0000"),
+                baseline_value=Decimal("120.0000"),
+                threshold_status="normal",
+                is_anomaly=False,
+                alert_notes="Direct manifold gauge verification confirms calibrated working pressure.",
+            )
+
+            # 3. Failure Mode & Effects Analysis (FMEA & RCM)
+            AssetFailureMode.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                component_subsystem="Centrifugal Pump Impeller & Volute Casing",
+                function_description="Deliver 450 gpm cooling water at 6.5 bar differential head continuously during plant operations.",
+                functional_failure="Total discharge flow drops below 350 gpm or erratic discharge pressure pulsing.",
+                failure_mode="Cavitation Pitting & Blade Erosion",
+                failure_cause="Low suction head (NPSH margin inadequate), entrained air bubbles, or suction strainer blinding.",
+                failure_effect="Loss of heat exchanger cooling capacity, elevated casing vibration, and eventual impeller destruction requiring emergency line shutdown.",
+                severity_score=7,
+                occurrence_score=5,
+                detection_score=8,
+                rcm_strategy="condition_based",
+                strategy_rationale="Continuous acoustic ultrasound sensor and vibration monitoring detect inception of cavitation long before structural impeller wear.",
+                mitigation_task="Monthly acoustic ultrasound check on suction nozzle; automated trip if ultrasound exceeds 38 dBµV for > 5 minutes.",
+                linked_maintenance_schedule=sched,
+                assessed_by=user,
+                status="active",
+            )
+
+            AssetFailureMode.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                component_subsystem="Hydraulic Cylinder Rod Packing & Wiper Seal",
+                function_description="Retain 210 bar hydraulic oil inside cylinder bore while cycling linear motion at 0.4 m/s.",
+                functional_failure="External hydraulic fluid weeping along cylinder chrome rod exceeding 5 drops/min.",
+                failure_mode="Elastomer Thermal Hardening & Extrusion",
+                failure_cause="High hydraulic fluid operating temperature (>80°C) and particulate contamination abrading primary polyurethane lip.",
+                failure_effect="Fluid loss, slipping position hold, slip hazard around machinery, and environmental cleanup required.",
+                severity_score=5,
+                occurrence_score=4,
+                detection_score=8,
+                rcm_strategy="time_based_pm",
+                strategy_rationale="Seal elastomer exhibits deterministic wear out curve past 8,000 operating hours in high-heat service.",
+                mitigation_task="Scheduled annual rod seal kit replacement during planned plant turnaround.",
+                linked_maintenance_schedule=sched,
+                assessed_by=user,
+                status="active",
+            )
+
+            AssetFailureMode.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                component_subsystem="Electric Drive Motor Stator Windings",
+                function_description="Convert 480V 3-phase electrical energy into 150 kW shaft mechanical power.",
+                functional_failure="Phase-to-ground or phase-to-phase electrical short circuit tripping main supply breaker.",
+                failure_mode="Dielectric Thermal Breakdown & Moisture Ingress",
+                failure_cause="Class F insulation aging accelerated by winding temperature hotspots (>140°C) and ambient condensation.",
+                failure_effect="Catastrophic motor burn-out, production line dead stoppage for 24-48 hours, high replacement capital cost.",
+                severity_score=9,
+                occurrence_score=7,
+                detection_score=9,
+                rcm_strategy="condition_based",
+                strategy_rationale="Continuous stator RTD telemetry and quarterly polarization index (PI) insulation testing prevent unexpected burnout.",
+                mitigation_task="Quarterly Megger insulation resistance testing (minimum 100 Megohms) and continuous RTD thermal limit trips.",
+                linked_maintenance_schedule=sched,
+                assessed_by=user,
+                status="active",
+            )
+
+            # 4. Calibration Records
+            AssetCalibrationRecord.objects.create(
+                tenant=tenant,
+                instrument_tag="PT-101 (Discharge Pressure Transmitter)",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                calibrated_by=user,
+                service_vendor=vendor,
+                calibration_date=timezone.now().date() - timezone.timedelta(days=45),
+                calibration_frequency_days=365,
+                next_due_date=timezone.now().date() + timezone.timedelta(days=320),
+                reference_standard_used="Fluke 754 Documenting Process Calibrator S/N 892144 (NIST Traceable)",
+                traceability_certificate_no="NIST-FLK-2026-9081",
+                setpoint_nominal=Decimal("100.0000"),
+                allowable_tolerance=Decimal("0.5000"),
+                tolerance_unit="percent_span",
+                as_found_reading=Decimal("100.1200"),
+                as_left_reading=Decimal("100.0400"),
+                calibration_result="pass",
+                certificate_number="CAL-CERT-2026-PT101",
+                certificate_expiry=timezone.now().date() + timezone.timedelta(days=320),
+                status="valid",
+                notes="Calibrated at 5 points (0%, 25%, 50%, 75%, 100% span). Zero adjustment required. Span linearity within 0.04%.",
+            )
+
+            AssetCalibrationRecord.objects.create(
+                tenant=tenant,
+                instrument_tag="TT-204 (Bearing Resistance Thermometer RTD)",
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                calibrated_by=user,
+                service_vendor=vendor,
+                calibration_date=timezone.now().date() - timezone.timedelta(days=20),
+                calibration_frequency_days=180,
+                next_due_date=timezone.now().date() + timezone.timedelta(days=160),
+                reference_standard_used="Beamex MC6 Multifunction Calibrator & Dry Block Bath #DB-50",
+                traceability_certificate_no="ISO17025-BMX-2026-4412",
+                setpoint_nominal=Decimal("50.0000"),
+                allowable_tolerance=Decimal("0.2500"),
+                tolerance_unit="celsius",
+                as_found_reading=Decimal("50.3800"),
+                as_left_reading=Decimal("50.0800"),
+                calibration_result="pass_with_adjustment",
+                certificate_number="CAL-CERT-2026-TT204",
+                certificate_expiry=timezone.now().date() + timezone.timedelta(days=160),
+                status="valid",
+                notes="As-Found reading exceeded 0.25°C tolerance (+0.38°C). Trimmed zero offset via transmitter software. Final As-Left error +0.08°C.",
+            )
+
+            AssetCalibrationRecord.objects.create(
+                tenant=tenant,
+                instrument_tag="DG-003 (Precision Digital Toolroom Micrometer)",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                calibrated_by=user,
+                calibration_date=timezone.now().date() - timezone.timedelta(days=380),
+                calibration_frequency_days=365,
+                next_due_date=timezone.now().date() - timezone.timedelta(days=15),
+                reference_standard_used="Mitutoyo Ceramic Gauge Block Set Grade 0 ISO 3650 S/N 41029",
+                traceability_certificate_no="MIT-CERT-2025-8812",
+                setpoint_nominal=Decimal("25.0000"),
+                allowable_tolerance=Decimal("0.0050"),
+                tolerance_unit="engineering_units",
+                as_found_reading=Decimal("25.0020"),
+                as_left_reading=Decimal("25.0010"),
+                calibration_result="pass",
+                certificate_number="CAL-CERT-2025-DG003",
+                certificate_expiry=timezone.now().date() - timezone.timedelta(days=15),
+                status="expired",
+                notes="Instrument in good physical condition but recalibration deadline is overdue by 15 days. Scheduled for recalibration this week.",
+            )
+
+        self.stdout.write(f"[{tenant.name}] 11.7 Seeding complete (3 assessments, 4 telemetry readings, 3 failure modes, 3 calibration records).")
