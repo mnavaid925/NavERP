@@ -96,64 +96,64 @@
 ---
 
 ## 11.5-0 - Non-goals, pinned so later passes cannot "helpfully" add them
-- [ ] **NO duplicate operational work order engine** — Plant floor job shop scheduling reuses `scm.MaintenanceWorkOrder` [MWO-] and `scm.MaintenancePlan` [PM-].
-- [ ] **NO duplicate financial general ledger** — All maintenance financial debit/credit postings reuse the authoritative accounting spine (`accounting.JournalEntry` [JE-] and `accounting.GLAccount`).
-- [ ] **NO live IoT streaming telemetry ingestion engine / MQTT daemon** — Real-time sensor streaming, vibration data parsing, and condition monitoring belong to **11.7 Asset Reliability & Condition Monitoring**.
-- [ ] **NO physical warehouse bin picking & parts reservation lock** — Spare parts warehouse stock allocation is handled by Module 5 (Inventory) and SCM 4.4 (WMS); 11.5 records consumption and cost.
-- [ ] **NO full-blown external vendor portal login / customer ticket portal** — External contractor access is managed through standard staff assignment and party relationships; contractor self-service portal is out of scope.
+- [x] **NO duplicate operational work order engine** — Plant floor job shop scheduling reuses `scm.MaintenanceWorkOrder` [MWO-] and `scm.MaintenancePlan` [PM-].
+- [x] **NO duplicate financial general ledger** — All maintenance financial debit/credit postings reuse the authoritative accounting spine (`accounting.JournalEntry` [JE-] and `accounting.GLAccount`).
+- [x] **NO live IoT streaming telemetry ingestion engine / MQTT daemon** — Real-time sensor streaming, vibration data parsing, and condition monitoring belong to **11.7 Asset Reliability & Condition Monitoring**.
+- [x] **NO physical warehouse bin picking & parts reservation lock** — Spare parts warehouse stock allocation is handled by Module 5 (Inventory) and SCM 4.4 (WMS); 11.5 records consumption and cost.
+- [x] **NO full-blown external vendor portal login / customer ticket portal** — External contractor access is managed through standard staff assignment and party relationships; contractor self-service portal is out of scope.
 
 ---
 
 ## Sub-module 11.5 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.5.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.5.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
-- [ ] App `apps/assets` already scaffolded in 11.1
+- [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetMaintenanceRequest (`AMRQ`)**
-  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py`
-  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceRequests.py`
-  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (CRUD + triage + dispatch + resolve + close + reject)
-  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceRequests.py`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/list.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/detail.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_request/form.html`
-- [ ] **Entity 2: AssetMaintenanceSchedule (`AMSC`)**
-  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceSchedules.py`
-  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceSchedules.py`
-  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceSchedules.py` (CRUD + activate + pause + generate_request + record_completion)
-  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceSchedules.py`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/list.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/detail.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_schedule/form.html`
-- [ ] **Entity 3: AssetServiceContract (`ASVC`)**
-  - [ ] `apps/assets/models/AssetMaintenance/AssetServiceContracts.py`
-  - [ ] `apps/assets/forms/AssetMaintenance/AssetServiceContracts.py`
-  - [ ] `apps/assets/views/AssetMaintenance/AssetServiceContracts.py` (CRUD + activate + record_visit + renew + terminate)
-  - [ ] `apps/assets/urls/AssetMaintenance/AssetServiceContracts.py`
-  - [ ] `templates/assets/asset_maintenance/asset_service_contract/list.html`
-  - [ ] `templates/assets/asset_maintenance/asset_service_contract/detail.html`
-  - [ ] `templates/assets/asset_maintenance/asset_service_contract/form.html`
-- [ ] **Entity 4: AssetMaintenanceLog (`AMLG`)**
-  - [ ] `apps/assets/models/AssetMaintenance/AssetMaintenanceLogs.py`
-  - [ ] `apps/assets/forms/AssetMaintenance/AssetMaintenanceLogs.py`
-  - [ ] `apps/assets/views/AssetMaintenance/AssetMaintenanceLogs.py` (CRUD + submit_review + approve + post_gl)
-  - [ ] `apps/assets/urls/AssetMaintenance/AssetMaintenanceLogs.py`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/list.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/detail.html`
-  - [ ] `templates/assets/asset_maintenance/asset_maintenance_log/form.html`
+- [x] **Entity 1: AssetMaintenanceRequest (`AMRQ`)**
+  - [x] `apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [x] `apps/assets/forms/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [x] `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (CRUD + triage + dispatch + resolve + close + reject)
+  - [x] `apps/assets/urls/AssetMaintenance/AssetMaintenanceRequests.py`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_request/list.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_request/detail.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_request/form.html`
+- [x] **Entity 2: AssetMaintenanceSchedule (`AMSC`)**
+  - [x] `apps/assets/models/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [x] `apps/assets/forms/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [x] `apps/assets/views/AssetMaintenance/AssetMaintenanceSchedules.py` (CRUD + activate + pause + generate_request + record_completion)
+  - [x] `apps/assets/urls/AssetMaintenance/AssetMaintenanceSchedules.py`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_schedule/list.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_schedule/detail.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_schedule/form.html`
+- [x] **Entity 3: AssetServiceContract (`ASVC`)**
+  - [x] `apps/assets/models/AssetMaintenance/AssetServiceContracts.py`
+  - [x] `apps/assets/forms/AssetMaintenance/AssetServiceContracts.py`
+  - [x] `apps/assets/views/AssetMaintenance/AssetServiceContracts.py` (CRUD + activate + record_visit + renew + terminate)
+  - [x] `apps/assets/urls/AssetMaintenance/AssetServiceContracts.py`
+  - [x] `templates/assets/asset_maintenance/asset_service_contract/list.html`
+  - [x] `templates/assets/asset_maintenance/asset_service_contract/detail.html`
+  - [x] `templates/assets/asset_maintenance/asset_service_contract/form.html`
+- [x] **Entity 4: AssetMaintenanceLog (`AMLG`)**
+  - [x] `apps/assets/models/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [x] `apps/assets/forms/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [x] `apps/assets/views/AssetMaintenance/AssetMaintenanceLogs.py` (CRUD + submit_review + approve + post_gl)
+  - [x] `apps/assets/urls/AssetMaintenance/AssetMaintenanceLogs.py`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_log/list.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_log/detail.html`
+  - [x] `templates/assets/asset_maintenance/asset_maintenance_log/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all models in `apps/assets/models/AssetMaintenance/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all forms in `apps/assets/forms/AssetMaintenance/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetMaintenance/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetMaintenance/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.5 models (`_seed_tenant_11_5`)
-- [ ] Add `LIVE_LINKS["11.5"]` in `apps/core/navigation.py`:
+- [x] Re-export all models in `apps/assets/models/AssetMaintenance/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all forms in `apps/assets/forms/AssetMaintenance/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetMaintenance/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetMaintenance/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.5 models (`_seed_tenant_11_5`)
+- [x] Add `LIVE_LINKS["11.5"]` in `apps/core/navigation.py`:
   - `"Preventive Maintenance (PM) Scheduling"`: `assets:asset_maintenance_schedule_list`
   - `"Work Order Creation & Dispatch"`: `assets:asset_maintenance_request_list`
   - `"Spare Parts & Inventory Control"`: `assets:asset_maintenance_log_list`
@@ -166,38 +166,38 @@
     - `"Maintenance Logs"`: `assets:asset_maintenance_log_list`
     - `"Maintenance & Repair Management"`: `assets:asset_maintenance_request_list`
     - `"PM Scheduling"`: `assets:asset_maintenance_schedule_list`
-- [ ] Run `makemigrations assets` (generating `0008_...`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (generating `0008_...`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_5.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+- [x] Create `temp/smoke_11_5.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions) — 32/32 PASSED
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.5.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.5.md`
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (23 code fixes committed individually)
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_assetmaintenance_models.py`
-- [ ] `test_assetmaintenance_forms.py`
-- [ ] `test_assetmaintenance_views.py`
-- [ ] `test_assetmaintenance_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/` (100% green)
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_asset_maintenance_models.py` (22 tests)
+- [x] `test_asset_maintenance_forms.py` (15 tests)
+- [x] `test_asset_maintenance_views.py` (18 tests)
+- [x] `test_asset_maintenance_security.py` (37 tests)
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/` (766 passed, 0 failures, 100% green)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.5 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
-- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.5.md` (or declare None in review notes)
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.5 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.5.md`
 
 ## Later passes / deferred (Parked from research)
 - IoT Telemetry Live Auto-Trigger (deferred to 11.7)
@@ -205,7 +205,23 @@
 - Automated Vendor AP Bill OCR Matching (deferred to AI Document Processing)
 
 ## Review notes
-(filled in at the end)
+### Sub-module 11.5: Maintenance & Repair Management (Close-out 2026-11-09)
+- **Delivered Entities & Features**:
+  1. `AssetMaintenanceRequest` [AMRQ-]: Breakdown and repair ticketing, urgency & symptom triage, internal technician or external vendor dispatching with service contract linking, resolution verification, and rejection workflow.
+  2. `AssetMaintenanceSchedule` [AMSC-]: Time-based, meter-based, and condition-based recurrence calendars, runtime meter triggers, advance lead-time notifications, SOP checklists, next-due calculation on completion, and on-demand work ticket generation.
+  3. `AssetServiceContract` [ASVC-]: Vendor AMC/SLA agreements, quota-capped routine & emergency visit tracking, response & resolution SLA commitments, contract renewals, and early termination gated by `@tenant_admin_required`.
+  4. `AssetMaintenanceLog` [AMLG-]: Work history ledger, wrench hours, spare parts consumption, ISO 14224 root cause failure modes, repair cost roll-up (`labor + parts + vendor = total`), supervisory approval, and General Ledger posting with multi-entity synchronization.
+- **Review Findings**:
+  - Six review passes executed strictly serial (`code-reviewer`, `explorer`, `frontend-reviewer`, `performance-reviewer`, `qa-smoke-tester`, `security-reviewer`).
+  - Master findings consolidated in `.claude/tasks/review-assets-11.5.md`: 2 Critical, 8 Important, 13 Minor.
+  - All 23 findings resolved and committed file-by-file in Phase 5.
+- **Test Suite Results**:
+  - Module 11.5 dedicated tests: **92 passed, 0 failed, 0 errors** across 4 test modules (`test_asset_maintenance_models.py`, `test_asset_maintenance_forms.py`, `test_asset_maintenance_views.py`, `test_asset_maintenance_security.py`).
+  - Full app test suite: **766 passed, 0 failed, 0 errors** in 108.35s (`pytest apps/assets/tests/`, completely unfiltered).
+- **Gaps Tracked**:
+  - Registered in `.agents/tasks/gaps-assets-11.5.md`:
+    - `GAP-assets-11.5-01`: Canonical Database Table Names (`db_table`) — Deferred / documented as-built.
+    - `GAP-assets-11.5-02`: Financial General Ledger Balanced Journal Entry Posting — Open / pending accounting AP bill/cash integration.
 
 ---
 
