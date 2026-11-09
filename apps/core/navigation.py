@@ -3193,6 +3193,20 @@ LIVE_LINKS = {
         "Cost Allocations": "assets:transfer_list",
         "Asset Financial Management Hub": "assets:overview",
     },
+    "11.5": {
+        "Preventive Maintenance (PM) Scheduling": "assets:asset_maintenance_schedule_list",
+        "Work Order Creation & Dispatch": "assets:asset_maintenance_request_list",
+        "Spare Parts & Inventory Control": "assets:asset_maintenance_log_list",
+        "Maintenance History & Logs": "assets:asset_maintenance_log_list",
+        "Vendor & Contract Maintenance": "assets:asset_service_contract_list",
+        # Plural and convenience aliases
+        "PM Schedules": "assets:asset_maintenance_schedule_list",
+        "Maintenance Requests": "assets:asset_maintenance_request_list",
+        "Maintenance Logs": "assets:asset_maintenance_log_list",
+        "Service Contracts": "assets:asset_service_contract_list",
+        "Service Agreements": "assets:asset_service_contract_list",
+        "Maintenance & Repair Management": "assets:asset_maintenance_request_list",
+    },
 
 
 
