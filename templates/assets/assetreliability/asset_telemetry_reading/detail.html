@@ -17,7 +17,7 @@
             <span class="badge {{ reading.metric_type_css }}">{{ reading.get_metric_type_display }}</span>
             <span class="badge {{ reading.threshold_status_css }}">{{ reading.get_threshold_status_display }}</span>
             {% if reading.is_anomaly %}
-            <span class="badge badge-purple">Statistical Anomaly</span>
+            <span class="badge badge-amber">Statistical Anomaly</span>
             {% endif %}
         </div>
     </div>
@@ -136,7 +136,7 @@
                     <span class="text-xs uppercase tracking-wider text-slate-500 font-semibold block">Anomaly Classification Status</span>
                     <div class="mt-2">
                         {% if reading.is_anomaly %}
-                            <span class="badge badge-purple text-sm py-1 px-3">Statistical Anomaly Detected</span>
+                            <span class="badge badge-amber text-sm py-1 px-3">Statistical Anomaly Detected</span>
                         {% else %}
                             <span class="badge badge-green text-sm py-1 px-3">Normal Operating Pattern</span>
                         {% endif %}
