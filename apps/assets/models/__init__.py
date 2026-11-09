@@ -36,6 +36,12 @@ from apps.assets.models.AssetProcurement import (
     AssetRequisition,
     AssetTag,
 )
+from apps.assets.models.AssetReliability import (
+    AssetCalibrationRecord,
+    AssetConditionAssessment,
+    AssetFailureMode,
+    AssetTelemetryReading,
+)
 
 __all__ = [
     "TenantOwned",
@@ -64,4 +70,8 @@ __all__ = [
     "AssetOeeRecord",
     "AssetEnergyReading",
     "AssetPerformanceScorecard",
+    "AssetConditionAssessment",
+    "AssetTelemetryReading",
+    "AssetFailureMode",
+    "AssetCalibrationRecord",
 ]
