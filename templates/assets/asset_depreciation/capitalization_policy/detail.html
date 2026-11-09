@@ -117,8 +117,8 @@
                 {% if eval_result %}
                 <div class="p-4 rounded-lg border {% if eval_result.classification == 'capitalize' %}bg-green-50 border-green-200{% else %}bg-amber-50 border-amber-200{% endif %}">
                     <div class="flex items-center gap-2 mb-1">
-                        <i data-lucide="{% if eval_result.classification == 'capitalize' %}check-circle-2{% else %}alert-circle{% endif %}" class="w-5 h-5 {% if eval_result.classification == 'capitalize' %}text-green{% else %}text-amber{% endif %}"></i>
-                        <span class="font-bold text-base {% if eval_result.classification == 'capitalize' %}text-green{% else %}text-amber{% endif %}">
+                        <i data-lucide="{% if eval_result.classification == 'capitalize' %}check-circle-2{% else %}alert-circle{% endif %}" class="w-5 h-5 {% if eval_result.classification == 'capitalize' %}text-ok{% else %}text-warn{% endif %}"></i>
+                        <span class="font-bold text-base {% if eval_result.classification == 'capitalize' %}text-ok{% else %}text-warn{% endif %}">
                             Classification: {% if eval_result.classification == 'capitalize' %}CAPITALIZE AS ASSET (CapEx){% else %}EXPENSE IMMEDIATELY (OpEx){% endif %}
                         </span>
                     </div>
@@ -155,7 +155,7 @@
                 <div>
                     <div class="text-xs text-muted">Statutory Safe Harbor Compliance</div>
                     {% if policy.de_minimis_safe_harbor %}
-                    <div class="text-sm font-medium text-green flex items-center gap-1.5 mt-1">
+                    <div class="text-sm font-medium text-ok flex items-center gap-1.5 mt-1">
                         <i data-lucide="check" class="w-4 h-4"></i> IRS Reg. 1.263(a)-1(f) De Minimis
                     </div>
                     {% else %}
