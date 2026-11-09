@@ -197,7 +197,7 @@ def depreciation_schedule_calculate(request, pk):
         messages.error(request, "Cannot recalculate a posted depreciation schedule.")
         return redirect("assets:depreciation_schedule_detail", pk=schedule.pk)
 
-    amount = schedule.calculate_depreciation()
+    amount = schedule.calculate_depreciation(force=True)
     schedule.save()
     write_audit_log(request.user, schedule, "calculate", tenant=request.tenant)
     messages.success(request, f"Depreciation calculated: ${amount:,.2f} for {schedule.number}.")
