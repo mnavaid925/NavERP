@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import models
 from django.utils import timezone
@@ -133,8 +133,20 @@ class CapitalizationPolicy(TenantNumbered):
         return self.SCOPE_CSS.get(self.policy_scope, "badge-slate")
 
     def evaluate_asset(self, cost, useful_life_months):
-        cost_val = Decimal(str(cost or 0))
-        life_val = int(useful_life_months or 0)
+        try:
+            cost_val = Decimal(str(cost or 0))
+            if not cost_val.is_finite() or cost_val < Decimal("0.00") or cost_val >= Decimal("1000000000000"):
+                raise ValueError("Invalid cost value")
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValueError("Invalid cost value")
+
+        try:
+            life_val = int(useful_life_months or 0)
+            if life_val < 0 or life_val > 1200:
+                raise ValueError("Invalid useful life")
+        except (TypeError, ValueError):
+            raise ValueError("Invalid useful life")
+
         meets_cost = cost_val >= self.minimum_cost_threshold
         meets_life = life_val >= self.minimum_useful_life_months
 
