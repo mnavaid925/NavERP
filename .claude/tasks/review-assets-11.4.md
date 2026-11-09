@@ -15,22 +15,22 @@
 
 | ID | Sev | Title | File & Line | Status |
 |:---|:---:|:------|:------------|:------:|
-| **C1** | Critical | Non-existent attribute access on `scm.Asset` in `complete_transfer()` | `apps/assets/models/AssetDepreciation/AssetTransfers.py:230-238` | `[ ] open` |
-| **I1** | Important | Silent omission of General Ledger posting when GL accounts unconfigured in schedule | `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py:269-311` | `[ ] open` |
-| **I2** | Important | Silent omission of General Ledger posting when GL accounts unconfigured in revaluation | `apps/assets/models/AssetDepreciation/AssetRevaluations.py:215-275` | `[ ] open` |
-| **I3** | Important | Depreciation override amount entered by user is overwritten by calculation logic | `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py:196-254`, `views/.../AssetDepreciationSchedules.py:120, 155` | `[ ] open` |
-| **I4** | Important | `transferred_by` omitted from `reject_foreign` in `AssetTransferForm.clean()` | `apps/assets/forms/AssetDepreciation/AssetTransfers.py:86-104` | `[ ] open` |
-| **I5** | Important | Unhandled `decimal.InvalidOperation` on `eval_cost` in Capitalization Policy Evaluator | `apps/assets/views/AssetDepreciation/CapitalizationPolicies.py:83-95`, `models/.../CapitalizationPolicies.py:136-137` | `[ ] open` |
-| **I6** | Important | Non-theme badge CSS classes (`badge-purple`, `badge-blue`) in model CSS mappings | `AssetDepreciationSchedules.py:49-50`, `AssetRevaluations.py:47`, `AssetTransfers.py:40-41`, `CapitalizationPolicies.py:34-35` | `[ ] open` |
-| **I7** | Important | Invalid text color classes `text-green` and `text-amber` across templates | `revaluation/list.html:138`, `revaluation/detail.html:69-70`, `capitalization_policy/detail.html:120-121, 158` | `[ ] open` |
-| **I8** | Important | Privileged action buttons in templates lack tenant admin role gating | Templates across `templates/assets/asset_depreciation/` | `[ ] open` |
-| **M1** | Minor | Invalid field lookup `transfer.operational_asset.current_location.name` in detail template | `templates/assets/asset_depreciation/transfer/detail.html:172` | `[ ] open` |
-| **M2** | Minor | Capitalization policy test widget display misses `manual_review` classification | `templates/assets/asset_depreciation/capitalization_policy/detail.html:122` | `[ ] open` |
-| **M3** | Minor | Deep nested FK lookups in `depreciation_schedule_detail` and `transfer_detail` | `AssetDepreciationSchedules.py:92-101`, `AssetTransfers.py:83-97` | `[ ] open` |
-| **M4** | Minor | Missing `search_query` context alias in list views | All 4 list views in `apps/assets/views/AssetDepreciation/` | `[ ] open` |
-| **M5** | Minor | Template physical directional margin classes (`mr-1`, `ml-*`) instead of logical RTL (`me-1`, `ms-*`) | Templates across `templates/assets/asset_depreciation/` | `[ ] open` |
-| **M6** | Minor | List pagination card footers missing standard padding and border classes | All 4 list templates in `templates/assets/asset_depreciation/` | `[ ] open` |
-| **M7** | Minor | Icon-only action buttons in list tables omit `aria-label` | All 4 list templates in `templates/assets/asset_depreciation/` | `[ ] open` |
+| **C1** | Critical | Non-existent attribute access on `scm.Asset` in `complete_transfer()` | `apps/assets/models/AssetDepreciation/AssetTransfers.py:230-238` | `[x] fixed — fix(assets): update scm.Asset with correct location, custodian, and org_unit in complete_transfer (C1)` |
+| **I1** | Important | Silent omission of General Ledger posting when GL accounts unconfigured in schedule | `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py:269-311` | `[x] fixed — fix(assets): require GL accounts before posting depreciation schedule to GL (I1)` |
+| **I2** | Important | Silent omission of General Ledger posting when GL accounts unconfigured in revaluation | `apps/assets/models/AssetDepreciation/AssetRevaluations.py:215-275` | `[x] fixed — fix(assets): require GL accounts for non-zero revaluations before posting (I2)` |
+| **I3** | Important | Depreciation override amount entered by user is overwritten by calculation logic | `apps/assets/models/AssetDepreciation/AssetDepreciationSchedules.py:196-254`, `views/.../AssetDepreciationSchedules.py:120, 155` | `[x] fixed — fix(assets): preserve manual depreciation override in calculate_depreciation (I3)` |
+| **I4** | Important | `transferred_by` omitted from `reject_foreign` in `AssetTransferForm.clean()` | `apps/assets/forms/AssetDepreciation/AssetTransfers.py:86-104` | `[x] fixed — fix(assets): reject foreign transferred_by user in AssetTransferForm (I4)` |
+| **I5** | Important | Unhandled `decimal.InvalidOperation` on `eval_cost` in Capitalization Policy Evaluator | `apps/assets/views/AssetDepreciation/CapitalizationPolicies.py:83-95`, `models/.../CapitalizationPolicies.py:136-137` | `[x] fixed — fix(assets): guard evaluate_asset against invalid, infinite, and out-of-range inputs (I5)` |
+| **I6** | Important | Non-theme badge CSS classes (`badge-purple`, `badge-blue`) in model CSS mappings | `AssetDepreciationSchedules.py:49-50`, `AssetRevaluations.py:47`, `AssetTransfers.py:40-41`, `CapitalizationPolicies.py:34-35` | `[x] fixed — fix(assets): replace non-theme badges in model CSS mappings (I6)` |
+| **I7** | Important | Invalid text color classes `text-green` and `text-amber` across templates | `revaluation/list.html:138`, `revaluation/detail.html:69-70`, `capitalization_policy/detail.html:120-121, 158` | `[x] fixed — fix(assets): replace invalid text-green and text-amber with text-ok and text-warn (I7)` |
+| **I8** | Important | Privileged action buttons in templates lack tenant admin role gating | Templates across `templates/assets/asset_depreciation/` | `[x] fixed — fix(assets): gate privileged actions behind tenant admin role across templates (I8)` |
+| **M1** | Minor | Invalid field lookup `transfer.operational_asset.current_location.name` in detail template | `templates/assets/asset_depreciation/transfer/detail.html:172` | `[x] fixed — fix(assets): fix operational_asset location lookup in transfer detail (M1)` |
+| **M2** | Minor | Capitalization policy test widget display misses `manual_review` classification | `templates/assets/asset_depreciation/capitalization_policy/detail.html:122` | `[x] fixed — fix(assets): display manual review classification in capitalization evaluator (M2)` |
+| **M3** | Minor | Deep nested FK lookups in `depreciation_schedule_detail` and `transfer_detail` | `AssetDepreciationSchedules.py:92-101`, `AssetTransfers.py:83-97` | `[x] fixed — perf(assets): select_related related entities in detail views (M3)` |
+| **M4** | Minor | Missing `search_query` context alias in list views | All 4 list views in `apps/assets/views/AssetDepreciation/` | `[x] fixed — feat(assets): add search_query context alias across all 4 list views (M4)` |
+| **M5** | Minor | Template physical directional margin classes (`mr-1`, `ml-*`) instead of logical RTL (`me-1`, `ms-*`) | Templates across `templates/assets/asset_depreciation/` | `[x] fixed — style(assets): use logical me-1 and ms-* classes across templates (M5)` |
+| **M6** | Minor | List pagination card footers missing standard padding and border classes | All 4 list templates in `templates/assets/asset_depreciation/` | `[x] fixed — style(assets): add standard padding and border to list card footers (M6)` |
+| **M7** | Minor | Icon-only action buttons in list tables omit `aria-label` | All 4 list templates in `templates/assets/asset_depreciation/` | `[x] fixed — accessibility(assets): add aria-label to table action buttons in list templates (M7)` |
 
 ---
 
