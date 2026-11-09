@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Calibration Records — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Reliability & Condition</span>
+            <span>/</span>
+            <span>Calibration Records</span>
+        </div>
+        <h1 class="page-title">Instrument Calibration Records</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_calibration_record_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Calibration
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="gauge"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Calibrations</div>
+            <div class="stat-value">{{ total_calibrations }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Passed / In Tolerance</div>
+            <div class="stat-value">{{ passed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="x-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Out of Tolerance</div>
+            <div class="stat-value">{{ failed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="calendar-x"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue / Expired</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Tag, cert #, standard..." class="form-input">
+            </div>
+            <div>
+                <label for="res-filter" class="form-label">Calibration Result</label>
+                <select id="res-filter" name="calibration_result" class="form-select">
+                    <option value="">All Results</option>
+                    {% for val, label in calibration_result_choices %}
+                    <option value="{{ val }}" {% if request.GET.calibration_result == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="vendor-filter" class="form-label">Calibration Vendor</label>
+                <select id="vendor-filter" name="vendor" class="form-select">
+                    <option value="">All Labs / Vendors</option>
+                    {% for v in vendor_list %}
+                    <option value="{{ v.pk }}" {% if request.GET.vendor == v.pk|stringformat:"d" %}selected{% endif %}>{{ v.legal_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Certificate Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_calibration_record_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Calibration #</th>
+                        <th>Instrument Tag</th>
+                        <th>Target Asset</th>
+                        <th>Cal Date</th>
+                        <th>Next Due Date</th>
+                        <th>Setpoint (Tol)</th>
+                        <th>As-Left Error</th>
+                        <th>Result</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in calibration_records %}
+                    <tr>
+                        <td class="font-medium">
+                            <a href="{% url 'assets:asset_calibration_record_detail' c.pk %}" class="text-blue-600 hover:underline">
+                                {{ c.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-900">{{ c.instrument_tag }}</div>
+                            <div class="text-xs text-slate-500 font-mono">{{ c.reference_standard_used|truncatechars:30 }}</div>
+                        </td>
+                        <td>
+                            <div class="text-xs text-slate-700">
+                                {% if c.fixed_asset %}
+                                    FA: {{ c.fixed_asset.name }}
+                                {% elif c.operational_asset %}
+                                    AST: {{ c.operational_asset.name }}
+                                {% else %}
+                                    <span class="text-slate-400 italic">Standalone Gauge</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="text-xs text-slate-600">
+                            {{ c.calibration_date|date:"M d, Y" }}
+                        </td>
+                        <td>
+                            <div class="text-xs font-semibold {% if c.status == 'expired' %}text-red-600{% elif c.status == 'expiring_soon' %}text-amber-600{% else %}text-slate-800{% endif %}">
+                                {{ c.next_due_date|date:"M d, Y" }}
+                            </div>
+                        </td>
+                        <td class="text-xs text-slate-800">
+                            {{ c.setpoint_nominal }} (±{{ c.allowable_tolerance }})
+                        </td>
+                        <td>
+                            {% if c.as_left_error is not None %}
+                                <span class="font-mono text-xs {% if c.calibration_result == 'fail_out_of_tolerance' %}text-red-600 font-bold{% else %}text-slate-700{% endif %}">
+                                    {% if c.as_left_error > 0 %}+{% endif %}{{ c.as_left_error }}
+                                </span>
+                            {% else %}
+                                <span class="text-slate-400 italic">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ c.calibration_result_css }}">
+                                {{ c.get_calibration_result_display }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge {{ c.status_css }}">
+                                {{ c.get_status_display }}
+                            </span>
+                        </td>
+                        <td class="text-end table-actions">
+                            <div class="flex items-center justify-end gap-1">
+                                <a href="{% url 'assets:asset_calibration_record_detail' c.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                <a href="{% url 'assets:asset_calibration_record_edit' c.pk %}" class="btn btn-icon btn-outline" title="Edit Record">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_calibration_record_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete calibration record {{ c.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Record">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10">
+                            <div class="empty-state py-12 text-center">
+                                <div class="empty-state-icon mx-auto text-slate-300 mb-3">
+                                    <i data-lucide="gauge" class="w-12 h-12 mx-auto"></i>
+                                </div>
+                                <h3 class="text-lg font-medium text-slate-800">No calibration records found</h3>
+                                <p class="text-sm text-slate-500 mt-1">Track pressure transmitters, thermometers, calipers, and test instrument calibration compliance.</p>
+                                <div class="mt-4">
+                                    <a href="{% url 'assets:asset_calibration_record_create' %}" class="btn btn-primary">
+                                        <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Calibration Record
+                                    </a>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+            <div class="text-sm text-slate-500">
+                Showing page {{ page_obj.number }} of {{ paginator.num_pages }}
+            </div>
+            <div class="flex items-center gap-1">
+                {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.calibration_result %}&calibration_result={{ request.GET.calibration_result }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.calibration_result %}&calibration_result={{ request.GET.calibration_result }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
