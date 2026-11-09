@@ -61,6 +61,7 @@ def asset_model_list(request):
         "model_statuses": AssetModel.MODEL_STATUS_CHOICES,
         "categories": categories,
         "q": q,
+        "search_query": q,
         "selected_status": status,
         "selected_category": category_id,
         "total_count": counts["total"] or 0,
