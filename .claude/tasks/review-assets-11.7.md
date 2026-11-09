@@ -58,4 +58,22 @@ None.
 - Non-directional spacing classes `ml-*` in detail/form templates. Fix: replace with `ms-*` for RTL compatibility.
 - Add matching `aria-label` to table icon buttons alongside `title`.
 
+---
+
+## Pass 4: Performance Reviewer Findings
+
+### Critical
+None.
+
+### Important
+- Uncombined KPI queries across list views: 4 roundtrips per list view instead of 1 aggregate query. Fix: combine counts/averages into single `.aggregate()` calls across all 4 list views.
+- Non-atomic mutations in trigger request workflows (`AssetConditionAssessments.py:218-233`, `AssetTelemetryReadings.py:173-195`). Fix: wrap multi-model creations and updates in `with transaction.atomic():`.
+- Missing composite database indexes on hot filter columns and default orderings (`idx_acas_ten_type`, `idx_acas_ten_opstat`, `idx_atel_ten_src`, `idx_acal_ten_cdate`). Fix: add to `Meta.indexes` (satisfying L65 <= 30 chars).
+
+### Minor
+- Unnecessary `select_related` joins in list views for relations only rendered in detail views. Fix: remove unused FKs from list `select_related`.
+- Divergent pagination page size (20 vs app-wide default 15). Fix: change `Paginator(qs, 20)` to `Paginator(qs, 15)`.
+- Defer large unused `TextField`s in list views. Fix: add `.defer(...)` to list queries.
+
+
 
