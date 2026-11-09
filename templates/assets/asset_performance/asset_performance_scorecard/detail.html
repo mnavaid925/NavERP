@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+
+{% block title %}Scorecard {{ scorecard.number }} — Asset Performance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_performance_scorecard_list' %}">Scorecards</a>
+            <span>/</span>
+            <span>{{ scorecard.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scorecard.number }}</h1>
+            <span class="badge {{ scorecard.grade_css }} text-sm">{{ scorecard.get_benchmark_grade_display }}</span>
+            <span class="badge {{ scorecard.period_css }}">{{ scorecard.get_period_type_display }}</span>
+            <span class="badge {{ scorecard.status_css }}">{{ scorecard.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        {% if scorecard.status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_performance_scorecard_publish' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Certify & Publish
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_performance_scorecard_edit' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_performance_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Delete scorecard {{ scorecard.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Primary Metric Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card border-2 {% if scorecard.performance_index_score >= 90 %}border-green-200{% elif scorecard.performance_index_score >= 75 %}border-blue-200{% else %}border-amber-200{% endif %}">
+        <div class="stat-icon {% if scorecard.performance_index_score >= 90 %}green{% elif scorecard.performance_index_score >= 75 %}blue{% else %}orange{% endif %}">
+            <i data-lucide="award"></i>
+        </div>
+        <div class="stat-body">
+            <div class="stat-label font-bold text-slate-800">API Index Score</div>
+            <div class="stat-value text-2xl font-black {% if scorecard.performance_index_score >= 90 %}text-green-600{% elif scorecard.performance_index_score >= 75 %}text-blue-600{% else %}text-amber-600{% endif %}">
+                {{ scorecard.performance_index_score }}
+            </div>
+            <div class="text-xs text-slate-400">Scale: 0–100 (Weighted)</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="pie-chart"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Capacity Utilization</div>
+            <div class="stat-value">{{ scorecard.capacity_utilization_rate }}%</div>
+            <div class="progress mt-2"><div class="progress-bar bg-blue-500" style="width: {{ scorecard.capacity_utilization_rate }}%;"></div></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Availability Rate</div>
+            <div class="stat-value">{{ scorecard.availability_rate }}%</div>
+            <div class="progress mt-2"><div class="progress-bar bg-purple-500" style="width: {{ scorecard.availability_rate }}%;"></div></div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">MTBF Reliability</div>
+            <div class="stat-value">{{ scorecard.mtbf_hours }} <span class="text-xs font-normal text-slate-500">hrs</span></div>
+            <div class="text-xs text-slate-400 mt-1">MTTR: {{ scorecard.mttr_hours }} hrs</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Capacity Allocation & Reliability Metrics -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Capacity Breakdown Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Capacity & Operating Time Allocation</h2>
+                <span class="text-xs text-slate-500">{{ scorecard.period_start|date:"M d, Y" }} – {{ scorecard.period_end|date:"M d, Y" }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                    <div>
+                        <span class="text-xs text-slate-500">Calendar Clock Hours</span>
+                        <div class="font-mono font-semibold text-slate-900">{{ scorecard.total_calendar_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Planned Operating Hours</span>
+                        <div class="font-mono font-semibold text-slate-900">{{ scorecard.planned_operating_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Actual Running Hours</span>
+                        <div class="font-mono font-bold text-green-600 text-base">{{ scorecard.actual_operating_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Unplanned Breakdown Hours</span>
+                        <div class="font-mono font-bold text-red-600">{{ scorecard.unplanned_downtime_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Planned PM / Setup Hours</span>
+                        <div class="font-mono font-semibold text-slate-700">{{ scorecard.planned_downtime_hours }} hrs</div>
+                    </div>
+                    <div>
+                        <span class="text-xs text-slate-500">Idle / Unutilized Capacity</span>
+                        <div class="font-mono font-semibold text-amber-600">{{ scorecard.idle_capacity_hours }} hrs</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reliability & Operations Rollup -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Reliability & Energy Performance Synthesis</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-3 bg-slate-50 rounded-md border border-slate-100">
+                        <div class="text-xs font-semibold text-slate-700 uppercase">Operational Reliability</div>
+                        <div class="mt-2 space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Breakdown Failure Incidents:</span>
+                                <span class="font-mono font-bold text-slate-900">{{ scorecard.failure_event_count }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Total Downtime Cost:</span>
+                                <span class="font-mono font-bold text-red-600">${{ scorecard.total_downtime_cost|floatformat:2 }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Average Shift OEE:</span>
+                                <span class="font-mono font-bold text-blue-600">{{ scorecard.average_oee_percentage }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-slate-50 rounded-md border border-slate-100">
+                        <div class="text-xs font-semibold text-slate-700 uppercase">Energy & Sustainability</div>
+                        <div class="mt-2 space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Total Energy Consumption:</span>
+                                <span class="font-mono font-bold text-slate-900">{{ scorecard.total_energy_consumption_kwh }} kWh</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Total Carbon Emissions:</span>
+                                <span class="font-mono font-bold text-slate-900">{{ scorecard.total_carbon_emissions_kg }} kg CO2e</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-600">Peer Category Rank:</span>
+                                <span class="font-mono font-bold text-purple-600">#{{ scorecard.peer_category_ranking }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if scorecard.executive_summary %}
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Executive Reliability Assessment</h2>
+            </div>
+            <div class="card-body">
+                <p class="text-slate-800 text-sm whitespace-pre-line leading-relaxed">{{ scorecard.executive_summary }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right Column: Target Asset & Evaluator -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Equipment Reference</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if scorecard.fixed_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Fixed Asset</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ scorecard.fixed_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ scorecard.fixed_asset.asset_number }}</div>
+                </div>
+                {% endif %}
+
+                {% if scorecard.operational_asset %}
+                <div>
+                    <span class="text-xs text-slate-500">Operational Equipment</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ scorecard.operational_asset.name }}</div>
+                    <div class="text-xs text-slate-400 font-mono">{{ scorecard.operational_asset.code }}</div>
+                </div>
+                {% endif %}
+
+                {% if scorecard.department %}
+                <div>
+                    <span class="text-xs text-slate-500">Department / Workshop</span>
+                    <div class="font-medium text-slate-900 text-sm">{{ scorecard.department.name }}</div>
+                </div>
+                {% endif %}
+
+                {% if not scorecard.fixed_asset and not scorecard.operational_asset %}
+                <p class="text-sm text-slate-400 italic">No asset linked.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Scorecard Certification</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-xs text-slate-500">Evaluated By</span>
+                    <div class="text-slate-800 font-medium">
+                        {{ scorecard.evaluated_by.get_full_name|default:scorecard.evaluated_by.username|default:"System Evaluator" }}
+                    </div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Created At</span>
+                    <div class="text-slate-700">{{ scorecard.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+                <div>
+                    <span class="text-xs text-slate-500">Certified / Updated</span>
+                    <div class="text-slate-700">{{ scorecard.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
