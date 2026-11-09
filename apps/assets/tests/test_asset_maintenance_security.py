@@ -65,15 +65,12 @@ def _asset_maintenance_request_payload(asset, org_unit, **overrides):
 
 
 def _asset_maintenance_schedule_payload(asset, **overrides):
-    today = timezone.now().date()
     payload = {
         "name": "Security Injected Schedule",
         "schedule_type": "time_based",
         "fixed_asset": asset.pk,
         "frequency_interval": 1,
         "frequency_unit": "months",
-        "start_date": str(today),
-        "next_due_date": str(today + timezone.timedelta(days=30)),
         "lead_time_days": 3,
         "is_mandatory": True,
         "is_active": True,
@@ -282,7 +279,7 @@ def test_asset_maintenance_security_contract_list_isolation(client_a, service_co
     url = reverse("assets:asset_service_contract_list")
     response = client_a.get(url)
     assert response.status_code == 200
-    contracts = response.context["contracts"]
+    contracts = response.context["service_contracts"]
     assert service_contract_a in contracts
     assert service_contract_b not in contracts
 
