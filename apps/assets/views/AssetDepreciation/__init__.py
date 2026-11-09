@@ -1,0 +1,1 @@
+"""AssetDepreciation views package."""
