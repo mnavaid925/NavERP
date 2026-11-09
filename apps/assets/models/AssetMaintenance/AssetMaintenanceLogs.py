@@ -57,13 +57,13 @@ class AssetMaintenanceLog(TenantNumbered):
         "emergency_breakdown": "badge-red",
         "calibration": "badge-slate",
         "inspection": "badge-green",
-        "overhaul": "badge-purple",
+        "overhaul": "badge-slate",
     }
 
     FAILURE_CODE_CSS = {
         "mechanical_wear": "badge-amber",
         "electrical_short": "badge-red",
-        "hydraulic_leak": "badge-blue",
+        "hydraulic_leak": "badge-info",
         "software_fault": "badge-slate",
         "operator_error": "badge-muted",
         "corrosion": "badge-amber",
