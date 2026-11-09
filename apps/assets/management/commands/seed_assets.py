@@ -15,12 +15,16 @@ from apps.assets.models import (
     AssetCriticalityAssessment,
     AssetCustodyLog,
     AssetDepreciationSchedule,
+    AssetDowntimeLog,
+    AssetEnergyReading,
     AssetIncidentReport,
     AssetMaintenanceLog,
     AssetMaintenanceRequest,
     AssetMaintenanceSchedule,
     AssetModel,
     AssetMovementLog,
+    AssetOeeRecord,
+    AssetPerformanceScorecard,
     AssetRequisition,
     AssetRevaluation,
     AssetServiceContract,
@@ -48,6 +52,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetPerformanceScorecard.objects.all().delete()
+            AssetEnergyReading.objects.all().delete()
+            AssetOeeRecord.objects.all().delete()
+            AssetDowntimeLog.objects.all().delete()
             AssetMaintenanceLog.objects.all().delete()
             AssetMaintenanceRequest.objects.all().delete()
             AssetMaintenanceSchedule.objects.all().delete()
@@ -1195,6 +1203,219 @@ class Command(BaseCommand):
                 approved_by=user,
                 approved_at=timezone.now() - timezone.timedelta(days=14),
             )
+
+        # =========================================================================
+        # 11.6 Asset Performance & Utilization (Idempotent)
+        # =========================================================================
+        if not AssetDowntimeLog.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] Seeding 11.6 Asset Performance & Utilization...")
+
+            down1 = AssetDowntimeLog.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                downtime_category="unplanned_breakdown",
+                impact_level="full_shutdown",
+                root_cause_code="ISO-14224 MECH-VALVE-SEIZE",
+                failure_description="Main hydraulic proportional valve seized during spindle traverse, causing emergency halt alarm E-404.",
+                started_at=timezone.now() - timezone.timedelta(days=5, hours=4),
+                ended_at=timezone.now() - timezone.timedelta(days=5, hours=1, minutes=30),
+                hourly_cost_rate=Decimal("350.00"),
+                is_mtbf_failure=True,
+                logged_by=user,
+                status="resolved",
+                resolution_notes="Disassembled proportional valve, flushed contaminated spool channel, replaced seals, test run completed.",
+            )
+
+            down2 = AssetDowntimeLog.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                downtime_category="setup_changeover",
+                impact_level="cell_idle",
+                root_cause_code="SETUP-TOOL-CALIB",
+                failure_description="Scheduled fixture retooling and optical tool setter calibration for high-tolerance batch run.",
+                started_at=timezone.now() - timezone.timedelta(days=2, hours=3),
+                ended_at=timezone.now() - timezone.timedelta(days=2, hours=2, minutes=15),
+                hourly_cost_rate=Decimal("200.00"),
+                is_mtbf_failure=False,
+                logged_by=user,
+                status="resolved",
+                resolution_notes="New collets mounted, runout checked <0.003mm, first-off sample verified on CMM.",
+            )
+
+            down3 = AssetDowntimeLog.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                downtime_category="utility_outage",
+                impact_level="minor_stop",
+                root_cause_code="UTIL-VOLT-SAG",
+                failure_description="Main factory sub-station voltage sag triggered auxiliary drive under-voltage protection.",
+                started_at=timezone.now() - timezone.timedelta(hours=2),
+                ended_at=None,
+                hourly_cost_rate=Decimal("350.00"),
+                is_mtbf_failure=False,
+                logged_by=user,
+                status="active",
+                resolution_notes="",
+            )
+
+            oee1 = AssetOeeRecord.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                record_date=timezone.now().date() - timezone.timedelta(days=2),
+                shift_name="Shift 1 (Day)",
+                planned_production_time_minutes=Decimal("480.00"),
+                operating_time_minutes=Decimal("420.00"),
+                ideal_cycle_time_seconds=Decimal("12.00"),
+                total_units_produced=1950,
+                good_units_produced=1910,
+                defect_units_count=25,
+                rework_units_count=15,
+                breakdown_loss_minutes=Decimal("30.00"),
+                setup_loss_minutes=Decimal("15.00"),
+                small_stops_loss_minutes=Decimal("10.00"),
+                reduced_speed_loss_minutes=Decimal("5.00"),
+                defect_loss_minutes=Decimal("6.00"),
+                startup_loss_minutes=Decimal("4.00"),
+                status="finalized",
+                notes="Excellent throughput and high tool life throughout morning machining run.",
+                recorded_by=user,
+            )
+
+            oee2 = AssetOeeRecord.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                record_date=timezone.now().date() - timezone.timedelta(days=1),
+                shift_name="Shift 2 (Evening)",
+                planned_production_time_minutes=Decimal("480.00"),
+                operating_time_minutes=Decimal("360.00"),
+                ideal_cycle_time_seconds=Decimal("15.00"),
+                total_units_produced=1300,
+                good_units_produced=1220,
+                defect_units_count=55,
+                rework_units_count=25,
+                breakdown_loss_minutes=Decimal("60.00"),
+                setup_loss_minutes=Decimal("30.00"),
+                small_stops_loss_minutes=Decimal("15.00"),
+                reduced_speed_loss_minutes=Decimal("10.00"),
+                defect_loss_minutes=Decimal("14.00"),
+                startup_loss_minutes=Decimal("8.00"),
+                status="finalized",
+                notes="Minor chip jamming in conveyor caused brief idling; scrap elevated during roughing pass.",
+                recorded_by=user,
+            )
+
+            energy1 = AssetEnergyReading.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                reading_timestamp=timezone.now() - timezone.timedelta(days=3),
+                utility_type="electricity",
+                meter_serial_number="MTR-ELEC-CELL-01",
+                consumption_value=Decimal("1420.5000"),
+                unit_of_measure="kWh",
+                peak_demand_kw=Decimal("85.50"),
+                power_factor=Decimal("0.940"),
+                operating_hours=Decimal("48.00"),
+                units_produced=4500,
+                emission_factor=Decimal("0.4500"),
+                ghg_scope="scope_2",
+                cost_per_unit=Decimal("0.1250"),
+                status="validated",
+                notes="Peak demand well within sub-station threshold. Power factor healthy at 0.94.",
+                recorded_by=user,
+            )
+
+            energy2 = AssetEnergyReading.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                reading_timestamp=timezone.now() - timezone.timedelta(days=1),
+                utility_type="electricity",
+                meter_serial_number="MTR-ELEC-CELL-01",
+                consumption_value=Decimal("1580.0000"),
+                unit_of_measure="kWh",
+                peak_demand_kw=Decimal("94.20"),
+                power_factor=Decimal("0.915"),
+                operating_hours=Decimal("48.00"),
+                units_produced=4200,
+                emission_factor=Decimal("0.4500"),
+                ghg_scope="scope_2",
+                cost_per_unit=Decimal("0.1250"),
+                status="validated",
+                notes="Heavy roughing cycle increased spindle motor draw; monitored power factor harmonic filter.",
+                recorded_by=user,
+            )
+
+            energy3 = AssetEnergyReading.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                reading_timestamp=timezone.now() - timezone.timedelta(days=2),
+                utility_type="natural_gas",
+                meter_serial_number="MTR-GAS-BLDG-B",
+                consumption_value=Decimal("380.0000"),
+                unit_of_measure="m3",
+                operating_hours=Decimal("48.00"),
+                emission_factor=Decimal("1.9500"),
+                ghg_scope="scope_1",
+                cost_per_unit=Decimal("0.8500"),
+                status="validated",
+                notes="Heat treatment tempering furnace gas flow telemetry.",
+                recorded_by=user,
+            )
+
+            sc1 = AssetPerformanceScorecard.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                period_type="monthly",
+                period_start=(timezone.now().date() - timezone.timedelta(days=35)).replace(day=1),
+                period_end=timezone.now().date().replace(day=1) - timezone.timedelta(days=1),
+                total_calendar_hours=Decimal("720.00"),
+                planned_operating_hours=Decimal("480.00"),
+                actual_operating_hours=Decimal("415.00"),
+                unplanned_downtime_hours=Decimal("22.50"),
+                planned_downtime_hours=Decimal("25.00"),
+                failure_event_count=2,
+                average_oee_percentage=Decimal("79.50"),
+                total_energy_consumption_kwh=Decimal("18450.00"),
+                total_carbon_emissions_kg=Decimal("8302.50"),
+                total_downtime_cost=Decimal("7875.00"),
+                peer_category_ranking=1,
+                status="published",
+                executive_summary="Solid operational performance throughout prior month. Capacity utilization exceeded 86%. Spindle availability remained above 94% despite hydraulic valve incident. Recommended continuing monthly PM filter swaps.",
+                evaluated_by=user,
+            )
+
+            sc2 = AssetPerformanceScorecard.objects.create(
+                tenant=tenant,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                period_type="monthly",
+                period_start=timezone.now().date().replace(day=1),
+                period_end=timezone.now().date(),
+                total_calendar_hours=Decimal("240.00"),
+                planned_operating_hours=Decimal("160.00"),
+                actual_operating_hours=Decimal("142.00"),
+                unplanned_downtime_hours=Decimal("6.00"),
+                planned_downtime_hours=Decimal("8.00"),
+                failure_event_count=1,
+                average_oee_percentage=Decimal("83.20"),
+                total_energy_consumption_kwh=Decimal("6120.00"),
+                total_carbon_emissions_kg=Decimal("2754.00"),
+                total_downtime_cost=Decimal("2100.00"),
+                peer_category_ranking=1,
+                status="draft",
+                executive_summary="Mid-month performance tracking sound with OEE averaging 83%.",
+                evaluated_by=user,
+            )
+
+            self.stdout.write(f"[{tenant.name}] 11.6 Seeding complete (3 downtimes, 2 OEE records, 3 energy readings, 2 scorecards).")
 
         self.stdout.write(f"[{tenant.name}] 11.5 Seeding complete (2 contracts, 2 schedules, 3 requests, 2 logs).")
 
