@@ -139,5 +139,22 @@
   - **Problem**: Missing `.danger` modifier class from `theme.css`.
   - **Fix**: Add `.danger` modifier to delete button classes.
 
+---
+
+## Reviewer 4: `performance-reviewer` Findings
+
+### Important
+- **[PERF-I1] Missing select_related for service_contract and dispatched_work_order in Request Detail View**
+  - **Files**: `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (72-88).
+  - **Problem**: Detail template renders `maintenance_request.service_contract.contract_number` and `maintenance_request.dispatched_work_order.number`, triggering extra lazy queries on ticket detail page.
+  - **Fix**: Add `"service_contract"` and `"dispatched_work_order"` to `select_related` in `asset_maintenance_request_detail`.
+
+### Minor
+- **[PERF-M1] Inconsistent KPI Aggregation Base in Request List View**
+  - **Files**: `apps/assets/views/AssetMaintenance/AssetMaintenanceRequests.py` (54-61).
+  - **Problem**: Computes KPIs on filtered `qs` while Schedules, Contracts, and Logs aggregate on `all_tenant_*` (workspace total).
+  - **Fix**: Align to `all_tenant_requests.aggregate(...)` to show workspace-wide maintenance metrics consistently with sibling dashboards.
+
+
 
 
