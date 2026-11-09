@@ -75,5 +75,18 @@ None.
 - Divergent pagination page size (20 vs app-wide default 15). Fix: change `Paginator(qs, 20)` to `Paginator(qs, 15)`.
 - Defer large unused `TextField`s in list views. Fix: add `.defer(...)` to list queries.
 
+---
+
+## Pass 5: QA Smoke Tester Findings
+
+- **Test Suite Result:** 109 assertions executed across 28 routes — 109 PASSED, 0 FAILED.
+- **Comment Leaks:** 0 leaks detected across all rendered templates (no `{#` artifacts in response HTML).
+- **IDOR Coverage:** 100% of cross-tenant access attempts by `admin_acme` against Globex objects correctly yielded HTTP 404.
+- **Defects:**
+  - Critical: None.
+  - Important: None.
+  - Minor: None.
+
+
 
 
