@@ -1,0 +1,1 @@
+"""AssetDepreciation models package."""
