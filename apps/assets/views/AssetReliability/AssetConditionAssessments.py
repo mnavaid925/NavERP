@@ -35,8 +35,10 @@ def asset_condition_assessment_list(request):
             Q(number__icontains=q)
             | Q(title__icontains=q)
             | Q(findings__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
-            | Q(operational_asset__asset_tag__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
+            | Q(fixed_asset__name__icontains=q)
+            | Q(operational_asset__tag_code__icontains=q)
+            | Q(operational_asset__name__icontains=q)
         )
 
     status_filter = request.GET.get("status", "").strip()
@@ -56,8 +58,8 @@ def asset_condition_assessment_list(request):
         qs = qs.filter(operating_status=op_status_filter)
 
     cat_filter = request.GET.get("category", "").strip()
-    if cat_filter:
-        qs = qs.filter(asset_category_id=cat_filter)
+    if cat_filter and cat_filter.isdigit():
+        qs = qs.filter(asset_category_id=int(cat_filter))
 
     # Aggregates / Stats over tenant base
     tenant_base = AssetConditionAssessment.objects.filter(tenant=request.tenant)
