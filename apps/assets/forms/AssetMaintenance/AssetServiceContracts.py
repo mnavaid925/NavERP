@@ -70,11 +70,11 @@ class AssetServiceContractForm(TenantUniqueMixin, forms.ModelForm):
             self.fields["vendor"].queryset = Party.objects.filter(tenant=tenant)
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant)
             self.fields["operational_asset"].queryset = Asset.objects.filter(tenant=tenant)
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=tenant)
+        self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["vendor", "fixed_asset", "operational_asset", "currency"])
+        reject_foreign(self, cleaned, ["vendor", "fixed_asset", "operational_asset"])
         start = cleaned.get("start_date")
         end = cleaned.get("end_date")
         if start and end and end < start:
