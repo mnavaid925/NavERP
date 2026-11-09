@@ -30,6 +30,13 @@ from apps.assets.forms.AssetMaintenance import (
     AssetServiceContractForm,
     AssetServiceContractRenewForm,
 )
+from apps.assets.forms.AssetPerformance import (
+    AssetDowntimeLogForm,
+    AssetDowntimeLogResolveForm,
+    AssetEnergyReadingForm,
+    AssetOeeRecordForm,
+    AssetPerformanceScorecardForm,
+)
 from apps.assets.forms.AssetProcurement import (
     AssetAcquisitionReceiptForm,
     AssetCapitalizationForm,
@@ -66,4 +73,9 @@ __all__ = [
     "AssetServiceContractForm",
     "AssetServiceContractRenewForm",
     "AssetMaintenanceLogForm",
+    "AssetDowntimeLogForm",
+    "AssetDowntimeLogResolveForm",
+    "AssetOeeRecordForm",
+    "AssetEnergyReadingForm",
+    "AssetPerformanceScorecardForm",
 ]
