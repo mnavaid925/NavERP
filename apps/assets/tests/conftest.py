@@ -607,7 +607,4 @@ def spec_template_b(db, tenant_b, category_root_b):
         unit_of_measure="Ah",
         is_required=False,
     )
-        unit_of_measure="Ah",
-        is_required=False,
-    )
 
