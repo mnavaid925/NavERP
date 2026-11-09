@@ -3220,6 +3220,25 @@ LIVE_LINKS = {
         "Performance Scorecards": "assets:asset_performance_scorecard_list",
         "Asset Performance & Utilization": "assets:asset_performance_scorecard_list",
     },
+    "11.7": {
+        "Condition Assessment & Inspections": "assets:asset_condition_assessment_list",
+        "Predictive Maintenance & IoT Integration": "assets:asset_telemetry_reading_list",
+        "Failure Mode Analysis (FMEA)": "assets:asset_failure_mode_list",
+        "Lubrication & Calibration Management": "assets:asset_calibration_record_list",
+        "Reliability-Centered Maintenance (RCM)": "assets:asset_failure_mode_list",
+        # Plural and convenience aliases
+        "Condition Assessments": "assets:asset_condition_assessment_list",
+        "Asset Condition Assessments": "assets:asset_condition_assessment_list",
+        "Telemetry Readings": "assets:asset_telemetry_reading_list",
+        "Asset Telemetry Readings": "assets:asset_telemetry_reading_list",
+        "Failure Modes (FMEA)": "assets:asset_failure_mode_list",
+        "Asset Failure Modes": "assets:asset_failure_mode_list",
+        "FMEA Registry": "assets:asset_failure_mode_list",
+        "Calibration Records": "assets:asset_calibration_record_list",
+        "Asset Calibration Records": "assets:asset_calibration_record_list",
+        "RCM Strategy": "assets:asset_failure_mode_list",
+        "Asset Reliability & Condition Monitoring": "assets:asset_condition_assessment_list",
+    },
 
 
 
