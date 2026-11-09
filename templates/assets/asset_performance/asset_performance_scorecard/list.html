@@ -58,12 +58,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ q }}" placeholder="Number, asset, department..." class="form-input">
+                <label for="filter-sc-q" class="form-label text-xs">Search</label>
+                <input id="filter-sc-q" type="text" name="q" value="{{ q }}" placeholder="Number, asset, department..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select">
+                <label for="filter-sc-status" class="form-label text-xs">Status</label>
+                <select id="filter-sc-status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
@@ -71,8 +71,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Period Type</label>
-                <select name="period_type" class="form-select">
+                <label for="filter-sc-period" class="form-label text-xs">Period Type</label>
+                <select id="filter-sc-period" name="period_type" class="form-select">
                     <option value="">All Periods</option>
                     {% for val, label in period_choices %}
                     <option value="{{ val }}" {% if period_type == val %}selected{% endif %}>{{ label }}</option>
@@ -80,8 +80,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Benchmark Grade</label>
-                <select name="grade" class="form-select">
+                <label for="filter-sc-grade" class="form-label text-xs">Benchmark Grade</label>
+                <select id="filter-sc-grade" name="grade" class="form-select">
                     <option value="">All Grades</option>
                     {% for val, label in grade_choices %}
                     <option value="{{ val }}" {% if grade == val %}selected{% endif %}>{{ label }}</option>
@@ -89,8 +89,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Fixed Asset</label>
-                <select name="fixed_asset" class="form-select">
+                <label for="filter-sc-fixed-asset" class="form-label text-xs">Fixed Asset</label>
+                <select id="filter-sc-fixed-asset" name="fixed_asset" class="form-select">
                     <option value="">All Assets</option>
                     {% for fa in fixed_assets %}
                     <option value="{{ fa.pk }}" {% if fixed_asset_id == fa.pk|stringformat:"d" %}selected{% endif %}>{{ fa.name }}</option>
@@ -102,7 +102,7 @@
                     <i data-lucide="search" class="w-4 h-4 me-1"></i> Filter
                 </button>
                 {% if q or status or period_type or grade or fixed_asset_id %}
-                <a href="{% url 'assets:asset_performance_scorecard_list' %}" class="btn btn-outline text-slate-500">
+                <a href="{% url 'assets:asset_performance_scorecard_list' %}" class="btn btn-outline text-slate-500" title="Clear filters" aria-label="Clear filters">
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </a>
                 {% endif %}
