@@ -3,13 +3,16 @@ from django.contrib import admin
 from apps.assets.models import (
     AssetAcquisitionReceipt,
     AssetAudit,
+    AssetCalibrationRecord,
     AssetCapitalization,
     AssetCategory,
+    AssetConditionAssessment,
     AssetCriticalityAssessment,
     AssetCustodyLog,
     AssetDepreciationSchedule,
     AssetDowntimeLog,
     AssetEnergyReading,
+    AssetFailureMode,
     AssetIncidentReport,
     AssetMaintenanceLog,
     AssetMaintenanceRequest,
@@ -23,6 +26,7 @@ from apps.assets.models import (
     AssetServiceContract,
     AssetSpecificationTemplate,
     AssetTag,
+    AssetTelemetryReading,
     AssetTransfer,
     CapitalizationPolicy,
 )
@@ -218,5 +222,38 @@ class AssetPerformanceScorecardAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "fixed_asset", "operational_asset", "department", "evaluated_by")
     list_filter = ("status", "period_type", "benchmark_grade")
     search_fields = ("number", "executive_summary")
+
+
+@admin.register(AssetConditionAssessment)
+class AssetConditionAssessmentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "assessment_type", "condition_grade", "health_score", "operating_status", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "asset_category", "inspector", "external_inspector")
+    list_filter = ("status", "condition_grade", "assessment_type", "operating_status")
+    search_fields = ("number", "title", "findings")
+
+
+@admin.register(AssetTelemetryReading)
+class AssetTelemetryReadingAdmin(admin.ModelAdmin):
+    list_display = ("number", "sensor_identifier", "metric_type", "reading_value", "metric_unit", "deviation_percentage", "threshold_status", "is_anomaly", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "recorded_by")
+    list_filter = ("threshold_status", "metric_type", "source", "is_anomaly")
+    search_fields = ("number", "sensor_identifier", "alert_notes")
+
+
+@admin.register(AssetFailureMode)
+class AssetFailureModeAdmin(admin.ModelAdmin):
+    list_display = ("number", "component_subsystem", "failure_mode", "rpn", "risk_level", "rcm_strategy", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "asset_category", "linked_maintenance_schedule", "assessed_by")
+    list_filter = ("status", "risk_level", "rcm_strategy")
+    search_fields = ("number", "component_subsystem", "failure_mode", "failure_cause")
+
+
+@admin.register(AssetCalibrationRecord)
+class AssetCalibrationRecordAdmin(admin.ModelAdmin):
+    list_display = ("number", "instrument_tag", "calibration_date", "next_due_date", "setpoint_nominal", "as_left_error", "calibration_result", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "calibrated_by", "service_vendor")
+    list_filter = ("status", "calibration_result", "tolerance_unit")
+    search_fields = ("number", "instrument_tag", "reference_standard_used", "certificate_number")
+
 
 
