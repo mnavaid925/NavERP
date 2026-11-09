@@ -15,6 +15,10 @@ from apps.assets.models import (
     AssetMovementLog,
     AssetCustodyLog,
     AssetIncidentReport,
+    AssetCategory,
+    AssetModel,
+    AssetCriticalityAssessment,
+    AssetSpecificationTemplate,
 )
 
 
@@ -455,3 +459,148 @@ def incident_b(db, tenant_b, operational_asset_b, location_b, admin_b):
         incident_description="Clamp attachment missing from staging rack.",
         status="reported",
     )
+
+
+# ---------------------------------------------------------------------------
+# Module 11.3 Asset Classification & Categorization Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def category_root_a(db, tenant_a):
+    return AssetCategory.objects.create(
+        tenant=tenant_a,
+        code="FAC-PLANT",
+        name="Plant Equipment",
+        category_type="machinery",
+        default_depreciation_method="straight_line",
+        default_useful_life_months=120,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def category_child_a(db, tenant_a, category_root_a):
+    return AssetCategory.objects.create(
+        tenant=tenant_a,
+        code="HVAC-CHL",
+        name="Centrifugal Chillers",
+        parent=category_root_a,
+        category_type="facility",
+        default_depreciation_method="straight_line",
+        default_useful_life_months=84,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def category_root_b(db, tenant_b):
+    return AssetCategory.objects.create(
+        tenant=tenant_b,
+        code="LOG-FLEET",
+        name="Fleet Vehicles",
+        category_type="fleet",
+        default_depreciation_method="straight_line",
+        default_useful_life_months=60,
+        is_active=True,
+    )
+
+
+@pytest.fixture
+def asset_model_a(db, tenant_a, category_root_a, vendor_party_a):
+    return AssetModel.objects.create(
+        tenant=tenant_a,
+        model_number="CAT-320GC",
+        name="Hydraulic Excavator",
+        category=category_root_a,
+        manufacturer=vendor_party_a,
+        estimated_replacement_cost=Decimal("175000.00"),
+        expected_life_years=10,
+        warranty_duration_months=24,
+        metering_type="hours",
+        model_status="active",
+    )
+
+
+@pytest.fixture
+def asset_model_b(db, tenant_b, category_root_b, vendor_party_b):
+    return AssetModel.objects.create(
+        tenant=tenant_b,
+        model_number="YALE-ERP040",
+        name="Electric Forklift",
+        category=category_root_b,
+        manufacturer=vendor_party_b,
+        estimated_replacement_cost=Decimal("38000.00"),
+        expected_life_years=7,
+        warranty_duration_months=12,
+        metering_type="hours",
+        model_status="active",
+    )
+
+
+@pytest.fixture
+def criticality_assessment_a(db, tenant_a, operational_asset_a, admin_user):
+    assessment = AssetCriticalityAssessment(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        assessor=admin_user,
+        production_impact=5,
+        safety_impact=4,
+        environmental_impact=3,
+        regulatory_impact=3,
+        maintenance_cost_impact=4,
+        single_point_of_failure=True,
+        assessment_status="draft",
+        notes="Primary critical bottleneck asset.",
+    )
+    assessment.calculate_composite_score()
+    assessment.save()
+    return assessment
+
+
+@pytest.fixture
+def criticality_assessment_b(db, tenant_b, operational_asset_b, admin_b):
+    assessment = AssetCriticalityAssessment(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        assessor=admin_b,
+        production_impact=2,
+        safety_impact=1,
+        environmental_impact=1,
+        regulatory_impact=1,
+        maintenance_cost_impact=2,
+        single_point_of_failure=False,
+        assessment_status="draft",
+    )
+    assessment.calculate_composite_score()
+    assessment.save()
+    return assessment
+
+
+@pytest.fixture
+def spec_template_a(db, tenant_a, category_root_a):
+    return AssetSpecificationTemplate.objects.create(
+        tenant=tenant_a,
+        category=category_root_a,
+        attribute_name="Operating Voltage",
+        attribute_key="operating_voltage",
+        data_type="numeric",
+        unit_of_measure="V",
+        min_numeric_value=Decimal("380.00"),
+        max_numeric_value=Decimal("480.00"),
+        is_required=True,
+        is_searchable=True,
+    )
+
+
+@pytest.fixture
+def spec_template_b(db, tenant_b, category_root_b):
+    return AssetSpecificationTemplate.objects.create(
+        tenant=tenant_b,
+        category=category_root_b,
+        attribute_name="Battery Capacity",
+        attribute_key="battery_capacity",
+        data_type="numeric",
+        unit_of_measure="Ah",
+        is_required=False,
+    )
+
