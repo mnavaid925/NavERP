@@ -45,7 +45,7 @@ class AssetPerformanceScorecard(TenantNumbered):
     PERIOD_CSS = {
         "daily": "badge-slate",
         "weekly": "badge-info",
-        "monthly": "badge-purple",
+        "monthly": "badge-info",
         "quarterly": "badge-amber",
         "annual": "badge-green",
     }
