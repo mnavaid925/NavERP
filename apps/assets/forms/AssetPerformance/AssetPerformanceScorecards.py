@@ -85,7 +85,7 @@ class AssetPerformanceScorecardForm(TenantUniqueMixin, forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "department"])
+        reject_foreign(self, cleaned, ["fixed_asset", "operational_asset", "department", "evaluated_by"])
 
         start = cleaned.get("period_start")
         end = cleaned.get("period_end")
