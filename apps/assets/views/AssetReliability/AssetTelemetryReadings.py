@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -59,12 +59,18 @@ def asset_telemetry_reading_list(request):
     elif anomaly_filter == "0":
         qs = qs.filter(is_anomaly=False)
 
-    # Summary KPI counts over tenant
+    # Summary KPI counts over tenant in a single roundtrip
     tenant_base = AssetTelemetryReading.objects.filter(tenant=request.tenant)
-    total_readings = tenant_base.count()
-    critical_reading_count = tenant_base.filter(threshold_status="critical").count()
-    anomaly_reading_count = tenant_base.filter(Q(is_anomaly=True) | Q(threshold_status="anomaly_detected")).count()
-    normal_reading_count = tenant_base.filter(threshold_status="normal").count()
+    stats = tenant_base.aggregate(
+        total=Count("id"),
+        critical=Count("id", filter=Q(threshold_status="critical")),
+        anomaly=Count("id", filter=Q(is_anomaly=True) | Q(threshold_status="anomaly_detected")),
+        normal=Count("id", filter=Q(threshold_status="normal")),
+    )
+    total_readings = stats["total"]
+    critical_reading_count = stats["critical"]
+    anomaly_reading_count = stats["anomaly"]
+    normal_reading_count = stats["normal"]
 
     paginator = Paginator(qs, 20)
     page_number = request.GET.get("page")
