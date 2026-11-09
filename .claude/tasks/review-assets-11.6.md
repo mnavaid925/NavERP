@@ -47,7 +47,17 @@
 
 ## 3. Frontend / UI Reviewer Findings
 
-*(Pending review pass)*
+### Critical
+- **FE-C1**: `templates/assets/asset_performance/asset_downtime_log/resolve.html:28` — Lesson L10 violation: `{{ log.fixed_asset.name|default:log.operational_asset.name|default:"Unassigned" }}` causes `VariableDoesNotExist` and 500 when `fixed_asset` is `None`. Use `{% if log.fixed_asset %}{{ log.fixed_asset.name }}{% elif log.operational_asset %}{{ log.operational_asset.name }}{% else %}Unassigned{% endif %}`.
+- **FE-C2**: `templates/assets/asset_performance/` detail templates (`downtime:196`, `oee:222`, `energy:199`, `scorecard:224`) — Lesson L10 violation: chained user FK lookup inside `default:` filter argument (`log.logged_by.get_full_name|default:log.logged_by.username|default:"System"`). When user is `None`, raises `VariableDoesNotExist` and 500s. Wrap in explicit `{% if user %}` blocks.
+
+### Important
+- **FE-I1**: `apps/assets/models/AssetPerformance/` (`AssetDowntimeLogs:54`, `AssetEnergyReadings:50`, `AssetPerformanceScorecards:48`) — Lesson L33 / Design System violation: Non-existent badge class `badge-purple` used for `setup_changeover`, `natural_gas`, and `monthly`. `theme.css` defines only green, red, amber, info, muted, slate. Replace `badge-purple` with `badge-info`.
+- **FE-I2**: `templates/assets/asset_performance/asset_energy_reading/list.html:166`, `asset_performance_scorecard/list.html:132,156` — Lesson L13: Invented utility class `text-2xs` not in theme.css or Tailwind CDN. Replace with `text-xs` or `text-[10px]`.
+
+### Minor
+- **FE-M1**: Filter clear "X" buttons in all 4 list templates lack accessibility attributes (`title="Clear filters" aria-label="Clear filters"`).
+- **FE-M2**: Filter bar `<label>` elements lack `for` attributes and matching `<input>`/`<select>` `id` attributes.
 
 ---
 
