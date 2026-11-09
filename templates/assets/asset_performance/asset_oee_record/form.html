@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit OEE Entry {{ record.number }}{% else %}New Production Shift OEE Entry{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_oee_record_list' %}">OEE Records</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ record.number }}{% else %}New Entry{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit OEE Entry {{ record.number }}{% else %}New OEE Shift Entry{% endif %}</h1>
+    </div>
+</div>
+
+<div class="max-w-4xl">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-900">
+                {% if is_edit %}Update Shift Parameters & Loss Breakdown{% else %}Production Shift Data Input{% endif %}
+            </h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="space-y-6">
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="p-4 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Section: Asset & Shift Info -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Shift & Asset Assignment</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                            {{ form.fixed_asset }}
+                            {% if form.fixed_asset.errors %}
+                            <div class="form-error">{{ form.fixed_asset.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                            {{ form.operational_asset }}
+                            {% if form.operational_asset.errors %}
+                            <div class="form-error">{{ form.operational_asset.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.record_date.id_for_label }}">Production Date *</label>
+                            {{ form.record_date }}
+                            {% if form.record_date.errors %}
+                            <div class="form-error">{{ form.record_date.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.shift_name.id_for_label }}">Shift Name *</label>
+                            {{ form.shift_name }}
+                            {% if form.shift_name.errors %}
+                            <div class="form-error">{{ form.shift_name.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Time & Cycle Parameters -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Time & Cycle Parameters</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.planned_production_time_minutes.id_for_label }}">Planned Time (min) *</label>
+                            {{ form.planned_production_time_minutes }}
+                            {% if form.planned_production_time_minutes.errors %}
+                            <div class="form-error">{{ form.planned_production_time_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.operating_time_minutes.id_for_label }}">Operating Run Time (min) *</label>
+                            {{ form.operating_time_minutes }}
+                            {% if form.operating_time_minutes.errors %}
+                            <div class="form-error">{{ form.operating_time_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.ideal_cycle_time_seconds.id_for_label }}">Ideal Cycle Time (sec/pc) *</label>
+                            {{ form.ideal_cycle_time_seconds }}
+                            {% if form.ideal_cycle_time_seconds.errors %}
+                            <div class="form-error">{{ form.ideal_cycle_time_seconds.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Unit Output Counts -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Production Counts</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.total_units_produced.id_for_label }}">Total Units *</label>
+                            {{ form.total_units_produced }}
+                            {% if form.total_units_produced.errors %}
+                            <div class="form-error">{{ form.total_units_produced.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.good_units_produced.id_for_label }}">Good Units *</label>
+                            {{ form.good_units_produced }}
+                            {% if form.good_units_produced.errors %}
+                            <div class="form-error">{{ form.good_units_produced.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.defect_units_count.id_for_label }}">Defects / Scrap</label>
+                            {{ form.defect_units_count }}
+                            {% if form.defect_units_count.errors %}
+                            <div class="form-error">{{ form.defect_units_count.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.rework_units_count.id_for_label }}">Rework Units</label>
+                            {{ form.rework_units_count }}
+                            {% if form.rework_units_count.errors %}
+                            <div class="form-error">{{ form.rework_units_count.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: TPM Six Big Losses (Minutes) -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">TPM Six Big Losses (in Minutes)</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.breakdown_loss_minutes.id_for_label }}">1. Breakdown Loss</label>
+                            {{ form.breakdown_loss_minutes }}
+                            {% if form.breakdown_loss_minutes.errors %}
+                            <div class="form-error">{{ form.breakdown_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.setup_loss_minutes.id_for_label }}">2. Setup & Adjustments</label>
+                            {{ form.setup_loss_minutes }}
+                            {% if form.setup_loss_minutes.errors %}
+                            <div class="form-error">{{ form.setup_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.small_stops_loss_minutes.id_for_label }}">3. Small Stops / Idling</label>
+                            {{ form.small_stops_loss_minutes }}
+                            {% if form.small_stops_loss_minutes.errors %}
+                            <div class="form-error">{{ form.small_stops_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.reduced_speed_loss_minutes.id_for_label }}">4. Reduced Speed Loss</label>
+                            {{ form.reduced_speed_loss_minutes }}
+                            {% if form.reduced_speed_loss_minutes.errors %}
+                            <div class="form-error">{{ form.reduced_speed_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.defect_loss_minutes.id_for_label }}">5. Process Defect Loss</label>
+                            {{ form.defect_loss_minutes }}
+                            {% if form.defect_loss_minutes.errors %}
+                            <div class="form-error">{{ form.defect_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.startup_loss_minutes.id_for_label }}">6. Startup Yield Loss</label>
+                            {{ form.startup_loss_minutes }}
+                            {% if form.startup_loss_minutes.errors %}
+                            <div class="form-error">{{ form.startup_loss_minutes.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section: Status & Notes -->
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Status & Metadata</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.status.id_for_label }}">Record Status</label>
+                            {{ form.status }}
+                            {% if form.status.errors %}
+                            <div class="form-error">{{ form.status.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="{{ form.recorded_by.id_for_label }}">Recorded By</label>
+                            {{ form.recorded_by }}
+                            {% if form.recorded_by.errors %}
+                            <div class="form-error">{{ form.recorded_by.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="form-group mt-3">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Operator / Supervisor Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}
+                        <div class="form-error">{{ form.notes.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
+                    <a href="{% if is_edit %}{% url 'assets:asset_oee_record_detail' record.pk %}{% else %}{% url 'assets:asset_oee_record_list' %}{% endif %}" class="btn btn-outline">
+                        Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i data-lucide="save" class="w-4 h-4 me-1"></i> Calculate & Save OEE Entry
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
