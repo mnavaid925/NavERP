@@ -31,6 +31,10 @@ from apps.assets.models import (
     AssetOeeRecord,
     AssetEnergyReading,
     AssetPerformanceScorecard,
+    AssetConditionAssessment,
+    AssetTelemetryReading,
+    AssetFailureMode,
+    AssetCalibrationRecord,
 )
 
 
@@ -1302,6 +1306,224 @@ def performance_scorecard_b(db, tenant_b, fixed_asset_b, operational_asset_b, or
         benchmark_grade="grade_c",
         status="draft",
     )
+
+
+# ==============================================================================
+# Sub-module 11.7: Asset Reliability & Condition Monitoring Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def condition_assessment_a(db, tenant_a, fixed_asset_a, operational_asset_a, category_root_a, admin_user, vendor_party_a):
+    return AssetConditionAssessment.objects.create(
+        tenant=tenant_a,
+        title="Spindle Ultrasound & Bearing Vibration Analysis",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        assessment_type="ndt_ultrasonic",
+        assessment_date=timezone.now().date(),
+        condition_grade="grade_2_good",
+        operating_status="normal_service",
+        health_score=Decimal("82.50"),
+        estimated_remaining_useful_life_months=48,
+        inspector=admin_user,
+        external_inspector=vendor_party_a,
+        inspection_cost=Decimal("450.00"),
+        findings="Minor acoustic turbulence observed at drive-end bearing; well within OEM operating baseline.",
+        recommendations="Continue routine lubrication cycle; re-inspect during next PM interval.",
+        followup_required=False,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def condition_assessment_b(db, tenant_b, fixed_asset_b, operational_asset_b, category_root_b, admin_b):
+    return AssetConditionAssessment.objects.create(
+        tenant=tenant_b,
+        title="Globex Stacker Mast Thermography",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        assessment_type="ndt_thermography",
+        assessment_date=timezone.now().date(),
+        condition_grade="grade_3_fair",
+        operating_status="degraded_performance",
+        health_score=Decimal("65.00"),
+        estimated_remaining_useful_life_months=24,
+        inspector=admin_b,
+        inspection_cost=Decimal("300.00"),
+        findings="Elevated thermal delta of 18C on secondary hydraulic manifold.",
+        recommendations="Inspect flow bypass relief valve.",
+        followup_required=True,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def telemetry_reading_a(db, tenant_a, fixed_asset_a, operational_asset_a, admin_user):
+    return AssetTelemetryReading.objects.create(
+        tenant=tenant_a,
+        sensor_identifier="SENS-VIB-01",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        source="iot_continuous_sensor",
+        metric_type="vibration_velocity_rms",
+        metric_unit="mm_s",
+        recorded_at=timezone.now(),
+        reading_value=Decimal("4.2000"),
+        baseline_value=Decimal("3.5000"),
+        warning_threshold_low=Decimal("1.0000"),
+        warning_threshold_high=Decimal("6.0000"),
+        critical_threshold_low=Decimal("0.5000"),
+        critical_threshold_high=Decimal("8.5000"),
+        deviation_percentage=Decimal("20.00"),
+        threshold_status="normal",
+        is_anomaly=False,
+        sampling_frequency_hz=1000,
+        recorded_by=admin_user,
+        alert_notes="Steady state production cut.",
+    )
+
+
+@pytest.fixture
+def telemetry_reading_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin_b):
+    return AssetTelemetryReading.objects.create(
+        tenant=tenant_b,
+        sensor_identifier="SENS-TEMP-02",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        source="scada_historian",
+        metric_type="temperature_bearing",
+        metric_unit="celsius",
+        recorded_at=timezone.now(),
+        reading_value=Decimal("88.5000"),
+        baseline_value=Decimal("65.0000"),
+        warning_threshold_low=Decimal("30.0000"),
+        warning_threshold_high=Decimal("80.0000"),
+        critical_threshold_low=Decimal("20.0000"),
+        critical_threshold_high=Decimal("95.0000"),
+        deviation_percentage=Decimal("36.15"),
+        threshold_status="warning",
+        is_anomaly=False,
+        sampling_frequency_hz=10,
+        recorded_by=admin_b,
+        alert_notes="Temperature approaching critical boundary.",
+    )
+
+
+@pytest.fixture
+def failure_mode_a(db, tenant_a, fixed_asset_a, operational_asset_a, category_root_a, admin_user, maintenance_schedule_a):
+    return AssetFailureMode.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        asset_category=category_root_a,
+        component_subsystem="Spindle Assembly",
+        function_description="Deliver rotary torque up to 12,000 RPM with < 0.005mm runout.",
+        functional_failure="Spindle seized or excessive radial deflection.",
+        failure_mode="Ceramic hybrid bearing brinelling and micro-spalling",
+        failure_cause="Contamination ingress or lubricant breakdown under extreme cutting feeds.",
+        failure_effect="Loss of machined part concentricity and unrecoverable workpiece scrap.",
+        severity_score=7,
+        occurrence_score=5,
+        detection_score=4,
+        rpn=140,
+        risk_level="medium",
+        rcm_strategy="condition_based",
+        strategy_rationale="Vibration accelerometer provides 200+ hours early detection window.",
+        mitigation_task="Conduct high-frequency FFT vibration sweep and inspect seal labyrinth.",
+        linked_maintenance_schedule=maintenance_schedule_a,
+        assessed_by=admin_user,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def failure_mode_b(db, tenant_b, fixed_asset_b, operational_asset_b, category_root_b, admin_b, maintenance_schedule_b):
+    return AssetFailureMode.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        asset_category=category_root_b,
+        component_subsystem="Hydraulic Lift Cylinder",
+        function_description="Elevate fork carriages up to 4500mm.",
+        functional_failure="Mast drift under rated 2.5 ton load.",
+        failure_mode="Rod gland polyurethane seal extrusion",
+        failure_cause="Thermal breakdown from contaminated hydraulic oil.",
+        failure_effect="Drift during overhead pallet placement posing severe hazard.",
+        severity_score=8,
+        occurrence_score=6,
+        detection_score=5,
+        rpn=240,
+        risk_level="high",
+        rcm_strategy="time_directed_pm",
+        strategy_rationale="Replace seals periodically before extrusion threshold.",
+        mitigation_task="Replace hydraulic packing kit and flush cylinder bore.",
+        linked_maintenance_schedule=maintenance_schedule_b,
+        assessed_by=admin_b,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def calibration_record_a(db, tenant_a, fixed_asset_a, operational_asset_a, admin_user, vendor_party_a):
+    today = timezone.now().date()
+    return AssetCalibrationRecord.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        instrument_tag="INST-PT-001",
+        instrument_name="Digital Coolant Pressure Transmitter",
+        reference_standard_used="Fluke 754 Documenting Process Calibrator (NIST Ref: 98124)",
+        calibration_date=today,
+        calibration_interval_days=365,
+        next_due_date=today + timezone.timedelta(days=365),
+        nominal_setpoint=Decimal("50.0000"),
+        as_found_reading=Decimal("49.8500"),
+        as_found_error=Decimal("-0.1500"),
+        as_left_reading=Decimal("50.0100"),
+        as_left_error=Decimal("0.0100"),
+        allowable_tolerance=Decimal("0.2500"),
+        tolerance_unit="psi",
+        calibration_result="pass",
+        calibrated_by=admin_user,
+        service_vendor=vendor_party_a,
+        certificate_number="CERT-CAL-2026-089",
+        certificate_expiry=today + timezone.timedelta(days=365),
+        status="valid",
+        notes="Transmitter verified within OEM tolerance envelope.",
+    )
+
+
+@pytest.fixture
+def calibration_record_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin_b, vendor_party_b):
+    today = timezone.now().date()
+    return AssetCalibrationRecord.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        instrument_tag="INST-TC-002",
+        instrument_name="Hydraulic Fluid Thermocouple",
+        reference_standard_used="Hart Scientific Dry Well Calibrator #9103",
+        calibration_date=today,
+        calibration_interval_days=180,
+        next_due_date=today + timezone.timedelta(days=180),
+        nominal_setpoint=Decimal("100.0000"),
+        as_found_reading=Decimal("102.8000"),
+        as_found_error=Decimal("2.8000"),
+        as_left_reading=Decimal("100.2000"),
+        as_left_error=Decimal("0.2000"),
+        allowable_tolerance=Decimal("1.0000"),
+        tolerance_unit="celsius",
+        calibration_result="pass_with_adjustment",
+        calibrated_by=admin_b,
+        service_vendor=vendor_party_b,
+        certificate_number="CERT-CAL-GLOBEX-002",
+        certificate_expiry=today + timezone.timedelta(days=180),
+        status="valid",
+        notes="Adjusted offset potentiometer by -2.6C.",
+    )
+
 
 
 
