@@ -54,7 +54,7 @@ class AssetConditionAssessmentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["asset_category"].queryset = AssetCategory.objects.filter(tenant=self.tenant)
             self.fields["external_inspector"].queryset = Party.objects.filter(
                 tenant=self.tenant,
-                party_roles__role="vendor",
+                roles__role="vendor",
             ).distinct()
 
     def clean(self):
