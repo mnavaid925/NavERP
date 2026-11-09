@@ -70,6 +70,7 @@ def asset_service_contract_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "search_query": q,
         "status_choices": AssetServiceContract.STATUS_CHOICES,
         "contract_type_choices": AssetServiceContract.CONTRACT_TYPE_CHOICES,
         "billing_frequency_choices": AssetServiceContract.BILLING_FREQUENCY_CHOICES,
@@ -111,7 +112,7 @@ def asset_service_contract_detail(request, pk):
 @login_required
 def asset_service_contract_create(request):
     if request.method == "POST":
-        form = AssetServiceContractForm(request.POST)
+        form = AssetServiceContractForm(request.POST, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save(commit=False)
@@ -128,7 +129,7 @@ def asset_service_contract_create(request):
         vendor_id = request.GET.get("vendor")
         if vendor_id:
             initial["vendor"] = vendor_id
-        form = AssetServiceContractForm(initial=initial)
+        form = AssetServiceContractForm(initial=initial, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -143,7 +144,7 @@ def asset_service_contract_create(request):
 def asset_service_contract_edit(request, pk):
     obj = assets_object(request, AssetServiceContract, pk)
     if request.method == "POST":
-        form = AssetServiceContractForm(request.POST, instance=obj)
+        form = AssetServiceContractForm(request.POST, instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save()
@@ -151,7 +152,7 @@ def asset_service_contract_edit(request, pk):
             messages.success(request, f"Service Contract {obj.number} updated successfully.")
             return redirect("assets:asset_service_contract_detail", pk=obj.pk)
     else:
-        form = AssetServiceContractForm(instance=obj)
+        form = AssetServiceContractForm(instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -210,12 +211,13 @@ def asset_service_contract_renew(request, pk):
     if form.is_valid():
         new_end = form.cleaned_data["new_end_date"]
         new_val = form.cleaned_data.get("new_contract_value")
-        obj.renew(new_end_date=new_end, new_contract_value=new_val)
+        notes = form.cleaned_data.get("notes", "")
+        obj.renew(new_end_date=new_end, new_contract_value=new_val, notes=notes)
         write_audit_log(
             request.user,
             obj,
             "update",
-            changes={"action": "renew", "new_end_date": str(new_end)},
+            changes={"action": "renew", "new_end_date": str(new_end), "notes": notes},
             tenant=request.tenant,
         )
         messages.success(request, f"Contract {obj.number} renewed until {new_end}.")
