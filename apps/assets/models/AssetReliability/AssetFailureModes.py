@@ -198,6 +198,9 @@ class AssetFailureMode(TenantNumbered):
         else:
             self.risk_level = "low"
 
+    def calculate_rpn_and_risk_level(self):
+        return self.calculate_rpn()
+
     def save(self, *args, **kwargs):
         self.calculate_rpn()
         return super().save(*args, **kwargs)
