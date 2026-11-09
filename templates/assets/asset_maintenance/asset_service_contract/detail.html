@@ -26,12 +26,12 @@
         <form method="post" action="{% url 'assets:asset_service_contract_record_visit' service_contract.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700">
-                <i data-lucide="check-circle" class="w-4 h-4 mr-1"></i> Log Routine PM Visit
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Log Routine PM Visit
             </button>
         </form>
 
         <button type="button" onclick="document.getElementById('renew-modal').classList.remove('hidden')" class="btn btn-outline text-blue-700 hover:bg-blue-50">
-            <i data-lucide="refresh-cw" class="w-4 h-4 mr-1"></i> Renew Contract
+            <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Renew Contract
         </button>
         {% endif %}
 
@@ -39,30 +39,36 @@
         <form method="post" action="{% url 'assets:asset_service_contract_activate' service_contract.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
-                <i data-lucide="check" class="w-4 h-4 mr-1"></i> Activate Agreement
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Activate Agreement
             </button>
         </form>
         {% endif %}
 
-        {% if service_contract.status == "active" %}
+        {% if is_tenant_admin and service_contract.status == "active" %}
         <form method="post" action="{% url 'assets:asset_service_contract_terminate' service_contract.pk %}" class="inline" onsubmit="return confirm('Terminate service contract early?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-red-600 hover:bg-red-50">
-                <i data-lucide="ban" class="w-4 h-4 mr-1"></i> Terminate Early
+                <i data-lucide="ban" class="w-4 h-4 me-1"></i> Terminate Early
             </button>
         </form>
         {% endif %}
 
         <a href="{% url 'assets:asset_service_contract_edit' service_contract.pk %}" class="btn btn-outline">
-            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
 
+        {% if is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_service_contract_delete' service_contract.pk %}" class="inline" onsubmit="return confirm('Delete contract {{ service_contract.number }}?');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete">
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700" title="Delete" aria-label="Delete Contract">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         </form>
+        {% endif %}
+
+        <a href="{% url 'assets:asset_service_contract_list' %}" class="btn btn-ghost" aria-label="Back to Contracts">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
     </div>
 </div>
 
@@ -180,6 +186,54 @@
                 </table>
             </div>
         </div>
+
+        <!-- Service & Maintenance Execution Logs -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="card-title">Completed Service Logs under Agreement</h3>
+                <a href="{% url 'assets:asset_maintenance_log_create' %}?service_contract={{ service_contract.pk }}" class="btn btn-sm btn-outline inline-flex items-center">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Log Vendor Service
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Log #</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Technician / Contractor</th>
+                            <th>Total Cost</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in linked_logs %}
+                        <tr>
+                            <td class="font-mono">
+                                <a href="{% url 'assets:asset_maintenance_log_detail' log.pk %}" class="text-blue-600 hover:underline">
+                                    {{ log.number }}
+                                </a>
+                            </td>
+                            <td class="text-xs text-slate-600">{{ log.service_date|date:"M d, Y" }}</td>
+                            <td><span class="badge {{ log.maintenance_type_css }}">{{ log.get_maintenance_type_display }}</span></td>
+                            <td class="text-sm">
+                                {% if log.lead_technician %}{{ log.lead_technician.get_full_name|default:log.lead_technician.username }}{% elif log.service_vendor %}{{ log.service_vendor.name }}{% else %}—{% endif %}
+                            </td>
+                            <td class="font-medium">${{ log.total_cost|floatformat:2 }}</td>
+                            <td><span class="badge {{ log.status_css }}">{{ log.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-slate-500 text-sm">
+                                No service completion logs recorded yet.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Right Column: Vendor & Covered Asset -->
@@ -266,15 +320,15 @@
             {% csrf_token %}
             <div class="space-y-4">
                 <div>
-                    <label class="form-label">New Expiration Date *</label>
+                    <label class="form-label" for="{{ renew_form.new_end_date.id_for_label }}">New Expiration Date *</label>
                     {{ renew_form.new_end_date }}
                 </div>
                 <div>
-                    <label class="form-label">New Contract Value (Leave blank if unchanged)</label>
+                    <label class="form-label" for="{{ renew_form.new_contract_value.id_for_label }}">New Contract Value (Leave blank if unchanged)</label>
                     {{ renew_form.new_contract_value }}
                 </div>
                 <div>
-                    <label class="form-label">Renewal Notes</label>
+                    <label class="form-label" for="{{ renew_form.notes.id_for_label }}">Renewal Notes</label>
                     {{ renew_form.notes }}
                 </div>
             </div>
