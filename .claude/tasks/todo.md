@@ -7,6 +7,221 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.6: Asset Performance & Utilization (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.6.md` (2026-11-09)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, and 11.5.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous leaf is `0008_assetservicecontract_assetmaintenanceschedule_and_more.py` (from 11.5), so **11.6 claims `0009`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.6.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetPerformance/`
+> Template folder name: `templates/assets/asset_performance/{asset_downtime_log,asset_oee_record,asset_energy_reading,asset_performance_scorecard}/`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Performance & Utilization Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Register Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between financial capital assets and operational performance.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational machinery and runtime equipment master in `apps/scm` via string FK (`"scm.Asset"`), supporting meter tracking, tag codes, serial numbers, and machine run hours.
+  - Authoritative General Ledger & Currency Spine (`accounting.Currency`): Downtime hourly financial loss and energy consumption expense allocations link to `"accounting.Currency"`.
+  - Maintenance & SCM Work Order Bindings: Links downtime events to originating repair requests (`"assets.AssetMaintenanceRequest"` [AMRQ-]), historical service logs (`"assets.AssetMaintenanceLog"` [AMLG-]), and operational work orders (`"scm.MaintenanceWorkOrder"` [MWO-]).
+  - Asset Taxonomy & Model Integration: Reuses `"assets.AssetCategory"` [ACAT-] for peer cohort grouping and category ranking, and `"assets.AssetModel"` [AMOD-] for rated nominal cycle times and machine speeds.
+  - Core Spine Bindings: Reuses `"core.OrgUnit"` for plant departments, manufacturing cells, and cost center allocation; `"core.Party"` for utility providers (electricity, gas, water); and `settings.AUTH_USER_MODEL` for operators, evaluators, and supervisors.
+  - Collision-free 4-character uppercase prefixes starting with `A`:
+    - `AssetDowntimeLog` -> `NUMBER_PREFIX = "ADWN"` (format: `ADWN-YYYYMM-XXXX`)
+    - `AssetOeeRecord` -> `NUMBER_PREFIX = "AOEE"` (format: `AOEE-YYYYMM-XXXX`)
+    - `AssetEnergyReading` -> `NUMBER_PREFIX = "AENG"` (format: `AENG-YYYYMM-XXXX`)
+    - `AssetPerformanceScorecard` -> `NUMBER_PREFIX = "APSC"` (format: `APSC-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetDowntimeLog` [ADWN-]:
+      - Authoritative equipment downtime stoppage ledger, tracking start/end outage timestamps, duration, planned vs. unplanned classifications, root causes (ISO 14224), hourly financial loss valuation, and MTBF/MTTR reliability event attribution.
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="downtime_logs"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="downtime_logs"), `maintenance_request` (FK `"assets.AssetMaintenanceRequest"`, SET_NULL, null=True, blank=True, related_name="downtime_logs"), `maintenance_log` (FK `"assets.AssetMaintenanceLog"`, SET_NULL, null=True, blank=True, related_name="downtime_logs"), `work_order` (FK `"scm.MaintenanceWorkOrder"`, SET_NULL, null=True, blank=True, related_name="downtime_logs"), `reported_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="reported_asset_downtimes").
+      - Outage Timing & Metrics: `start_time` (DateTimeField), `end_time` (DateTimeField null=True, blank=True), `duration_minutes` (PositiveIntegerField default=0), `duration_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00).
+      - Classification & Cause: `stoppage_type` (`unplanned_breakdown`, `planned_maintenance`, `setup_changeover`, `tooling_change`, `operator_shortage`, `material_starvation`, `utility_outage`, `cleaning_sanitation`, `engineering_trial`, default `unplanned_breakdown`, max_length=32), `severity` (`total_stoppage`, `partial_degradation`, `minor_stop`, default `total_stoppage`, max_length=24), `failure_category` (`mechanical_wear`, `electrical_short`, `hydraulic_leak`, `software_fault`, `thermal_overload`, `operator_error`, `corrosion`, `external_utility`, `other`, default `mechanical_wear`, max_length=32), `is_unscheduled_breakdown` (BooleanField default=True, help_text="Counts as a failure for MTBF and MTTR calculations").
+      - Financial Costing: `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_downtime_logs"), `cost_per_hour` (DecimalField max_digits=12 decimal_places=2 default=0.00), `total_downtime_cost` (DecimalField max_digits=12 decimal_places=2 default=0.00).
+      - Lifecycle & Diagnosis: `status` (`active`, `investigating`, `resolved`, `cancelled`, default `active`, max_length=20), `root_cause_notes` (TextField blank=True), `corrective_action` (TextField blank=True).
+      - Status / Badge CSS: `active -> badge-red`, `investigating -> badge-amber`, `resolved -> badge-green`, `cancelled -> badge-muted`.
+      - Severity / Badge CSS: `total_stoppage -> badge-red`, `partial_degradation -> badge-amber`, `minor_stop -> badge-info`.
+      - Business Logic & Actions:
+        - `calculate_duration_and_cost()`: auto-calculates `duration_minutes`, `duration_hours`, and `total_downtime_cost = duration_hours * cost_per_hour` upon save when timestamps are present.
+        - Resolve Action (`asset_downtime_log_resolve`): records end time, computes duration and loss, prompts/saves corrective action, transitions `active / investigating -> resolved`.
+        - Cancel Action (`asset_downtime_log_cancel`): marks stoppage as cancelled (false alarm / erroneous logging), transitions `active / investigating -> cancelled`.
+      - Form exclusions: `tenant`, `number`, `duration_minutes`, `duration_hours`, `total_downtime_cost`, `created_at`, `updated_at`.
+      - View context keys: `downtime_logs`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `stoppage_type_choices`, `severity_choices`, `failure_category_choices`, `total_logs`, `active_count`, `total_downtime_hours`, `total_downtime_cost`.
+    - `AssetOeeRecord` [AOEE-]:
+      - Production run and shift-based Overall Equipment Effectiveness (OEE) accounting, capturing Availability %, Performance %, Quality %, gross/good/scrap/rework parts, ideal cycle times, and the TPM Six Big Losses.
+      - Identity & Subject: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="oee_records"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="oee_records"), `asset_model` (FK `"assets.AssetModel"`, SET_NULL, null=True, blank=True, related_name="oee_records"), `org_unit` (FK `"core.OrgUnit"`, SET_NULL, null=True, blank=True, related_name="asset_oee_records"), `recorded_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="recorded_asset_oee"), `record_date` (DateField default=timezone.now), `shift` (`morning`, `afternoon`, `night`, `full_day`, `custom_run`, default `morning`, max_length=20).
+      - Time Accounting (Minutes): `planned_production_minutes` (PositiveIntegerField default=480), `operating_minutes` (PositiveIntegerField default=0), `planned_downtime_minutes` (PositiveIntegerField default=0), `unplanned_downtime_minutes` (PositiveIntegerField default=0).
+      - Production Throughput: `ideal_cycle_time_seconds` (DecimalField max_digits=8 decimal_places=2 default=1.00), `total_units_produced` (PositiveIntegerField default=0), `good_units_produced` (PositiveIntegerField default=0), `scrapped_units` (PositiveIntegerField default=0), `rework_units` (PositiveIntegerField default=0).
+      - OEE Factor Percentages: `availability_rate` (DecimalField max_digits=5 decimal_places=2 default=0.00), `performance_rate` (DecimalField max_digits=5 decimal_places=2 default=0.00), `quality_rate` (DecimalField max_digits=5 decimal_places=2 default=0.00), `oee_percentage` (DecimalField max_digits=5 decimal_places=2 default=0.00), `oee_tier` (`world_class`, `acceptable`, `low_efficiency`, default `acceptable`, max_length=20).
+      - Six Big Losses Decomposition: `breakdown_loss_minutes` (PositiveIntegerField default=0), `setup_loss_minutes` (PositiveIntegerField default=0), `minor_stop_loss_minutes` (PositiveIntegerField default=0), `speed_loss_minutes` (PositiveIntegerField default=0), `scrap_loss_units` (PositiveIntegerField default=0), `startup_loss_units` (PositiveIntegerField default=0).
+      - Lifecycle & Audit: `status` (`draft`, `submitted`, `verified`, default `draft`, max_length=20), `notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `submitted -> badge-amber`, `verified -> badge-green`.
+      - OEE Tier / Badge CSS: `world_class -> badge-green`, `acceptable -> badge-info`, `low_efficiency -> badge-red`.
+      - Shift / Badge CSS: `morning -> badge-slate`, `afternoon -> badge-info`, `night -> badge-amber`, `full_day -> badge-green`, `custom_run -> badge-slate`.
+      - Business Logic & Actions:
+        - `calculate_oee()`: Availability % = `(operating_minutes / planned_production_minutes) * 100`; Performance % = `((total_units_produced * ideal_cycle_time_seconds) / (operating_minutes * 60)) * 100`; Quality % = `(good_units_produced / total_units_produced) * 100`; OEE % = `(Availability * Performance * Quality) / 10000`; sets `oee_tier` (`world_class` >= 85%, `acceptable` 60-84.99%, `low_efficiency` < 60%).
+        - Submit Action (`asset_oee_record_submit`): validates inputs and transitions `draft -> submitted`.
+        - Verify Action (`asset_oee_record_verify`): reliability supervisor locks OEE calculations, transitions `submitted -> verified`.
+      - Form exclusions: `tenant`, `number`, `availability_rate`, `performance_rate`, `quality_rate`, `oee_percentage`, `oee_tier`, `created_at`, `updated_at`.
+      - View context keys: `oee_records`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `shift_choices`, `oee_tier_choices`, `total_records`, `average_oee`, `world_class_count`, `low_efficiency_count`.
+    - `AssetEnergyReading` [AENG-]:
+      - Energy and utility consumption tracking per asset, logging electricity (kWh), gas, fuel, or steam consumption, monitoring peak demand load (kW) and power factor, calculating Specific Energy Consumption (SEC / energy intensity), calculating Scope 1 / Scope 2 GHG carbon emissions ($kg CO_2e$), and allocating utility financial expenses.
+      - Identity & Meter Setup: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="energy_readings"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="energy_readings"), `utility_provider` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="asset_energy_readings"), `org_unit` (FK `"core.OrgUnit"`, SET_NULL, null=True, blank=True, related_name="asset_energy_readings"), `recorded_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="recorded_asset_energy"), `reading_timestamp` (DateTimeField default=timezone.now), `period_start` (DateTimeField), `period_end` (DateTimeField).
+      - Utility Type & Reading: `utility_type` (`electricity`, `natural_gas`, `diesel_fuel`, `heavy_fuel_oil`, `steam`, `compressed_air`, `industrial_water`, default `electricity`, max_length=24), `meter_serial` (CharField max_length=64 blank=True), `start_reading` (DecimalField max_digits=14 decimal_places=2 default=0.00), `end_reading` (DecimalField max_digits=14 decimal_places=2 default=0.00), `consumption_quantity` (DecimalField max_digits=14 decimal_places=2 default=0.00), `unit_of_measure` (`kWh`, `m3`, `liters`, `metric_tons`, `therms`, default `kWh`, max_length=20).
+      - Power Quality & Demand: `peak_demand_kw` (DecimalField max_digits=10 decimal_places=2 default=0.00), `power_factor` (DecimalField max_digits=4 decimal_places=2 default=1.00).
+      - Energy Intensity (SEC): `operating_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `units_produced` (PositiveIntegerField default=0), `energy_intensity_per_hour` (DecimalField max_digits=10 decimal_places=2 default=0.00), `specific_energy_per_unit` (DecimalField max_digits=10 decimal_places=4 default=0.0000).
+      - Carbon Footprint & GHG: `ghg_scope` (`scope_1_direct`, `scope_2_purchased_electricity`, default `scope_2_purchased_electricity`, max_length=32), `emission_factor` (DecimalField max_digits=8 decimal_places=4 default=0.5000), `carbon_emissions_kg` (DecimalField max_digits=12 decimal_places=2 default=0.00), `carbon_emissions_tons` (DecimalField max_digits=10 decimal_places=3 default=0.000).
+      - Utility Financial Cost: `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_energy_readings"), `tariff_rate` (DecimalField max_digits=10 decimal_places=4 default=0.0000), `total_cost` (DecimalField max_digits=12 decimal_places=2 default=0.00).
+      - Anomaly & Status: `is_anomaly` (BooleanField default=False), `anomaly_notes` (CharField max_length=255 blank=True), `status` (`draft`, `verified`, `posted_to_gl`, default `verified`, max_length=20).
+      - Status / Badge CSS: `draft -> badge-slate`, `verified -> badge-green`, `posted_to_gl -> badge-info`.
+      - Utility Type / Badge CSS: `electricity -> badge-amber`, `natural_gas -> badge-info`, `diesel_fuel -> badge-slate`, `steam -> badge-red`, `industrial_water -> badge-info`.
+      - Anomaly / Badge CSS: `True -> badge-red`, `False -> badge-green`.
+      - Business Logic & Actions:
+        - `calculate_consumption_and_emissions()`: `consumption_quantity = end_reading - start_reading`; `energy_intensity_per_hour = consumption_quantity / operating_hours` (when hours > 0); `specific_energy_per_unit = consumption_quantity / units_produced` (when units > 0); `carbon_emissions_kg = consumption_quantity * emission_factor`; `carbon_emissions_tons = carbon_emissions_kg / 1000`; `total_cost = consumption_quantity * tariff_rate`.
+        - Verify Action (`asset_energy_reading_verify`): transitions `draft -> verified`.
+        - Flag Anomaly Action (`asset_energy_reading_flag_anomaly`): toggles `is_anomaly=True` with explanation.
+      - Form exclusions: `tenant`, `number`, `consumption_quantity`, `energy_intensity_per_hour`, `specific_energy_per_unit`, `carbon_emissions_kg`, `carbon_emissions_tons`, `total_cost`, `created_at`, `updated_at`.
+      - View context keys: `energy_readings`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `utility_type_choices`, `ghg_scope_choices`, `total_readings`, `total_kwh_consumption`, `total_carbon_tons`, `anomaly_count`.
+    - `AssetPerformanceScorecard` [APSC-]:
+      - Periodic multi-dimensional asset performance scorecard, consolidating actual vs. planned operating and idle hours, computing capacity utilization %, rolling reliability metrics (MTBF & MTTR), composite Asset Performance Index (API 0–100), benchmark letter-grade tiering (A–D), peer ranking within category/department, and trajectory tracking.
+      - Identity & Period: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="performance_scorecards"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="performance_scorecards"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="performance_scorecards"), `org_unit` (FK `"core.OrgUnit"`, SET_NULL, null=True, blank=True, related_name="asset_scorecards"), `evaluated_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="evaluated_scorecards"), `period_type` (`daily`, `weekly`, `monthly`, `quarterly`, `annual`, default `monthly`, max_length=20), `period_start` (DateField), `period_end` (DateField).
+      - Hours Accounting & Capacity: `calendar_hours` (DecimalField max_digits=8 decimal_places=2 default=720.00), `planned_capacity_hours` (DecimalField max_digits=8 decimal_places=2 default=320.00), `operating_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `idle_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `standby_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `planned_downtime_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `unplanned_downtime_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00).
+      - Utilization Rates: `capacity_utilization_rate` (DecimalField max_digits=5 decimal_places=2 default=0.00), `asset_utilization_rate` (DecimalField max_digits=5 decimal_places=2 default=0.00).
+      - Reliability Engineering Metrics: `breakdown_failure_count` (PositiveIntegerField default=0), `mtbf_hours` (DecimalField max_digits=10 decimal_places=2 default=0.00), `mttr_hours` (DecimalField max_digits=8 decimal_places=2 default=0.00), `availability_percentage` (DecimalField max_digits=5 decimal_places=2 default=0.00), `average_oee_percentage` (DecimalField max_digits=5 decimal_places=2 default=0.00), `total_energy_kwh` (DecimalField max_digits=14 decimal_places=2 default=0.00), `total_carbon_tons` (DecimalField max_digits=10 decimal_places=3 default=0.000).
+      - Composite Scoring & Peer Ranking: `performance_index_score` (DecimalField max_digits=5 decimal_places=2 default=0.00), `benchmark_grade` (`grade_a`, `grade_b`, `grade_c`, `grade_d`, default `grade_b`, max_length=20), `peer_rank` (PositiveIntegerField default=1), `peer_cohort_size` (PositiveIntegerField default=1), `trend_trajectory` (`improving`, `stable`, `deteriorating`, default `stable`, max_length=20).
+      - Lifecycle & Recommendations: `status` (`draft`, `finalized`, `published`, default `draft`, max_length=20), `evaluation_notes` (TextField blank=True), `recommendations` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `finalized -> badge-info`, `published -> badge-green`.
+      - Benchmark Grade / Badge CSS: `grade_a -> badge-green`, `grade_b -> badge-info`, `grade_c -> badge-amber`, `grade_d -> badge-red`.
+      - Trend / Badge CSS: `improving -> badge-green`, `stable -> badge-slate`, `deteriorating -> badge-red`.
+      - Business Logic & Actions:
+        - `calculate_scorecard()`: `capacity_utilization_rate = (operating_hours / planned_capacity_hours) * 100`; `asset_utilization_rate = (operating_hours / calendar_hours) * 100`; `mtbf_hours = operating_hours / breakdown_failure_count` (when count > 0, else operating_hours); `mttr_hours = unplanned_downtime_hours / breakdown_failure_count` (when count > 0, else 0.00); `availability_percentage = min(100.00, (operating_hours / planned_capacity_hours) * 100)`; `performance_index_score = 0.25 * availability + 0.30 * average_oee + 0.25 * capacity_utilization + 0.20 * min(100, (mtbf_hours / 100) * 10)`; assigns `benchmark_grade` (`grade_a` >= 90, `grade_b` 75-89.9, `grade_c` 60-74.9, `grade_d` < 60).
+        - Finalize Action (`asset_performance_scorecard_finalize`): recalculates metrics, transitions `draft -> finalized`.
+        - Publish Action (`asset_performance_scorecard_publish`): publishes scorecard for executive reporting, transitions `finalized -> published`.
+      - Form exclusions: `tenant`, `number`, `capacity_utilization_rate`, `asset_utilization_rate`, `mtbf_hours`, `mttr_hours`, `availability_percentage`, `performance_index_score`, `benchmark_grade`, `peer_rank`, `peer_cohort_size`, `created_at`, `updated_at`.
+      - View context keys: `performance_scorecards`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `period_type_choices`, `benchmark_grade_choices`, `trend_trajectory_choices`, `total_scorecards`, `average_api_score`, `grade_a_count`, `grade_d_count`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `ADWN` (AssetDowntimeLog), `AOEE` (AssetOeeRecord), `AENG` (AssetEnergyReading), `APSC` (AssetPerformanceScorecard) verified 100% collision-free repository-wide.
+- **Index Constraints & Length (L65)**: All index names <= 30 chars (`idx_adwn_ten_stat`, `idx_aoee_ten_date`, `idx_aeng_ten_time`, `idx_apsc_ten_pstart`).
+- **Choice Field Lengths (L65)**: All `CharField` `max_length` strictly >= longest choice value (e.g., `scope_2_purchased_electricity` = 30 <= 32; `unplanned_breakdown` = 19 <= 32).
+
+---
+
+## 11.6-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO duplicate maintenance work order execution engine** — Repair ticketing and shopfloor job execution reuse `scm.MaintenanceWorkOrder` [MWO-] and `assets.AssetMaintenanceRequest` [AMRQ-].
+- [ ] **NO direct continuous daemon PLC listeners (OPC-UA / MQTT)** — Real-time machine daemon polling is deferred to Sub-module 11.15; 11.6 delivers the authoritative data schema and web API endpoints.
+- [ ] **NO live sensor vibration / acoustic FFT spectrum analysis** — High-frequency NDT condition telemetry belongs to Sub-module 11.7 (Asset Reliability & Condition Monitoring).
+- [ ] **NO external carbon credit brokerage / offset market trading ledger** — Environmental accounting in 11.6 calculates Scope 1 and Scope 2 $kg CO_2e$ emissions; carbon offset trading belongs to external ESG reporting.
+- [ ] **NO vehicle fleet GPS / telematics tracking** — Vehicle GPS routes, fuel card integrations, and driver MPG belong to Sub-module 11.19 (Fleet & Vehicle Management).
+
+---
+
+## Sub-module 11.6 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.6.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetDowntimeLog (`ADWN`)**
+  - [ ] `apps/assets/models/AssetPerformance/AssetDowntimeLogs.py`
+  - [ ] `apps/assets/forms/AssetPerformance/AssetDowntimeLogs.py`
+  - [ ] `apps/assets/views/AssetPerformance/AssetDowntimeLogs.py` (CRUD + resolve + cancel)
+  - [ ] `apps/assets/urls/AssetPerformance/AssetDowntimeLogs.py`
+  - [ ] `templates/assets/asset_performance/asset_downtime_log/list.html`
+  - [ ] `templates/assets/asset_performance/asset_downtime_log/detail.html`
+  - [ ] `templates/assets/asset_performance/asset_downtime_log/form.html`
+- [ ] **Entity 2: AssetOeeRecord (`AOEE`)**
+  - [ ] `apps/assets/models/AssetPerformance/AssetOeeRecords.py`
+  - [ ] `apps/assets/forms/AssetPerformance/AssetOeeRecords.py`
+  - [ ] `apps/assets/views/AssetPerformance/AssetOeeRecords.py` (CRUD + submit + verify)
+  - [ ] `apps/assets/urls/AssetPerformance/AssetOeeRecords.py`
+  - [ ] `templates/assets/asset_performance/asset_oee_record/list.html`
+  - [ ] `templates/assets/asset_performance/asset_oee_record/detail.html`
+  - [ ] `templates/assets/asset_performance/asset_oee_record/form.html`
+- [ ] **Entity 3: AssetEnergyReading (`AENG`)**
+  - [ ] `apps/assets/models/AssetPerformance/AssetEnergyReadings.py`
+  - [ ] `apps/assets/forms/AssetPerformance/AssetEnergyReadings.py`
+  - [ ] `apps/assets/views/AssetPerformance/AssetEnergyReadings.py` (CRUD + verify + flag_anomaly)
+  - [ ] `apps/assets/urls/AssetPerformance/AssetEnergyReadings.py`
+  - [ ] `templates/assets/asset_performance/asset_energy_reading/list.html`
+  - [ ] `templates/assets/asset_performance/asset_energy_reading/detail.html`
+  - [ ] `templates/assets/asset_performance/asset_energy_reading/form.html`
+- [ ] **Entity 4: AssetPerformanceScorecard (`APSC`)**
+  - [ ] `apps/assets/models/AssetPerformance/AssetPerformanceScorecards.py`
+  - [ ] `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py`
+  - [ ] `apps/assets/views/AssetPerformance/AssetPerformanceScorecards.py` (CRUD + finalize + publish)
+  - [ ] `apps/assets/urls/AssetPerformance/AssetPerformanceScorecards.py`
+  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/list.html`
+  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/detail.html`
+  - [ ] `templates/assets/asset_performance/asset_performance_scorecard/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all models in `apps/assets/models/AssetPerformance/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all forms in `apps/assets/forms/AssetPerformance/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetPerformance/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetPerformance/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.6 models (`_seed_tenant_11_6`)
+- [ ] Add `LIVE_LINKS["11.6"]` in `apps/core/navigation.py`:
+  - `"Uptime & Downtime Tracking"`: `assets:asset_downtime_log_list`
+  - `"OEE & Productivity Metrics"`: `assets:asset_oee_record_list`
+  - `"Utilization Rate Monitoring"`: `assets:asset_performance_scorecard_list`
+  - `"Energy Consumption Tracking"`: `assets:asset_energy_reading_list`
+  - `"Performance Benchmarking & KPIs"`: `assets:asset_performance_scorecard_list`
+  - Plural & convenience aliases:
+    - `"Downtime Logs"`: `assets:asset_downtime_log_list`
+    - `"OEE Records"`: `assets:asset_oee_record_list`
+    - `"Energy Readings"`: `assets:asset_energy_reading_list`
+    - `"Performance Scorecards"`: `assets:asset_performance_scorecard_list`
+    - `"Asset Performance & Utilization"`: `assets:asset_performance_scorecard_list`
+    - `"Asset Downtime Logs"`: `assets:asset_downtime_log_list`
+    - `"Asset OEE"`: `assets:asset_oee_record_list`
+    - `"Asset Energy"`: `assets:asset_energy_reading_list`
+    - `"Asset Scorecards"`: `assets:asset_performance_scorecard_list`
+- [ ] Run `makemigrations assets` (generating `0009_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_6.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.6.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_asset_performance_models.py`
+- [ ] `test_asset_performance_forms.py`
+- [ ] `test_asset_performance_views.py`
+- [ ] `test_asset_performance_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.6 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.6.md`
+
+## Later passes / deferred (Parked from research)
+- Direct industrial protocol (OPC-UA / MQTT) daemon listeners (deferred to 11.15)
+- Continuous acoustic, vibration, and FFT spectrum analysis (deferred to 11.7)
+- Predictive failure probability curves via autoregressive ML (deferred to 11.14 / 11.15)
+- External carbon credit trading and ESG registry export (deferred to Module 2 / Module 10)
+
+## Review notes
+(filled in at the end)
+
+---
 # Sub-module 11.5: Maintenance & Repair Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.5.md` (2026-11-09)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, and 11.4.
