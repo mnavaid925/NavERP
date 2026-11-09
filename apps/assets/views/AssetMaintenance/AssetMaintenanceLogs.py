@@ -59,6 +59,7 @@ def asset_maintenance_log_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "search_query": q,
         "status_choices": AssetMaintenanceLog.STATUS_CHOICES,
         "maintenance_type_choices": AssetMaintenanceLog.MAINTENANCE_TYPE_CHOICES,
         "failure_code_choices": AssetMaintenanceLog.FAILURE_CODE_CHOICES,
@@ -101,7 +102,7 @@ def asset_maintenance_log_detail(request, pk):
 @login_required
 def asset_maintenance_log_create(request):
     if request.method == "POST":
-        form = AssetMaintenanceLogForm(request.POST)
+        form = AssetMaintenanceLogForm(request.POST, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save(commit=False)
@@ -118,7 +119,7 @@ def asset_maintenance_log_create(request):
             val = request.GET.get(param)
             if val:
                 initial[param] = val
-        form = AssetMaintenanceLogForm(initial=initial)
+        form = AssetMaintenanceLogForm(initial=initial, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -133,7 +134,7 @@ def asset_maintenance_log_create(request):
 def asset_maintenance_log_edit(request, pk):
     obj = assets_object(request, AssetMaintenanceLog, pk)
     if request.method == "POST":
-        form = AssetMaintenanceLogForm(request.POST, instance=obj)
+        form = AssetMaintenanceLogForm(request.POST, instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save()
@@ -141,7 +142,7 @@ def asset_maintenance_log_edit(request, pk):
             messages.success(request, f"Maintenance Log {obj.number} updated successfully.")
             return redirect("assets:asset_maintenance_log_detail", pk=obj.pk)
     else:
-        form = AssetMaintenanceLogForm(instance=obj)
+        form = AssetMaintenanceLogForm(instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
