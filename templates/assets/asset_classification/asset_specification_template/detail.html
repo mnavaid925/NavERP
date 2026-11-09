@@ -100,7 +100,7 @@
                     <label class="text-xs font-semibold uppercase text-muted">Numeric Value Bounds</label>
                     <div class="text-sm text-slate-800">
                         {% if template.min_numeric_value is not None or template.max_numeric_value is not None %}
-                        Min: <strong>{{ template.min_numeric_value|default:"No limit" }}</strong> — Max: <strong>{{ template.max_numeric_value|default:"No limit" }}</strong>
+                        Min: <strong>{{ template.min_numeric_value|default_if_none:"No limit" }}</strong> — Max: <strong>{{ template.max_numeric_value|default_if_none:"No limit" }}</strong>
                         {% else %}
                         <span class="text-muted">No numerical bounds enforced</span>
                         {% endif %}
