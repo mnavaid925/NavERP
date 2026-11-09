@@ -173,7 +173,7 @@
                     <div class="text-xs text-muted">Operational Asset Register</div>
                     <div class="font-medium text-slate-900">{{ transfer.operational_asset.name }}</div>
                     <div class="text-xs font-mono text-muted">{{ transfer.operational_asset.number }}</div>
-                    <div class="text-xs text-muted mt-1">Current Plant Loc: {{ transfer.operational_asset.current_location.name|default:"—" }}</div>
+                    <div class="text-xs text-muted mt-1">Current Plant Loc: {{ transfer.operational_asset.location.name|default:"—" }}</div>
                 </div>
                 {% endif %}
             </div>
