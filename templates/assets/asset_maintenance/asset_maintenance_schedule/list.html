@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}PM Schedules — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <span>PM Schedules</span>
+        </div>
+        <h1 class="page-title">Preventive Maintenance Schedules</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_maintenance_schedule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New PM Schedule
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total PM Schedules</div>
+            <div class="stat-value">{{ total_schedules }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Schedules</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Overdue Service</div>
+            <div class="stat-value">{{ overdue_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="pause-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Paused / Standby</div>
+            <div class="stat-value">{{ paused_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Schedule #, name, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Schedule Type</label>
+                <select id="type-filter" name="schedule_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in schedule_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.schedule_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="unit-filter" class="form-label">Frequency Unit</label>
+                <select id="unit-filter" name="frequency_unit" class="form-select">
+                    <option value="">All Units</option>
+                    {% for val, label in frequency_unit_choices %}
+                    <option value="{{ val }}" {% if request.GET.frequency_unit == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.schedule_type or request.GET.frequency_unit %}
+                <a href="{% url 'assets:asset_maintenance_schedule_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Schedule #</th>
+                    <th>Plan Name</th>
+                    <th>Asset Covered</th>
+                    <th>Type</th>
+                    <th>Interval</th>
+                    <th>Last Serviced</th>
+                    <th>Next Due</th>
+                    <th>Assigned Tech</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sched in maintenance_schedules %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_maintenance_schedule_detail' sched.pk %}" class="text-blue-600 hover:underline">
+                            {{ sched.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ sched.name }}</div>
+                        {% if sched.is_mandatory %}
+                        <span class="text-xs text-amber-700 font-semibold">Mandatory Compliance</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sched.fixed_asset %}
+                        <div class="text-sm font-medium">{{ sched.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ sched.fixed_asset.number }}</div>
+                        {% elif sched.operational_asset %}
+                        <div class="text-sm font-medium">{{ sched.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ sched.operational_asset.asset_tag|default:"Operational" }}</div>
+                        {% elif sched.asset_category %}
+                        <div class="text-sm font-medium">Category: {{ sched.asset_category.name }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ sched.schedule_type_css }}">{{ sched.get_schedule_type_display }}</span>
+                    </td>
+                    <td class="text-sm">
+                        Every {{ sched.frequency_interval }} {{ sched.get_frequency_unit_display }}
+                    </td>
+                    <td class="text-sm text-slate-600">
+                        {{ sched.last_service_date|date:"M d, Y"|default:"—" }}
+                    </td>
+                    <td>
+                        {% if sched.next_due_date %}
+                        <div class="text-sm font-medium {% if sched.status_css == 'badge-red' %}text-red-600 font-bold{% else %}text-slate-900{% endif %}">
+                            {{ sched.next_due_date|date:"M d, Y" }}
+                        </div>
+                        <div class="text-xs text-slate-500">{{ sched.lead_time_days }}d notice</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ sched.assigned_technician.get_full_name|default:sched.assigned_technician.username|default:sched.preferred_vendor.name|default:"—" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ sched.status_css }}">{{ sched.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_maintenance_schedule_detail' sched.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_maintenance_schedule_edit' sched.pk %}" class="btn btn-icon" title="Edit Schedule">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_maintenance_schedule_delete' sched.pk %}" class="inline" onsubmit="return confirm('Delete schedule {{ sched.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Schedule">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="calendar" class="empty-icon"></i>
+                            <div class="empty-title">No PM schedules found</div>
+                            <div class="empty-text">No preventive maintenance plans have been configured.</div>
+                            <a href="{% url 'assets:asset_maintenance_schedule_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Create First PM Schedule
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div>
+            Showing <span class="font-medium">{{ page_obj.start_index }}</span> to <span class="font-medium">{{ page_obj.end_index }}</span> of <span class="font-medium">{{ paginator.count }}</span> schedules
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.schedule_type %}&schedule_type={{ request.GET.schedule_type }}{% endif %}{% if request.GET.frequency_unit %}&frequency_unit={{ request.GET.frequency_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left" class="w-4 h-4 mr-1"></i> Previous
+            </a>
+            {% endif %}
+            <span class="text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.schedule_type %}&schedule_type={{ request.GET.schedule_type }}{% endif %}{% if request.GET.frequency_unit %}&frequency_unit={{ request.GET.frequency_unit }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
