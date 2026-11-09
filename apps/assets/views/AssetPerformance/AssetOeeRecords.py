@@ -18,7 +18,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def asset_oee_record_list(request):
     qs = AssetOeeRecord.objects.filter(tenant=request.tenant).select_related(
-        "fixed_asset", "operational_asset", "recorded_by"
+        "fixed_asset", "operational_asset"
     )
 
     q = request.GET.get("q", "").strip()
@@ -55,7 +55,7 @@ def asset_oee_record_list(request):
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).order_by("name")
+    fixed_assets = FixedAsset.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "page_obj": page_obj,
@@ -148,7 +148,7 @@ def asset_oee_record_edit(request, pk):
 @login_required
 @require_POST
 def asset_oee_record_delete(request, pk):
-    record = assets_object(request, AssetOeeRecord, pk)
+    record = assets_object(request, AssetOeeRecord, pk, select_related=["fixed_asset", "operational_asset"])
     number = record.number
     write_audit_log(request.user, record, "delete", tenant=request.tenant)
     record.delete()
@@ -159,7 +159,7 @@ def asset_oee_record_delete(request, pk):
 @login_required
 @require_POST
 def asset_oee_record_finalize(request, pk):
-    record = assets_object(request, AssetOeeRecord, pk)
+    record = assets_object(request, AssetOeeRecord, pk, select_related=["fixed_asset", "operational_asset"])
     if record.status != "draft":
         messages.error(request, f"OEE entry {record.number} cannot be finalized because it is currently {record.get_status_display().lower()}.")
         return redirect("assets:asset_oee_record_detail", pk=record.pk)
