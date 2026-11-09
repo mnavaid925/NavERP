@@ -173,3 +173,22 @@ class AssetCategory(TenantNumbered):
             curr = curr.parent
             depth += 1
         return " / ".join(nodes)
+
+    def get_ancestors(self):
+        """Return list of ancestor categories from immediate parent up to root."""
+        ancestors = []
+        curr = self.parent
+        depth = 0
+        while curr and depth < 10:
+            ancestors.append(curr)
+            curr = curr.parent
+            depth += 1
+        return ancestors
+
+    def get_descendants(self):
+        """Return list of descendant categories recursively."""
+        descendants = []
+        for child in self.children.all():
+            descendants.append(child)
+            descendants.extend(child.get_descendants())
+        return descendants
