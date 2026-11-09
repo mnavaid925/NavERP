@@ -73,7 +73,7 @@ def asset_condition_assessment_list(request):
     average_health_score = round(avg_score, 1) if avg_score is not None else 0.0
     followup_count = stats["followup"]
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
