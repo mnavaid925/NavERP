@@ -67,6 +67,7 @@ def asset_maintenance_request_list(request):
         "page_obj": page_obj,
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
+        "search_query": q,
         "status_choices": AssetMaintenanceRequest.STATUS_CHOICES,
         "urgency_choices": AssetMaintenanceRequest.URGENCY_CHOICES,
         "request_type_choices": AssetMaintenanceRequest.REQUEST_TYPE_CHOICES,
@@ -111,6 +112,7 @@ def asset_maintenance_request_detail(request, pk):
             initial={
                 "assigned_technician": obj.assigned_technician,
                 "assigned_vendor": obj.assigned_vendor,
+                "service_contract": obj.service_contract,
                 "dispatched_work_order": obj.dispatched_work_order,
             },
         ),
@@ -125,7 +127,7 @@ def asset_maintenance_request_detail(request, pk):
 @login_required
 def asset_maintenance_request_create(request):
     if request.method == "POST":
-        form = AssetMaintenanceRequestForm(request.POST)
+        form = AssetMaintenanceRequestForm(request.POST, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save(commit=False)
@@ -144,7 +146,7 @@ def asset_maintenance_request_create(request):
         operational_asset_id = request.GET.get("operational_asset")
         if operational_asset_id:
             initial["operational_asset"] = operational_asset_id
-        form = AssetMaintenanceRequestForm(initial=initial)
+        form = AssetMaintenanceRequestForm(initial=initial, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -159,7 +161,7 @@ def asset_maintenance_request_create(request):
 def asset_maintenance_request_edit(request, pk):
     obj = assets_object(request, AssetMaintenanceRequest, pk)
     if request.method == "POST":
-        form = AssetMaintenanceRequestForm(request.POST, instance=obj)
+        form = AssetMaintenanceRequestForm(request.POST, instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
         if form.is_valid():
             obj = form.save()
@@ -167,7 +169,7 @@ def asset_maintenance_request_edit(request, pk):
             messages.success(request, f"Maintenance Request {obj.number} updated successfully.")
             return redirect("assets:asset_maintenance_request_detail", pk=obj.pk)
     else:
-        form = AssetMaintenanceRequestForm(instance=obj)
+        form = AssetMaintenanceRequestForm(instance=obj, tenant=request.tenant)
         form.tenant = request.tenant
 
     context = {
@@ -215,6 +217,7 @@ def asset_maintenance_request_dispatch(request, pk):
         obj.dispatch(
             technician=form.cleaned_data.get("assigned_technician"),
             vendor=form.cleaned_data.get("assigned_vendor"),
+            service_contract=form.cleaned_data.get("service_contract"),
             work_order=form.cleaned_data.get("dispatched_work_order"),
         )
         write_audit_log(request.user, obj, "update", changes={"action": "dispatch"}, tenant=request.tenant)
