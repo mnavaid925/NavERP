@@ -23,8 +23,6 @@ def asset_telemetry_reading_list(request):
         AssetTelemetryReading.objects.select_related(
             "fixed_asset",
             "operational_asset",
-            "recorded_by",
-            "triggered_maintenance_request",
         ),
         request,
     )
