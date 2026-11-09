@@ -66,6 +66,7 @@ def revaluation_list(request):
         "impairment_count": agg["impairment_count"] or 0,
         "surplus_count": agg["surplus_count"] or 0,
         "q": q,
+        "search_query": q,
         "selected_event_type": selected_event_type,
         "selected_status": selected_status,
     }
