@@ -23,6 +23,10 @@ from apps.assets.models import (
     AssetRevaluation,
     AssetTransfer,
     CapitalizationPolicy,
+    AssetMaintenanceRequest,
+    AssetMaintenanceSchedule,
+    AssetServiceContract,
+    AssetMaintenanceLog,
 )
 
 
@@ -882,6 +886,206 @@ def transfer_b(db, tenant_b, fixed_asset_b, operational_asset_b, location_b, loc
         source_custodian=vendor_party_b,
         transferred_by=admin_b,
         transportation_cost=Decimal("250.00"),
+        status="draft",
+    )
+
+
+# ==============================================================================
+# Sub-module 11.5: Maintenance & Repair Management Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def service_contract_a(db, tenant_a, vendor_party_a, fixed_asset_a, operational_asset_a, currency_usd):
+    today = timezone.now().date()
+    return AssetServiceContract.objects.create(
+        tenant=tenant_a,
+        contract_number="AMC-ACME-2026-001",
+        title="Comprehensive CNC Maintenance Agreement",
+        contract_type="comprehensive_amc",
+        vendor=vendor_party_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        start_date=today,
+        end_date=today + timezone.timedelta(days=365),
+        contract_value=Decimal("12000.00"),
+        currency=currency_usd,
+        billing_frequency="annual",
+        sla_response_hours=4,
+        sla_resolution_hours=24,
+        pm_visits_included=4,
+        pm_visits_completed=0,
+        coverage_terms="Full mechanical and electrical coverage including replacement seals.",
+        auto_renew=True,
+        contact_person="John Service",
+        contact_phone="+1-555-0199",
+        contact_email="service@apexmachinery.com",
+        status="active",
+    )
+
+
+@pytest.fixture
+def service_contract_b(db, tenant_b, vendor_party_b, fixed_asset_b, operational_asset_b, currency_usd):
+    today = timezone.now().date()
+    return AssetServiceContract.objects.create(
+        tenant=tenant_b,
+        contract_number="AMC-GLOBEX-2026-001",
+        title="Globex Hydraulic SLA",
+        contract_type="labor_only",
+        vendor=vendor_party_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        start_date=today,
+        end_date=today + timezone.timedelta(days=180),
+        contract_value=Decimal("6000.00"),
+        currency=currency_usd,
+        billing_frequency="quarterly",
+        sla_response_hours=8,
+        sla_resolution_hours=48,
+        pm_visits_included=2,
+        pm_visits_completed=0,
+        status="active",
+    )
+
+
+@pytest.fixture
+def maintenance_schedule_a(db, tenant_a, fixed_asset_a, operational_asset_a, admin_user, vendor_party_a, service_contract_a):
+    today = timezone.now().date()
+    return AssetMaintenanceSchedule.objects.create(
+        tenant=tenant_a,
+        name="Quarterly Spindle & Bearing Inspection",
+        schedule_type="time_based",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        frequency_interval=3,
+        frequency_unit="months",
+        start_date=today,
+        next_due_date=today + timezone.timedelta(days=90),
+        lead_time_days=7,
+        meter_trigger_threshold=500,
+        is_mandatory=True,
+        is_active=True,
+        preferred_vendor=vendor_party_a,
+        assigned_technician=admin_user,
+        service_contract=service_contract_a,
+        service_checklist="1. Clean air filter\n2. Inspect drive belt\n3. Lubricate bearings",
+        status="active",
+    )
+
+
+@pytest.fixture
+def maintenance_schedule_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin_b, vendor_party_b, service_contract_b):
+    today = timezone.now().date()
+    return AssetMaintenanceSchedule.objects.create(
+        tenant=tenant_b,
+        name="Globex Monthly Fluid Check",
+        schedule_type="time_based",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        frequency_interval=1,
+        frequency_unit="months",
+        start_date=today,
+        next_due_date=today + timezone.timedelta(days=30),
+        lead_time_days=3,
+        is_mandatory=False,
+        is_active=True,
+        preferred_vendor=vendor_party_b,
+        assigned_technician=admin_b,
+        service_contract=service_contract_b,
+        status="active",
+    )
+
+
+@pytest.fixture
+def maintenance_request_a(db, tenant_a, fixed_asset_a, operational_asset_a, admin_user, org_unit_a, service_contract_a):
+    return AssetMaintenanceRequest.objects.create(
+        tenant=tenant_a,
+        title="Spindle Vibration and Overheating Warning",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        requester=admin_user,
+        department=org_unit_a,
+        request_type="breakdown_repair",
+        urgency="high",
+        is_breakdown=True,
+        downtime_started_at=timezone.now(),
+        symptom_description="High-frequency vibration detected at spindle head during full RPM cutting.",
+        status="submitted",
+    )
+
+
+@pytest.fixture
+def maintenance_request_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin_b, org_unit_b, service_contract_b):
+    return AssetMaintenanceRequest.objects.create(
+        tenant=tenant_b,
+        title="Globex Hydraulic Cylinder Leak",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        requester=admin_b,
+        department=org_unit_b,
+        request_type="breakdown_repair",
+        urgency="critical",
+        is_breakdown=True,
+        downtime_started_at=timezone.now(),
+        symptom_description="Hydraulic pressure dropping rapidly under heavy load.",
+        status="submitted",
+    )
+
+
+@pytest.fixture
+def maintenance_log_a(db, tenant_a, fixed_asset_a, operational_asset_a, maintenance_request_a, maintenance_schedule_a, service_contract_a, admin_user, vendor_party_a, expense_account_a):
+    now = timezone.now()
+    return AssetMaintenanceLog.objects.create(
+        tenant=tenant_a,
+        maintenance_type="corrective_repair",
+        service_date=now.date(),
+        completion_date=now,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        maintenance_request=maintenance_request_a,
+        maintenance_schedule=maintenance_schedule_a,
+        service_contract=service_contract_a,
+        lead_technician=admin_user,
+        service_vendor=vendor_party_a,
+        failure_code="mechanical_wear",
+        downtime_hours=Decimal("4.50"),
+        labor_hours=Decimal("6.00"),
+        hourly_labor_rate=Decimal("75.00"),
+        labor_cost=Decimal("450.00"),
+        parts_cost=Decimal("350.00"),
+        vendor_invoice_cost=Decimal("0.00"),
+        total_cost=Decimal("800.00"),
+        parts_consumed_summary="1x High-speed ceramic bearing #BRG-44\n1x Viton seal #VS-12",
+        root_cause_analysis="Lubrication starvation caused inner race scoring.",
+        action_taken="Flushed bearing housing, installed replacement ceramic bearing, replenished synthetic grease.",
+        expense_account=expense_account_a,
+        status="draft",
+    )
+
+
+@pytest.fixture
+def maintenance_log_b(db, tenant_b, fixed_asset_b, operational_asset_b, maintenance_request_b, maintenance_schedule_b, service_contract_b, admin_b, vendor_party_b, expense_account_b):
+    now = timezone.now()
+    return AssetMaintenanceLog.objects.create(
+        tenant=tenant_b,
+        maintenance_type="emergency_breakdown",
+        service_date=now.date(),
+        completion_date=now,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        maintenance_request=maintenance_request_b,
+        maintenance_schedule=maintenance_schedule_b,
+        service_contract=service_contract_b,
+        lead_technician=admin_b,
+        service_vendor=vendor_party_b,
+        failure_code="hydraulic_leak",
+        downtime_hours=Decimal("8.00"),
+        labor_hours=Decimal("8.00"),
+        hourly_labor_rate=Decimal("60.00"),
+        labor_cost=Decimal("480.00"),
+        parts_cost=Decimal("220.00"),
+        vendor_invoice_cost=Decimal("0.00"),
+        total_cost=Decimal("700.00"),
+        expense_account=expense_account_b,
         status="draft",
     )
 
