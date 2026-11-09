@@ -209,6 +209,7 @@ def test_asset_maintenance_log_form_valid(tenant_a, fixed_asset_a, admin_user, v
         "failure_code": "mechanical_wear",
         "downtime_hours": "3.50",
         "labor_hours": "4.00",
+        "labor_cost": "320.00",
         "hourly_labor_rate": "80.00",
         "parts_cost": "150.00",
         "vendor_invoice_cost": "0.00",
