@@ -25,7 +25,7 @@
         </div>
         <div class="card-body">
             <div class="mb-4 p-4 bg-slate-50 border border-slate-100 rounded-md text-sm space-y-1">
-                <div><span class="font-medium text-slate-700">Target Asset:</span> {{ log.fixed_asset.name|default:log.operational_asset.name|default:"Unassigned" }}</div>
+                <div><span class="font-medium text-slate-700">Target Asset:</span> {% if log.fixed_asset %}{{ log.fixed_asset.name }}{% elif log.operational_asset %}{{ log.operational_asset.name }}{% else %}Unassigned{% endif %}</div>
                 <div><span class="font-medium text-slate-700">Category:</span> {{ log.get_downtime_category_display }}</div>
                 <div><span class="font-medium text-slate-700">Started At:</span> {{ log.started_at|date:"F j, Y, H:i" }}</div>
             </div>
