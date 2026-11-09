@@ -138,7 +138,7 @@
 ### Minor Findings (Quality Polish)
 - [x] **M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — Missing `impact` level dropdown in filter bar and clear filter condition. (fixed: 6ae30ba1)
 - [x] **M2**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34, 40-52` — Contract drift: `peer_category_ranking` was specified in form exclusions (Contract 1.4 & 2.4). Remove from `fields` and add to `exclude`. (fixed: 1f6db776)
-- [ ] **M3**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Add `.only("id", "name")` to `FixedAsset.objects.filter(tenant=request.tenant)` dropdown queries in list views.
+- [x] **M3**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Add `.only("id", "name")` to `FixedAsset.objects.filter(tenant=request.tenant)` dropdown queries in list views. (fixed: 95e6fcf8, 5f50f026, 52ecccd5, 63358d0a)
 - [ ] **M4**: `templates/assets/asset_performance/` (all 4 list templates) — Filter clear "X" buttons lack accessibility attributes (`title="Clear filters" aria-label="Clear filters"`).
 - [ ] **M5**: `templates/assets/asset_performance/` (all 4 list templates) — Filter bar `<label>` elements lack `for` attributes and matching `<input>`/`<select>` `id` attributes.
 - [ ] **M6**: `apps/assets/models/AssetPerformance/` — Float casting in Decimal rounding calculations. Use `Decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)`.
