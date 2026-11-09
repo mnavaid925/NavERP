@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.accounting.models import Currency, FixedAsset, GLAccount
+from apps.accounting.models import FiscalPeriod
 from apps.assets.models import (
     AssetAcquisitionReceipt,
     AssetAudit,
@@ -13,12 +14,16 @@ from apps.assets.models import (
     AssetCategory,
     AssetCriticalityAssessment,
     AssetCustodyLog,
+    AssetDepreciationSchedule,
     AssetIncidentReport,
     AssetModel,
     AssetMovementLog,
     AssetRequisition,
+    AssetRevaluation,
     AssetSpecificationTemplate,
     AssetTag,
+    AssetTransfer,
+    CapitalizationPolicy,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -39,6 +44,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetDepreciationSchedule.objects.all().delete()
+            AssetRevaluation.objects.all().delete()
+            AssetTransfer.objects.all().delete()
+            CapitalizationPolicy.objects.all().delete()
             AssetSpecificationTemplate.objects.all().delete()
             AssetCriticalityAssessment.objects.all().delete()
             AssetModel.objects.all().delete()
@@ -62,6 +71,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_1(tenant)
             self._seed_tenant_11_2(tenant)
             self._seed_tenant_11_3(tenant)
+            self._seed_tenant_11_4(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -788,3 +798,170 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] 11.3 Seeding complete (6 categories, 3 models, 5 spec templates, 2 risk assessments).")
 
+
+    def _seed_tenant_11_4(self, tenant):
+        """Seed demo data for Sub-module 11.4: Depreciation & Financial Management."""
+        if AssetDepreciationSchedule.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.4 Depreciation & Financial data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.4 Depreciation & Financial Management...")
+
+        user = User.objects.filter(tenant=tenant).first()
+        org_units = list(OrgUnit.objects.filter(tenant=tenant))
+        org_unit_src = org_units[0] if org_units else None
+        org_unit_dst = org_units[1] if len(org_units) > 1 else org_unit_src
+        locations = list(Location.objects.filter(tenant=tenant))
+        loc_src = locations[0] if locations else None
+        loc_dst = locations[1] if len(locations) > 1 else loc_src
+        parties = list(Party.objects.filter(tenant=tenant))
+        custodian_src = parties[0] if parties else None
+        custodian_dst = parties[1] if len(parties) > 1 else custodian_src
+        vendor = Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first() or custodian_src
+        categories = list(AssetCategory.objects.filter(tenant=tenant))
+        cat_machinery = next((c for c in categories if c.category_type == "machinery"), categories[0] if categories else None)
+
+        fixed_assets = list(FixedAsset.objects.filter(tenant=tenant))
+        operational_assets = list(Asset.objects.filter(tenant=tenant))
+        fa_primary = fixed_assets[0] if fixed_assets else None
+        oa_primary = operational_assets[0] if operational_assets else None
+        fiscal_period = FiscalPeriod.objects.filter(tenant=tenant).first()
+
+        expense_acc = GLAccount.objects.filter(tenant=tenant, account_type="expense").first() or GLAccount.objects.filter(tenant=tenant).first()
+        accum_acc = GLAccount.objects.filter(tenant=tenant, account_type="asset").last() or GLAccount.objects.filter(tenant=tenant).last()
+        loss_acc = GLAccount.objects.filter(tenant=tenant, account_type="expense").last() or expense_acc
+        surplus_acc = GLAccount.objects.filter(tenant=tenant, account_type="equity").first() or accum_acc
+        cip_acc = GLAccount.objects.filter(tenant=tenant, account_type="asset").first() or accum_acc
+
+        with transaction.atomic():
+            # 1. Capitalization Policies
+            pol1 = CapitalizationPolicy.objects.create(
+                tenant=tenant,
+                name="Statutory IRS De Minimis Safe Harbor (CapEx Floor)",
+                policy_scope="tax_book_safe_harbor",
+                minimum_cost_threshold=Decimal("2500.00"),
+                minimum_useful_life_months=12,
+                default_classification="expense_immediately",
+                de_minimis_safe_harbor=True,
+                applicable_gaap_standard="US GAAP / IRS Reg. 1.263(a)-1(f)",
+                default_cip_account=cip_acc,
+                default_expense_account=expense_acc,
+                policy_notes="All tangible property items under $2,500.00 are immediately expensed under de minimis safe harbor election.",
+                effective_from=timezone.now().date() - timezone.timedelta(days=365),
+                is_active=True,
+            )
+
+            pol2 = CapitalizationPolicy.objects.create(
+                tenant=tenant,
+                name="Heavy Machinery & Plant Infrastructure Policy",
+                policy_scope="category_override",
+                category=cat_machinery,
+                minimum_cost_threshold=Decimal("5000.00"),
+                minimum_useful_life_months=24,
+                default_classification="capitalize",
+                de_minimis_safe_harbor=False,
+                applicable_gaap_standard="IFRS IAS 16 / US GAAP ASC 360",
+                default_cip_account=cip_acc,
+                default_expense_account=expense_acc,
+                policy_notes="Major production plant and CNC cells capitalized over 24-month minimum economic life.",
+                effective_from=timezone.now().date() - timezone.timedelta(days=180),
+                is_active=True,
+            )
+
+            if fa_primary:
+                # 2. Asset Depreciation Schedules
+                sched1 = AssetDepreciationSchedule.objects.create(
+                    tenant=tenant,
+                    fixed_asset=fa_primary,
+                    operational_asset=oa_primary,
+                    fiscal_period=fiscal_period,
+                    fiscal_year=2026,
+                    period_number=1,
+                    period_frequency="monthly",
+                    schedule_date=timezone.now().date() - timezone.timedelta(days=30),
+                    depreciation_method="straight_line",
+                    starting_book_value=fa_primary.acquisition_cost or Decimal("125000.00"),
+                    depreciation_amount=Decimal("2083.33"),
+                    accumulated_depreciation_after=Decimal("2083.33"),
+                    ending_book_value=(fa_primary.acquisition_cost or Decimal("125000.00")) - Decimal("2083.33"),
+                    expense_account=expense_acc,
+                    accumulated_account=accum_acc,
+                    cost_center=org_unit_src,
+                    status="posted",
+                    posted_at=timezone.now() - timezone.timedelta(days=28),
+                    posted_by=user,
+                    notes="Monthly straight-line depreciation run closed and posted to general ledger.",
+                )
+
+                sched2 = AssetDepreciationSchedule.objects.create(
+                    tenant=tenant,
+                    fixed_asset=fa_primary,
+                    operational_asset=oa_primary,
+                    fiscal_period=fiscal_period,
+                    fiscal_year=2026,
+                    period_number=2,
+                    period_frequency="monthly",
+                    schedule_date=timezone.now().date(),
+                    depreciation_method="straight_line",
+                    starting_book_value=sched1.ending_book_value,
+                    depreciation_amount=Decimal("2083.33"),
+                    accumulated_depreciation_after=Decimal("4166.66"),
+                    ending_book_value=sched1.ending_book_value - Decimal("2083.33"),
+                    expense_account=expense_acc,
+                    accumulated_account=accum_acc,
+                    cost_center=org_unit_src,
+                    status="calculated",
+                    notes="Current period draft calculation pending month-end closing approval.",
+                )
+
+                # 3. Asset Revaluations
+                rev1 = AssetRevaluation.objects.create(
+                    tenant=tenant,
+                    title=f"Annual Mid-Life Fair Value Revaluation - {fa_primary.name}",
+                    fixed_asset=fa_primary,
+                    operational_asset=oa_primary,
+                    event_type="revaluation_up",
+                    valuation_method="independent_appraisal",
+                    valuation_date=timezone.now().date() - timezone.timedelta(days=10),
+                    appraiser=vendor,
+                    appraiser_name_fallback="Accredited Industrial Appraisals Inc.",
+                    historical_cost=fa_primary.acquisition_cost or Decimal("125000.00"),
+                    accumulated_depreciation_before=Decimal("2083.33"),
+                    carrying_value_before=(fa_primary.acquisition_cost or Decimal("125000.00")) - Decimal("2083.33"),
+                    new_fair_market_value=(fa_primary.acquisition_cost or Decimal("125000.00")) + Decimal("7500.00"),
+                    revaluation_adjustment=Decimal("9583.33"),
+                    new_salvage_value=Decimal("5000.00"),
+                    remaining_useful_life_months=58,
+                    revaluation_surplus_account=surplus_acc,
+                    reason_and_methodology="Third-party market appraisal certified upward replacement value step-up due to tight supply chain equipment premiums.",
+                    status="approved",
+                    approved_by=user,
+                    approved_at=timezone.now() - timezone.timedelta(days=8),
+                )
+
+                # 4. Asset Transfers
+                xfr1 = AssetTransfer.objects.create(
+                    tenant=tenant,
+                    title=f"Inter-Facility Production Line Reallocation - {fa_primary.name}",
+                    fixed_asset=fa_primary,
+                    operational_asset=oa_primary,
+                    transfer_type="cost_center",
+                    transfer_date=timezone.now().date() - timezone.timedelta(days=5),
+                    source_department=org_unit_src,
+                    source_location=loc_src,
+                    source_custodian=custodian_src,
+                    source_expense_account=expense_acc,
+                    destination_department=org_unit_dst,
+                    destination_location=loc_dst,
+                    destination_custodian=custodian_dst,
+                    destination_expense_account=expense_acc,
+                    carrying_value_at_transfer=sched1.ending_book_value,
+                    transportation_cost=Decimal("1250.00"),
+                    reason="Operational transfer to balance production capacity across plant work centers.",
+                    status="completed",
+                    transferred_by=user,
+                    received_by=user,
+                    completed_at=timezone.now() - timezone.timedelta(days=4),
+                )
+
+        self.stdout.write(f"[{tenant.name}] 11.4 Seeding complete (2 policies, 2 schedules, 1 revaluation, 1 transfer).")
