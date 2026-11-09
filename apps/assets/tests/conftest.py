@@ -119,6 +119,17 @@ def location_b(db, tenant_b):
 
 
 @pytest.fixture
+def location_b2(db, tenant_b):
+    return Location.objects.create(
+        tenant=tenant_b,
+        code="WH-BAY2-B",
+        name="Globex Bay 2 Yard",
+        location_type="staging",
+        is_active=True,
+    )
+
+
+@pytest.fixture
 def po_a(db, tenant_a, vendor_party_a):
     return PurchaseOrder.objects.create(
         tenant=tenant_a,
@@ -756,13 +767,13 @@ def depreciation_schedule_a(db, tenant_a, fixed_asset_a, operational_asset_a, ex
         period_frequency="monthly",
         schedule_date=timezone.now().date(),
         depreciation_method="straight_line",
-        asset_cost_basis=Decimal("120000.00"),
+        starting_book_value=Decimal("120000.00"),
         salvage_value=Decimal("12000.00"),
         accumulated_depreciation_prior=Decimal("0.00"),
         useful_life_months_total=60,
         depreciation_amount=Decimal("1800.00"),
         accumulated_depreciation_after=Decimal("1800.00"),
-        net_book_value_after=Decimal("118200.00"),
+        ending_book_value=Decimal("118200.00"),
         expense_account=expense_account_a,
         accumulated_account=accum_account_a,
         status="draft",
@@ -781,13 +792,13 @@ def depreciation_schedule_b(db, tenant_b, fixed_asset_b, operational_asset_b, ex
         period_frequency="monthly",
         schedule_date=timezone.now().date(),
         depreciation_method="straight_line",
-        asset_cost_basis=Decimal("45000.00"),
+        starting_book_value=Decimal("45000.00"),
         salvage_value=Decimal("5000.00"),
         accumulated_depreciation_prior=Decimal("0.00"),
         useful_life_months_total=48,
         depreciation_amount=Decimal("833.33"),
         accumulated_depreciation_after=Decimal("833.33"),
-        net_book_value_after=Decimal("44166.67"),
+        ending_book_value=Decimal("44166.67"),
         expense_account=expense_account_b,
         accumulated_account=accum_account_b,
         status="draft",
@@ -851,7 +862,7 @@ def transfer_a(db, tenant_a, fixed_asset_a, operational_asset_a, location_a, loc
         source_department=org_unit_a,
         source_custodian=vendor_party_a,
         transferred_by=admin_user,
-        freight_cost=Decimal("750.00"),
+        transportation_cost=Decimal("750.00"),
         status="draft",
     )
 
@@ -870,7 +881,7 @@ def transfer_b(db, tenant_b, fixed_asset_b, operational_asset_b, location_b, loc
         source_department=org_unit_b,
         source_custodian=vendor_party_b,
         transferred_by=admin_b,
-        freight_cost=Decimal("250.00"),
+        transportation_cost=Decimal("250.00"),
         status="draft",
     )
 
