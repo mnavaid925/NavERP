@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Service Log {{ maintenance_log.number }}{% else %}New Maintenance Service Log{% endif %} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_maintenance_log_list' %}">Service Logs</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ maintenance_log.number }}{% else %}New Log{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Service Log {{ maintenance_log.number }}{% else %}Record Maintenance Service Log{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_maintenance_log_detail' maintenance_log.pk %}{% else %}{% url 'assets:asset_maintenance_log_list' %}{% endif %}" class="btn btn-outline">
+            <i data-lucide="x" class="w-4 h-4 mr-1"></i> Cancel
+        </a>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="card p-4 bg-red-50 border-red-200 text-red-700 text-sm mb-4">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Service Timing & Classification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Service Event & Failure Classification</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label for="{{ form.service_date.id_for_label }}" class="form-label">Service Date *</label>
+                {{ form.service_date }}
+                {% if form.service_date.errors %}<div class="form-error">{{ form.service_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.completion_date.id_for_label }}" class="form-label">Completion Timestamp</label>
+                {{ form.completion_date }}
+                {% if form.completion_date.errors %}<div class="form-error">{{ form.completion_date.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.maintenance_type.id_for_label }}" class="form-label">Maintenance Type *</label>
+                {{ form.maintenance_type }}
+                {% if form.maintenance_type.errors %}<div class="form-error">{{ form.maintenance_type.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.failure_code.id_for_label }}" class="form-label">Failure Root Cause (ISO 14224 / FMEA) *</label>
+                {{ form.failure_code }}
+                {% if form.failure_code.errors %}<div class="form-error">{{ form.failure_code.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.downtime_hours.id_for_label }}" class="form-label">Downtime Duration (Hours) *</label>
+                {{ form.downtime_hours }}
+                {% if form.downtime_hours.errors %}<div class="form-error">{{ form.downtime_hours.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.meter_reading.id_for_label }}" class="form-label">Asset Meter Reading</label>
+                {{ form.meter_reading }}
+                {% if form.meter_reading.errors %}<div class="form-error">{{ form.meter_reading.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset & Originating Documentation -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Asset & Originating Source Documents</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                {{ form.fixed_asset }}
+                {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                {{ form.operational_asset }}
+                {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.maintenance_request.id_for_label }}" class="form-label">Source Maintenance Request</label>
+                {{ form.maintenance_request }}
+                {% if form.maintenance_request.errors %}<div class="form-error">{{ form.maintenance_request.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.maintenance_schedule.id_for_label }}" class="form-label">Source PM Schedule</label>
+                {{ form.maintenance_schedule }}
+                {% if form.maintenance_schedule.errors %}<div class="form-error">{{ form.maintenance_schedule.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.service_contract.id_for_label }}" class="form-label">Governing Service Agreement (AMC)</label>
+                {{ form.service_contract }}
+                {% if form.service_contract.errors %}<div class="form-error">{{ form.service_contract.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.work_order.id_for_label }}" class="form-label">Shopfloor Work Order</label>
+                {{ form.work_order }}
+                {% if form.work_order.errors %}<div class="form-error">{{ form.work_order.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Technicians & Labor Cost -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Technician Assignment & Labor Costs</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.lead_technician.id_for_label }}" class="form-label">Lead Technician</label>
+                {{ form.lead_technician }}
+                {% if form.lead_technician.errors %}<div class="form-error">{{ form.lead_technician.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.service_vendor.id_for_label }}" class="form-label">Service Contractor / OEM Vendor</label>
+                {{ form.service_vendor }}
+                {% if form.service_vendor.errors %}<div class="form-error">{{ form.service_vendor.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.labor_hours.id_for_label }}" class="form-label">Wrench Labor Hours *</label>
+                {{ form.labor_hours }}
+                {% if form.labor_hours.errors %}<div class="form-error">{{ form.labor_hours.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.labor_cost.id_for_label }}" class="form-label">Labor Cost ($) *</label>
+                {{ form.labor_cost }}
+                {% if form.labor_cost.errors %}<div class="form-error">{{ form.labor_cost.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Spare Parts & Invoicing -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Spare Parts & Invoiced Charges</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label for="{{ form.parts_consumed_summary.id_for_label }}" class="form-label">Itemized Spare Parts Consumed</label>
+                {{ form.parts_consumed_summary }}
+                {% if form.parts_consumed_summary.errors %}<div class="form-error">{{ form.parts_consumed_summary.errors }}</div>{% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="form-group">
+                    <label for="{{ form.parts_cost.id_for_label }}" class="form-label">Parts Total Cost ($) *</label>
+                    {{ form.parts_cost }}
+                    {% if form.parts_cost.errors %}<div class="form-error">{{ form.parts_cost.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.vendor_invoice_cost.id_for_label }}" class="form-label">Vendor Invoiced Charge ($) *</label>
+                    {{ form.vendor_invoice_cost }}
+                    {% if form.vendor_invoice_cost.errors %}<div class="form-error">{{ form.vendor_invoice_cost.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="{{ form.expense_account.id_for_label }}" class="form-label">Debit: Expense GL Account</label>
+                    {{ form.expense_account }}
+                    {% if form.expense_account.errors %}<div class="form-error">{{ form.expense_account.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Technical Narrative -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Corrective Steps & Root Cause Narrative</h3>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label for="{{ form.root_cause_analysis.id_for_label }}" class="form-label">Root Cause Analysis Notes</label>
+                {{ form.root_cause_analysis }}
+                {% if form.root_cause_analysis.errors %}<div class="form-error">{{ form.root_cause_analysis.errors }}</div>{% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.action_taken.id_for_label }}" class="form-label">Technical Action Narrative & Test Runs *</label>
+                {{ form.action_taken }}
+                {% if form.action_taken.errors %}<div class="form-error">{{ form.action_taken.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:asset_maintenance_log_detail' maintenance_log.pk %}{% else %}{% url 'assets:asset_maintenance_log_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="check" class="w-4 h-4 mr-1"></i>
+            {% if is_edit %}Save Changes{% else %}Record Service Log{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
