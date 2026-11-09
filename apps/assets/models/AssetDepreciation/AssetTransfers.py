@@ -37,8 +37,8 @@ class AssetTransfer(TenantNumbered):
 
     TRANSFER_TYPE_CSS = {
         "cost_center": "badge-info",
-        "inter_department": "badge-blue",
-        "inter_facility": "badge-purple",
+        "inter_department": "badge-info",
+        "inter_facility": "badge-slate",
         "custodian_reassignment": "badge-amber",
         "inter_company": "badge-slate",
     }
