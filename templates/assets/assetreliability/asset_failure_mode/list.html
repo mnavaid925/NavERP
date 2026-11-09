@@ -170,15 +170,15 @@
                         </td>
                         <td class="text-end table-actions">
                             <div class="flex items-center justify-end gap-1">
-                                <a href="{% url 'assets:asset_failure_mode_detail' fm.pk %}" class="btn btn-icon btn-outline" title="View Detail">
+                                <a href="{% url 'assets:asset_failure_mode_detail' fm.pk %}" class="btn btn-icon btn-outline" title="View Detail" aria-label="View Detail">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                <a href="{% url 'assets:asset_failure_mode_edit' fm.pk %}" class="btn btn-icon btn-outline" title="Edit Failure Mode">
+                                <a href="{% url 'assets:asset_failure_mode_edit' fm.pk %}" class="btn btn-icon btn-outline" title="Edit Failure Mode" aria-label="Edit Failure Mode">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
                                 <form method="post" action="{% url 'assets:asset_failure_mode_delete' fm.pk %}" class="inline" onsubmit="return confirm('Delete failure mode {{ fm.number }}?');">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Failure Mode">
+                                    <button type="submit" class="btn btn-icon btn-danger" title="Delete Failure Mode" aria-label="Delete Failure Mode">
                                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                                     </button>
                                 </form>
