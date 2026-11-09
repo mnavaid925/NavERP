@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance Logs — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <span>Service Logs</span>
+        </div>
+        <h1 class="page-title">Maintenance & Service Logs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_maintenance_log_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Service Log
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Service Records</div>
+            <div class="stat-value">{{ total_logs }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Posted to GL</div>
+            <div class="stat-value">{{ posted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="timer"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Downtime</div>
+            <div class="stat-value">{{ total_downtime_hours|floatformat:1 }} hrs</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Repair Costs</div>
+            <div class="stat-value">${{ total_maintenance_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Log #, asset, parts, action..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Service Type</label>
+                <select id="type-filter" name="maintenance_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in maintenance_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.maintenance_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="fail-filter" class="form-label">Failure Mode</label>
+                <select id="fail-filter" name="failure_code" class="form-select">
+                    <option value="">All Failure Modes</option>
+                    {% for val, label in failure_code_choices %}
+                    <option value="{{ val }}" {% if request.GET.failure_code == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.maintenance_type or request.GET.failure_code %}
+                <a href="{% url 'assets:asset_maintenance_log_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Log #</th>
+                    <th>Date</th>
+                    <th>Asset Serviced</th>
+                    <th>Type</th>
+                    <th>Failure Root Cause</th>
+                    <th>Lead Tech / Vendor</th>
+                    <th>Downtime</th>
+                    <th>Total Cost</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in maintenance_logs %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_maintenance_log_detail' log.pk %}" class="text-blue-600 hover:underline">
+                            {{ log.number }}
+                        </a>
+                    </td>
+                    <td>{{ log.service_date|date:"M d, Y" }}</td>
+                    <td>
+                        {% if log.fixed_asset %}
+                        <div class="text-sm font-medium">{{ log.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ log.fixed_asset.number }}</div>
+                        {% elif log.operational_asset %}
+                        <div class="text-sm font-medium">{{ log.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ log.operational_asset.asset_tag|default:"Operational" }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ log.maintenance_type_css }}">{{ log.get_maintenance_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ log.failure_code_css }}">{{ log.get_failure_code_display }}</span>
+                    </td>
+                    <td>
+                        {% if log.lead_technician %}
+                        <div class="text-sm">{{ log.lead_technician.get_full_name|default:log.lead_technician.username }}</div>
+                        <div class="text-xs text-slate-500">Internal Tech</div>
+                        {% elif log.service_vendor %}
+                        <div class="text-sm">{{ log.service_vendor.name }}</div>
+                        <div class="text-xs text-slate-500">Vendor / OEM</div>
+                        {% else %}
+                        <span class="text-slate-400 text-xs italic">Unspecified</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm font-medium text-slate-800">
+                        {{ log.downtime_hours }} hrs
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">${{ log.total_cost|floatformat:2 }}</div>
+                        {% if log.labor_cost or log.parts_cost %}
+                        <div class="text-xs text-slate-500">L: ${{ log.labor_cost|floatformat:0 }} | P: ${{ log.parts_cost|floatformat:0 }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ log.status_css }}">{{ log.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_maintenance_log_detail' log.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_maintenance_log_edit' log.pk %}" class="btn btn-icon" title="Edit Log">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_maintenance_log_delete' log.pk %}" class="inline" onsubmit="return confirm('Delete maintenance log {{ log.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Log">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <i data-lucide="book-open" class="empty-icon"></i>
+                            <div class="empty-title">No maintenance logs found</div>
+                            <div class="empty-text">No service entries match your criteria.</div>
+                            <a href="{% url 'assets:asset_maintenance_log_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Log Service Work
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div>
+            Showing <span class="font-medium">{{ page_obj.start_index }}</span> to <span class="font-medium">{{ page_obj.end_index }}</span> of <span class="font-medium">{{ paginator.count }}</span> service logs
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.maintenance_type %}&maintenance_type={{ request.GET.maintenance_type }}{% endif %}{% if request.GET.failure_code %}&failure_code={{ request.GET.failure_code }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left" class="w-4 h-4 mr-1"></i> Previous
+            </a>
+            {% endif %}
+            <span class="text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.maintenance_type %}&maintenance_type={{ request.GET.maintenance_type }}{% endif %}{% if request.GET.failure_code %}&failure_code={{ request.GET.failure_code }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
