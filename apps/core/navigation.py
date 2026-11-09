@@ -3179,6 +3179,20 @@ LIVE_LINKS = {
         "Specification Templates": "assets:asset_specification_template_list",
         "Taxonomy & Classification": "assets:asset_category_list",
     },
+    "11.4": {
+        "Depreciation Schedule & Methods": "assets:depreciation_schedule_list",
+        "Asset Valuation & Revaluation": "assets:revaluation_list",
+        "Asset Transfer & Cost Allocation": "assets:transfer_list",
+        "Capital vs. Expense Determination": "assets:capitalization_policy_list",
+        "Fixed Asset Reporting & Compliance": "assets:depreciation_schedule_list",
+        # Plural and convenience aliases
+        "Depreciation Schedules": "assets:depreciation_schedule_list",
+        "Asset Revaluations": "assets:revaluation_list",
+        "Asset Transfers": "assets:transfer_list",
+        "Capitalization Policies": "assets:capitalization_policy_list",
+        "Cost Allocations": "assets:transfer_list",
+        "Asset Financial Management Hub": "assets:overview",
+    },
 
 
 
