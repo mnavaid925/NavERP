@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance Requests — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Maintenance & Repair</span>
+            <span>/</span>
+            <span>Maintenance Requests</span>
+        </div>
+        <h1 class="page-title">Asset Maintenance Requests</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_maintenance_request_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> New Request
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-value">{{ total_requests }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Open / In Progress</div>
+            <div class="stat-value">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Breakdowns (Down)</div>
+            <div class="stat-value">{{ breakdown_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="flame"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Urgency</div>
+            <div class="stat-value">{{ critical_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Request #, title, asset..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="urgency-filter" class="form-label">Urgency</label>
+                <select id="urgency-filter" name="urgency" class="form-select">
+                    <option value="">All Urgencies</option>
+                    {% for val, label in urgency_choices %}
+                    <option value="{{ val }}" {% if request.GET.urgency == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="type-filter" class="form-label">Request Type</label>
+                <select id="type-filter" name="request_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in request_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.request_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 mr-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.urgency or request.GET.request_type or request.GET.is_breakdown %}
+                <a href="{% url 'assets:asset_maintenance_request_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Request #</th>
+                    <th>Title & Symptoms</th>
+                    <th>Asset</th>
+                    <th>Type</th>
+                    <th>Urgency</th>
+                    <th>Requester</th>
+                    <th>Assigned To</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in maintenance_requests %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_maintenance_request_detail' req.pk %}" class="text-blue-600 hover:underline">
+                            {{ req.number }}
+                        </a>
+                        {% if req.is_breakdown %}
+                        <span class="badge badge-red ml-1">Down</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ req.title }}</div>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ req.symptom_description|truncatewords:8 }}</div>
+                    </td>
+                    <td>
+                        {% if req.fixed_asset %}
+                        <div class="text-sm font-medium">{{ req.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ req.fixed_asset.number }}</div>
+                        {% elif req.operational_asset %}
+                        <div class="text-sm font-medium">{{ req.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ req.operational_asset.asset_tag|default:"Operational" }}</div>
+                        {% else %}
+                        <span class="text-slate-400 text-sm">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ req.request_type_css }}">{{ req.get_request_type_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ req.urgency_css }}">{{ req.get_urgency_display }}</span>
+                    </td>
+                    <td>
+                        <div class="text-sm">{{ req.requester.get_full_name|default:req.requester.username|default:"—" }}</div>
+                        {% if req.department %}
+                        <div class="text-xs text-slate-500">{{ req.department.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if req.assigned_technician %}
+                        <div class="text-sm font-medium">{{ req.assigned_technician.get_full_name|default:req.assigned_technician.username }}</div>
+                        <div class="text-xs text-slate-500">Internal Tech</div>
+                        {% elif req.assigned_vendor %}
+                        <div class="text-sm font-medium">{{ req.assigned_vendor.name }}</div>
+                        <div class="text-xs text-slate-500">Vendor / OEM</div>
+                        {% else %}
+                        <span class="text-slate-400 text-xs italic">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span>
+                    </td>
+                    <td class="table-actions text-right">
+                        <a href="{% url 'assets:asset_maintenance_request_detail' req.pk %}" class="btn btn-icon" title="View Details">
+                            <i data-lucide="eye"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_maintenance_request_edit' req.pk %}" class="btn btn-icon" title="Edit Request">
+                            <i data-lucide="pencil"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_maintenance_request_delete' req.pk %}" class="inline" onsubmit="return confirm('Delete maintenance request {{ req.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete Request">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="inbox" class="empty-icon"></i>
+                            <div class="empty-title">No maintenance requests found</div>
+                            <div class="empty-text">No equipment breakdown or service tickets match your criteria.</div>
+                            <a href="{% url 'assets:asset_maintenance_request_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Submit First Request
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div>
+            Showing <span class="font-medium">{{ page_obj.start_index }}</span> to <span class="font-medium">{{ page_obj.end_index }}</span> of <span class="font-medium">{{ paginator.count }}</span> requests
+        </div>
+        <div class="pagination-controls">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.urgency %}&urgency={{ request.GET.urgency }}{% endif %}{% if request.GET.request_type %}&request_type={{ request.GET.request_type }}{% endif %}" class="btn btn-outline btn-sm">
+                <i data-lucide="chevron-left" class="w-4 h-4 mr-1"></i> Previous
+            </a>
+            {% endif %}
+            <span class="text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.urgency %}&urgency={{ request.GET.urgency }}{% endif %}{% if request.GET.request_type %}&request_type={{ request.GET.request_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next <i data-lucide="chevron-right" class="w-4 h-4 ml-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
