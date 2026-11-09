@@ -64,8 +64,9 @@ class AssetServiceContractForm(TenantUniqueMixin, forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.tenant = kwargs.pop("tenant", None)
         super().__init__(*args, **kwargs)
-        tenant = getattr(self, "tenant", None) or getattr(self.instance, "tenant", None)
+        tenant = self.tenant or getattr(self.instance, "tenant", None)
         if tenant:
             self.fields["vendor"].queryset = Party.objects.filter(tenant=tenant)
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=tenant)
