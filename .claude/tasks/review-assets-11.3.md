@@ -69,3 +69,30 @@ None.
 - Multi-Tenancy & Security: Complete tenant isolation across all models via `TenantNumbered`, views using `assets_object`, forms using `reject_foreign`, and write views writing audit logs.
 - Seeder & Admin: Robust seeder in `seed_assets.py` with multi-tenant coverage, realistic demo taxonomy, and idempotency guards. Comprehensive Django admin registrations with filters and search.
 
+---
+
+## 3. Frontend Reviewer Pass
+
+### Verdict
+Pass with minor findings (0 Critical, 2 Important, 3 Minor).
+
+### Critical
+None.
+
+### Important
+1. `templates/assets/asset_classification/asset_category/detail.html:269`, `asset_criticality_assessment/list.html:165`, `asset_model/detail.html:207`, `asset_specification_template/detail.html:158`, `asset_specification_template/list.html:155` — Non-existent `text-green` theme class used across 5 templates (Lesson L13 & L33). In `theme.css`, success text is `.text-ok`. Fix: Replace `text-green` with `text-ok`.
+2. `apps/assets/models/AssetClassification/AssetSpecificationTemplates.py:27` — Non-existent `badge-purple` returned by `DATA_TYPE_CSS["select"]`. Fix: Change `"select": "badge-purple"` to `"select": "badge-info"`.
+
+### Minor
+1. `templates/assets/asset_classification/asset_category/list.html:193`, `asset_model/list.html:178`, `asset_criticality_assessment/list.html:198`, `asset_specification_template/list.html:195` — Unstyled `.card-footer` container for pagination in list views lacks top border and padding. Fix: Add standard utility classes `p-4 border-t border-slate-100`.
+2. `templates/assets/asset_classification/asset_category/detail.html:223` — Prefer model property `display_manufacturer` over chained filter defaults `{{ mod.manufacturer.name|default:mod.manufacturer_name_fallback|default:"—" }}`. Fix: Replace with `{{ mod.display_manufacturer }}`.
+3. All 12 templates — RTL icon spacing: use `me-1` instead of `mr-1` for automated RTL mirror support.
+
+### Done well
+- Zero comment leaks: strict adherence to Lesson L2; zero multiline `{# ... #}` comment leaks.
+- Robust pagination guards (L9): all 4 list templates correctly guard `has_previous` and `has_next` before accessing `previous_page_number` / `next_page_number`.
+- Strict PK filter comparisons using `|stringformat:"d"`.
+- Accessible & well-structured forms and table delete actions.
+- Risk assessment consequence progress bar breakdown leveraging theme.css `.progress` and `.progress-bar`.
+
+
