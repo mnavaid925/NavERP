@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}{{ assessment.number }} — Condition Assessment — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_condition_assessment_list' %}">Condition Assessments</a>
+            <span>/</span>
+            <span>{{ assessment.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ assessment.title }}</h1>
+            <span class="badge {{ assessment.status_css }}">{{ assessment.get_status_display }}</span>
+            <span class="badge {{ assessment.condition_grade_css }}">{{ assessment.get_condition_grade_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_condition_assessment_edit' assessment.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+
+        {% if assessment.status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_condition_assessment_complete' assessment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Mark Completed
+            </button>
+        </form>
+        {% endif %}
+
+        {% if assessment.status == 'completed' and request.user.is_tenant_admin %}
+        <form method="post" action="{% url 'assets:asset_condition_assessment_review' assessment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="award" class="w-4 h-4 me-1"></i> Approve & Sign-off
+            </button>
+        </form>
+        {% endif %}
+
+        {% if not assessment.triggered_maintenance_request %}
+        <form method="post" action="{% url 'assets:asset_condition_assessment_trigger_request' assessment.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600 hover:bg-amber-50" title="Dispatch Corrective Maintenance Request">
+                <i data-lucide="wrench" class="w-4 h-4 me-1"></i> Dispatch Repair Ticket
+            </button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'assets:asset_condition_assessment_delete' assessment.pk %}" class="inline" onsubmit="return confirm('Permanently delete assessment {{ assessment.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if assessment.triggered_maintenance_request %}
+<div class="card bg-amber-50 border-amber-200 mb-6">
+    <div class="card-body flex items-center justify-between py-3">
+        <div class="flex items-center gap-3 text-amber-900">
+            <i data-lucide="wrench" class="w-5 h-5 text-amber-600"></i>
+            <div>
+                <span class="font-semibold">Linked Maintenance Request:</span>
+                <span class="font-mono text-sm ml-1">{{ assessment.triggered_maintenance_request.number }}</span>
+                — {{ assessment.triggered_maintenance_request.title }}
+                <span class="badge {{ assessment.triggered_maintenance_request.status_css }} ml-2">{{ assessment.triggered_maintenance_request.get_status_display }}</span>
+            </div>
+        </div>
+        <a href="{% url 'assets:asset_maintenance_request_detail' assessment.triggered_maintenance_request.pk %}" class="btn btn-outline btn-sm bg-white">
+            View Request <i data-lucide="external-link" class="w-3.5 h-3.5 ms-1"></i>
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left 2 Cols: Main Assessment Data -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Physical Findings & Checklist -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="search" class="w-4 h-4 text-blue-600"></i> Inspection Observations & Findings
+                </h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Detailed Defect / Condition Findings</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-line text-slate-800">
+                        {{ assessment.findings }}
+                    </div>
+                </div>
+
+                {% if assessment.checklist_summary %}
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Diagnostic Checklist Scope</h4>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-200 text-sm whitespace-pre-line text-slate-700">
+                        {{ assessment.checklist_summary }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if assessment.recommendations %}
+                <div>
+                    <h4 class="text-xs uppercase tracking-wider text-slate-500 font-semibold mb-1">Engineering Recommendations & Mitigations</h4>
+                    <div class="p-3 bg-amber-50 rounded border border-amber-200 text-sm whitespace-pre-line text-amber-900">
+                        {{ assessment.recommendations }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Health & Operating Status Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="activity" class="w-4 h-4 text-purple-600"></i> Health Scoring & Operational Evaluation
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Health Index Score</div>
+                        <div class="text-3xl font-bold mt-1 {% if assessment.health_score < 40 %}text-red-600{% elif assessment.health_score < 70 %}text-amber-600{% else %}text-green-600{% endif %}">
+                            {{ assessment.health_score }} / 100
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2 mt-2">
+                            <div class="{% if assessment.health_score < 40 %}bg-red-500{% elif assessment.health_score < 70 %}bg-amber-500{% else %}bg-green-500{% endif %} h-2 rounded-full" style="width: {{ assessment.health_score }}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Operating Status</div>
+                        <div class="mt-2">
+                            <span class="badge {{ assessment.operating_status_css }} text-sm py-1 px-3">
+                                {{ assessment.get_operating_status_display }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="p-4 bg-slate-50 rounded border border-slate-200 text-center">
+                        <div class="text-xs uppercase tracking-wider text-slate-500 font-semibold">Follow-up Required</div>
+                        <div class="mt-2">
+                            {% if assessment.followup_required %}
+                                <span class="badge badge-red text-sm py-1 px-3">Yes — Action Required</span>
+                            {% else %}
+                                <span class="badge badge-green text-sm py-1 px-3">No — Operating Normally</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Metadata, Asset links, Inspector -->
+    <div class="space-y-6">
+        <!-- Target Equipment Card -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="cpu" class="w-4 h-4 text-blue-600"></i> Asset Information
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Financial Fixed Asset</span>
+                    {% if assessment.fixed_asset %}
+                        <div class="font-medium text-slate-900">{{ assessment.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ assessment.fixed_asset.asset_number }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Operational Equipment</span>
+                    {% if assessment.operational_asset %}
+                        <div class="font-medium text-slate-900">{{ assessment.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ assessment.operational_asset.asset_tag }}</div>
+                    {% else %}
+                        <span class="text-slate-400 italic">None linked</span>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Asset Category Taxonomy</span>
+                    <div class="font-medium text-slate-800">{{ assessment.asset_category.name|default:"General / Unassigned" }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Assessment Type</span>
+                    <span class="badge {{ assessment.assessment_type_css }} mt-1">
+                        {{ assessment.get_assessment_type_display }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Examination Audit & Personnel -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title font-semibold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="user-check" class="w-4 h-4 text-slate-600"></i> Inspection Personnel
+                </h3>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Assessment Date</span>
+                    <div class="font-medium text-slate-800">{{ assessment.assessment_date|date:"F d, Y" }}</div>
+                </div>
+
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Internal Inspector</span>
+                    <div class="font-medium text-slate-800">
+                        {{ assessment.inspector.get_full_name|default:assessment.inspector.username|default:"—" }}
+                    </div>
+                </div>
+
+                {% if assessment.external_inspector %}
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">External Testing Laboratory</span>
+                    <div class="font-medium text-slate-800">{{ assessment.external_inspector.legal_name }}</div>
+                </div>
+                {% endif %}
+
+                {% if assessment.reviewed_by %}
+                <div>
+                    <span class="text-slate-500 block text-xs uppercase">Supervisory Reviewer</span>
+                    <div class="font-medium text-slate-800">
+                        {{ assessment.reviewed_by.get_full_name|default:assessment.reviewed_by.username }}
+                    </div>
+                    <div class="text-xs text-slate-500">{{ assessment.reviewed_at|date:"M d, Y H:i" }}</div>
+                </div>
+                {% endif %}
+
+                <div class="pt-2 border-t border-slate-100 text-xs text-slate-400">
+                    Created: {{ assessment.created_at|date:"M d, Y H:i" }}<br>
+                    Updated: {{ assessment.updated_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
