@@ -136,7 +136,7 @@
 - [x] **I9**: `templates/assets/asset_performance/asset_energy_reading/list.html:166`, `asset_performance_scorecard/list.html:132,156` — Lesson L13: Invented utility class `text-2xs` not in theme.css or Tailwind CDN. Replace with `text-xs`. (fixed: 7b4375a9, 818db534)
 
 ### Minor Findings (Quality Polish)
-- [ ] **M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — Missing `impact` level dropdown in filter bar and clear filter condition.
+- [x] **M1**: `templates/assets/asset_performance/asset_downtime_log/list.html:59-101` — Missing `impact` level dropdown in filter bar and clear filter condition. (fixed: 6ae30ba1)
 - [ ] **M2**: `apps/assets/forms/AssetPerformance/AssetPerformanceScorecards.py:34, 40-52` — Contract drift: `peer_category_ranking` was specified in form exclusions (Contract 1.4 & 2.4). Remove from `fields` and add to `exclude`.
 - [ ] **M3**: `apps/assets/views/AssetPerformance/` (all 4 list views) — Add `.only("id", "name")` to `FixedAsset.objects.filter(tenant=request.tenant)` dropdown queries in list views.
 - [ ] **M4**: `templates/assets/asset_performance/` (all 4 list templates) — Filter clear "X" buttons lack accessibility attributes (`title="Clear filters" aria-label="Clear filters"`).
