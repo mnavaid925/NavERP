@@ -31,7 +31,6 @@ class AssetFailureModeForm(TenantUniqueMixin, TenantModelForm):
             "mitigation_task",
             "linked_maintenance_schedule",
             "assessed_by",
-            "status",
         ]
         widgets = {
             "fixed_asset": forms.Select(attrs={"class": "form-select"}),
@@ -51,7 +50,6 @@ class AssetFailureModeForm(TenantUniqueMixin, TenantModelForm):
             "mitigation_task": forms.Textarea(attrs={"class": "form-textarea", "rows": 3, "placeholder": "Proactive task: Monthly ultrasonic cavitation detection..."}),
             "linked_maintenance_schedule": forms.Select(attrs={"class": "form-select"}),
             "assessed_by": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
