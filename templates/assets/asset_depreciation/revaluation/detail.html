@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{{ revaluation.number }} — Asset Revaluation — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:revaluation_list' %}">Revaluations & Impairments</a>
+            <span>/</span>
+            <span>{{ revaluation.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ revaluation.number }}</h1>
+            <span class="badge {{ revaluation.status_css }}">{{ revaluation.get_status_display }}</span>
+            <span class="badge {{ revaluation.event_type_css }}">{{ revaluation.get_event_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if revaluation.status != 'approved' %}
+        <form method="post" action="{% url 'assets:revaluation_approve' revaluation.pk %}" class="inline" onsubmit="return confirm('Approve revaluation {{ revaluation.number }} and update the fixed asset ledger? This posts balanced GL entries.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check" class="w-4 h-4 mr-1"></i> Approve & Apply
+            </button>
+        </form>
+        <a href="{% url 'assets:revaluation_edit' revaluation.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 mr-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:revaluation_delete' revaluation.pk %}" class="inline" onsubmit="return confirm('Delete revaluation assessment {{ revaluation.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red">
+                <i data-lucide="trash-2" class="w-4 h-4 mr-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:revaluation_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Left Column: Valuation Breakdown & Financial Accounts -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Revaluation Comparison Summary -->
+        <div class="card">
+            <div class="card-header flex items-center justify-between">
+                <div>
+                    <h2 class="text-base font-semibold text-slate-800">{{ revaluation.title }}</h2>
+                    <div class="text-xs text-muted">Valuation Date: {{ revaluation.valuation_date|date:"Y-m-d" }} · Method: {{ revaluation.get_valuation_method_display }}</div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <div class="text-xs text-muted mb-1">Carrying Value (Before)</div>
+                        <div class="text-xl font-bold font-mono text-slate-800">${{ revaluation.carrying_value_before|floatformat:2 }}</div>
+                        <div class="text-xs text-muted mt-1">Cost: ${{ revaluation.historical_cost|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <div class="text-xs text-brand mb-1">Appraised Fair Value</div>
+                        <div class="text-xl font-bold font-mono text-brand">${{ revaluation.new_fair_market_value|floatformat:2 }}</div>
+                        <div class="text-xs text-muted mt-1">Recoverable / Exit Value</div>
+                    </div>
+                    <div class="p-4 {% if revaluation.revaluation_adjustment < 0 %}bg-red-50 border-red-200{% else %}bg-green-50 border-green-200{% endif %} rounded-lg border">
+                        <div class="text-xs {% if revaluation.revaluation_adjustment < 0 %}text-red{% else %}text-green{% endif %} mb-1">Net Valuation Adjustment</div>
+                        <div class="text-xl font-bold font-mono {% if revaluation.revaluation_adjustment < 0 %}text-red{% else %}text-green{% endif %}">
+                            {% if revaluation.revaluation_adjustment > 0 %}+{% endif %}${{ revaluation.revaluation_adjustment|floatformat:2 }}
+                        </div>
+                        <div class="text-xs text-muted mt-1">{% if revaluation.revaluation_adjustment < 0 %}Impairment Charge{% else %}Revaluation Surplus{% endif %}</div>
+                    </div>
+                </div>
+
+                <!-- Prospective Depreciation Parameters -->
+                <div class="p-4 bg-slate-50 rounded-lg border border-slate-200 mb-6">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-3">Forward Depreciation Schedule Adjustments</h3>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <div class="text-xs text-muted">Revised Salvage Value</div>
+                            <div class="font-medium font-mono text-slate-800">
+                                {% if revaluation.new_salvage_value is not None %}${{ revaluation.new_salvage_value|floatformat:2 }}{% else %}Unchanged (${{ revaluation.fixed_asset.salvage_value|floatformat:2 }}){% endif %}
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-muted">Revised Remaining Useful Life</div>
+                            <div class="font-medium text-slate-800">
+                                {% if revaluation.remaining_useful_life_months %}{{ revaluation.remaining_useful_life_months }} months{% else %}Unchanged ({{ revaluation.fixed_asset.useful_life_months }} mos original){% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if revaluation.reason_and_methodology %}
+                <div>
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Appraisal Methodology & Impairment Cause</h3>
+                    <p class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-200">{{ revaluation.reason_and_methodology }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- General Ledger Posting & Accounts -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">General Ledger Routing</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-xs text-muted mb-1">Impairment Loss Account (P&L)</div>
+                        {% if revaluation.impairment_loss_account %}
+                        <div class="font-medium text-slate-900">{{ revaluation.impairment_loss_account.code }} — {{ revaluation.impairment_loss_account.name }}</div>
+                        {% else %}
+                        <div class="text-sm text-muted">Not specified / Not an impairment</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Revaluation Surplus Account (OCI / Equity)</div>
+                        {% if revaluation.revaluation_surplus_account %}
+                        <div class="font-medium text-slate-900">{{ revaluation.revaluation_surplus_account.code }} — {{ revaluation.revaluation_surplus_account.name }}</div>
+                        {% else %}
+                        <div class="text-sm text-muted">Not specified / Not an upward revaluation</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Linked Journal Entry</div>
+                        {% if revaluation.journal_entry %}
+                        <span class="font-medium font-mono text-brand">{{ revaluation.journal_entry.number }}</span>
+                        <span class="badge badge-green ml-2">Posted</span>
+                        {% else %}
+                        <span class="text-sm text-muted">Pending Approval</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="text-xs text-muted mb-1">Independent Appraiser</div>
+                        <div class="font-medium text-slate-900">{{ revaluation.appraiser.name|default:revaluation.appraiser_name_fallback|default:"Internal Review" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Fixed Asset Master Information -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Fixed Asset Subject</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-muted">Asset Name & Number</div>
+                    <div class="font-bold text-slate-900 text-base">{{ revaluation.fixed_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ revaluation.fixed_asset.number }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Acquisition Cost</div>
+                    <div class="font-medium font-mono text-slate-900">${{ revaluation.fixed_asset.acquisition_cost|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Accumulated Depreciation</div>
+                    <div class="font-medium font-mono text-slate-900">${{ revaluation.fixed_asset.accumulated_depreciation|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Current Net Book Value</div>
+                    <div class="font-medium font-mono text-slate-900">${{ revaluation.fixed_asset.book_value|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Status & Depreciation Method</div>
+                    <div class="text-sm font-medium text-slate-800">{{ revaluation.fixed_asset.get_status_display }} · {{ revaluation.fixed_asset.get_method_display }}</div>
+                </div>
+                {% if revaluation.operational_asset %}
+                <div class="pt-4 border-t border-slate-200">
+                    <div class="text-xs text-muted">Operational Asset Register</div>
+                    <div class="font-medium text-slate-900">{{ revaluation.operational_asset.name }}</div>
+                    <div class="text-xs font-mono text-muted">{{ revaluation.operational_asset.number }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-800">Approval Governance</h2>
+            </div>
+            <div class="card-body space-y-3 text-sm">
+                <div>
+                    <div class="text-xs text-muted">Governance Status</div>
+                    <span class="badge {{ revaluation.status_css }}">{{ revaluation.get_status_display }}</span>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Approved Date</div>
+                    <div class="font-medium text-slate-800">{{ revaluation.approved_at|date:"Y-m-d H:i"|default:"Pending Approval" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-muted">Approved By</div>
+                    <div class="font-medium text-slate-800">{{ revaluation.approved_by.get_full_name|default:revaluation.approved_by.username|default:"—" }}</div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 text-xs text-muted">
+                    <div>Created: {{ revaluation.created_at|date:"Y-m-d H:i" }}</div>
+                    <div>Updated: {{ revaluation.updated_at|date:"Y-m-d H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
