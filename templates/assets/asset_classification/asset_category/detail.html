@@ -222,7 +222,7 @@
                         </a>
                     </td>
                     <td>{{ mod.name }}</td>
-                    <td>{{ mod.manufacturer.name|default:mod.manufacturer_name_fallback|default:"—" }}</td>
+                    <td>{{ mod.display_manufacturer }}</td>
                     <td>{{ mod.standard_warranty_months }} mos</td>
                     <td><span class="badge {{ mod.status_css }}">{{ mod.get_model_status_display }}</span></td>
                     <td class="text-right table-actions">
