@@ -69,7 +69,7 @@ def asset_failure_mode_list(request):
     high_risk_count = stats["high"]
     cbm_strategy_count = stats["cbm"]
 
-    paginator = Paginator(qs, 20)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
