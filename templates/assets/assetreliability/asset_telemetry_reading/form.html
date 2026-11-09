@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Reading {{ reading.number }}{% else %}Ingest Telemetry Reading{% endif %} — Asset Reliability — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_telemetry_reading_list' %}">Telemetry Readings</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ reading.number }}{% else %}New Reading{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Telemetry Reading: {{ reading.number }}{% else %}Ingest Sensor Telemetry Reading{% endif %}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.errors %}
+    <div class="card bg-red-50 border-red-200">
+        <div class="card-body py-3 text-sm text-red-700">
+            <div class="font-semibold mb-1">Please correct the following errors:</div>
+            <ul class="list-disc list-inside">
+                {% for field in form %}
+                    {% for error in field.errors %}
+                        <li>{{ field.label }}: {{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Sensor & Asset Identification -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">1. Sensor Channel & Target Equipment</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label for="{{ form.sensor_identifier.id_for_label }}" class="form-label">Sensor Identifier / Transmitter Serial</label>
+                {{ form.sensor_identifier }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.source.id_for_label }}" class="form-label">Telemetry Ingestion Source <span class="text-red-500">*</span></label>
+                {{ form.source }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                {{ form.fixed_asset }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                {{ form.operational_asset }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.recorded_at.id_for_label }}" class="form-label">Capture Timestamp <span class="text-red-500">*</span></label>
+                {{ form.recorded_at }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.recorded_by.id_for_label }}" class="form-label">Ingested / Recorded By</label>
+                {{ form.recorded_by }}
+            </div>
+        </div>
+    </div>
+
+    <!-- Measurement Metrics -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">2. Physical Measurement & Operational Baseline</h3>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label for="{{ form.metric_type.id_for_label }}" class="form-label">Physical Metric Type <span class="text-red-500">*</span></label>
+                {{ form.metric_type }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.metric_unit.id_for_label }}" class="form-label">Measurement Unit <span class="text-red-500">*</span></label>
+                {{ form.metric_unit }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.reading_value.id_for_label }}" class="form-label">Measured Physical Reading <span class="text-red-500">*</span></label>
+                {{ form.reading_value }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.baseline_value.id_for_label }}" class="form-label">Expected Operating Baseline</label>
+                {{ form.baseline_value }}
+            </div>
+
+            <div class="form-group">
+                <label for="{{ form.anomaly_confidence.id_for_label }}" class="form-label">Anomaly Confidence (%)</label>
+                {{ form.anomaly_confidence }}
+            </div>
+
+            <div class="md:col-span-3 pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    {{ form.is_anomaly }}
+                    <span class="text-sm font-medium text-slate-800">Flag as Pattern Anomaly</span>
+                </label>
+                <p class="text-xs text-slate-500 ml-6">Check if sensor pattern deviates significantly from statistical signature.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Commentary -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title font-semibold text-slate-800">3. Diagnostic Commentary</h3>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label for="{{ form.alert_notes.id_for_label }}" class="form-label">Alert & Diagnostic Notes</label>
+                {{ form.alert_notes }}
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% if is_edit %}{% url 'assets:asset_telemetry_reading_detail' reading.pk %}{% else %}{% url 'assets:asset_telemetry_reading_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+        <button type="submit" class="btn btn-primary">
+            <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Record Telemetry{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}
