@@ -138,6 +138,7 @@
                         </a>
                         <form method="post" action="{% url 'assets:asset_lease_schedule_delete' sch.pk %}" class="inline" onsubmit="return confirm('Delete schedule line {{ sch.number }}?');">
                             {% csrf_token %}
+                            <input type="hidden" name="next" value="{% url 'assets:asset_lease_schedule_list' %}">
                             <button type="submit" class="btn btn-icon text-danger" title="Delete">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
