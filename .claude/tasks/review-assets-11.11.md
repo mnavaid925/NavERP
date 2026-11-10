@@ -59,7 +59,7 @@
   - **Issue**: `--flush` deletes models from 11.1-11.10 but does not purge 11.11 compliance models.
   - **Fix**: Add deletion calls in reverse dependency order for `AssetComplianceIncident`, `AssetPermitLicense`, `AssetComplianceAudit`, and `AssetComplianceFramework`.
 
-- [ ] **I5: Status Guards Missing on Destructive / Modification View Endpoints**
+- [x] **I5: Status Guards Missing on Destructive / Modification View Endpoints**
   - **Files**:
     - `apps/assets/views/AssetCompliance/AssetComplianceAudits.py:147-193`
     - `apps/assets/views/AssetCompliance/AssetComplianceIncidents.py:169-215`
