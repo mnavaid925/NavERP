@@ -104,12 +104,11 @@ def asset_compliance_framework_create(request):
             framework.tenant = request.tenant
             framework.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                framework,
                 "create",
-                "AssetComplianceFramework",
-                framework.pk,
-                f"Registered compliance framework {framework.number} ({framework.code})",
+                changes={"details": f"Registered compliance framework {framework.number} ({framework.code})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance framework {framework.number} registered successfully.")
             return redirect("assets:asset_compliance_framework_detail", pk=framework.pk)
@@ -135,12 +134,11 @@ def asset_compliance_framework_edit(request, pk):
         if form.is_valid():
             framework = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                framework,
                 "update",
-                "AssetComplianceFramework",
-                framework.pk,
-                f"Updated compliance framework {framework.number} ({framework.code})",
+                changes={"details": f"Updated compliance framework {framework.number} ({framework.code})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance framework {framework.number} updated successfully.")
             return redirect("assets:asset_compliance_framework_detail", pk=framework.pk)
@@ -164,14 +162,13 @@ def asset_compliance_framework_delete(request, pk):
     framework = assets_object(request, AssetComplianceFramework, pk)
     num = framework.number
     code = framework.code
-    framework.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        framework,
         "delete",
-        "AssetComplianceFramework",
-        pk,
-        f"Deleted compliance framework {num} ({code})",
+        changes={"details": f"Deleted compliance framework {num} ({code})"},
+        tenant=request.tenant,
     )
+    framework.delete()
     messages.success(request, f"Compliance framework {num} ({code}) was deleted.")
     return redirect("assets:asset_compliance_framework_list")
