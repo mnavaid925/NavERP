@@ -1976,6 +1976,17 @@ def scrap_salvage_b(db, tenant_b, disposal_request_b, fixed_asset_b, operational
 # Sub-module 11.11: Compliance & Regulatory Management fixtures
 # -------------------------------------------------------------------------
 @pytest.fixture
+def category_a(category_root_a):
+    return category_root_a
+
+
+@pytest.fixture
+def category_b(category_root_b):
+    return category_root_b
+
+
+@pytest.fixture
+
 def compliance_framework_a(db, tenant_a, category_a, vendor_party_a):
     today = timezone.now().date()
     return AssetComplianceFramework.objects.create(
