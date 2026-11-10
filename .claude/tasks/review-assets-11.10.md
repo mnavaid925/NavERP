@@ -42,7 +42,7 @@
 - [x] **M5**: Deleting a schedule line from schedule list redirects to contract detail (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:180`). Check referer or query param to redirect back to `assets:asset_lease_schedule_list`.
 - [x] **M6**: Schedule Admin list_filter lacks temporal filter (`apps/assets/admin.py:383`). Add `due_date` filter for periodic reconciliation in admin.
 - [x] **M7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). If `request.GET.lease` is present, cancel links back to originating contract detail page.
-- [ ] **M8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
+- [x] **M8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
 - [ ] **M9**: Accessibility improvements in templates (`templates/assets/assetleaserental/`). Add `aria-label` to filter inputs and action icon buttons, add `scope="col"` to table header cells.
 - [ ] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
 - [ ] **M11**: Large text fields not deferred in modification and buy-analysis list views (`apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
