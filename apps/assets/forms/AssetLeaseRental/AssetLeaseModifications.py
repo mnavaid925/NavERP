@@ -56,9 +56,11 @@ class AssetLeaseModificationForm(TenantUniqueMixin, TenantModelForm):
             self.fields["lease_contract"].queryset = AssetLeaseContract.objects.filter(
                 tenant=self.tenant
             ).order_by("-id")
-            self.fields["requested_by"].queryset = User.objects.filter(is_active=True).order_by("username")
+            self.fields["requested_by"].queryset = User.objects.filter(
+                tenant=self.tenant, is_active=True
+            ).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["lease_contract"])
+        reject_foreign(self, cleaned, ["lease_contract", "requested_by"])
         return cleaned
