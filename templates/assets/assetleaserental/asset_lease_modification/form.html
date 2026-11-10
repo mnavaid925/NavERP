@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_modification_list' %}">Modifications</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ modification.number }}{% else %}New Modification{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Identification & Timing -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">1. Modification Scope & Timing</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.lease_contract.id_for_label }}">Lease Contract *</label>
+                {{ form.lease_contract }}
+                {% if form.lease_contract.errors %}<div class="form-error">{{ form.lease_contract.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.modification_type.id_for_label }}">Modification Type *</label>
+                {{ form.modification_type }}
+                {% if form.modification_type.errors %}<div class="form-error">{{ form.modification_type.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.request_date.id_for_label }}">Request Date *</label>
+                {{ form.request_date }}
+                {% if form.request_date.errors %}<div class="form-error">{{ form.request_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date *</label>
+                {{ form.effective_date }}
+                {% if form.effective_date.errors %}<div class="form-error">{{ form.effective_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.requested_by.id_for_label }}">Requested By</label>
+                {{ form.requested_by }}
+                {% if form.requested_by.errors %}<div class="form-error">{{ form.requested_by.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Remeasurement Balances -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">2. Balance Remeasurement & Accounting Impact</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.prior_lease_liability.id_for_label }}">Prior Lease Liability ($)</label>
+                {{ form.prior_lease_liability }}
+                {% if form.prior_lease_liability.errors %}<div class="form-error">{{ form.prior_lease_liability.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revised_lease_liability.id_for_label }}">Revised Lease Liability ($)</label>
+                {{ form.revised_lease_liability }}
+                {% if form.revised_lease_liability.errors %}<div class="form-error">{{ form.revised_lease_liability.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.prior_rou_asset_value.id_for_label }}">Prior ROU Asset Value ($)</label>
+                {{ form.prior_rou_asset_value }}
+                {% if form.prior_rou_asset_value.errors %}<div class="form-error">{{ form.prior_rou_asset_value.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revised_rou_asset_value.id_for_label }}">Revised ROU Asset Value ($)</label>
+                {{ form.revised_rou_asset_value }}
+                {% if form.revised_rou_asset_value.errors %}<div class="form-error">{{ form.revised_rou_asset_value.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.gain_loss_on_modification.id_for_label }}">Gain / Loss on Modification ($)</label>
+                {{ form.gain_loss_on_modification }}
+                {% if form.gain_loss_on_modification.errors %}<div class="form-error">{{ form.gain_loss_on_modification.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.impairment_loss_recognized.id_for_label }}">Impairment Loss ($)</label>
+                {{ form.impairment_loss_recognized }}
+                {% if form.impairment_loss_recognized.errors %}<div class="form-error">{{ form.impairment_loss_recognized.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Revised Contract Terms -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">3. Revised Terms (If Applicable)</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revised_term_months.id_for_label }}">Revised Term (Months)</label>
+                {{ form.revised_term_months }}
+                {% if form.revised_term_months.errors %}<div class="form-error">{{ form.revised_term_months.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revised_payment_amount.id_for_label }}">Revised Periodic Rent ($)</label>
+                {{ form.revised_payment_amount }}
+                {% if form.revised_payment_amount.errors %}<div class="form-error">{{ form.revised_payment_amount.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.revised_discount_rate_pct.id_for_label }}">Revised Discount Rate (%)</label>
+                {{ form.revised_discount_rate_pct }}
+                {% if form.revised_discount_rate_pct.errors %}<div class="form-error">{{ form.revised_discount_rate_pct.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Justification & Notes -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">4. Justification & Notes</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.justification.id_for_label }}">Commercial Justification</label>
+                {{ form.justification }}
+                {% if form.justification.errors %}<div class="form-error">{{ form.justification.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Audit Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'assets:asset_lease_modification_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Modification
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
