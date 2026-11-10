@@ -108,12 +108,11 @@ def asset_lease_schedule_create(request):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "created",
-                    "AssetLeaseSchedule",
-                    instance.pk,
-                    f"Created lease schedule {instance.number} for {instance.lease_contract.number}",
+                    instance,
+                    "create",
+                    changes=f"Created lease schedule {instance.number} for {instance.lease_contract.number}",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease schedule line {instance.number} created.")
@@ -140,12 +139,11 @@ def asset_lease_schedule_edit(request, pk):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "updated",
-                    "AssetLeaseSchedule",
-                    instance.pk,
-                    f"Updated lease schedule {instance.number}",
+                    instance,
+                    "update",
+                    changes=f"Updated lease schedule {instance.number}",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease schedule line {instance.number} updated.")
@@ -166,16 +164,14 @@ def asset_lease_schedule_delete(request, pk):
     schedule = assets_object(request, AssetLeaseSchedule, pk)
     num = schedule.number
     contract_pk = schedule.lease_contract_id
-    schedule.delete()
-
     write_audit_log(
-        request.tenant,
         request.user,
-        "deleted",
-        "AssetLeaseSchedule",
-        pk,
-        f"Deleted lease schedule line {num}",
+        schedule,
+        "delete",
+        changes=f"Deleted lease schedule line {num}",
+        tenant=request.tenant,
     )
+    schedule.delete()
     messages.success(request, f"Schedule line {num} deleted.")
     return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
 
@@ -200,12 +196,11 @@ def asset_lease_schedule_mark_paid(request, pk):
         contract.save()
 
         write_audit_log(
-            request.tenant,
             request.user,
+            schedule,
             "paid",
-            "AssetLeaseSchedule",
-            schedule.pk,
-            f"Marked schedule {schedule.number} (Period {schedule.period_number}) as paid (${schedule.payment_amount})",
+            changes=f"Marked schedule {schedule.number} (Period {schedule.period_number}) as paid (${schedule.payment_amount})",
+            tenant=request.tenant,
         )
 
         messages.success(
@@ -223,12 +218,11 @@ def asset_lease_schedule_accrue(request, pk):
     schedule.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "accrued",
-        "AssetLeaseSchedule",
-        schedule.pk,
-        f"Accrued interest expense and ROU depreciation for schedule {schedule.number}",
+        schedule,
+        "accrue",
+        changes=f"Accrued interest expense and ROU depreciation for schedule {schedule.number}",
+        tenant=request.tenant,
     )
     messages.info(request, f"Schedule period {schedule.period_number} marked as Accrued.")
     return redirect("assets:asset_lease_schedule_detail", pk=schedule.pk)
