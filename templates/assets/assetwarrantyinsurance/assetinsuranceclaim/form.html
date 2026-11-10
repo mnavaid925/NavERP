@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Claim {{ claim.number }}{% else %}Report Casualty Loss{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_insurance_claim_list' %}">Insurance Claims</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ claim.number }}{% else %}New Claim{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Claim {{ claim.number }}{% else %}Report Casualty / Peril Loss{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_insurance_claim_detail' claim.pk %}{% else %}{% url 'assets:asset_insurance_claim_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">{% if is_edit %}Update Insurance Claim Details{% else %}Casualty Loss Intake Form{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Policy & Covered Asset -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Covering Insurance Policy & Asset
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Casualty Headline / Loss Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.policy.id_for_label }}" class="form-label">Covering Insurance Policy *</label>
+                        {{ form.policy }}
+                        {% if form.policy.errors %}<div class="form-error">{{ form.policy.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.incident_report.id_for_label }}" class="form-label">Linked 11.2 Incident Report</label>
+                        {{ form.incident_report }}
+                        {% if form.incident_report.errors %}<div class="form-error">{{ form.incident_report.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                        {{ form.operational_asset }}
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Incident Occurrence & Damage -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Casualty Occurrence & Peril Classification
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.incident_date.id_for_label }}" class="form-label">Occurrence Date *</label>
+                        {{ form.incident_date }}
+                        {% if form.incident_date.errors %}<div class="form-error">{{ form.incident_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.peril_type.id_for_label }}" class="form-label">Peril Type</label>
+                        {{ form.peril_type }}
+                        {% if form.peril_type.errors %}<div class="form-error">{{ form.peril_type.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.incident_location.id_for_label }}" class="form-label">Physical Location *</label>
+                        {{ form.incident_location }}
+                        {% if form.incident_location.errors %}<div class="form-error">{{ form.incident_location.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="{{ form.incident_description.id_for_label }}" class="form-label">Loss Narrative & Damage Extent *</label>
+                        {{ form.incident_description }}
+                        {% if form.incident_description.errors %}<div class="form-error">{{ form.incident_description.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Loss Valuation & Adjuster -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Loss Valuation, Deductible & Adjuster
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.currency.id_for_label }}" class="form-label">Currency</label>
+                        {{ form.currency }}
+                        {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.claimed_loss_amount.id_for_label }}" class="form-label">Gross Loss Claimed *</label>
+                        {{ form.claimed_loss_amount }}
+                        {% if form.claimed_loss_amount.errors %}<div class="form-error">{{ form.claimed_loss_amount.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.deductible_applied.id_for_label }}" class="form-label">Deductible Applied</label>
+                        {{ form.deductible_applied }}
+                        {% if form.deductible_applied.errors %}<div class="form-error">{{ form.deductible_applied.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.carrier_claim_number.id_for_label }}" class="form-label">Carrier Claim Reference #</label>
+                        {{ form.carrier_claim_number }}
+                        {% if form.carrier_claim_number.errors %}<div class="form-error">{{ form.carrier_claim_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.adjuster_party.id_for_label }}" class="form-label">Adjusting Firm</label>
+                        {{ form.adjuster_party }}
+                        {% if form.adjuster_party.errors %}<div class="form-error">{{ form.adjuster_party.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.adjuster_name.id_for_label }}" class="form-label">Adjuster Name / Contact</label>
+                        {{ form.adjuster_name }}
+                        {% if form.adjuster_name.errors %}<div class="form-error">{{ form.adjuster_name.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.salvage_recovery_amount.id_for_label }}" class="form-label">Salvage Recovery Amount</label>
+                        {{ form.salvage_recovery_amount }}
+                        {% if form.salvage_recovery_amount.errors %}<div class="form-error">{{ form.salvage_recovery_amount.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.settlement_method.id_for_label }}" class="form-label">Expected Settlement Method</label>
+                        {{ form.settlement_method }}
+                        {% if form.settlement_method.errors %}<div class="form-error">{{ form.settlement_method.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.proof_of_loss_document.id_for_label }}" class="form-label">Proof of Loss Document</label>
+                        {{ form.proof_of_loss_document }}
+                        {% if form.proof_of_loss_document.errors %}<div class="form-error">{{ form.proof_of_loss_document.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="{{ form.settlement_notes.id_for_label }}" class="form-label">Forensic Notes / Remarks</label>
+                        {{ form.settlement_notes }}
+                        {% if form.settlement_notes.errors %}<div class="form-error">{{ form.settlement_notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'assets:asset_insurance_claim_detail' claim.pk %}{% else %}{% url 'assets:asset_insurance_claim_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}File Casualty Claim{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
