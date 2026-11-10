@@ -22,3 +22,25 @@
 - Strict multi-tenancy across all layers: all four models inherit `TenantNumbered`, queries use `assets_scope` or explicit `tenant=request.tenant`, forms inherit `TenantModelForm`, and `clean()` methodically executes `reject_foreign()` on all tenant FKs.
 - Clear separation of concerns and packaging: 4 models, 4 forms, 4 view modules, 4 URL modules, and 12 templates matching NavERP conventions.
 - Comprehensive seeder idempotency with realistic domain test data across Acme and Globex tenants.
+
+## 2. Explorer (Codebase & Architecture)
+**Verdict:** PASS with Important items to fix.
+
+### Important
+- `apps/assets/management/commands/seed_assets.py:1752, 2006` — In commit `6659c982`, 11.9 demo data was appended inside `_seed_tenant_11_8(self, tenant)` instead of an isolated `_seed_tenant_11_9` method. Because `_seed_tenant_11_8` has an early return if `AssetWarranty.objects.filter(tenant=tenant).exists()`, existing 11.8 data causes 11.9 seeding to be bypassed. Fix: extract lines 2004–2178 into a dedicated `_seed_tenant_11_9(self, tenant)` method with its own idempotency check, wire `self._seed_tenant_11_9(tenant)` in `handle()`, and keep `_seed_tenant_11_8` strictly scoped to 11.8.
+- `templates/assets/assetwarrantyinsurance/assetwarranty/detail.html:236` — Incompatible model attribute `warranty.service_contract.provider_name` renders blank. Fix: replace with `{{ warranty.service_contract.vendor.name }}` or `{{ warranty.service_contract.title }}`.
+
+### Minor
+- `apps/assets/models/AssetWarrantyInsurance/AssetInsurancePolicies.py:66` — `POLICY_TYPE_CSS` maps `"business_interruption"` to `"badge-purple"`, which is not a defined palette class in `static/css/theme.css` (L33). Fix: change `"business_interruption": "badge-purple"` to `"badge-info"` or `"badge-slate"`.
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:284` — Warranty status reactivation ignores calendar expiration. Fix: set status to `"expired"` if `claim.warranty.end_date < timezone.now().date()`, otherwise `"active"`.
+
+### Contract & Structure Verification Summary
+- **Package Structure:** PASS (4 parallel packages with 4 entity files each, matching backend package convention).
+- **Re-exports & `__all__`:** PASS (all 4 models, 4 forms, 34 views re-exported).
+- **URL Concatenation:** PASS (literal paths precede `<int:pk>/`, no collisions).
+- **Reverse URL Lookup:** PASS (96 URL tags tested, all reverse kwargs valid).
+- **Context Contract:** PASS (matches frozen contract in `contract-assets-11.8.md` byte-for-byte).
+- **Filter Conformance:** PASS (GET filtering before pagination, `|stringformat:"d"` PK comparisons).
+- **Core Spine Reuse:** PASS (`core.Party` for providers, `accounting.Currency` global, links to `accounting.FixedAsset`).
+- **Admin & Navigation:** PASS (registered in admin, `LIVE_LINKS["11.8"]` wired).
+- **Migrations:** PASS (migration `0012` applied cleanly, `manage.py check` passes 100%).
