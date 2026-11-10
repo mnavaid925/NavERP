@@ -69,10 +69,10 @@ class AssetLeaseBuyAnalysisForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant
             ).order_by("name")
             self.fields["evaluated_by"].queryset = User.objects.filter(
-                is_active=True
+                tenant=self.tenant, is_active=True
             ).order_by("username")
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["category"])
+        reject_foreign(self, cleaned, ["category", "evaluated_by"])
         return cleaned
