@@ -66,3 +66,25 @@ None.
 - PK filter comparisons strictly use `|stringformat:"d"`.
 - None-safe display fallbacks with safe defaults (L10 guard).
 - RTL-compliant logical spacing utilities (`me-1`, `text-end`).
+
+## 4. Performance Reviewer
+**Verdict:** PASS (Clean Performance Architecture — 0 Critical, 2 Important Chained Lookups, 3 Minor Optimizations).
+
+### Critical
+None.
+
+### Important
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:99-111` — Detail view chained FK traversal on warrantor party in `AssetWarrantyClaim`. Template renders `claim.warranty.warrantor_party.name`, but `warrantor_party` is not in `select_related()`, causing +1 query per claim detail load. Fix: add `"warranty__warrantor_party"` to `select_related()` in `asset_warranty_claim_detail`.
+- `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:100-112` — Detail view chained FK traversal on underwriter party and currency in `AssetInsuranceClaim`. Template renders `claim.policy.underwriter_party.name` and `claim.policy.currency.code`, causing +2 unselected queries per claim detail load. Fix: add `"policy__underwriter_party"` and `"policy__currency"` to `select_related()` in `asset_insurance_claim_detail`.
+
+### Minor
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:123` & `AssetInsuranceClaims.py:124` — Lazy FK lookups during claim form initial pre-population from query params (`?warranty=<id>` and `?policy=<id>`). Fix: add `select_related("fixed_asset", "operational_asset", "currency")` on parent lookup.
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:212, 258, 301` — State transition actions lazy load parent warranty. Fix: use `select_related("warranty")`.
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarranties.py:92` & `AssetInsurancePolicies.py:92` — Category dropdown in list views fetches all columns. Fix: append `.only("id", "name")`.
+
+### Done Well
+- Zero N+1 on all 4 list views: all ForeignKeys accessed in loops are pre-fetched via `select_related()`.
+- Large TextFields (`terms_and_conditions`, `coverage_terms`, `defect_description`, etc.) explicitly deferred in list queries.
+- Header KPI metrics computed in a single `.aggregate()` call with conditional `filter=Q(...)`.
+- Clean `__str__` implementations without FK traversal (L18 guard).
+- Composite multi-tenant indexes on `(tenant, status)`, `(tenant, date)`, and `UniqueConstraint(tenant, number)`.
