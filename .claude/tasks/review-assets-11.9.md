@@ -131,7 +131,7 @@
   - **Issue:** Filter dropdown querysets fetch all columns for Parties and Categories.
   - **Fix:** Append `.only("id", "name")` to reduce memory and query payload.
 
-- [ ] **M5: Redundant Foreign Key Lookup in Create Views**
+- [x] **M5: Redundant Foreign Key Lookup in Create Views** — fixed (commits e1c33b34, da083bf1, 928f1d20)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetResaleListings.py:149-151`
     - `apps/assets/views/AssetDisposal/AssetTradeIns.py:132`
