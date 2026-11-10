@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ scrap_salvage.number }}{% else %}New Scrap Job{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_scrap_salvage_list' %}">Scrap & Salvage</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ scrap_salvage.number }}{% else %}New Job{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Scrap Work Order: {{ scrap_salvage.number }}{% else %}New Machinery Scrap & Salvage Work Order{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Asset & Recycler Link -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">1. Asset Identification & Partner</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.disposal_request.id_for_label }}">Disposal Request *</label>
+                        {{ form.disposal_request }}
+                        {% if form.disposal_request.errors %}<div class="form-error">{{ form.disposal_request.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset *</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Plant Asset</label>
+                        {{ form.operational_asset }}
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.recycler_partner.id_for_label }}">Recycler / Scrap Processor</label>
+                        {{ form.recycler_partner }}
+                        {% if form.recycler_partner.errors %}<div class="form-error">{{ form.recycler_partner.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.scrap_method.id_for_label }}">Scrap / Decommissioning Method *</label>
+                        {{ form.scrap_method }}
+                        {% if form.scrap_method.errors %}<div class="form-error">{{ form.scrap_method.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.decommissioning_date.id_for_label }}">Decommissioning Date *</label>
+                        {{ form.decommissioning_date }}
+                        {% if form.decommissioning_date.errors %}<div class="form-error">{{ form.decommissioning_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.supervisor.id_for_label }}">Decommissioning Supervisor</label>
+                        {{ form.supervisor }}
+                        {% if form.supervisor.errors %}<div class="form-error">{{ form.supervisor.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Material Weights & Salvage Revenue -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">2. Material Weights & Revenue Estimates</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.total_scrap_weight_kg.id_for_label }}">Total Scrap Weight (kg)</label>
+                        {{ form.total_scrap_weight_kg }}
+                        {% if form.total_scrap_weight_kg.errors %}<div class="form-error">{{ form.total_scrap_weight_kg.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.ferrous_weight_kg.id_for_label }}">Ferrous Steel/Iron (kg)</label>
+                        {{ form.ferrous_weight_kg }}
+                        {% if form.ferrous_weight_kg.errors %}<div class="form-error">{{ form.ferrous_weight_kg.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.non_ferrous_weight_kg.id_for_label }}">Non-Ferrous Cu/Al (kg)</label>
+                        {{ form.non_ferrous_weight_kg }}
+                        {% if form.non_ferrous_weight_kg.errors %}<div class="form-error">{{ form.non_ferrous_weight_kg.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.e_waste_weight_kg.id_for_label }}">E-Waste Weight (kg)</label>
+                        {{ form.e_waste_weight_kg }}
+                        {% if form.e_waste_weight_kg.errors %}<div class="form-error">{{ form.e_waste_weight_kg.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.salvage_proceeds.id_for_label }}">Salvage Proceeds Revenue ($)</label>
+                        {{ form.salvage_proceeds }}
+                        {% if form.salvage_proceeds.errors %}<div class="form-error">{{ form.salvage_proceeds.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.dismantling_cost.id_for_label }}">Teardown & Rigging Cost ($)</label>
+                        {{ form.dismantling_cost }}
+                        {% if form.dismantling_cost.errors %}<div class="form-error">{{ form.dismantling_cost.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Hazardous Abatement & Sanitization -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">3. Environmental Abatement & Media Sanitization</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-2 form-group pt-2">
+                        {{ form.has_hazardous_materials }}
+                        <label class="form-label mb-0" for="{{ form.has_hazardous_materials.id_for_label }}">Contains Hazardous Contaminants (Lead, PCB, Asbestos, Freon)</label>
+                    </div>
+
+                    <div class="flex items-center gap-2 form-group pt-2">
+                        {{ form.abatement_certified }}
+                        <label class="form-label mb-0" for="{{ form.abatement_certified.id_for_label }}">Abatement Professional Clearance Certified</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.hazardous_waste_class.id_for_label }}">Hazardous Waste Classification Code</label>
+                        {{ form.hazardous_waste_class }}
+                        {% if form.hazardous_waste_class.errors %}<div class="form-error">{{ form.hazardous_waste_class.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.epa_manifest_number.id_for_label }}">EPA Uniform Manifest Tracking Number</label>
+                        {{ form.epa_manifest_number }}
+                        {% if form.epa_manifest_number.errors %}<div class="form-error">{{ form.epa_manifest_number.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="flex items-center gap-2 form-group pt-2">
+                        {{ form.data_sanitized }}
+                        <label class="form-label mb-0" for="{{ form.data_sanitized.id_for_label }}">Storage Media Sanitized (NIST / DoD Standard)</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.sanitization_method.id_for_label }}">Data Sanitization Method</label>
+                        {{ form.sanitization_method }}
+                        {% if form.sanitization_method.errors %}<div class="form-error">{{ form.sanitization_method.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.sanitization_verified_by.id_for_label }}">ITAD Auditor / Security Verifier</label>
+                        {{ form.sanitization_verified_by }}
+                        {% if form.sanitization_verified_by.errors %}<div class="form-error">{{ form.sanitization_verified_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.hazardous_manifest_doc.id_for_label }}">EPA Manifest Attachment Document</label>
+                        {{ form.hazardous_manifest_doc }}
+                        {% if form.hazardous_manifest_doc.errors %}<div class="form-error">{{ form.hazardous_manifest_doc.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Certificate of Destruction & Logistics -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">4. Certificate of Destruction & Logistics</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cod_number.id_for_label }}">Certificate of Destruction Serial Number</label>
+                        {{ form.cod_number }}
+                        {% if form.cod_number.errors %}<div class="form-error">{{ form.cod_number.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cod_issue_date.id_for_label }}">CoD Issue Date</label>
+                        {{ form.cod_issue_date }}
+                        {% if form.cod_issue_date.errors %}<div class="form-error">{{ form.cod_issue_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cod_issuing_agency.id_for_label }}">Issuing Recycler Agency</label>
+                        {{ form.cod_issuing_agency }}
+                        {% if form.cod_issuing_agency.errors %}<div class="form-error">{{ form.cod_issuing_agency.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.certificate_of_destruction.id_for_label }}">Attached Digital CoD Document</label>
+                        {{ form.certificate_of_destruction }}
+                        {% if form.certificate_of_destruction.errors %}<div class="form-error">{{ form.certificate_of_destruction.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.carrier_name.id_for_label }}">Hauling Carrier</label>
+                        {{ form.carrier_name }}
+                        {% if form.carrier_name.errors %}<div class="form-error">{{ form.carrier_name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.bill_of_lading_number.id_for_label }}">Bill of Lading / Scale Ticket Ref</label>
+                        {{ form.bill_of_lading_number }}
+                        {% if form.bill_of_lading_number.errors %}<div class="form-error">{{ form.bill_of_lading_number.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2 form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Teardown & Salvage Log Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'assets:asset_scrap_salvage_detail' scrap_salvage.pk %}{% else %}{% url 'assets:asset_scrap_salvage_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Scrap Work Order{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
