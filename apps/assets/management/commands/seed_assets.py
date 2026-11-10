@@ -74,6 +74,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetComplianceIncident.objects.all().delete()
+            AssetPermitLicense.objects.all().delete()
+            AssetComplianceAudit.objects.all().delete()
+            AssetComplianceFramework.objects.all().delete()
             AssetInsuranceClaim.objects.all().delete()
             AssetInsurancePolicy.objects.all().delete()
             AssetWarrantyClaim.objects.all().delete()
