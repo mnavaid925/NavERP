@@ -158,10 +158,10 @@ def asset_scrap_salvage_create(request):
         if dr_id and dr_id.isdigit():
             initial["disposal_request"] = int(dr_id)
             dr = assets_scope(AssetDisposalRequest.objects.all(), request).filter(pk=int(dr_id)).first()
-            if dr and dr.fixed_asset:
-                initial["fixed_asset"] = dr.fixed_asset.pk
-                if dr.operational_asset:
-                    initial["operational_asset"] = dr.operational_asset.pk
+            if dr and dr.fixed_asset_id:
+                initial["fixed_asset"] = dr.fixed_asset_id
+                if dr.operational_asset_id:
+                    initial["operational_asset"] = dr.operational_asset_id
         form = AssetScrapSalvageForm(initial=initial, tenant=request.tenant)
 
     context = {
