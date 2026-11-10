@@ -97,19 +97,19 @@
                 </div>
                 <div>
                     <dt class="text-muted">Request Date</dt>
-                    <dd class="font-medium text-slate-900">{{ modification.request_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ modification.request_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Effective Date</dt>
-                    <dd class="font-medium text-slate-900">{{ modification.effective_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ modification.effective_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Requested By</dt>
-                    <dd class="font-medium text-slate-900">{% if modification.requested_by %}{{ modification.requested_by.get_full_name|default:modification.requested_by.username }}{% else %}Not specified{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if modification.requested_by %}{{ modification.requested_by.get_full_name|default:modification.requested_by.username }}{% else %}Not specified{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Approved By</dt>
-                    <dd class="font-medium text-slate-900">{% if modification.approved_by %}{{ modification.approved_by.get_full_name|default:modification.approved_by.username }}{% else %}Pending Approval{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if modification.approved_by %}{{ modification.approved_by.get_full_name|default:modification.approved_by.username }}{% else %}Pending Approval{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Status</dt>
@@ -128,11 +128,11 @@
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 <div>
                     <dt class="text-muted">Prior Lease Liability</dt>
-                    <dd class="font-mono text-slate-900">${{ modification.prior_lease_liability|floatformat:2 }}</dd>
+                    <dd class="font-mono text-slate-900 dark:text-slate-100">${{ modification.prior_lease_liability|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Revised Lease Liability</dt>
-                    <dd class="font-mono font-bold text-slate-900">${{ modification.revised_lease_liability|floatformat:2 }}</dd>
+                    <dd class="font-mono font-bold text-slate-900 dark:text-slate-100">${{ modification.revised_lease_liability|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Liability Adjustment</dt>
@@ -142,7 +142,7 @@
                 </div>
                 <div>
                     <dt class="text-muted">ROU Asset Adjustment</dt>
-                    <dd class="font-mono text-slate-900">${{ modification.rou_asset_adjustment|floatformat:2 }}</dd>
+                    <dd class="font-mono text-slate-900 dark:text-slate-100">${{ modification.rou_asset_adjustment|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Gain / Loss on Modification</dt>
@@ -165,32 +165,32 @@
         <h2 class="text-base font-semibold">Revised Terms & Business Justification</h2>
     </div>
     <div class="card-body space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm p-3 bg-slate-50 rounded border border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
             <div>
                 <span class="text-muted">Revised Term:</span>
-                <span class="font-medium text-slate-900 ml-1">{{ modification.revised_term_months|default:"Unchanged" }} Months</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{{ modification.revised_term_months|default:"Unchanged" }} Months</span>
             </div>
             <div>
                 <span class="text-muted">Revised Payment:</span>
-                <span class="font-medium text-slate-900 ml-1">{% if modification.revised_payment_amount %}${{ modification.revised_payment_amount|floatformat:2 }}{% else %}Unchanged{% endif %}</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{% if modification.revised_payment_amount %}${{ modification.revised_payment_amount|floatformat:2 }}{% else %}Unchanged{% endif %}</span>
             </div>
             <div>
                 <span class="text-muted">Revised Discount Rate:</span>
-                <span class="font-medium text-slate-900 ml-1">{% if modification.revised_discount_rate_pct %}{{ modification.revised_discount_rate_pct }}%{% else %}Unchanged{% endif %}</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{% if modification.revised_discount_rate_pct %}{{ modification.revised_discount_rate_pct }}%{% else %}Unchanged{% endif %}</span>
             </div>
         </div>
 
         {% if modification.justification %}
         <div class="text-sm">
-            <div class="font-semibold text-slate-900 mb-1">Commercial Justification:</div>
-            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ modification.justification }}</div>
+            <div class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Commercial Justification:</div>
+            <div class="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">{{ modification.justification }}</div>
         </div>
         {% endif %}
 
         {% if modification.notes %}
         <div class="text-sm">
-            <div class="font-semibold text-slate-900 mb-1">Audit Notes:</div>
-            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ modification.notes }}</div>
+            <div class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Audit Notes:</div>
+            <div class="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">{{ modification.notes }}</div>
         </div>
         {% endif %}
     </div>
