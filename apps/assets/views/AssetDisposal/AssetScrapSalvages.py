@@ -59,19 +59,18 @@ def asset_scrap_salvage_list(request):
         qs = qs.filter(recycler_partner_id=int(recycler_filter))
 
     base_tenant_qs = assets_scope(AssetScrapSalvage.objects.all(), request)
-    total_scraps = base_tenant_qs.count()
-    in_progress_count = base_tenant_qs.filter(
-        status__in=["dismantling", "abatement_in_progress", "scrap_transferred"]
-    ).count()
-    certified_destroyed_count = base_tenant_qs.filter(
-        status__in=["certified_destroyed", "settled"]
-    ).count()
-    proceeds_agg = base_tenant_qs.aggregate(
-        proceeds=Sum("salvage_proceeds"),
-        weight=Sum("total_scrap_weight_kg"),
+    kpi_agg = base_tenant_qs.aggregate(
+        total_scraps=Count("id"),
+        in_progress=Count("id", filter=Q(status__in=["dismantling", "abatement_in_progress", "scrap_transferred"])),
+        certified_destroyed=Count("id", filter=Q(status__in=["certified_destroyed", "settled"])),
+        total_salvage_proceeds=Sum("salvage_proceeds"),
+        total_weight_recovered=Sum("total_scrap_weight_kg"),
     )
-    total_salvage_proceeds = proceeds_agg["proceeds"] or Decimal("0.00")
-    total_weight_recovered = proceeds_agg["weight"] or Decimal("0.00")
+    total_scraps = kpi_agg["total_scraps"] or 0
+    in_progress_count = kpi_agg["in_progress"] or 0
+    certified_destroyed_count = kpi_agg["certified_destroyed"] or 0
+    total_salvage_proceeds = kpi_agg["total_salvage_proceeds"] or Decimal("0.00")
+    total_weight_recovered = kpi_agg["total_weight_recovered"] or Decimal("0.00")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
