@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Incident — {{ incident.number }}{% else %}Report Non-Compliance Incident{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_compliance_incident_list' %}">Violations & Incidents</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ incident.number }}{% else %}Log Incident{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Non-Compliance Incident{% else %}Log Statutory Violation / Incident{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Incident Report & CAPA Plan</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Incident Summary / Citation Title *</label>
+                    {{ form.title }}
+                    <span class="text-xs text-muted">{{ form.title.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.incident_type.id_for_label }}">Incident Type *</label>
+                    {{ form.incident_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.severity.id_for_label }}">Severity Classification *</label>
+                    {{ form.severity }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.incident_date.id_for_label }}">Date & Time of Occurrence *</label>
+                    {{ form.incident_date }}
+                    <span class="text-xs text-muted">{{ form.incident_date.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.discovery_date.id_for_label }}">Discovery / Citation Date *</label>
+                    {{ form.discovery_date }}
+                    <span class="text-xs text-muted">{{ form.discovery_date.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset</label>
+                    {{ form.asset }}
+                    <span class="text-xs text-muted">{{ form.asset.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.permit.id_for_label }}">Violated Permit (Optional)</label>
+                    {{ form.permit }}
+                    <span class="text-xs text-muted">{{ form.permit.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.audit.id_for_label }}">Source Audit (Optional)</label>
+                    {{ form.audit }}
+                    <span class="text-xs text-muted">{{ form.audit.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.enforcement_agency.id_for_label }}">Enforcement Agency</label>
+                    {{ form.enforcement_agency }}
+                    <span class="text-xs text-muted">{{ form.enforcement_agency.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.citation_reference.id_for_label }}">Citation / Docket #</label>
+                    {{ form.citation_reference }}
+                    <span class="text-xs text-muted">{{ form.citation_reference.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_investigator.id_for_label }}">Lead Investigator / Remediation Lead</label>
+                    {{ form.assigned_investigator }}
+                    <span class="text-xs text-muted">{{ form.assigned_investigator.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fine_assessed.id_for_label }}">Assessed Penalty Fine ($)</label>
+                    {{ form.fine_assessed }}
+                    <span class="text-xs text-muted">{{ form.fine_assessed.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fine_paid.id_for_label }}">Settled / Paid Fine ($)</label>
+                    {{ form.fine_paid }}
+                    <span class="text-xs text-muted">{{ form.fine_paid.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fine_payment_date.id_for_label }}">Fine Settlement Date</label>
+                    {{ form.fine_payment_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.root_cause.id_for_label }}">Primary Root Cause</label>
+                    {{ form.root_cause }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_resolution_date.id_for_label }}">Target Resolution Date</label>
+                    {{ form.target_resolution_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Incident Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.root_cause_analysis.id_for_label }}">Root Cause Analysis Investigation Narrative</label>
+                    {{ form.root_cause_analysis }}
+                    <span class="text-xs text-muted">{{ form.root_cause_analysis.help_text }}</span>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.corrective_action_plan.id_for_label }}">Mandated Corrective & Preventive Action (CAPA) Plan</label>
+                    {{ form.corrective_action_plan }}
+                    <span class="text-xs text-muted">{{ form.corrective_action_plan.help_text }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'assets:asset_compliance_incident_list' %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Log Incident{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
