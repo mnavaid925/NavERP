@@ -57,6 +57,16 @@ class AssetComplianceAuditForm(TenantUniqueMixin, TenantModelForm):
             self.fields["asset"].queryset = Asset.objects.filter(tenant=self.tenant)
             self.fields["auditor_party"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["lead_auditor_user"].queryset = User.objects.filter(tenant=self.tenant)
+        if "status" in self.fields:
+            self.fields["status"].choices = [
+                (k, v) for k, v in AssetComplianceAudit.STATUS_CHOICES if k != "completed"
+            ]
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status == "completed":
+            raise forms.ValidationError("Status cannot be set to Completed directly. Use the complete audit action.")
+        return status
 
     def clean(self):
         cleaned = super().clean()
