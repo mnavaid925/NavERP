@@ -197,6 +197,9 @@ def asset_permit_license_delete(request, pk):
 @require_POST
 def asset_permit_license_renew(request, pk):
     permit = assets_object(request, AssetPermitLicense, pk)
+    if permit.status in ["revoked", "suspended"]:
+        messages.error(request, f"Permit/license {permit.number} cannot be renewed while {permit.get_status_display().lower()}.")
+        return redirect("assets:asset_permit_license_detail", pk=permit.pk)
     permit.status = "pending_renewal"
     permit.save(update_fields=["status", "updated_at"])
     write_audit_log(
