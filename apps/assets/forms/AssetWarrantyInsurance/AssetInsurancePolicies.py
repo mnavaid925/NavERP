@@ -73,7 +73,7 @@ class AssetInsurancePolicyForm(TenantUniqueMixin, TenantModelForm):
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
             self.fields["asset_category"].queryset = AssetCategory.objects.filter(tenant=self.tenant)
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["policy_document"].queryset = Document.objects.filter(tenant=self.tenant)
             self.fields["risk_manager"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
 
@@ -93,7 +93,6 @@ class AssetInsurancePolicyForm(TenantUniqueMixin, TenantModelForm):
                 "fixed_asset",
                 "operational_asset",
                 "asset_category",
-                "currency",
                 "policy_document",
                 "risk_manager",
             ],
