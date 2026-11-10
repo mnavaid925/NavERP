@@ -54,17 +54,22 @@ def asset_permit_license_list(request):
     soon_window = today + timedelta(days=60)
 
     # Aggregate KPI counts
-    base_all = AssetPermitLicense.objects.filter(tenant=request.tenant)
-    total_permits = base_all.count()
-    active_count = base_all.filter(status="active").count()
-    expiring_soon_count = base_all.filter(
-        status="active",
-        expiration_date__gte=today,
-        expiration_date__lte=soon_window,
-    ).count()
-    expired_count = base_all.filter(
-        Q(status="expired") | (Q(status="active") & Q(expiration_date__lt=today))
-    ).count()
+    metrics = AssetPermitLicense.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        expiring_soon=Count(
+            "id",
+            filter=Q(status="active", expiration_date__gte=today, expiration_date__lte=soon_window),
+        ),
+        expired=Count(
+            "id",
+            filter=Q(status="expired") | (Q(status="active") & Q(expiration_date__lt=today)),
+        ),
+    )
+    total_permits = metrics["total"]
+    active_count = metrics["active"]
+    expiring_soon_count = metrics["expiring_soon"]
+    expired_count = metrics["expired"]
 
     authority_list = Party.objects.filter(tenant=request.tenant).order_by("name")
 
