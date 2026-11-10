@@ -202,6 +202,7 @@ def asset_scrap_salvage_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_scrap_salvage_delete(request, pk):
     instance = assets_object(request, AssetScrapSalvage, pk)
