@@ -61,7 +61,7 @@
         <div class="stat-icon purple"><i data-lucide="activity"></i></div>
         <div class="stat-body">
             <div class="stat-label">Liability Adjustment</div>
-            <div class="stat-value font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+            <div class="stat-value font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-ok{% endif %}">
                 ${{ modification.liability_adjustment|floatformat:2 }}
             </div>
         </div>
@@ -136,7 +136,7 @@
                 </div>
                 <div>
                     <dt class="text-muted">Liability Adjustment</dt>
-                    <dd class="font-mono font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                    <dd class="font-mono font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-ok{% endif %}">
                         ${{ modification.liability_adjustment|floatformat:2 }}
                     </dd>
                 </div>
@@ -146,7 +146,7 @@
                 </div>
                 <div>
                     <dt class="text-muted">Gain / Loss on Modification</dt>
-                    <dd class="font-mono font-medium {% if modification.gain_loss_on_modification >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    <dd class="font-mono font-medium {% if modification.gain_loss_on_modification >= 0 %}text-ok{% else %}text-danger{% endif %}">
                         ${{ modification.gain_loss_on_modification|floatformat:2 }}
                     </dd>
                 </div>
