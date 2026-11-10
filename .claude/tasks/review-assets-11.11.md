@@ -39,7 +39,7 @@
   - **Issue**: Views pass `category_list`, `framework_list`, and `agency_list` in context, but the template filter forms lack the respective dropdown inputs.
   - **Fix**: Add the missing `<select>` elements with `pk|stringformat:"d"` comparison.
 
-- [ ] **I2: Pagination Links Drop Active Foreign Key Query Parameters**
+- [x] **I2: Pagination Links Drop Active Foreign Key Query Parameters**
   - **Files**:
     - `templates/assets/assetcompliance/asset_compliance_framework/list.html:188, 198` (`category`)
     - `templates/assets/assetcompliance/asset_compliance_audit/list.html:186, 196` (`framework`)
