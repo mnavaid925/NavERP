@@ -51,4 +51,21 @@ class AssetLeaseScheduleForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["lease_contract"])
+
+        contract = cleaned.get("lease_contract")
+        period = cleaned.get("period_number")
+        if contract and period is not None and self.tenant:
+            qs = AssetLeaseSchedule.objects.filter(
+                tenant=self.tenant,
+                lease_contract=contract,
+                period_number=period,
+            )
+            if self.instance and self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                self.add_error(
+                    "period_number",
+                    f"Period {period} already exists for contract {contract.number}."
+                )
+
         return cleaned
