@@ -83,7 +83,7 @@
   - **Issue**: `status` is included in `Meta.fields` of edit forms, allowing users to bypass dedicated transition endpoints (`complete`, `resolve`, `close`) and their timestamp tracking.
   - **Fix**: Exclude `status` from `AssetComplianceAuditForm` and `AssetComplianceIncidentForm`, or restrict form choices to pre-completion statuses.
 
-- [ ] **I8: Consolidate Multi-Query KPI Metrics in List Views**
+- [x] **I8: Consolidate Multi-Query KPI Metrics in List Views**
   - **Files**:
     - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:49-54`
     - `apps/assets/views/AssetCompliance/AssetComplianceAudits.py:57-64`
@@ -96,7 +96,7 @@
 
 ### Minor
 
-- [ ] **M1: Falsy `0%` Fallback Bug in Framework Readiness Score**
+- [x] **M1: Falsy `0%` Fallback Bug in Framework Readiness Score**
   - **File**: `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:53`
   - **Fix**: Change to `round(avg_readiness if avg_readiness is not None else 100)`.
 
