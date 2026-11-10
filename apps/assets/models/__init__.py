@@ -42,6 +42,12 @@ from apps.assets.models.AssetReliability import (
     AssetFailureMode,
     AssetTelemetryReading,
 )
+from apps.assets.models.AssetDisposal import (
+    AssetDisposalRequest,
+    AssetResaleListing,
+    AssetScrapSalvage,
+    AssetTradeIn,
+)
 from apps.assets.models.AssetWarrantyInsurance import (
     AssetInsuranceClaim,
     AssetInsurancePolicy,
@@ -84,4 +90,8 @@ __all__ = [
     "AssetWarrantyClaim",
     "AssetInsurancePolicy",
     "AssetInsuranceClaim",
+    "AssetDisposalRequest",
+    "AssetResaleListing",
+    "AssetTradeIn",
+    "AssetScrapSalvage",
 ]
