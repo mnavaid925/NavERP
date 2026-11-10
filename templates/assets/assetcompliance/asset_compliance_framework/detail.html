@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{{ framework.code }} — Framework Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_compliance_framework_list' %}">Frameworks</a>
+            <span>/</span>
+            <span>{{ framework.code }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ framework.name }}</h1>
+            <span class="badge {{ framework.status_badge_class }}">{{ framework.get_status_display }}</span>
+            <span class="badge {{ framework.framework_type_badge_class }}">{{ framework.get_framework_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_compliance_framework_edit' framework.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <a href="{% url 'assets:asset_compliance_framework_list' %}" class="btn btn-outline">
+            Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Framework Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Framework Overview</h2>
+                <span class="font-mono text-sm text-muted">{{ framework.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Standard Code</span>
+                        <span class="font-medium text-slate-900">{{ framework.code }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Revision / Edition</span>
+                        <span class="font-medium text-slate-900">{{ framework.revision }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Regulatory / Governing Body</span>
+                        <span class="font-medium text-slate-900">
+                            {% if framework.regulatory_agency %}
+                            {{ framework.regulatory_agency.name }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Applicable Category</span>
+                        <span class="font-medium text-slate-900">
+                            {% if framework.applicable_category %}
+                            {{ framework.applicable_category.name }}
+                            {% else %}
+                            <span class="text-muted">All Asset Categories</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Effective Date</span>
+                        <span class="font-medium text-slate-900">{{ framework.effective_date }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Mandatory Audit Frequency</span>
+                        <span class="font-medium text-slate-900">Every {{ framework.mandatory_audit_cycle_months }} months</span>
+                    </div>
+                </div>
+
+                {% if framework.description %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-2">Scope & Objectives</span>
+                    <div class="prose text-sm text-slate-700 whitespace-pre-line">{{ framework.description }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Associated Compliance Audits -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Associated Compliance Audits</h2>
+                <a href="{% url 'assets:asset_compliance_audit_create' %}?framework={{ framework.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> New Audit
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Title</th>
+                            <th>Audit Date</th>
+                            <th>Type</th>
+                            <th>Rating</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in audits %}
+                        <tr>
+                            <td class="font-mono text-sm font-semibold">
+                                <a href="{% url 'assets:asset_compliance_audit_detail' a.pk %}" class="text-brand hover:underline">
+                                    {{ a.number }}
+                                </a>
+                            </td>
+                            <td class="max-w-xs truncate">{{ a.title }}</td>
+                            <td>{{ a.audit_date }}</td>
+                            <td><span class="badge {{ a.audit_type_badge_class }}">{{ a.get_audit_type_display }}</span></td>
+                            <td><span class="badge {{ a.compliance_rating_badge_class }}">{{ a.get_compliance_rating_display }}</span></td>
+                            <td><span class="badge {{ a.status_badge_class }}">{{ a.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No compliance audits recorded under this framework.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Metrics & Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Compliance Readiness</h2>
+            </div>
+            <div class="card-body text-center py-6">
+                <div class="inline-flex items-center justify-center w-24 h-24 rounded-full border-4 border-brand-500 mb-3">
+                    <span class="text-2xl font-bold text-slate-900">{{ framework.readiness_score }}%</span>
+                </div>
+                <div class="text-sm font-medium text-slate-700">Audit Readiness Posture</div>
+                <div class="text-xs text-muted mt-1">Based on active documentation, checklist verification, and open non-conformances.</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Audit Trail</h2>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-muted">Created</span>
+                    <span class="font-medium text-slate-800">{{ framework.created_at|date:"M d, Y H:i" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Last Updated</span>
+                    <span class="font-medium text-slate-800">{{ framework.updated_at|date:"M d, Y H:i" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
