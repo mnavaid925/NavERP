@@ -89,7 +89,7 @@ def asset_disposal_request_list(request):
         "status_choices": AssetDisposalRequest.STATUS_CHOICES,
         "method_choices": AssetDisposalRequest.DISPOSAL_METHOD_CHOICES,
         "reason_choices": AssetDisposalRequest.RETIREMENT_REASON_CHOICES,
-        "category_list": AssetCategory.objects.filter(tenant=request.tenant),
+        "category_list": AssetCategory.objects.filter(tenant=request.tenant).only("id", "name"),
         "total_requests": total_requests,
         "pending_approval_count": pending_approval_count,
         "in_progress_count": in_progress_count,
