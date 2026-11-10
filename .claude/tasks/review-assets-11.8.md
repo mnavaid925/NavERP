@@ -92,7 +92,8 @@
   - **Description:** Resolving or rejecting a claim sets `claim.warranty.status = "active"`, even if the warranty's `end_date` has already passed.
   - **Fix:** Set status to `"expired"` if `claim.warranty.end_date < timezone.now().date()`, else `"active"`.
 
-- [ ] **M5: Mismatch Between UI Delete Button Visibility and Backend View Authorization Gate**
+- [x] **M5: Mismatch Between UI Delete Button Visibility and Backend View Authorization Gate**
+  - **Status:** [x] fixed — update delete button check to is_superuser or is_tenant_admin across 8 templates (0039899e, 52012033, 37532ae5, fff24712, 011837b4, 998de3d2, 90d558a1, 3a5bd4a5)
   - **Location:**
     - `templates/assets/assetwarrantyinsurance/assetwarranty/detail.html:50` & `list.html:181`
     - `templates/assets/assetwarrantyinsurance/assetwarrantyclaim/detail.html:50` & `list.html:162`
