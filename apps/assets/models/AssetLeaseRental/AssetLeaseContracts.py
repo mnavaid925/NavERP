@@ -53,12 +53,12 @@ class AssetLeaseContract(TenantNumbered):
         "modified": "badge-info",
         "expired": "badge-muted",
         "terminated": "badge-red",
-        "buyout": "badge-purple",
+        "buyout": "badge-info",
     }
 
     CLASSIFICATION_CSS = {
         "operating": "badge-info",
-        "finance": "badge-purple",
+        "finance": "badge-slate",
     }
 
     PAYMENT_FREQUENCY_CSS = {
