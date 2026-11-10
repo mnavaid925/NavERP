@@ -133,12 +133,11 @@ def asset_warranty_create(request):
                 warranty.registered_by = request.user
                 warranty.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_warranty.create",
-                    model_name="AssetWarranty",
-                    object_id=warranty.pk,
-                    details=f"Created warranty {warranty.number} - {warranty.title}",
+                    obj=warranty,
+                    action="create",
+                    changes={"details": f"Created warranty {warranty.number} - {warranty.title}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Warranty {warranty.number} successfully registered.")
                 return redirect("assets:asset_warranty_detail", pk=warranty.pk)
@@ -162,12 +161,11 @@ def asset_warranty_edit(request, pk):
             with transaction.atomic():
                 warranty = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_warranty.edit",
-                    model_name="AssetWarranty",
-                    object_id=warranty.pk,
-                    details=f"Updated warranty {warranty.number} - {warranty.title}",
+                    obj=warranty,
+                    action="update",
+                    changes={"details": f"Updated warranty {warranty.number} - {warranty.title}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Warranty {warranty.number} updated.")
                 return redirect("assets:asset_warranty_detail", pk=warranty.pk)
@@ -190,12 +188,11 @@ def asset_warranty_delete(request, pk):
     number = warranty.number
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty.delete",
-            model_name="AssetWarranty",
-            object_id=warranty.pk,
-            details=f"Deleted warranty {number}",
+            obj=warranty,
+            action="delete",
+            changes={"details": f"Deleted warranty {number}"},
+            tenant=request.tenant,
         )
         warranty.delete()
         messages.success(request, f"Warranty {number} deleted.")
@@ -214,12 +211,11 @@ def asset_warranty_activate(request, pk):
         warranty.status = "active"
         warranty.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty.activate",
-            model_name="AssetWarranty",
-            object_id=warranty.pk,
-            details=f"Activated warranty {warranty.number}",
+            obj=warranty,
+            action="activate",
+            changes={"details": f"Activated warranty {warranty.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Warranty {warranty.number} is now active.")
     return redirect("assets:asset_warranty_detail", pk=warranty.pk)
@@ -236,12 +232,11 @@ def asset_warranty_renew(request, pk):
         warranty.status = "active"
         warranty.save(update_fields=["end_date", "status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty.renew",
-            model_name="AssetWarranty",
-            object_id=warranty.pk,
-            details=f"Renewed warranty {warranty.number} to {warranty.end_date}",
+            obj=warranty,
+            action="renew",
+            changes={"details": f"Renewed warranty {warranty.number} to {warranty.end_date}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Warranty {warranty.number} renewed through {warranty.end_date}.")
     return redirect("assets:asset_warranty_detail", pk=warranty.pk)
@@ -256,12 +251,11 @@ def asset_warranty_void(request, pk):
         warranty.status = "voided"
         warranty.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty.void",
-            model_name="AssetWarranty",
-            object_id=warranty.pk,
-            details=f"Voided warranty {warranty.number}",
+            obj=warranty,
+            action="void",
+            changes={"details": f"Voided warranty {warranty.number}"},
+            tenant=request.tenant,
         )
         messages.info(request, f"Warranty {warranty.number} has been voided.")
     return redirect("assets:asset_warranty_detail", pk=warranty.pk)
