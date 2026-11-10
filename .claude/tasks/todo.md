@@ -29220,3 +29220,226 @@ Theme badges use color-named tokens (`badge-green`, `badge-red`, `badge-amber`, 
     - `apps/bi/tests/test_integrationhub_security.py` (52 tests)
   - Full BI app suite: 3,026 tests passing green (0 failures).
 - **Gaps**: None (Documented in `.claude/tasks/gaps-bi-10.19.md`).
+
+
+---
+
+# Sub-module 11.8 — Warranty & Insurance Management (Module 11: Asset Management System, `assets`) — plan from research-assets-11.8.md (2026-11-10)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.7.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0011_assetcalibrationrecord_idx_acal_ten_cdate_and_more.py`, so **11.8 claims the next incremental migration `0012_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.8.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetWarrantyInsurance/<Entity>.py`
+> Template folder name: `templates/assets/assetwarrantyinsurance/{assetwarranty,assetwarrantyclaim,assetinsurancepolicy,assetinsuranceclaim}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+
+- **Asset Warranty & Insurance Management Spine Integration (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Register Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between financial capital assets and warranty/insurance protections.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational machinery and runtime equipment master in `apps/scm` via string FK (`"scm.Asset"`), supporting meter tracking, serial numbers, and equipment defect histories.
+  - Sibling Asset Management Links:
+    - Links warranty claims directly to repair intake tickets (`"assets.AssetMaintenanceRequest"` [AMRQ-]).
+    - Links insurance damage claims directly to loss and theft investigations (`"assets.AssetIncidentReport"` [AINC-]).
+    - Interfaces with taxonomy groupings (`"assets.AssetCategory"` [ACAT-]) for fleet blanket coverage and warranty profiles.
+    - Interfaces with recurring service agreements (`"assets.AssetServiceContract"` [ASVC-]) for extended warranty ROI analysis.
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for OEMs, warranty providers, commercial insurance carriers, insurance brokers, and independent loss adjusters.
+    - Reuses `"core.Document"` for warranty certificates, terms & conditions, policy endorsements, damage photos, police reports, and proof of loss affidavits.
+    - Reuses `"accounting.Currency"` for multi-currency policies, deductibles, premiums, and claims.
+    - Reuses `settings.AUTH_USER_MODEL` for internal warranty coordinators, claims managers, risk officers, and claim approvers.
+  - Collision-Free 4-Character Uppercase Prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetWarranty` -> `NUMBER_PREFIX = "AWAR"` (format: `AWAR-YYYYMM-XXXX`)
+    - `AssetWarrantyClaim` -> `NUMBER_PREFIX = "AWCL"` (format: `AWCL-YYYYMM-XXXX`)
+    - `AssetInsurancePolicy` -> `NUMBER_PREFIX = "AINS"` (format: `AINS-YYYYMM-XXXX`)
+    - `AssetInsuranceClaim` -> `NUMBER_PREFIX = "AICL"` (format: `AICL-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetWarranty` [AWAR-]:
+      - Governs equipment warranty contract capture, dual-parameter coverage thresholds (calendar date validity + operating hour / mileage / cycle usage limits), coverage percentage breakdowns (parts, labor, dispatch), deductible amounts, OEM document archival, proactive expiration alerts, and extended warranty ROI evaluation.
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="warranties"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="warranties"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="warranties"), `vendor` (FK `"core.Party"`, PROTECT, related_name="provided_asset_warranties"), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_warranties"), `service_contract` (FK `"assets.AssetServiceContract"`, SET_NULL, null=True, blank=True, related_name="linked_warranties"), `document` (FK `"core.Document"`, SET_NULL, null=True, blank=True, related_name="asset_warranties"), `created_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="created_asset_warranties").
+      - Coverage Data & Thresholds: `title` (CharField max_length=255), `warranty_number` (CharField max_length=100), `warranty_type` (`oem_standard`, `extended`, `dealer_distributor`, `refurbished_rebuilt`, `third_party_service`, default `oem_standard`, max_length=32), `coverage_scope` (`bumper_to_bumper`, `powertrain_drive`, `parts_only`, `labor_only`, `structural_frame`, `corrosion_perforation`, `specific_components`, default `bumper_to_bumper`, max_length=32), `parts_coverage_pct` (DecimalField max_digits=5, decimal_places=2, default=100.00, validators 0..100), `labor_coverage_pct` (DecimalField max_digits=5, decimal_places=2, default=100.00, validators 0..100), `travel_service_covered` (BooleanField default=True), `deductible_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `start_date` (DateField), `end_date` (DateField), `meter_limit_value` (DecimalField max_digits=14, decimal_places=2, null=True, blank=True), `meter_limit_unit` (`none`, `operating_hours`, `kilometers`, `miles`, `production_cycles`, default `none`, max_length=24).
+      - ROI, Terms & Lifecycle: `purchase_cost` (DecimalField max_digits=14, decimal_places=2, default=0.00), `estimated_roi_benefit` (DecimalField max_digits=14, decimal_places=2, default=0.00), `terms_and_conditions` (TextField blank=True), `claim_submission_instructions` (TextField blank=True), `notification_lead_days` (PositiveIntegerField default=30), `status` (`draft`, `active`, `expired`, `voided`, `pending_renewal`, default `active`, max_length=24).
+      - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `expired -> badge-red`, `voided -> badge-muted`, `pending_renewal -> badge-amber`.
+      - Warranty Type / Badge CSS: `oem_standard -> badge-info`, `extended -> badge-green`, `dealer_distributor -> badge-slate`, `refurbished_rebuilt -> badge-amber`, `third_party_service -> badge-info`.
+      - Coverage Scope / Badge CSS: `bumper_to_bumper -> badge-green`, `powertrain_drive -> badge-info`, `parts_only -> badge-slate`, `labor_only -> badge-slate`, `structural_frame -> badge-amber`, `corrosion_perforation -> badge-amber`, `specific_components -> badge-info`.
+      - Business Logic & Actions:
+        - `asset_warranty_activate`: transitions `draft -> active`.
+        - `asset_warranty_renew`: extends `end_date`, updates renewal cost, transitions status to `active`.
+        - `asset_warranty_void`: marks warranty as `voided` with audit reason.
+        - `is_valid_on_date(date, meter_value)` helper: verifies whether an asset failure falls within time and meter coverage bounds.
+      - Form exclusions: `tenant`, `number`, `status`, `created_by`, `created_at`, `updated_at`.
+      - View context keys: `warranties`, `page_obj`, `paginator`, `is_paginated`, `warranty_type_choices`, `coverage_scope_choices`, `status_choices`, `vendors`, `fixed_assets`, `total_warranties`, `active_warranties_count`, `expiring_soon_count`, `total_purchase_cost`.
+    - `AssetWarrantyClaim` [AWCL-]:
+      - Defect documentation and vendor warranty claim processing, linking claims to originating maintenance tickets (`AssetMaintenanceRequest`), tracking Return Merchandise Authorization (RMA) numbers and defective part shipping, recording claimed vs. approved amounts, and reconciling settlements (vendor credit memo, cash refund, part replacement, free service).
+      - Identity & Linkages: `warranty` (FK `"assets.AssetWarranty"`, CASCADE, related_name="claims"), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="warranty_claims"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="warranty_claims"), `maintenance_request` (FK `"assets.AssetMaintenanceRequest"`, SET_NULL, null=True, blank=True, related_name="warranty_claims"), `vendor` (FK `"core.Party"`, PROTECT, related_name="processed_warranty_claims"), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_warranty_claims"), `filed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="filed_warranty_claims"), `approved_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="approved_warranty_claims"), `document` (FK `"core.Document"`, SET_NULL, null=True, blank=True, related_name="warranty_claims").
+      - Defect & Filing Data: `claim_title` (CharField max_length=255), `vendor_claim_reference` (CharField max_length=100 blank=True), `rma_number` (CharField max_length=100 blank=True), `incident_date` (DateField), `filing_date` (DateField default=timezone.now), `claim_type` (`parts_replacement`, `labor_reimbursement`, `full_unit_replacement`, `onsite_vendor_repair`, `commercial_concession`, default `parts_replacement`, max_length=32), `defect_description` (TextField), `failed_component_name` (CharField max_length=255), `meter_at_failure` (DecimalField max_digits=14, decimal_places=2, null=True, blank=True), `defective_part_returned` (BooleanField default=False), `return_tracking_number` (CharField max_length=100 blank=True).
+      - Financial Accounting & Settlement: `claimed_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `approved_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `deductible_deducted` (DecimalField max_digits=14, decimal_places=2, default=0.00), `net_reimbursement_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `settlement_method` (`pending`, `vendor_credit_memo`, `cash_bank_transfer`, `direct_parts_replacement`, `free_vendor_service`, `rejected_no_settlement`, default `pending`, max_length=32), `settlement_date` (DateField null=True, blank=True), `status` (`draft`, `submitted`, `under_review`, `approved`, `partially_approved`, `rejected`, `settled_closed`, `voided`, default `draft`, max_length=24), `resolution_notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `submitted -> badge-info`, `under_review -> badge-amber`, `approved -> badge-green`, `partially_approved -> badge-amber`, `rejected -> badge-red`, `settled_closed -> badge-green`, `voided -> badge-muted`.
+      - Claim Type / Badge CSS: `parts_replacement -> badge-info`, `labor_reimbursement -> badge-slate`, `full_unit_replacement -> badge-amber`, `onsite_vendor_repair -> badge-info`, `commercial_concession -> badge-slate`.
+      - Settlement Method / Badge CSS: `pending -> badge-amber`, `vendor_credit_memo -> badge-info`, `cash_bank_transfer -> badge-green`, `direct_parts_replacement -> badge-info`, `free_vendor_service -> badge-slate`, `rejected_no_settlement -> badge-red`.
+      - Business Logic & Actions:
+        - `asset_warranty_claim_submit`: validates claim data and transitions `draft -> submitted`.
+        - `asset_warranty_claim_review`: transitions `submitted -> under_review`.
+        - `asset_warranty_claim_settle`: records approved amount, computes `net_reimbursement_amount = approved_amount - deductible_deducted`, records settlement method and date, transitions status to `settled_closed`.
+        - `asset_warranty_claim_reject`: records vendor denial reason and transitions status to `rejected`.
+      - Form exclusions: `tenant`, `number`, `net_reimbursement_amount`, `settlement_date`, `status`, `filed_by`, `approved_by`, `created_at`, `updated_at`.
+      - View context keys: `warranty_claims`, `page_obj`, `paginator`, `is_paginated`, `claim_type_choices`, `status_choices`, `settlement_method_choices`, `warranties`, `vendors`, `total_claims`, `submitted_claims_count`, `approved_claims_count`, `total_recovered_amount`.
+    - `AssetInsurancePolicy` [AINS-]:
+      - Commercial property, plant & equipment, machinery breakdown, and mobile fleet insurance policy management, capturing insurer underwriter and broker relationships, Statement of Values (SOV) / Total Insured Value, valuation basis, deductible retentions, coinsurance percentages, premium payment schedules, and renewal tracking.
+      - Identity & Underwriting Links: `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="insurance_policies"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="insurance_policies"), `asset_category` (FK `"assets.AssetCategory"`, SET_NULL, null=True, blank=True, related_name="insurance_policies"), `insurer` (FK `"core.Party"`, PROTECT, related_name="issued_asset_insurance_policies"), `broker` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="brokered_asset_insurance_policies"), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_insurance_policies"), `document` (FK `"core.Document"`, SET_NULL, null=True, blank=True, related_name="insurance_policies"), `managed_by` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="managed_insurance_policies").
+      - Policy Parameters & Coverage: `policy_number` (CharField max_length=100), `policy_name` (CharField max_length=255), `policy_type` (`property_plant_equipment`, `machinery_breakdown`, `boiler_pressure_vessel`, `in_transit_cargo`, `commercial_auto_fleet`, `electronic_equipment`, `general_commercial_liability`, `all_risk_comprehensive`, default `machinery_breakdown`, max_length=32), `coverage_scope` (`single_asset`, `asset_category_fleet`, `enterprise_blanket`, default `single_asset`, max_length=32), `total_insured_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `valuation_basis` (`replacement_cost`, `actual_cash_value`, `agreed_value`, `book_value`, default `replacement_cost`, max_length=24), `deductible_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `coinsurance_pct` (DecimalField max_digits=5, decimal_places=2, default=100.00, validators 0..100), `annual_premium` (DecimalField max_digits=14, decimal_places=2, default=0.00), `premium_frequency` (`annual`, `semi_annual`, `quarterly`, `monthly`, default `annual`, max_length=20), `premium_due_date` (DateField null=True, blank=True), `coverage_start_date` (DateField), `coverage_end_date` (DateField), `renewal_reminder_days` (PositiveIntegerField default=60), `status` (`draft`, `active`, `expired`, `cancelled`, `pending_renewal`, default `active`, max_length=24), `special_terms_exclusions` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `expired -> badge-red`, `cancelled -> badge-muted`, `pending_renewal -> badge-amber`.
+      - Policy Type / Badge CSS: `property_plant_equipment -> badge-info`, `machinery_breakdown -> badge-amber`, `boiler_pressure_vessel -> badge-slate`, `in_transit_cargo -> badge-info`, `commercial_auto_fleet -> badge-slate`, `electronic_equipment -> badge-info`, `general_commercial_liability -> badge-slate`, `all_risk_comprehensive -> badge-green`.
+      - Valuation Basis / Badge CSS: `replacement_cost -> badge-green`, `actual_cash_value -> badge-amber`, `agreed_value -> badge-info`, `book_value -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_insurance_policy_activate`: transitions `draft -> active`.
+        - `asset_insurance_policy_renew`: extends policy term, updates premium, transitions status to `active`.
+        - `asset_insurance_policy_cancel`: marks policy as `cancelled` with documented reason.
+        - `asset_insurance_policy_update_sov`: synchronizes Total Insured Value from asset revaluation appraisals (`AssetRevaluation`).
+      - Form exclusions: `tenant`, `number`, `status`, `managed_by`, `created_at`, `updated_at`.
+      - View context keys: `insurance_policies`, `page_obj`, `paginator`, `is_paginated`, `policy_type_choices`, `status_choices`, `valuation_basis_choices`, `insurers`, `brokers`, `total_policies`, `active_policies_count`, `total_insured_value`, `total_annual_premium`.
+    - `AssetInsuranceClaim` [AICL-]:
+      - Property damage and loss claim processing, integrating with operational incident reports (`AssetIncidentReport`), coordinating independent loss adjusting firms and forensic inspections, linking proof of loss documentation and police reports, and reconciling net settlement payouts (`Net Payout = Gross Loss - Deductible - Salvage Offset`).
+      - Identity & Loss Links: `policy` (FK `"assets.AssetInsurancePolicy"`, CASCADE, related_name="claims"), `fixed_asset` (FK `"accounting.FixedAsset"`, SET_NULL, null=True, blank=True, related_name="insurance_claims"), `operational_asset` (FK `"scm.Asset"`, SET_NULL, null=True, blank=True, related_name="insurance_claims"), `incident_report` (FK `"assets.AssetIncidentReport"`, SET_NULL, null=True, blank=True, related_name="insurance_claims"), `adjuster_party` (FK `"core.Party"`, SET_NULL, null=True, blank=True, related_name="adjusted_asset_claims"), `currency` (FK `"accounting.Currency"`, SET_NULL, null=True, blank=True, related_name="asset_insurance_claims"), `claims_coordinator` (FK `settings.AUTH_USER_MODEL`, SET_NULL, null=True, blank=True, related_name="coordinated_insurance_claims"), `document` (FK `"core.Document"`, SET_NULL, null=True, blank=True, related_name="insurance_claims").
+      - Loss Narrative & Adjustment: `claim_title` (CharField max_length=255), `insurer_claim_number` (CharField max_length=100 blank=True), `loss_date` (DateField), `loss_cause` (`fire_explosion`, `water_damage_flood`, `electrical_surge`, `mechanical_breakdown`, `theft_vandalism`, `natural_disaster_storm`, `collision_impact`, `operator_error`, `transit_loss`, default `mechanical_breakdown`, max_length=32), `loss_description` (TextField), `loss_location` (CharField max_length=255 blank=True), `adjuster_name` (CharField max_length=150 blank=True), `adjuster_contact` (CharField max_length=150 blank=True), `adjuster_inspection_date` (DateField null=True, blank=True), `police_report_reference` (CharField max_length=100 blank=True).
+      - Loss Settlement & Payout Reconciliation: `estimated_loss_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `deductible_applied` (DecimalField max_digits=14, decimal_places=2, default=0.00), `salvage_recovery_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `approved_payout_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `actual_paid_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `settlement_date` (DateField null=True, blank=True), `status` (`incident_logged`, `claim_filed`, `under_adjuster_review`, `proof_of_loss_submitted`, `settlement_offered`, `settled_paid`, `disputed_negotiation`, `denied`, `closed`, default `incident_logged`, max_length=32), `settlement_notes` (TextField blank=True).
+      - Status / Badge CSS: `incident_logged -> badge-slate`, `claim_filed -> badge-info`, `under_adjuster_review -> badge-amber`, `proof_of_loss_submitted -> badge-info`, `settlement_offered -> badge-amber`, `settled_paid -> badge-green`, `disputed_negotiation -> badge-amber`, `denied -> badge-red`, `closed -> badge-muted`.
+      - Loss Cause / Badge CSS: `fire_explosion -> badge-red`, `water_damage_flood -> badge-amber`, `electrical_surge -> badge-amber`, `mechanical_breakdown -> badge-info`, `theft_vandalism -> badge-red`, `natural_disaster_storm -> badge-amber`, `collision_impact -> badge-red`, `operator_error -> badge-slate`, `transit_loss -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_insurance_claim_file`: validates loss event details and transitions `incident_logged -> claim_filed`.
+        - `asset_insurance_claim_proof_of_loss`: attaches adjuster evaluation and transitions to `proof_of_loss_submitted`.
+        - `asset_insurance_claim_settle`: computes net payout `approved_payout_amount = estimated_loss_amount - deductible_applied - salvage_recovery_value`, records actual paid amount and settlement date, and transitions status to `settled_paid`.
+        - `asset_insurance_claim_deny`: records underwriter denial justification and transitions status to `denied`.
+      - Form exclusions: `tenant`, `number`, `approved_payout_amount`, `actual_paid_amount`, `settlement_date`, `status`, `claims_coordinator`, `created_at`, `updated_at`.
+      - View context keys: `insurance_claims`, `page_obj`, `paginator`, `is_paginated`, `loss_cause_choices`, `status_choices`, `policies`, `adjusters`, `total_claims`, `active_claims_count`, `total_estimated_loss`, `total_settled_payout`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `AWAR` (AssetWarranty), `AWCL` (AssetWarrantyClaim), `AINS` (AssetInsurancePolicy), `AICL` (AssetInsuranceClaim) verified 100% collision-free repository-wide.
+- **Index Constraints & Length (L65)**: All index names <= 30 chars (`idx_awar_ten_stat`, `idx_awar_ten_end`, `idx_awar_ten_vnd`, `idx_awcl_ten_stat`, `idx_awcl_ten_inc`, `idx_awcl_ten_war`, `idx_ains_ten_stat`, `idx_ains_ten_end`, `idx_ains_ten_ins`, `idx_aicl_ten_stat`, `idx_aicl_ten_loss`, `idx_aicl_ten_pol`).
+- **Choice Field Lengths (L65)**: All `CharField` `max_length` strictly >= longest choice value (e.g. `direct_parts_replacement` = 24 <= 32; `proof_of_loss_submitted` = 24 <= 32; `general_commercial_liability` = 28 <= 32; `corrosion_perforation` = 21 <= 32).
+
+---
+
+## 11.8-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+
+- [ ] **NO ACORD XML / EDI Electronic Claim Transmission** — NavERP provides structured web UI claim logging and document tracking; external insurance clearinghouse EDI transmissions (ACORD 140 / X12 837) belong to advanced integration passes.
+- [ ] **NO OEM direct real-time warranty API connectors** — Automated REST API links to manufacturer warranty portals (Caterpillar, Komatsu, Lenovo, Dell) deferred to future external API adapter architecture.
+- [ ] **NO real-time telematics shock/crash claim triggering** — Automated vehicle crash or severe shock sensor G-force claim generation deferred to future IoT streaming gateway phase.
+- [ ] **NO geospatial GIS flood/hazard underwriting risk modelling** — Algorithmic flood zone, seismic hazard, and hurricane surge modeling belongs to advanced spatial analytics and external actuarial software.
+- [ ] **NO duplicate maintenance work order dispatching or salvage auction engine** — Work orders remain in 11.5 (`AssetMaintenanceRequest`), loss investigations remain in 11.2 (`AssetIncidentReport`), and equipment salvage/scrapping auctions belong downstream in 11.9 (`AssetDisposal`).
+
+---
+
+## Sub-module 11.8 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.8.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetWarranty (`AWAR`)**
+  - [ ] `apps/assets/models/AssetWarrantyInsurance/AssetWarranties.py`
+  - [ ] `apps/assets/forms/AssetWarrantyInsurance/AssetWarranties.py`
+  - [ ] `apps/assets/views/AssetWarrantyInsurance/AssetWarranties.py` (CRUD + activate + renew + void)
+  - [ ] `apps/assets/urls/AssetWarrantyInsurance/AssetWarranties.py`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarranty/list.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarranty/detail.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarranty/form.html`
+- [ ] **Entity 2: AssetWarrantyClaim (`AWCL`)**
+  - [ ] `apps/assets/models/AssetWarrantyInsurance/AssetWarrantyClaims.py`
+  - [ ] `apps/assets/forms/AssetWarrantyInsurance/AssetWarrantyClaims.py`
+  - [ ] `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py` (CRUD + submit + review + settle + reject)
+  - [ ] `apps/assets/urls/AssetWarrantyInsurance/AssetWarrantyClaims.py`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarrantyclaim/list.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarrantyclaim/detail.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetwarrantyclaim/form.html`
+- [ ] **Entity 3: AssetInsurancePolicy (`AINS`)**
+  - [ ] `apps/assets/models/AssetWarrantyInsurance/AssetInsurancePolicies.py`
+  - [ ] `apps/assets/forms/AssetWarrantyInsurance/AssetInsurancePolicies.py`
+  - [ ] `apps/assets/views/AssetWarrantyInsurance/AssetInsurancePolicies.py` (CRUD + activate + renew + cancel)
+  - [ ] `apps/assets/urls/AssetWarrantyInsurance/AssetInsurancePolicies.py`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsurancepolicy/list.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsurancepolicy/detail.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsurancepolicy/form.html`
+- [ ] **Entity 4: AssetInsuranceClaim (`AICL`)**
+  - [ ] `apps/assets/models/AssetWarrantyInsurance/AssetInsuranceClaims.py`
+  - [ ] `apps/assets/forms/AssetWarrantyInsurance/AssetInsuranceClaims.py`
+  - [ ] `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py` (CRUD + file + proof_of_loss + settle + deny)
+  - [ ] `apps/assets/urls/AssetWarrantyInsurance/AssetInsuranceClaims.py`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsuranceclaim/list.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsuranceclaim/detail.html`
+  - [ ] `templates/assets/assetwarrantyinsurance/assetinsuranceclaim/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all 4 models in `apps/assets/models/AssetWarrantyInsurance/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all 4 forms in `apps/assets/forms/AssetWarrantyInsurance/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetWarrantyInsurance/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetWarrantyInsurance/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.8 models (`_seed_tenant_11_8`)
+- [ ] Add `LIVE_LINKS["11.8"]` in `apps/core/navigation.py`:
+  ```python
+  "11.8": {
+      "Warranty Registration & Tracking": "assets:asset_warranty_list",
+      "Warranty Claim Processing": "assets:asset_warranty_claim_list",
+      "Insurance Policy Management": "assets:asset_insurance_policy_list",
+      "Claim Filing & Settlement": "assets:asset_insurance_claim_list",
+      "Extended Warranty & Service Contracts": "assets:asset_warranty_list",
+      # Extra live leaves & aliases
+      "Asset Warranties": "assets:asset_warranty_list",
+      "Warranty Claims": "assets:asset_warranty_claim_list",
+      "Insurance Policies": "assets:asset_insurance_policy_list",
+      "Insurance Claims": "assets:asset_insurance_claim_list",
+      "Warranty & Insurance Management": "assets:asset_warranty_list",
+  },
+  ```
+- [ ] Run `makemigrations assets` (generating incremental migration `0012_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_8.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.8.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_asset_warranty_insurance_models.py`
+- [ ] `test_asset_warranty_insurance_forms.py`
+- [ ] `test_asset_warranty_insurance_views.py`
+- [ ] `test_asset_warranty_insurance_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.8 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.8.md` (or declare None)
+
+---
+
+## Later Passes / Deferred
+
+- **ACORD XML & EDI Electronic Claim Transmission**: Automated machine-to-machine filing of insurance claims and First Notice of Loss (FNOL) via ACORD 140 / X12 837 EDI feeds deferred to enterprise clearinghouse integration pass.
+- **OEM Direct Warranty API Connectors**: Direct automated REST/SOAP API integration with manufacturer warranty tracking systems (Caterpillar, Komatsu, John Deere, Dell, Lenovo) deferred until external vendor gateway framework is deployed.
+- **IoT Shock & Crash Automated Claim Filing**: Telematics and condition monitoring streaming gateways triggering automatic First Notice of Loss upon catastrophic impact or high G-force events deferred to future IoT streaming gateway phase.
+- **Geospatial GIS Hazard Exposure Modeling**: Automated calculation of aggregate asset exposure across flood, earthquake, and hurricane hazard boundaries deferred to dedicated spatial risk analytics pass.
+- **Subrogation Legal Suit Tracking**: Specialized legal workflow tracking against third-party tortfeasors for subrogated insurance recovery deferred to general legal contracts management module.
+
+---
+
+## Review & Close-Out Summary (11.8 Warranty & Insurance Management)
+
+*(To be filled during Phase 7 Close-Out)*
