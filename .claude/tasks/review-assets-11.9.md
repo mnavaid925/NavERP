@@ -111,7 +111,7 @@
   - **Issue:** Forms do not validate that selected `fixed_asset` matches parent `disposal_request.fixed_asset`, or that `retired_fixed_asset != replacement_fixed_asset` in trade-in.
   - **Fix:** In form `clean()`, validate that `fixed_asset == disposal_request.fixed_asset` and ensure `retired_fixed_asset != replacement_fixed_asset`.
 
-- [ ] **M2: Defensive String Concatenation on Notes Fields**
+- [x] **M2: Defensive String Concatenation on Notes Fields** — fixed (commits 8912d014, 5f720d8d)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:231`
     - `apps/assets/views/AssetDisposal/AssetScrapSalvages.py:232`
