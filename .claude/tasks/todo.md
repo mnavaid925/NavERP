@@ -7,6 +7,176 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.11: Compliance & Regulatory Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.11.md` (2026-11-10)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.9.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0012_assetdisposalrequest_assetinsurancepolicy_and_more.py` (from 11.8/11.9), so **11.11 claims `0013_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.11.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetCompliance/<Entity>.py`
+> Template folder name: `templates/assets/assetcompliance/{asset_compliance_framework,asset_compliance_audit,asset_permit_license,asset_compliance_incident}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Compliance & Regulatory Multi-Tenant Base & Isolation (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational plant machinery, production equipment, and facilities infrastructure in `apps/scm` via string FK (`"scm.Asset"`), supporting regulatory permit linking, equipment audit scoping, and statutory incident logging.
+  - Asset Taxonomy Integration: Reuses `"assets.AssetCategory"` [ACAT-] for category-level regulatory standards applicability (e.g., ASME for Pressure Vessels, EPA for Boilers/Generators).
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for regulatory agencies (EPA, OSHA, DOT), external accredited audit bodies (BSI, TÜV, Bureau Veritas), and municipal permitting authorities.
+    - Reuses `"core.Document"` for attached official operating permits, signed audit checklists, and formal Notices of Violation (NOV).
+    - Reuses `settings.AUTH_USER_MODEL` for internal lead auditors, compliance officers, and CAPA remediation leads.
+  - Collision-free 3-letter / 4-character uppercase prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetComplianceFramework` -> `NUMBER_PREFIX = "ACF"` (format: `ACF-YYYYMM-XXXX`)
+    - `AssetComplianceAudit` -> `NUMBER_PREFIX = "ACA"` (format: `ACA-YYYYMM-XXXX`)
+    - `AssetPermitLicense` -> `NUMBER_PREFIX = "APL"` (format: `APL-YYYYMM-XXXX`)
+    - `AssetComplianceIncident` -> `NUMBER_PREFIX = "ACI"` (format: `ACI-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetComplianceFramework` [ACF-]:
+      - Domain Purpose: Central regulatory standard and compliance mandate catalog (NavERP.md Bullet 1: Regulatory Standards Mapping).
+      - Identity & Categorization: `name` (CharField max_length=255), `code` (CharField max_length=50), `framework_type` (CharField max_length=24, choices: `regulatory`, `statutory`, `voluntary_standard`, `industry_code`, `corporate_policy`, default `regulatory`), `regulatory_agency` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="compliance_frameworks"), `applicable_category` (FK `"assets.AssetCategory"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="compliance_frameworks").
+      - Governance & Cycles: `effective_date` (DateField default=timezone.now), `revision` (CharField max_length=50 default="Current"), `mandatory_audit_cycle_months` (PositiveIntegerField default=12), `readiness_score` (PositiveIntegerField default=100), `description` (TextField blank=True).
+      - Lifecycle & Status: `status` (CharField max_length=20, choices: `draft`, `active`, `under_review`, `deprecated`, default `active`).
+      - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `under_review -> badge-amber`, `deprecated -> badge-muted`.
+      - Framework Type / Badge CSS: `regulatory -> badge-red`, `statutory -> badge-amber`, `voluntary_standard -> badge-info`, `industry_code -> badge-slate`, `corporate_policy -> badge-muted`.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `frameworks`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `type_choices`, `category_list`, `total_frameworks`, `active_count`, `avg_readiness_score`.
+        - Detail: `framework`, `audits`, `incidents`.
+    - `AssetComplianceAudit` [ACA-]:
+      - Domain Purpose: Compliance audit cycles, evidence gathering, checklists, and non-conformance severity scoring (NavERP.md Bullet 2: Audit Preparation & Documentation).
+      - Identity & Scope: `title` (CharField max_length=255), `framework` (FK `"assets.AssetComplianceFramework"`, on_delete=models.PROTECT, related_name="audits"), `asset` (FK `"scm.Asset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="compliance_audits"), `audit_type` (CharField max_length=30, choices: `internal`, `external_regulatory`, `third_party_certification`, `customer_qualification`, default `internal`), `lead_auditor_user` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="led_compliance_audits"), `auditor_party` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="conducted_asset_audits"), `audit_date` (DateField default=timezone.now), `scope_description` (TextField blank=True).
+      - Checkpoint Counts & Evaluation: `total_checkpoints` (PositiveIntegerField default=0), `passed_checkpoints` (PositiveIntegerField default=0), `minor_findings_count` (PositiveIntegerField default=0), `major_findings_count` (PositiveIntegerField default=0), `critical_findings_count` (PositiveIntegerField default=0), `compliance_rating` (CharField max_length=24, choices: `fully_compliant`, `minor_deficiencies`, `major_non_conformance`, `critical_breach`, `not_rated`, default `not_rated`), `summary_findings` (TextField blank=True).
+      - Status & Lifecycle: `status` (CharField max_length=20, choices: `scheduled`, `in_progress`, `under_review`, `completed`, `cancelled`, default `scheduled`), `completed_at` (DateTimeField null=True, blank=True).
+      - Status / Badge CSS: `scheduled -> badge-slate`, `in_progress -> badge-info`, `under_review -> badge-amber`, `completed -> badge-green`, `cancelled -> badge-muted`.
+      - Compliance Rating / Badge CSS: `fully_compliant -> badge-green`, `minor_deficiencies -> badge-amber`, `major_non_conformance -> badge-red`, `critical_breach -> badge-red`, `not_rated -> badge-slate`.
+      - Audit Type / Badge CSS: `internal -> badge-info`, `external_regulatory -> badge-red`, `third_party_certification -> badge-green`, `customer_qualification -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_compliance_audit_start`: transitions `scheduled -> in_progress`.
+        - `asset_compliance_audit_complete`: evaluates findings, updates `completed_at = timezone.now()`, transitions `in_progress/under_review -> completed`.
+      - Form exclusions: `tenant`, `number`, `completed_at`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `audits`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `type_choices`, `rating_choices`, `framework_list`, `total_audits`, `in_progress_count`, `completed_count`, `breaches_count`.
+        - Detail: `audit`, `incidents`.
+    - `AssetPermitLicense` [APL-]:
+      - Domain Purpose: Operating permits, emissions caps, safety certifications, and expiration/renewal monitoring (NavERP.md Bullet 4: License & Permit Tracking).
+      - Identity & Authority: `permit_name` (CharField max_length=255), `permit_number` (CharField max_length=100), `permit_type` (CharField max_length=30, choices: `environmental_emissions`, `safety_operating`, `hazardous_material`, `water_discharge`, `pressure_vessel`, `radiation_device`, `municipal_zoning`, `transportation`, default `safety_operating`), `asset` (FK `"scm.Asset"`, on_delete=models.CASCADE, related_name="permits_licenses"), `issuing_authority` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="issued_asset_permits").
+      - Validity & Renewal: `issue_date` (DateField default=timezone.now), `effective_date` (DateField default=timezone.now), `expiration_date` (DateField), `renewal_lead_days` (PositiveIntegerField default=60), `renewal_fee` (DecimalField max_digits=12, decimal_places=2, default=0.00), `operating_conditions` (TextField blank=True).
+      - Status & Lifecycle: `status` (CharField max_length=20, choices: `active`, `pending_renewal`, `under_review`, `expired`, `suspended`, `revoked`, default `active`).
+      - Status / Badge CSS: `active -> badge-green`, `pending_renewal -> badge-amber`, `under_review -> badge-info`, `expired -> badge-red`, `suspended -> badge-red`, `revoked -> badge-muted`.
+      - Permit Type / Badge CSS: `environmental_emissions -> badge-amber`, `safety_operating -> badge-green`, `hazardous_material -> badge-red`, `water_discharge -> badge-info`, `pressure_vessel -> badge-slate`, `radiation_device -> badge-red`, `municipal_zoning -> badge-slate`, `transportation -> badge-info`.
+      - Business Logic & Actions:
+        - `asset_permit_license_renew`: records renewal submission, sets status to `active` or `pending_renewal`.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `permits`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `type_choices`, `authority_list`, `total_permits`, `active_count`, `expiring_soon_count`, `expired_count`.
+        - Detail: `permit`, `incidents`.
+    - `AssetComplianceIncident` [ACI-]:
+      - Domain Purpose: Statutory violation logging, Notices of Violation (NOV), citations, penalty fine tracking, and CAPA remediation (NavERP.md Bullets 3 & 5: Environmental & Safety Compliance & Penalty & Violation Management).
+      - Identity & Incident Details: `title` (CharField max_length=255), `incident_date` (DateTimeField default=timezone.now), `discovery_date` (DateField default=timezone.now), `incident_type` (CharField max_length=30, choices: `notice_of_violation`, `regulatory_citation`, `emissions_exceedance`, `unpermitted_discharge`, `safety_infraction`, `failed_inspection`, `internal_audit_breach`, default `safety_infraction`), `severity` (CharField max_length=24, choices: `de_minimis`, `other_than_serious`, `serious`, `repeat`, `willful`, `imminent_danger`, default `serious`).
+      - Cross-Links: `asset` (FK `"scm.Asset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="compliance_incidents"), `permit` (FK `"assets.AssetPermitLicense"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="incidents"), `audit` (FK `"assets.AssetComplianceAudit"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="incidents"), `enforcement_agency` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="cited_compliance_incidents"), `citation_reference` (CharField max_length=100 blank=True).
+      - Financial Exposure & Fine Settlement: `fine_assessed` (DecimalField max_digits=14, decimal_places=2, default=0.00), `fine_paid` (DecimalField max_digits=14, decimal_places=2, default=0.00), `fine_payment_date` (DateField null=True, blank=True).
+      - Investigation & CAPA: `root_cause` (CharField max_length=30, choices: `mechanical_failure`, `human_error`, `inadequate_procedure`, `lack_of_maintenance`, `measurement_error`, `external_factor`, default `mechanical_failure`), `root_cause_analysis` (TextField blank=True), `corrective_action_plan` (TextField blank=True), `assigned_investigator` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="investigated_compliance_incidents"), `target_resolution_date` (DateField null=True, blank=True), `actual_resolution_date` (DateField null=True, blank=True).
+      - Status & Lifecycle: `status` (CharField max_length=24, choices: `open`, `under_investigation`, `capa_in_progress`, `under_agency_review`, `appealed`, `resolved`, `closed`, default `open`).
+      - Status / Badge CSS: `open -> badge-red`, `under_investigation -> badge-amber`, `capa_in_progress -> badge-info`, `under_agency_review -> badge-amber`, `appealed -> badge-slate`, `resolved -> badge-green`, `closed -> badge-muted`.
+      - Severity / Badge CSS: `de_minimis -> badge-slate`, `other_than_serious -> badge-info`, `serious -> badge-amber`, `repeat -> badge-red`, `willful -> badge-red`, `imminent_danger -> badge-red`.
+      - Incident Type / Badge CSS: `notice_of_violation -> badge-red`, `regulatory_citation -> badge-red`, `emissions_exceedance -> badge-amber`, `unpermitted_discharge -> badge-red`, `safety_infraction -> badge-amber`, `failed_inspection -> badge-info`, `internal_audit_breach -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_compliance_incident_resolve`: records resolution date, verifies CAPA, transitions to `resolved`.
+        - `asset_compliance_incident_close`: marks incident formally closed after fine settlement and agency acceptance.
+      - Form exclusions: `tenant`, `number`, `actual_resolution_date`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `incidents`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `severity_choices`, `type_choices`, `agency_list`, `total_incidents`, `open_count`, `critical_severity_count`, `total_fines_assessed`, `total_fines_paid`.
+        - Detail: `incident`.
+
+---
+
+## Sub-module 11.11 Implementation Checklist
+
+- [x] **Phase 1: Research**
+  - [x] Competitive market research of 8 leading EAM/EHS/Compliance suites (`.claude/tasks/research-assets-11.11.md`)
+  - [x] Commit research catalog
+
+- [ ] **Phase 2: Planning & Specification**
+  - [x] Checkable implementation plan in `.claude/tasks/todo.md`
+  - [ ] Commit `todo.md`
+  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.11.md`
+  - [ ] Commit contract file
+
+- [ ] **Phase 3: Serial Build (Entity by Entity)**
+  - [ ] **Entity 1: `AssetComplianceFramework`**
+    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceFrameworks.py`
+    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceFrameworks.py`
+    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py`
+    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceFrameworks.py`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/list.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/detail.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_framework/form.html`
+  - [ ] **Entity 2: `AssetComplianceAudit`**
+    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceAudits.py`
+    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py`
+    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceAudits.py`
+    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceAudits.py`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/list.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/detail.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_audit/form.html`
+  - [ ] **Entity 3: `AssetPermitLicense`**
+    - [ ] `apps/assets/models/AssetCompliance/AssetPermitLicenses.py`
+    - [ ] `apps/assets/forms/AssetCompliance/AssetPermitLicenses.py`
+    - [ ] `apps/assets/views/AssetCompliance/AssetPermitLicenses.py`
+    - [ ] `apps/assets/urls/AssetCompliance/AssetPermitLicenses.py`
+    - [ ] `templates/assets/assetcompliance/asset_permit_license/list.html`
+    - [ ] `templates/assets/assetcompliance/asset_permit_license/detail.html`
+    - [ ] `templates/assets/assetcompliance/asset_permit_license/form.html`
+  - [ ] **Entity 4: `AssetComplianceIncident`**
+    - [ ] `apps/assets/models/AssetCompliance/AssetComplianceIncidents.py`
+    - [ ] `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py`
+    - [ ] `apps/assets/views/AssetCompliance/AssetComplianceIncidents.py`
+    - [ ] `apps/assets/urls/AssetCompliance/AssetComplianceIncidents.py`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/list.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/detail.html`
+    - [ ] `templates/assets/assetcompliance/asset_compliance_incident/form.html`
+  - [ ] **Integrate**
+    - [ ] Re-export all 4 entities in `apps/assets/models/__init__.py`
+    - [ ] Re-export all forms in `apps/assets/forms/__init__.py`
+    - [ ] Re-export all views in `apps/assets/views/__init__.py`
+    - [ ] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
+    - [ ] Register all 4 models in `apps/assets/admin.py`
+    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.11 seed data
+    - [ ] Wire `LIVE_LINKS["11.11"]` in `apps/core/navigation.py`
+    - [ ] Run `makemigrations assets` (claims `0013_...`)
+    - [ ] Run `migrate`
+    - [ ] Run `seed_assets` twice (idempotency check)
+    - [ ] Run `manage.py check`
+  - [ ] **Smoke Test**
+    - [ ] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
+
+- [ ] **Phase 4: Six Reviewers (Strictly Serial)**
+  - [ ] 1. `code-reviewer`
+  - [ ] 2. `explorer`
+  - [ ] 3. `frontend-reviewer`
+  - [ ] 4. `performance-reviewer`
+  - [ ] 5. `qa-smoke-tester`
+  - [ ] 6. `security-reviewer`
+  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.11.md` and commit
+
+- [ ] **Phase 5: Code Fixer**
+  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+
+- [ ] **Phase 6: Comprehensive Test Suite**
+  - [ ] Write `apps/assets/tests/test_compliance_models.py`
+  - [ ] Write `apps/assets/tests/test_compliance_forms.py`
+  - [ ] Write `apps/assets/tests/test_compliance_views.py`
+  - [ ] Write `apps/assets/tests/test_compliance_security.py`
+  - [ ] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green
+
+- [ ] **Phase 7: Documentation & Close-Out**
+  - [ ] Update `README.md`
+  - [ ] Update `.claude/skills/assets/SKILL.md`
+  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.11.md`
+  - [ ] Update close-out in `todo.md`
+
+---
 # Sub-module 11.9: Asset Disposal & Retirement (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.9.md` (2026-11-10)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, and 11.7.
