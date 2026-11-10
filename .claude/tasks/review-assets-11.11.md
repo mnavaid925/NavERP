@@ -20,7 +20,7 @@
   - **Issue**: Views call `write_audit_log(request.tenant, request.user, action, ModelName, pk, message)` (6 arguments) instead of `write_audit_log(user, obj, action, changes=None, tenant=None)`. Causes `TypeError` / HTTP 500 on every create, edit, delete, and workflow transition.
   - **Fix**: Update all 17 call sites to pass `write_audit_log(request.user, instance, action, changes=..., tenant=request.tenant)`.
 
-- [ ] **C2: Missing User Foreign-Key Scoping in Form `reject_foreign` (Cross-Tenant IDOR Risk)**
+- [x] **C2: Missing User Foreign-Key Scoping in Form `reject_foreign` (Cross-Tenant IDOR Risk)**
   - **Files**:
     - `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py:63` (`lead_auditor_user`)
     - `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py:71` (`assigned_investigator`)
