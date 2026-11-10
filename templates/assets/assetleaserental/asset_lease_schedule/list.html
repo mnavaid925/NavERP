@@ -122,7 +122,7 @@
                     <td>{{ sch.due_date|date:"Y-m-d" }}</td>
                     <td class="font-medium">${{ sch.payment_amount|floatformat:2 }}</td>
                     <td class="font-mono text-xs text-danger">${{ sch.interest_expense|floatformat:2 }}</td>
-                    <td class="font-mono text-xs text-success">${{ sch.principal_reduction|floatformat:2 }}</td>
+                    <td class="font-mono text-xs text-ok">${{ sch.principal_reduction|floatformat:2 }}</td>
                     <td class="font-mono text-xs font-semibold">${{ sch.ending_liability|floatformat:2 }}</td>
                     <td>
                         <span class="badge {{ sch.status_css }}">
