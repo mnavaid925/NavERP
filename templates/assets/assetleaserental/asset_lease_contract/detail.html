@@ -169,15 +169,15 @@
                 </div>
                 <div>
                     <dt class="text-muted">Fair Market Value (FMV)</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.fair_market_value|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.fair_market_value is not None %}${{ lease.fair_market_value|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Initial Direct Costs</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.initial_direct_costs|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.initial_direct_costs is not None %}${{ lease.initial_direct_costs|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Lease Incentives Received</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.lease_incentives|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.lease_incentives is not None %}${{ lease.lease_incentives|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Initial Lease Liability</dt>
@@ -189,11 +189,11 @@
                 </div>
                 <div>
                     <dt class="text-muted">Residual Value Guarantee</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.residual_value_guarantee|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.residual_value_guarantee is not None %}${{ lease.residual_value_guarantee|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Purchase Option Price</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.purchase_option_price|floatformat:2|default:"N/A" }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.purchase_option_price is not None %}${{ lease.purchase_option_price|floatformat:2 }}{% else %}N/A{% endif %}</dd>
                 </div>
             </dl>
         </div>
