@@ -226,6 +226,9 @@ def asset_insurance_policy_activate(request, pk):
 @require_POST
 def asset_insurance_policy_renew(request, pk):
     policy = get_object_or_404(AssetInsurancePolicy, pk=pk, tenant=request.tenant)
+    if policy.status not in ["active", "pending_renewal", "expired"]:
+        messages.warning(request, f"Policy {policy.number} cannot be renewed in its current state ({policy.get_status_display()}).")
+        return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
     with transaction.atomic():
         base_date = max(policy.expiration_date, timezone.now().date())
         policy.expiration_date = base_date + timedelta(days=365)
