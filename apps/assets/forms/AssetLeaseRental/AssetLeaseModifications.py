@@ -63,4 +63,26 @@ class AssetLeaseModificationForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["lease_contract", "requested_by"])
+
+        rate = cleaned.get("revised_discount_rate_pct")
+        if rate is not None and (rate < 0 or rate > 100):
+            self.add_error("revised_discount_rate_pct", "Discount rate must be between 0% and 100%.")
+
+        term = cleaned.get("revised_term_months")
+        if term is not None and (term < 1 or term > 600):
+            self.add_error("revised_term_months", "Revised lease term must be between 1 and 600 months.")
+
+        non_negative_fields = [
+            "prior_lease_liability",
+            "revised_lease_liability",
+            "prior_rou_asset_value",
+            "revised_rou_asset_value",
+            "impairment_loss_recognized",
+            "revised_payment_amount",
+        ]
+        for f in non_negative_fields:
+            val = cleaned.get(f)
+            if val is not None and val < 0:
+                self.add_error(f, "Amount cannot be negative.")
+
         return cleaned
