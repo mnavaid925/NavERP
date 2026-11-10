@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Lease Schedule {{ schedule.number }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_schedule_list' %}">Schedules</a>
+            <span>/</span>
+            <span>{{ schedule.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ schedule.number }} (Period {{ schedule.period_number }})</h1>
+            <span class="badge {{ schedule.status_css }}">{{ schedule.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex gap-2">
+        {% if schedule.status != 'paid' %}
+        <form method="post" action="{% url 'assets:asset_lease_schedule_mark_paid' schedule.pk %}" class="flex items-center gap-2">
+            {% csrf_token %}
+            <input type="text" name="payment_reference" placeholder="Check/Wire/ACH ref..." class="form-input text-xs py-1" style="width: 170px;">
+            <button type="submit" class="btn btn-primary" title="Record payment settlement">
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Mark Paid
+            </button>
+        </form>
+        {% endif %}
+        {% if schedule.status == 'scheduled' %}
+        <form method="post" action="{% url 'assets:asset_lease_schedule_accrue' schedule.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline" title="Book monthly interest & ROU depreciation accrual">
+                <i data-lucide="clock" class="w-4 h-4 me-1"></i> Accrue
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_lease_schedule_edit' schedule.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_lease_schedule_delete' schedule.pk %}" class="inline" onsubmit="return confirm('Delete schedule line {{ schedule.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Due Date</div>
+            <div class="stat-value text-lg">{{ schedule.due_date|date:"Y-m-d" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Payment Amount</div>
+            <div class="stat-value">${{ schedule.payment_amount|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Interest Expense</div>
+            <div class="stat-value">${{ schedule.interest_expense|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="arrow-down-right"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Principal Reduction</div>
+            <div class="stat-value">${{ schedule.principal_reduction|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- Card 1: Installment & Contract Context -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Installment & Contract Details</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                    <dt class="text-muted">Parent Lease Contract</dt>
+                    <dd class="font-medium text-slate-900">
+                        <a href="{% url 'assets:asset_lease_contract_detail' schedule.lease_contract.pk %}" class="text-primary hover:underline">
+                            {{ schedule.lease_contract.number }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Lessor</dt>
+                    <dd class="font-medium text-slate-900">{{ schedule.lease_contract.lessor.name }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Period Number</dt>
+                    <dd class="font-bold text-slate-900">Period {{ schedule.period_number }} of {{ schedule.lease_contract.total_periods }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Payment Frequency</dt>
+                    <dd class="font-medium text-slate-900">{{ schedule.lease_contract.get_payment_frequency_display }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Payment Due Date</dt>
+                    <dd class="font-medium text-slate-900">{{ schedule.due_date|date:"Y-m-d" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Status</dt>
+                    <dd><span class="badge {{ schedule.status_css }}">{{ schedule.get_status_display }}</span></dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Card 2: Financial Amortization Breakdown -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Actuarial Amortization Breakdown</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                    <dt class="text-muted">Beginning Lease Liability</dt>
+                    <dd class="font-mono text-slate-900">${{ schedule.beginning_liability|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Ending Lease Liability</dt>
+                    <dd class="font-mono font-bold text-slate-900">${{ schedule.ending_liability|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Interest Accretion</dt>
+                    <dd class="font-mono text-danger">${{ schedule.interest_expense|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Principal Liability Reduction</dt>
+                    <dd class="font-mono text-success font-semibold">${{ schedule.principal_reduction|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">ROU Depreciation</dt>
+                    <dd class="font-mono text-slate-900">${{ schedule.rou_depreciation|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Ending ROU Asset Value</dt>
+                    <dd class="font-mono text-slate-900">${{ schedule.ending_rou_asset_value|floatformat:2 }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Card 3: Settlement & Payment Details -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Disbursement & Settlement Information</h2>
+    </div>
+    <div class="card-body">
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-4 text-sm mb-4">
+            <div>
+                <dt class="text-muted">Payment Reference</dt>
+                <dd class="font-medium text-slate-900">{{ schedule.payment_reference|default:"Not Paid Yet" }}</dd>
+            </div>
+            <div>
+                <dt class="text-muted">Settlement Date</dt>
+                <dd class="font-medium text-slate-900">{{ schedule.paid_date|date:"Y-m-d"|default:"Pending" }}</dd>
+            </div>
+            <div>
+                <dt class="text-muted">Created Timestamp</dt>
+                <dd class="font-medium text-slate-900">{{ schedule.created_at|date:"Y-m-d H:i" }}</dd>
+            </div>
+        </dl>
+        {% if schedule.notes %}
+        <div class="text-sm bg-slate-50 p-3 rounded border border-slate-200">
+            <span class="font-medium">Remarks:</span> {{ schedule.notes }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
