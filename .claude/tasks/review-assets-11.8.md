@@ -88,3 +88,35 @@ None.
 - Header KPI metrics computed in a single `.aggregate()` call with conditional `filter=Q(...)`.
 - Clean `__str__` implementations without FK traversal (L18 guard).
 - Composite multi-tenant indexes on `(tenant, status)`, `(tenant, date)`, and `UniqueConstraint(tenant, number)`.
+
+## 5. QA Smoke Tester
+**Verdict:** FAIL (1 Critical finding blocking all mutation/action endpoints with HTTP 500, 0 Important, 0 Minor).
+
+### Critical
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarranties.py` (lines 135, 164, 192, 216, 238, 257)
+- `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py` (lines 139, 168, 196, 225, 244, 287, 321)
+- `apps/assets/views/AssetWarrantyInsurance/AssetInsurancePolicies.py` (lines 136, 165, 193, 217, 239, 258)
+- `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py` (lines 141, 170, 198, 227, 247, 285, 311)
+  — **`write_audit_log()` Signature Mismatch Crashes All Mutations with 500 (`TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`)**:
+  All 26 call sites across 11.8 view modules invoke `write_audit_log(tenant=request.tenant, user=request.user, action="...", model_name="...", object_id=..., details=...)`. However, `apps.core.utils.write_audit_log` defines signature `write_audit_log(user, obj, action, changes=None, tenant=None)`. The unexpected keyword argument `'model_name'` causes an unhandled `TypeError` (HTTP 500) whenever ANY record is created, edited, deleted, activated, renewed, voided, submitted, reviewed, settled, rejected, cancelled, adjuster-assigned, proof-filed, or denied.
+  **Fix:** Update all 26 call sites across all 4 view files to match the authoritative signature:
+  `write_audit_log(user=request.user, obj=instance, action="<verb>", changes="<details>", tenant=request.tenant)` (with `<verb>` <= 10 characters or short code).
+
+### Important
+None.
+
+### Minor
+None.
+
+### Done Well
+- **URL & Page Coverage (107/107 checks executed):**
+  - All 4 list views (`asset_warranty_list`, `asset_warranty_claim_list`, `asset_insurance_policy_list`, `asset_insurance_claim_list`) and module landing page (`assets:overview`) render status 200 with zero template comment leaks (`{#` / `{% comment`), valid page `<title>` tags, and functional search / choice filters.
+  - Robust junk-parameter handling across all lists: non-existent strings and out-of-range pages return HTTP 200 cleanly without 500 errors.
+  - Page 2 pagination verified cleanly on all list views.
+  - All 6 create views (including query-param pre-populated forms `?warranty=` and `?policy=`) render clean forms.
+  - All 8 detail and edit views render status 200; sampled object identifiers (`AWAR-00001`, `AWCL-00002`, `AINS-00001`, `AICL-00002`) verified present in rendered HTML.
+- **HTTP Method Enforcement:**
+  - All 18 action/delete endpoints decorated with `@require_POST` correctly reject GET requests with HTTP 405 Method Not Allowed.
+- **Cross-Tenant IDOR Security (25/25 vectors blocked):**
+  - Tenant admin `admin_acme` attempting to view detail, view edit, or POST action/delete against Globex records (`AWAR-00001`, `AWCL-00002`, `AINS-00001`, `AICL-00002` with Globex PKs) consistently and safely returns HTTP 404 across 100% of routes.
+
