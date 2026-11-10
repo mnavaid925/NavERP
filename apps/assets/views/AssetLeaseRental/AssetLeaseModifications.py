@@ -233,6 +233,7 @@ def asset_lease_modification_approve(request, pk):
 
         if modification.modification_type == "full_termination":
             contract.status = "terminated"
+            contract.payment_schedules.filter(status="scheduled").update(status="cancelled")
         else:
             contract.status = "modified"
 
