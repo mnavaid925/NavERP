@@ -23,6 +23,10 @@ from apps.assets.models import (
     AssetIncidentReport,
     AssetInsuranceClaim,
     AssetInsurancePolicy,
+    AssetLeaseBuyAnalysis,
+    AssetLeaseContract,
+    AssetLeaseModification,
+    AssetLeaseSchedule,
     AssetMaintenanceLog,
     AssetMaintenanceRequest,
     AssetMaintenanceSchedule,
@@ -362,6 +366,39 @@ class AssetComplianceIncidentAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "asset", "permit", "audit", "enforcement_agency", "assigned_investigator")
     list_filter = ("status", "severity", "incident_type", "root_cause")
     search_fields = ("number", "title", "citation_reference", "asset__code")
+
+
+@admin.register(AssetLeaseContract)
+class AssetLeaseContractAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "lessor", "classification", "payment_amount", "current_lease_liability", "status", "tenant")
+    list_select_related = ("tenant", "lessor", "asset", "category", "fixed_asset")
+    list_filter = ("status", "classification", "payment_frequency", "payment_timing")
+    search_fields = ("number", "title", "master_lease_agreement_ref", "lessor__name")
+
+
+@admin.register(AssetLeaseSchedule)
+class AssetLeaseScheduleAdmin(admin.ModelAdmin):
+    list_display = ("number", "lease_contract", "period_number", "due_date", "payment_amount", "interest_expense", "principal_reduction", "ending_liability", "status", "tenant")
+    list_select_related = ("tenant", "lease_contract", "lease_contract__lessor")
+    list_filter = ("status",)
+    search_fields = ("number", "payment_reference", "lease_contract__number")
+
+
+@admin.register(AssetLeaseModification)
+class AssetLeaseModificationAdmin(admin.ModelAdmin):
+    list_display = ("number", "lease_contract", "modification_type", "effective_date", "liability_adjustment", "status", "tenant")
+    list_select_related = ("tenant", "lease_contract", "requested_by", "approved_by")
+    list_filter = ("status", "modification_type")
+    search_fields = ("number", "justification", "lease_contract__number")
+
+
+@admin.register(AssetLeaseBuyAnalysis)
+class AssetLeaseBuyAnalysisAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "target_asset_name", "category", "purchase_price", "monthly_lease_payment", "net_advantage_to_leasing", "recommendation", "status", "tenant")
+    list_select_related = ("tenant", "category", "evaluated_by", "approved_by")
+    list_filter = ("status", "recommendation")
+    search_fields = ("number", "title", "target_asset_name")
+
 
 
 
