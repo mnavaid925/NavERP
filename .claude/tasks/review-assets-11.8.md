@@ -40,7 +40,8 @@
     - In settlement/rejection views, assert claim status is in allowed open/review states (e.g. `claim.claim_status in ['submitted', 'under_review']` or `claim.claim_status in ['proof_of_loss_filed', 'under_carrier_review', 'approved_pending_payout', 'adjuster_assigned']`).
     - In edit views, redirect with warning if `claim.claim_status in ['settled_closed', 'rejected', 'settled_paid', 'denied_disputed', 'closed']`.
 
-- [ ] **I3: Detail View Chained FK Traversal on Related Parties and Currency Causes Extra Queries**
+- [x] **I3: Detail View Chained FK Traversal on Related Parties and Currency Causes Extra Queries**
+  - **Status:** [x] fixed — prefetch chained FKs on detail views (e0df2e2f, f332f737)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:99-111`
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:100-112`
