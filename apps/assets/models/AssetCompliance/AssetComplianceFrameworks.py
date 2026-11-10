@@ -113,6 +113,7 @@ class AssetComplianceFramework(TenantNumbered):
             models.Index(fields=["tenant", "status"], name="idx_acf_ten_stat"),
             models.Index(fields=["tenant", "framework_type"], name="idx_acf_ten_type"),
             models.Index(fields=["tenant", "code"], name="idx_acf_ten_code"),
+            models.Index(fields=["tenant", "applicable_category"], name="idx_acf_ten_cat"),
         ]
 
     def __str__(self):
