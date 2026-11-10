@@ -108,7 +108,7 @@
   - **File**: `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:80-96`
   - **Fix**: Include linked incidents via `AssetComplianceIncident.objects.filter(tenant=request.tenant, audit__framework=framework)[:10]` in detail context.
 
-- [ ] **M4: Form Numeric and Date Boundary Validations**
+- [x] **M4: Form Numeric and Date Boundary Validations**
   - **Files**:
     - `apps/assets/forms/AssetCompliance/AssetPermitLicenses.py` (`expiration_date >= effective_date`)
     - `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py` (`passed_checkpoints <= total_checkpoints`)
@@ -127,7 +127,7 @@
   - **Files**: All 4 view files in `apps/assets/views/AssetCompliance/`
   - **Fix**: Use the decorator for delete views (resolving I6 and M7 together).
 
-- [ ] **M8: Incident Form Fine Field Defaults**
+- [x] **M8: Incident Form Fine Field Defaults**
   - **File**: `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py`
   - **Fix**: Default `fine_assessed` and `fine_paid` to `Decimal("0.00")` if left blank.
 
