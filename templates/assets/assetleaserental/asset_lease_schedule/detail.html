@@ -91,7 +91,7 @@
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 <div>
                     <dt class="text-muted">Parent Lease Contract</dt>
-                    <dd class="font-medium text-slate-900">
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">
                         <a href="{% url 'assets:asset_lease_contract_detail' schedule.lease_contract.pk %}" class="text-primary hover:underline">
                             {{ schedule.lease_contract.number }}
                         </a>
@@ -99,19 +99,19 @@
                 </div>
                 <div>
                     <dt class="text-muted">Lessor</dt>
-                    <dd class="font-medium text-slate-900">{{ schedule.lease_contract.lessor.name }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.lease_contract.lessor.name }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Period Number</dt>
-                    <dd class="font-bold text-slate-900">Period {{ schedule.period_number }} of {{ schedule.lease_contract.total_periods }}</dd>
+                    <dd class="font-bold text-slate-900 dark:text-slate-100">Period {{ schedule.period_number }} of {{ schedule.lease_contract.total_periods }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Payment Frequency</dt>
-                    <dd class="font-medium text-slate-900">{{ schedule.lease_contract.get_payment_frequency_display }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.lease_contract.get_payment_frequency_display }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Payment Due Date</dt>
-                    <dd class="font-medium text-slate-900">{{ schedule.due_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.due_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Status</dt>
@@ -130,11 +130,11 @@
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 <div>
                     <dt class="text-muted">Beginning Lease Liability</dt>
-                    <dd class="font-mono text-slate-900">${{ schedule.beginning_liability|floatformat:2 }}</dd>
+                    <dd class="font-mono text-slate-900 dark:text-slate-100">${{ schedule.beginning_liability|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Ending Lease Liability</dt>
-                    <dd class="font-mono font-bold text-slate-900">${{ schedule.ending_liability|floatformat:2 }}</dd>
+                    <dd class="font-mono font-bold text-slate-900 dark:text-slate-100">${{ schedule.ending_liability|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Interest Accretion</dt>
@@ -146,11 +146,11 @@
                 </div>
                 <div>
                     <dt class="text-muted">ROU Depreciation</dt>
-                    <dd class="font-mono text-slate-900">${{ schedule.rou_depreciation|floatformat:2 }}</dd>
+                    <dd class="font-mono text-slate-900 dark:text-slate-100">${{ schedule.rou_depreciation|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Ending ROU Asset Value</dt>
-                    <dd class="font-mono text-slate-900">${{ schedule.ending_rou_asset_value|floatformat:2 }}</dd>
+                    <dd class="font-mono text-slate-900 dark:text-slate-100">${{ schedule.ending_rou_asset_value|floatformat:2 }}</dd>
                 </div>
             </dl>
         </div>
@@ -166,19 +166,19 @@
         <dl class="grid grid-cols-1 sm:grid-cols-3 gap-y-3 gap-x-4 text-sm mb-4">
             <div>
                 <dt class="text-muted">Payment Reference</dt>
-                <dd class="font-medium text-slate-900">{{ schedule.payment_reference|default:"Not Paid Yet" }}</dd>
+                <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.payment_reference|default:"Not Paid Yet" }}</dd>
             </div>
             <div>
                 <dt class="text-muted">Settlement Date</dt>
-                <dd class="font-medium text-slate-900">{{ schedule.paid_date|date:"Y-m-d"|default:"Pending" }}</dd>
+                <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.paid_date|date:"Y-m-d"|default:"Pending" }}</dd>
             </div>
             <div>
                 <dt class="text-muted">Created Timestamp</dt>
-                <dd class="font-medium text-slate-900">{{ schedule.created_at|date:"Y-m-d H:i" }}</dd>
+                <dd class="font-medium text-slate-900 dark:text-slate-100">{{ schedule.created_at|date:"Y-m-d H:i" }}</dd>
             </div>
         </dl>
         {% if schedule.notes %}
-        <div class="text-sm bg-slate-50 p-3 rounded border border-slate-200">
+        <div class="text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">
             <span class="font-medium">Remarks:</span> {{ schedule.notes }}
         </div>
         {% endif %}
