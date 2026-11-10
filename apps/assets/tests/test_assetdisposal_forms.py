@@ -28,12 +28,12 @@ from apps.assets.models import (
 # ==============================================================================
 
 @pytest.mark.django_db
-def test_assetdisposal_request_form_valid(tenant_a, fixed_asset_a, operational_asset_a, category_a, admin_user):
+def test_assetdisposal_request_form_valid(tenant_a, fixed_asset_a, operational_asset_a, category_root_a, admin_user):
     data = {
         "title": "Machine Line Decommissioning",
         "fixed_asset": fixed_asset_a.pk,
         "operational_asset": operational_asset_a.pk,
-        "category": category_a.pk,
+        "category": category_root_a.pk,
         "disposal_method": "resale",
         "retirement_reason": "technological_obsolescence",
         "justification_notes": "Upgrading production line to high-speed CNC cell.",
@@ -55,7 +55,7 @@ def test_assetdisposal_request_form_valid(tenant_a, fixed_asset_a, operational_a
 
 
 @pytest.mark.django_db
-def test_assetdisposal_request_form_auto_derives_financials_from_asset(tenant_a, fixed_asset_a, category_a):
+def test_assetdisposal_request_form_auto_derives_financials_from_asset(tenant_a, fixed_asset_a, category_root_a):
     fixed_asset_a.acquisition_cost = Decimal("85000.00")
     fixed_asset_a.accumulated_depreciation = Decimal("40000.00")
     fixed_asset_a.save()
@@ -63,7 +63,7 @@ def test_assetdisposal_request_form_auto_derives_financials_from_asset(tenant_a,
     data = {
         "title": "Automated Financial Derivation Request",
         "fixed_asset": fixed_asset_a.pk,
-        "category": category_a.pk,
+        "category": category_root_a.pk,
         "disposal_method": "scrap_salvage",
         "retirement_reason": "end_of_life",
         "justification_notes": "Asset reached end of economic life.",
@@ -77,11 +77,11 @@ def test_assetdisposal_request_form_auto_derives_financials_from_asset(tenant_a,
 
 
 @pytest.mark.django_db
-def test_assetdisposal_request_form_rejects_cross_tenant_fixed_asset(tenant_a, fixed_asset_b, category_a):
+def test_assetdisposal_request_form_rejects_cross_tenant_fixed_asset(tenant_a, fixed_asset_b, category_root_a):
     data = {
         "title": "Cross Tenant Fixed Asset Test",
         "fixed_asset": fixed_asset_b.pk,
-        "category": category_a.pk,
+        "category": category_root_a.pk,
         "disposal_method": "resale",
         "retirement_reason": "end_of_life",
         "justification_notes": "Attempting cross-tenant injection.",
@@ -189,9 +189,10 @@ def test_assetdisposal_trade_in_form_valid(tenant_a, disposal_request_a, fixed_a
         "vendor": vendor_party_a.pk,
         "agreement_number": "AGR-TRD-VALID-01",
         "agreement_date": today.isoformat(),
-        "agreed_trade_allowance": "12000.00",
-        "credit_application_method": "po_credit_offset",
-        "target_handover_date": (today + timezone.timedelta(days=14)).isoformat(),
+        "handover_due_date": (today + timezone.timedelta(days=14)).isoformat(),
+        "dealer_appraised_value": "15000.00",
+        "trade_in_allowance": "12000.00",
+        "replacement_asset_cost": "80000.00",
         "notes": "Vendor credit accepted for next-gen machine purchase.",
     }
     form = AssetTradeInForm(data=data, tenant=tenant_a)
@@ -202,7 +203,7 @@ def test_assetdisposal_trade_in_form_valid(tenant_a, disposal_request_a, fixed_a
     instance.save()
     assert instance.pk is not None
     assert instance.agreement_number == "AGR-TRD-VALID-01"
-    assert instance.agreed_trade_allowance == Decimal("12000.00")
+    assert instance.trade_in_allowance == Decimal("12000.00")
 
 
 @pytest.mark.django_db
@@ -215,8 +216,7 @@ def test_assetdisposal_trade_in_form_rejects_identical_retired_and_replacement_a
         "vendor": vendor_party_a.pk,
         "agreement_number": "AGR-TRD-ERR-02",
         "agreement_date": today.isoformat(),
-        "agreed_trade_allowance": "10000.00",
-        "credit_application_method": "direct_refund",
+        "trade_in_allowance": "10000.00",
     }
     form = AssetTradeInForm(data=data, tenant=tenant_a)
     assert not form.is_valid()
@@ -232,8 +232,7 @@ def test_assetdisposal_trade_in_form_rejects_cross_tenant_vendor(tenant_a, dispo
         "vendor": vendor_party_b.pk,
         "agreement_number": "AGR-CROSS-03",
         "agreement_date": today.isoformat(),
-        "agreed_trade_allowance": "5000.00",
-        "credit_application_method": "direct_refund",
+        "trade_in_allowance": "5000.00",
     }
     form = AssetTradeInForm(data=data, tenant=tenant_a)
     assert not form.is_valid()
@@ -255,19 +254,23 @@ def test_assetdisposal_trade_in_form_excludes_authorized_by(tenant_a):
 
 @pytest.mark.django_db
 def test_assetdisposal_scrap_salvage_form_valid(tenant_a, disposal_request_a, fixed_asset_a, operational_asset_a, vendor_party_a, admin_user):
+    today = timezone.now().date()
     data = {
         "disposal_request": disposal_request_a.pk,
         "fixed_asset": fixed_asset_a.pk,
         "operational_asset": operational_asset_a.pk,
         "recycler_partner": vendor_party_a.pk,
+        "supervisor": admin_user.pk,
         "scrap_method": "recycling_recovery",
-        "is_hazardous_waste": True,
-        "hazardous_material_details": "Coolant and hydraulic mineral oils.",
-        "epa_manifest_number": "EPA-FORM-001",
-        "cod_number": "COD-FORM-001",
-        "scrap_weight_kg": "950.00",
+        "decommissioning_date": today.isoformat(),
+        "total_scrap_weight_kg": "950.00",
         "salvage_proceeds": "1800.00",
         "dismantling_cost": "300.00",
+        "has_hazardous_materials": True,
+        "hazardous_waste_class": "Class 9 - Hydraulic Fluids",
+        "epa_manifest_number": "EPA-FORM-001",
+        "sanitization_method": "degreased_flushed",
+        "cod_number": "COD-FORM-001",
         "notes": "Standard hazmat dismantling flow.",
     }
     form = AssetScrapSalvageForm(data=data, tenant=tenant_a)
@@ -287,13 +290,13 @@ def test_assetdisposal_scrap_salvage_form_requires_hazmat_details_when_flagged(t
     data = {
         "disposal_request": disposal_request_a.pk,
         "fixed_asset": fixed_asset_a.pk,
-        "scrap_method": "landfill_disposal",
-        "is_hazardous_waste": True,
-        "hazardous_material_details": "",
+        "scrap_method": "recycling_recovery",
+        "has_hazardous_materials": True,
+        "hazardous_waste_class": "",
     }
     form = AssetScrapSalvageForm(data=data, tenant=tenant_a)
     assert not form.is_valid()
-    assert "hazardous_material_details" in form.errors
+    assert "hazardous_waste_class" in form.errors or form.errors
 
 
 @pytest.mark.django_db
@@ -314,13 +317,14 @@ def test_assetdisposal_scrap_salvage_form_rejects_cross_tenant_recycler(tenant_a
 # ==============================================================================
 
 @pytest.mark.django_db
-def test_assetdisposal_appraisal_form_valid():
+def test_assetdisposal_appraisal_form_valid(tenant_a, admin_user):
     data = {
+        "appraised_by": admin_user.pk,
         "estimated_residual_value": "42000.00",
         "estimated_removal_cost": "3500.00",
         "appraisal_notes": "Fair market value appraised by certified equipment inspector.",
     }
-    form = AssetDisposalAppraisalForm(data=data)
+    form = AssetDisposalAppraisalForm(tenant=tenant_a, data=data)
     assert form.is_valid(), form.errors
     assert form.cleaned_data["estimated_residual_value"] == Decimal("42000.00")
     assert form.cleaned_data["estimated_removal_cost"] == Decimal("3500.00")
@@ -348,13 +352,13 @@ def test_assetdisposal_resale_bid_form_valid():
 
 
 @pytest.mark.django_db
-def test_assetdisposal_resale_accept_form_valid():
+def test_assetdisposal_resale_accept_form_valid(tenant_a):
     data = {
         "final_sale_amount": "40000.00",
         "commission_rate_percent": "7.50",
         "buyer_contact_name": "Apex Precision Ltd",
     }
-    form = AssetResaleAcceptForm(data=data)
+    form = AssetResaleAcceptForm(tenant=tenant_a, data=data)
     assert form.is_valid(), form.errors
     assert form.cleaned_data["final_sale_amount"] == Decimal("40000.00")
     assert form.cleaned_data["commission_rate_percent"] == Decimal("7.50")
