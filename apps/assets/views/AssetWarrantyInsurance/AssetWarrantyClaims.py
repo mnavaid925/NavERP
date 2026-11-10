@@ -122,7 +122,11 @@ def asset_warranty_claim_create(request):
     initial = {}
     warranty_pk = request.GET.get("warranty")
     if warranty_pk and warranty_pk.isdigit():
-        war = AssetWarranty.objects.filter(pk=int(warranty_pk), tenant=request.tenant).first()
+        war = (
+            AssetWarranty.objects.filter(pk=int(warranty_pk), tenant=request.tenant)
+            .select_related("fixed_asset", "operational_asset", "currency")
+            .first()
+        )
         if war:
             initial["warranty"] = war
             initial["fixed_asset"] = war.fixed_asset
