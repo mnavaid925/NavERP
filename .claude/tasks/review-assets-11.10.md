@@ -35,7 +35,7 @@
 
 ## Minor Findings
 
-- [ ] **M1**: Form clean methods lack non-negative and range validation (`apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). Validate non-negative financial amounts and percentages between 0 and 100 in `clean()`.
+- [x] **M1**: Form clean methods lack non-negative and range validation (`apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). Validate non-negative financial amounts and percentages between 0 and 100 in `clean()`.
 - [ ] **M2**: `AssetLeaseModification` model lacks automatic computation of adjustment deltas on `save()` (`apps/assets/models/AssetLeaseRental/AssetLeaseModifications.py`). Implement model `save()` calculation for `liability_adjustment` and `rou_asset_adjustment`.
 - [ ] **M3**: Missing unique constraint on `(tenant, lease_contract, period_number)` in `AssetLeaseSchedule` (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:111-121`). Enforce uniqueness in `AssetLeaseScheduleForm.clean()`.
 - [ ] **M4**: Schedule Create does not validate tenant ownership of `?lease=<id>` GET parameter (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:98-100`). Use `assets_object(request, AssetLeaseContract, int(lease_param))` to validate tenant ownership and 404 on foreign ID.
