@@ -134,12 +134,11 @@ def asset_insurance_policy_create(request):
                     policy.risk_manager = request.user
                 policy.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_insurance_policy.create",
-                    model_name="AssetInsurancePolicy",
-                    object_id=policy.pk,
-                    details=f"Created insurance policy {policy.number} ({policy.policy_number}) - {policy.title}",
+                    obj=policy,
+                    action="create",
+                    changes={"details": f"Created insurance policy {policy.number} ({policy.policy_number}) - {policy.title}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Insurance policy {policy.number} successfully created.")
                 return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
@@ -163,12 +162,11 @@ def asset_insurance_policy_edit(request, pk):
             with transaction.atomic():
                 policy = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_insurance_policy.edit",
-                    model_name="AssetInsurancePolicy",
-                    object_id=policy.pk,
-                    details=f"Updated insurance policy {policy.number}",
+                    obj=policy,
+                    action="update",
+                    changes={"details": f"Updated insurance policy {policy.number}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Insurance policy {policy.number} updated.")
                 return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
@@ -191,12 +189,11 @@ def asset_insurance_policy_delete(request, pk):
     number = policy.number
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_policy.delete",
-            model_name="AssetInsurancePolicy",
-            object_id=policy.pk,
-            details=f"Deleted insurance policy {number}",
+            obj=policy,
+            action="delete",
+            changes={"details": f"Deleted insurance policy {number}"},
+            tenant=request.tenant,
         )
         policy.delete()
         messages.success(request, f"Insurance policy {number} deleted.")
@@ -215,12 +212,11 @@ def asset_insurance_policy_activate(request, pk):
         policy.status = "active"
         policy.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_policy.activate",
-            model_name="AssetInsurancePolicy",
-            object_id=policy.pk,
-            details=f"Activated policy {policy.number}",
+            obj=policy,
+            action="activate",
+            changes={"details": f"Activated policy {policy.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Policy {policy.number} is now in force.")
     return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
@@ -236,12 +232,11 @@ def asset_insurance_policy_renew(request, pk):
         policy.status = "active"
         policy.save(update_fields=["expiration_date", "status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_policy.renew",
-            model_name="AssetInsurancePolicy",
-            object_id=policy.pk,
-            details=f"Renewed policy {policy.number} through {policy.expiration_date}",
+            obj=policy,
+            action="renew",
+            changes={"details": f"Renewed policy {policy.number} through {policy.expiration_date}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Policy {policy.number} renewed through {policy.expiration_date}.")
     return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
@@ -256,12 +251,11 @@ def asset_insurance_policy_cancel(request, pk):
         policy.status = "cancelled"
         policy.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_policy.cancel",
-            model_name="AssetInsurancePolicy",
-            object_id=policy.pk,
-            details=f"Cancelled policy {policy.number}",
+            obj=policy,
+            action="cancel",
+            changes={"details": f"Cancelled policy {policy.number}"},
+            tenant=request.tenant,
         )
         messages.info(request, f"Policy {policy.number} has been cancelled.")
     return redirect("assets:asset_insurance_policy_detail", pk=policy.pk)
