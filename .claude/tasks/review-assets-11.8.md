@@ -116,7 +116,8 @@
   - **Description:** Icon-only action links and buttons specify `title` but lack `aria-label` for assistive technology.
   - **Fix:** Add `aria-label` matching `title` on icon-only interactive elements.
 
-- [ ] **M8: Settlement and Rejection Modal Bodies Lack Dark Mode Styling**
+- [x] **M8: Settlement and Rejection Modal Bodies Lack Dark Mode Styling**
+  - **Status:** [x] fixed — add dark mode utility classes to claim modals (8a3c349d, 3eda9834)
   - **Location:** `templates/assets/assetwarrantyinsurance/{assetwarrantyclaim,assetinsuranceclaim}/detail.html`
   - **Description:** Modals use `bg-white rounded-lg` without dark mode classes.
   - **Fix:** Add `dark:bg-slate-800 dark:text-slate-100`.
