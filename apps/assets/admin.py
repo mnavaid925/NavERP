@@ -6,6 +6,9 @@ from apps.assets.models import (
     AssetCalibrationRecord,
     AssetCapitalization,
     AssetCategory,
+    AssetComplianceAudit,
+    AssetComplianceFramework,
+    AssetComplianceIncident,
     AssetConditionAssessment,
     AssetCriticalityAssessment,
     AssetCustodyLog,
@@ -27,6 +30,7 @@ from apps.assets.models import (
     AssetMovementLog,
     AssetOeeRecord,
     AssetPerformanceScorecard,
+    AssetPermitLicense,
     AssetRequisition,
     AssetRevaluation,
     AssetServiceContract,
@@ -326,6 +330,39 @@ class AssetScrapSalvageAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "fixed_asset", "disposal_request", "recycler_partner")
     list_filter = ("status", "scrap_method", "has_hazardous_materials", "abatement_certified", "data_sanitized")
     search_fields = ("number", "cod_number", "epa_manifest_number", "carrier_name")
+
+
+@admin.register(AssetComplianceFramework)
+class AssetComplianceFrameworkAdmin(admin.ModelAdmin):
+    list_display = ("number", "code", "name", "framework_type", "regulatory_agency", "applicable_category", "readiness_score", "status", "tenant")
+    list_select_related = ("tenant", "regulatory_agency", "applicable_category")
+    list_filter = ("status", "framework_type")
+    search_fields = ("number", "code", "name", "regulatory_agency__name")
+
+
+@admin.register(AssetComplianceAudit)
+class AssetComplianceAuditAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "framework", "asset", "audit_type", "audit_date", "compliance_rating", "status", "tenant")
+    list_select_related = ("tenant", "framework", "asset", "lead_auditor_user", "auditor_party")
+    list_filter = ("status", "audit_type", "compliance_rating")
+    search_fields = ("number", "title", "framework__code", "asset__name")
+
+
+@admin.register(AssetPermitLicense)
+class AssetPermitLicenseAdmin(admin.ModelAdmin):
+    list_display = ("number", "permit_number", "permit_name", "permit_type", "asset", "issuing_authority", "expiration_date", "status", "tenant")
+    list_select_related = ("tenant", "asset", "issuing_authority")
+    list_filter = ("status", "permit_type")
+    search_fields = ("number", "permit_number", "permit_name", "asset__code")
+
+
+@admin.register(AssetComplianceIncident)
+class AssetComplianceIncidentAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "incident_type", "severity", "asset", "enforcement_agency", "fine_assessed", "fine_paid", "status", "tenant")
+    list_select_related = ("tenant", "asset", "permit", "audit", "enforcement_agency", "assigned_investigator")
+    list_filter = ("status", "severity", "incident_type", "root_cause")
+    search_fields = ("number", "title", "citation_reference", "asset__code")
+
 
 
 
