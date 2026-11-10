@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}{{ scrap_salvage.number }} — Scrap & Salvage Work Order — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_scrap_salvage_list' %}">Scrap & Salvage</a>
+            <span>/</span>
+            <span>{{ scrap_salvage.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ scrap_salvage.fixed_asset.name }}</h1>
+            <span class="badge {{ scrap_salvage.status_css }}">{{ scrap_salvage.get_status_display }}</span>
+            <span class="badge {{ scrap_salvage.scrap_method_css }}">{{ scrap_salvage.get_scrap_method_display }}</span>
+            {% if scrap_salvage.has_hazardous_materials %}
+            <span class="badge badge-red">Hazardous Waste</span>
+            {% endif %}
+            {% if scrap_salvage.cod_number %}
+            <span class="badge badge-green">CoD Certified</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-slate-500 mt-1 font-mono">
+            Work Order: {{ scrap_salvage.number }} • Created {{ scrap_salvage.created_at|date:"M d, Y H:i" }}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if scrap_salvage.status in 'draft,dismantling,abatement_in_progress' and not scrap_salvage.abatement_certified and scrap_salvage.has_hazardous_materials %}
+        <button type="button" onclick="document.getElementById('abatement-modal').classList.remove('hidden')" class="btn btn-outline text-amber-700 border-amber-300 hover:bg-amber-50">
+            <i data-lucide="shield-alert" class="w-4 h-4 me-1"></i> Certify Abatement
+        </button>
+        {% endif %}
+
+        {% if scrap_salvage.status in 'dismantling,scrap_transferred' and not scrap_salvage.cod_number %}
+        <button type="button" onclick="document.getElementById('cod-modal').classList.remove('hidden')" class="btn btn-outline text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+            <i data-lucide="file-check" class="w-4 h-4 me-1"></i> Record CoD
+        </button>
+        {% endif %}
+
+        {% if scrap_salvage.status in 'scrap_transferred,certified_destroyed' %}
+        <form method="post" action="{% url 'assets:asset_scrap_salvage_settle' scrap_salvage.pk %}" class="inline" onsubmit="return confirm('Close scrap settlement and synchronize proceeds & costs to disposal request?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">
+                <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Settle Scrap Recovery
+            </button>
+        </form>
+        {% endif %}
+
+        {% if scrap_salvage.status != 'settled' and scrap_salvage.status != 'cancelled' %}
+        <a href="{% url 'assets:asset_scrap_salvage_edit' scrap_salvage.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_scrap_salvage_delete' scrap_salvage.pk %}" class="inline" onsubmit="return confirm('Delete scrap work order {{ scrap_salvage.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Decommissioning Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Scrap & Teardown Specifications</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Scrapped Fixed Asset</div>
+                        <div class="text-sm font-semibold text-slate-800 mt-1">
+                            {{ scrap_salvage.fixed_asset.asset_number }} — {{ scrap_salvage.fixed_asset.name }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Parent Disposal Request</div>
+                        <div class="text-sm font-mono text-slate-800 mt-1">
+                            <a href="{% url 'assets:asset_disposal_request_detail' scrap_salvage.disposal_request.pk %}" class="text-blue-600 hover:underline">
+                                {{ scrap_salvage.disposal_request.number }}
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Plant Machinery Tag</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {{ scrap_salvage.operational_asset.tag_code|default:"No operational asset linked" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Recycling / Scrap Partner</div>
+                        <div class="text-sm font-medium text-slate-800 mt-1">
+                            {{ scrap_salvage.recycler_partner.name|default:"Internal Plant Dismantling Crew" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Decommissioning Date</div>
+                        <div class="text-sm text-slate-700 mt-1">{{ scrap_salvage.decommissioning_date|date:"M d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Completion / Settlement Date</div>
+                        <div class="text-sm text-slate-700 mt-1">{{ scrap_salvage.completion_date|date:"M d, Y"|default:"In Progress" }}</div>
+                    </div>
+                </div>
+
+                {% if scrap_salvage.notes %}
+                <div class="border-t border-slate-100 mt-4 pt-4">
+                    <div class="text-xs text-slate-400 font-medium uppercase mb-1">Teardown Notes & Serial Harvest Log</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ scrap_salvage.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Material Weights & Salvage Revenue -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Recovered Scrap Metal & Material Weights</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Gross Scrap Weight</div>
+                        <div class="text-base font-bold text-slate-900 mt-1 font-mono">{{ scrap_salvage.total_scrap_weight_kg|floatformat:2 }} kg</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Ferrous Steel / Iron</div>
+                        <div class="text-base font-semibold text-slate-800 mt-1 font-mono">{{ scrap_salvage.ferrous_weight_kg|floatformat:2 }} kg</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Non-Ferrous (Cu/Al)</div>
+                        <div class="text-base font-semibold text-amber-800 mt-1 font-mono">{{ scrap_salvage.non_ferrous_weight_kg|floatformat:2 }} kg</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">E-Waste / Circuitry</div>
+                        <div class="text-base font-semibold text-blue-800 mt-1 font-mono">{{ scrap_salvage.e_waste_weight_kg|floatformat:2 }} kg</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                        <div class="text-xs text-slate-500">Gross Salvage Revenue</div>
+                        <div class="text-base font-semibold text-emerald-700 mt-1 font-mono">${{ scrap_salvage.salvage_proceeds|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Scrap metal yard settlement</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Teardown / Rigging Cost</div>
+                        <div class="text-base font-semibold text-red-600 mt-1 font-mono">-${{ scrap_salvage.dismantling_cost|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Crane hire, labor, abatement</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Net Salvage Recovery</div>
+                        <div class="text-lg font-bold mt-1 font-mono {% if scrap_salvage.net_salvage_recovery >= 0 %}text-emerald-700{% else %}text-red-600{% endif %}">
+                            ${{ scrap_salvage.net_salvage_recovery|floatformat:2 }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">Proceeds minus dismantling</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Compliance & Environmental Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Environmental Compliance & Data Sanitization</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 rounded border {% if scrap_salvage.has_hazardous_materials %}bg-amber-50 border-amber-200{% else %}bg-slate-50 border-slate-200{% endif %}">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold uppercase text-slate-700">Hazardous Materials</span>
+                            {% if scrap_salvage.has_hazardous_materials %}
+                            <span class="badge badge-red">Contains Hazardous</span>
+                            {% else %}
+                            <span class="badge badge-green">Non-Hazardous</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-600">
+                            <strong>Class:</strong> {{ scrap_salvage.hazardous_waste_class|default:"None" }}
+                        </div>
+                        <div class="text-xs text-slate-600 mt-1">
+                            <strong>EPA Manifest #:</strong> {{ scrap_salvage.epa_manifest_number|default:"—" }}
+                        </div>
+                        <div class="text-xs text-slate-600 mt-1">
+                            <strong>Abatement Status:</strong>
+                            {% if scrap_salvage.abatement_certified %}
+                            <span class="text-emerald-700 font-semibold">Certified on {{ scrap_salvage.abatement_date|date:"M d, Y" }}</span>
+                            {% else %}
+                            <span class="text-amber-700">Pending Environmental Clearance</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="p-4 rounded border bg-slate-50 border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-semibold uppercase text-slate-700">ITAD Media Sanitization</span>
+                            {% if scrap_salvage.data_sanitized %}
+                            <span class="badge badge-green">Data Sanitized</span>
+                            {% else %}
+                            <span class="badge badge-slate">Not Sanitized / N/A</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-xs text-slate-600">
+                            <strong>Method:</strong> <span class="badge {{ scrap_salvage.sanitization_method_css }}">{{ scrap_salvage.get_sanitization_method_display }}</span>
+                        </div>
+                        <div class="text-xs text-slate-600 mt-1">
+                            <strong>Verified By:</strong> {{ scrap_salvage.sanitization_verified_by|default:"—" }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Certificate of Destruction Info -->
+                <div class="p-4 rounded border bg-emerald-50 border-emerald-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-semibold uppercase text-emerald-800">Certificate of Destruction (CoD) Audit Trail</span>
+                        {% if scrap_salvage.cod_number %}
+                        <span class="badge badge-green">CoD Executed</span>
+                        {% else %}
+                        <span class="badge badge-amber">CoD Pending</span>
+                        {% endif %}
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-slate-700">
+                        <div><strong>CoD Serial #:</strong> {{ scrap_salvage.cod_number|default:"Pending" }}</div>
+                        <div><strong>Execution Date:</strong> {{ scrap_salvage.cod_issue_date|date:"M d, Y"|default:"Pending" }}</div>
+                        <div><strong>Issuing Agency:</strong> {{ scrap_salvage.cod_issuing_agency|default:"Pending" }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Logistics & Documents -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Logistics & Custody Transfer</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Hauling Freight Carrier</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ scrap_salvage.carrier_name|default:"Designated Recycler Fleet" }}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Bill of Lading / Scale Ticket</div>
+                    <div class="text-sm font-mono text-slate-800 mt-0.5">
+                        {{ scrap_salvage.bill_of_lading_number|default:"—" }}
+                    </div>
+                </div>
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Decommissioning Supervisor</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ scrap_salvage.supervisor.get_full_name|default:scrap_salvage.supervisor.username|default:"Unassigned" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Destruction & Environmental Documents</h3>
+            </div>
+            <div class="card-body space-y-3">
+                {% if scrap_salvage.certificate_of_destruction %}
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                    <i data-lucide="award" class="w-6 h-6 text-emerald-600"></i>
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">{{ scrap_salvage.certificate_of_destruction.title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ scrap_salvage.certificate_of_destruction.file_number }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-500 italic">No Certificate of Destruction document uploaded.</div>
+                {% endif %}
+
+                {% if scrap_salvage.hazardous_manifest_doc %}
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                    <i data-lucide="shield-alert" class="w-6 h-6 text-amber-600"></i>
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">{{ scrap_salvage.hazardous_manifest_doc.title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ scrap_salvage.hazardous_manifest_doc.file_number }}</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Certify Abatement -->
+<div id="abatement-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-amber-700">Certify Hazardous Waste Abatement</h3>
+            <button type="button" onclick="document.getElementById('abatement-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_scrap_salvage_certify_abatement' scrap_salvage.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">EPA Uniform Manifest Tracking Number *</label>
+                    {{ abatement_form.epa_manifest_number }}
+                </div>
+                <div>
+                    <label class="form-label">Hazardous Waste Classification Code</label>
+                    {{ abatement_form.hazardous_waste_class }}
+                </div>
+                <div>
+                    <label class="form-label">Remediation / Abatement Verification Notes</label>
+                    {{ abatement_form.abatement_notes }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('abatement-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-amber-600 hover:bg-amber-700 text-white border-amber-600">Certify Abatement</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Record Certificate of Destruction -->
+<div id="cod-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-emerald-700">Record Certificate of Destruction (CoD)</h3>
+            <button type="button" onclick="document.getElementById('cod-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_scrap_salvage_record_cod' scrap_salvage.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Certificate Serial Number *</label>
+                    {{ cert_form.cod_number }}
+                </div>
+                <div>
+                    <label class="form-label">Date of Destruction *</label>
+                    {{ cert_form.cod_issue_date }}
+                </div>
+                <div>
+                    <label class="form-label">Issuing Certified Recycler / ITAD Facility *</label>
+                    {{ cert_form.cod_issuing_agency }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('cod-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">Save Certificate</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
