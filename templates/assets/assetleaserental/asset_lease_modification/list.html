@@ -126,7 +126,7 @@
                     <td>{{ mod.effective_date|date:"Y-m-d" }}</td>
                     <td class="font-mono text-xs">${{ mod.prior_lease_liability|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ mod.revised_lease_liability|floatformat:2 }}</td>
-                    <td class="font-mono text-xs font-semibold {% if mod.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                    <td class="font-mono text-xs font-semibold {% if mod.liability_adjustment >= 0 %}text-danger{% else %}text-ok{% endif %}">
                         ${{ mod.liability_adjustment|floatformat:2 }}
                     </td>
                     <td>
