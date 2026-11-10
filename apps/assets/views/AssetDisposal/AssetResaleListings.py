@@ -188,6 +188,7 @@ def asset_resale_listing_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_resale_listing_delete(request, pk):
     instance = assets_object(request, AssetResaleListing, pk)
