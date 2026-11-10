@@ -189,6 +189,13 @@ def asset_trade_in_delete(request, pk):
 @require_POST
 def asset_trade_in_surrender(request, pk):
     instance = assets_object(request, AssetTradeIn, pk)
+    if instance.status == "equipment_surrendered":
+        messages.info(request, f"Equipment for trade-in {instance.number} has already been surrendered.")
+        return redirect("assets:asset_trade_in_detail", pk=instance.pk)
+    if instance.status not in ["draft", "proposed", "negotiated", "accepted"]:
+        messages.warning(request, f"Trade-in {instance.number} cannot be surrendered from {instance.get_status_display()}.")
+        return redirect("assets:asset_trade_in_detail", pk=instance.pk)
+
     with transaction.atomic():
         instance.surrendered_at = timezone.now()
         instance.status = "equipment_surrendered"
@@ -204,6 +211,9 @@ def asset_trade_in_settle(request, pk):
     instance = assets_object(request, AssetTradeIn, pk)
     if instance.status == "credit_settled":
         messages.info(request, f"Trade-in {instance.number} has already been settled.")
+        return redirect("assets:asset_trade_in_detail", pk=instance.pk)
+    if instance.status not in ["accepted", "equipment_surrendered"]:
+        messages.warning(request, f"Trade-in {instance.number} must be accepted or equipment surrendered before credit settlement.")
         return redirect("assets:asset_trade_in_detail", pk=instance.pk)
 
     with transaction.atomic():
