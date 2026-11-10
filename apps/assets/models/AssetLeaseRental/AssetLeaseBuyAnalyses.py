@@ -275,7 +275,11 @@ class AssetLeaseBuyAnalysis(TenantNumbered):
 
         # Annual loan payment
         if loan_rate > 0 and loan_years > 0:
-            annual_loan_pmt = loan_principal * (loan_rate / (1.0 - (1.0 + loan_rate) ** (-loan_years)))
+            denom = 1.0 - (1.0 + loan_rate) ** (-loan_years)
+            if denom > 1e-9:
+                annual_loan_pmt = loan_principal * (loan_rate / denom)
+            else:
+                annual_loan_pmt = loan_principal / loan_years
         else:
             annual_loan_pmt = loan_principal / loan_years if loan_years > 0 else 0.0
 
@@ -307,8 +311,9 @@ class AssetLeaseBuyAnalysis(TenantNumbered):
 
             # Terminal salvage value recovery in final year
             if y == years:
-                # Salvage recovery is a cash inflow (reduces outflow)
-                after_tax_salvage = salvage * (1.0 - tax_rate)
+                # Under straight-line depreciation down to salvage, book value equals salvage
+                # (no taxable gain/loss on sale at salvage value)
+                after_tax_salvage = salvage
                 net_cash_flow -= after_tax_salvage
                 buy_tco -= salvage
 
@@ -330,13 +335,14 @@ class AssetLeaseBuyAnalysis(TenantNumbered):
         lease_npv = upfront_fee * (1.0 - tax_rate)
         lease_tco = upfront_fee
 
-        for y in range(1, min(years, lease_years) + 1):
+        horizon = min(years, lease_years)
+        for y in range(1, horizon + 1):
             after_tax_rent = annual_lease_pmt * (1.0 - tax_rate)
             after_tax_maint = maint_lease * (1.0 - tax_rate)
             net_lease_cf = after_tax_rent + after_tax_maint
             lease_tco += annual_lease_pmt + maint_lease
 
-            if y == lease_years and buyout_option > 0:
+            if y == horizon and buyout_option > 0:
                 net_lease_cf += buyout_option
                 lease_tco += buyout_option
 
