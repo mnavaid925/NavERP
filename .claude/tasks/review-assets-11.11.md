@@ -100,7 +100,7 @@
   - **File**: `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:53`
   - **Fix**: Change to `round(avg_readiness if avg_readiness is not None else 100)`.
 
-- [ ] **M2: Missing Helper Properties on `AssetComplianceFramework`**
+- [x] **M2: Missing Helper Properties on `AssetComplianceFramework`**
   - **File**: `apps/assets/models/AssetCompliance/AssetComplianceFrameworks.py`
   - **Fix**: Add `@property def is_active(self): return self.status == "active"` and `is_audit_due` property.
 
