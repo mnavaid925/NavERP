@@ -3270,6 +3270,22 @@ LIVE_LINKS = {
         "Certificates of Destruction": "assets:asset_scrap_salvage_list",
         "Asset Disposal & Retirement": "assets:asset_disposal_request_list",
     },
+    "11.10": {
+        "Lease Contract Administration": "assets:asset_lease_contract_list",
+        "Operating vs. Finance Lease Classification": "assets:asset_lease_contract_list",
+        "Lease Payment & Amortization": "assets:asset_lease_schedule_list",
+        "Lease Modification & Termination": "assets:asset_lease_modification_list",
+        "Lease vs. Buy Analysis": "assets:asset_lease_buy_analysis_list",
+        # Plural and convenience aliases
+        "Lease Contracts": "assets:asset_lease_contract_list",
+        "Asset Lease Contracts": "assets:asset_lease_contract_list",
+        "Lease Schedules": "assets:asset_lease_schedule_list",
+        "Payment Schedules": "assets:asset_lease_schedule_list",
+        "Lease Modifications": "assets:asset_lease_modification_list",
+        "Lease vs. Buy Analyses": "assets:asset_lease_buy_analysis_list",
+        "Lease vs Buy Analysis": "assets:asset_lease_buy_analysis_list",
+        "Lease & Rental Management": "assets:asset_lease_contract_list",
+    },
     "11.11": {
         "Regulatory Standards Mapping": "assets:asset_compliance_framework_list",
         "Audit Preparation & Documentation": "assets:asset_compliance_audit_list",
