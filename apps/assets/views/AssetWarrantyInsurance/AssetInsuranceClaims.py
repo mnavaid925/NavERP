@@ -161,6 +161,9 @@ def asset_insurance_claim_create(request):
 @login_required
 def asset_insurance_claim_edit(request, pk):
     claim = get_object_or_404(AssetInsuranceClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status in ["settled_paid", "denied_disputed", "closed"]:
+        messages.warning(request, f"Insurance claim {claim.number} is finalized ({claim.get_claim_status_display()}) and cannot be edited.")
+        return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
     if request.method == "POST":
         form = AssetInsuranceClaimForm(request.POST, instance=claim, tenant=request.tenant)
         if form.is_valid():
@@ -255,6 +258,9 @@ def asset_insurance_claim_file_proof(request, pk):
 @require_POST
 def asset_insurance_claim_settle(request, pk):
     claim = get_object_or_404(AssetInsuranceClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status not in ["proof_of_loss_filed", "under_carrier_review", "approved_pending_payout", "adjuster_assigned"]:
+        messages.warning(request, f"Claim {claim.number} cannot be settled in its current state ({claim.get_claim_status_display()}).")
+        return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
     raw_payout = request.POST.get("settlement_payout_amount", "0.00")
     try:
         payout_amt = Decimal(str(raw_payout).strip()) if raw_payout and str(raw_payout).strip() else Decimal("0.00")
@@ -302,6 +308,9 @@ def asset_insurance_claim_settle(request, pk):
 @require_POST
 def asset_insurance_claim_deny(request, pk):
     claim = get_object_or_404(AssetInsuranceClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status not in ["proof_of_loss_filed", "under_carrier_review", "approved_pending_payout", "adjuster_assigned", "incident_reported"]:
+        messages.warning(request, f"Claim {claim.number} cannot be recorded as denied in its current state ({claim.get_claim_status_display()}).")
+        return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
     notes = request.POST.get("settlement_notes", "").strip()
 
     with transaction.atomic():
