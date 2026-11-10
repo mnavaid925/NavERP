@@ -254,3 +254,28 @@ class AssetDisposalRequest(TenantNumbered):
         ) - (self.net_book_value or Decimal("0.00"))
         self.realized_gain_loss = gain_loss
         return gain_loss
+
+    def complete_disposal(self):
+        """
+        Marks request completed, recalculates gain/loss, sets completion timestamp,
+        and synchronizes FixedAsset and scm.Asset statuses to 'disposed'.
+        """
+        self.calculate_gain_loss()
+        self.status = "completed"
+        self.completed_at = timezone.now()
+        self.save(update_fields=["status", "completed_at", "realized_gain_loss", "updated_at"])
+
+        if self.fixed_asset:
+            fa = self.fixed_asset
+            if hasattr(fa, "status"):
+                fa.status = "disposed"
+                fa.save(update_fields=["status", "updated_at"] if hasattr(fa, "updated_at") else ["status"])
+
+        if self.operational_asset:
+            oa = self.operational_asset
+            if hasattr(oa, "status"):
+                oa.status = "disposed"
+                oa.save(update_fields=["status", "updated_at"] if hasattr(oa, "updated_at") else ["status"])
+
+        return self
+
