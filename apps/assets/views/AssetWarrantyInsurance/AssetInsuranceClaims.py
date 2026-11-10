@@ -139,12 +139,11 @@ def asset_insurance_claim_create(request):
                     claim.claims_officer = request.user
                 claim.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_insurance_claim.create",
-                    model_name="AssetInsuranceClaim",
-                    object_id=claim.pk,
-                    details=f"Created insurance claim {claim.number} under policy {claim.policy.policy_number}",
+                    obj=claim,
+                    action="create",
+                    changes={"details": f"Created insurance claim {claim.number} under policy {claim.policy.policy_number}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Insurance claim {claim.number} filed successfully.")
                 return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
@@ -168,12 +167,11 @@ def asset_insurance_claim_edit(request, pk):
             with transaction.atomic():
                 claim = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_insurance_claim.edit",
-                    model_name="AssetInsuranceClaim",
-                    object_id=claim.pk,
-                    details=f"Updated insurance claim {claim.number}",
+                    obj=claim,
+                    action="update",
+                    changes={"details": f"Updated insurance claim {claim.number}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Insurance claim {claim.number} updated.")
                 return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
@@ -196,12 +194,11 @@ def asset_insurance_claim_delete(request, pk):
     number = claim.number
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_claim.delete",
-            model_name="AssetInsuranceClaim",
-            object_id=claim.pk,
-            details=f"Deleted insurance claim {number}",
+            obj=claim,
+            action="delete",
+            changes={"details": f"Deleted insurance claim {number}"},
+            tenant=request.tenant,
         )
         claim.delete()
         messages.success(request, f"Insurance claim {number} deleted.")
@@ -225,12 +222,11 @@ def asset_insurance_claim_assign_adjuster(request, pk):
             claim.date_reported_to_carrier = timezone.now().date()
         claim.save()
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_claim.assign_adjuster",
-            model_name="AssetInsuranceClaim",
-            object_id=claim.pk,
-            details=f"Assigned adjuster to claim {claim.number}",
+            obj=claim,
+            action="adjuster",
+            changes={"details": f"Assigned adjuster to claim {claim.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Claim {claim.number} updated: Adjuster assigned.")
     return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
@@ -245,12 +241,11 @@ def asset_insurance_claim_file_proof(request, pk):
         claim.proof_of_loss_date = timezone.now().date()
         claim.save(update_fields=["claim_status", "proof_of_loss_date", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_claim.file_proof",
-            model_name="AssetInsuranceClaim",
-            object_id=claim.pk,
-            details=f"Filed sworn proof of loss for claim {claim.number}",
+            obj=claim,
+            action="file_proof",
+            changes={"details": f"Filed sworn proof of loss for claim {claim.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Proof of loss submitted for claim {claim.number}.")
     return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
@@ -283,12 +278,11 @@ def asset_insurance_claim_settle(request, pk):
             claim.settlement_notes = notes
         claim.save()
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_claim.settle",
-            model_name="AssetInsuranceClaim",
-            object_id=claim.pk,
-            details=f"Settled insurance claim {claim.number} with payout {payout_amt}",
+            obj=claim,
+            action="settle",
+            changes={"details": f"Settled insurance claim {claim.number} with payout {payout_amt}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Insurance claim {claim.number} settled and marked paid.")
     return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
@@ -308,12 +302,11 @@ def asset_insurance_claim_deny(request, pk):
             claim.settlement_notes = notes
         claim.save()
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_insurance_claim.deny",
-            model_name="AssetInsuranceClaim",
-            object_id=claim.pk,
-            details=f"Insurance claim {claim.number} recorded as denied",
+            obj=claim,
+            action="deny",
+            changes={"details": f"Insurance claim {claim.number} recorded as denied"},
+            tenant=request.tenant,
         )
         messages.warning(request, f"Insurance claim {claim.number} recorded as denied / under dispute.")
     return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
