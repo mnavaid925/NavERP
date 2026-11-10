@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -165,8 +166,16 @@ def asset_lease_schedule_delete(request, pk):
     schedule = assets_object(request, AssetLeaseSchedule, pk)
     num = schedule.number
     contract_pk = schedule.lease_contract_id
+    next_url = request.POST.get("next") or request.GET.get("next")
+    if not next_url:
+        referer = request.META.get("HTTP_REFERER", "")
+        if "lease-schedules" in referer and "detail" not in referer:
+            next_url = reverse("assets:asset_lease_schedule_list")
+
     if schedule.status == "paid":
         messages.warning(request, f"Cannot delete schedule line {num} because it has already been paid and settled.")
+        if next_url:
+            return redirect(next_url)
         return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
 
     write_audit_log(
@@ -178,6 +187,8 @@ def asset_lease_schedule_delete(request, pk):
     )
     schedule.delete()
     messages.success(request, f"Schedule line {num} deleted.")
+    if next_url:
+        return redirect(next_url)
     return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
 
 
