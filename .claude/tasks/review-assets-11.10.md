@@ -2,89 +2,50 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: IN PROGRESS (Pass 5 of 6 complete)
+**Status**: REVIEW COMPLETE — PENDING PHASE 5 FIXES (6/6 Reviewer Passes Completed)
 
 ---
 
-## Pass 1: Code Reviewer (`code-reviewer`)
+## Critical Findings
 
-### Critical
-- [ ] **CR1**: Contract edit resets current amortized liability and ROU carrying balances to initial (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:351-352`, `apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:156,204-206`). In `calculate_present_value()`, `current_lease_liability` and `current_rou_asset_carrying_value` are set unconditionally to `initial_liability` and `initial_rou`. Only reset if status is draft or no schedules are paid.
-- [ ] **CR2**: Cross-tenant User leakage in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:59,63`) and `AssetLeaseBuyAnalysisForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseBuyAnalyses.py:71-73,77`). `requested_by` and `evaluated_by` querysets are not filtered by `tenant=self.tenant`, and not checked in `reject_foreign`.
-
-### Important
-- [ ] **IR1**: Day-of-month collapse bug in amortization schedule date incrementation (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:459-463`). Clamping `_d` to February length permanently degrades subsequent months' day to 28 instead of returning to 30/31. Store `base_day = first_payment_date.day`.
-- [ ] **IR2**: Missing audit logging on `asset_lease_contract_calculate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:201-213`). Mutating action lacks `write_audit_log`.
-- [ ] **IR3**: Termination and buyout actions do not derecognize or cancel remaining scheduled installments (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:238-242`). Cancel remaining future schedules (`status="scheduled" -> "cancelled"`).
-- [ ] **IR4**: Flawed salvage tax treatment and mismatched horizons in Lease vs. Buy Analysis (`apps/assets/models/AssetLeaseRental/AssetLeaseBuyAnalyses.py:311-312,333,339-342`). Taxing salvage when book value equals salvage incorrectly penalizes buy scenario; buyout option evaluation at `min(years, lease_years)`.
-- [ ] **IR5**: Paid schedules and executed modifications can be deleted without restriction (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:165-180`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:191-206`). Disallow deleting paid schedules and executed modifications.
-
-### Minor
-- [ ] **MR1**: Form clean methods lack non-negative and range validation (`AssetLeaseContracts.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). Add explicit bounds validation in `clean()`.
-- [ ] **MR2**: `AssetLeaseModification` model lacks automatic computation of adjustment deltas on `save()` (`AssetLeaseModifications.py`). Implement model `save()` calculation.
-- [ ] **MR3**: Missing unique constraint on `(tenant, lease_contract, period_number)` in `AssetLeaseSchedule` (`AssetLeaseSchedules.py:111-121`). Enforce uniqueness.
-- [ ] **MR4**: Cross-tenant IDOR check in `asset_lease_schedule_create` GET parameter (`AssetLeaseSchedules.py:98-100`). Validate tenant ownership using `assets_object`.
-- [ ] **MR5**: Deleting a schedule line from schedule list redirects to contract detail (`AssetLeaseSchedules.py:180`). Redirect back to schedule list if invoked from schedule list.
+- [ ] **C1**: Invalid `write_audit_log` call signature causing HTTP 500 on all form submissions and POST mutations across all four view files (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py`, `AssetLeaseSchedules.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). The canonical signature in `apps/core/utils.py:10` is `write_audit_log(user, obj, action, changes=None, tenant=None)`. All 18 mutating call sites pass 6 arguments: `write_audit_log(request.tenant, request.user, "action", "ModelName", instance.pk, f"Message...")`, raising fatal `TypeError: write_audit_log() takes from 3 to 5 positional arguments but 6 were given`. Update all call sites to `write_audit_log(request.user, instance, "action", changes=..., tenant=request.tenant)`.
+- [ ] **C2**: Cross-tenant User leakage in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:59,63`) and `AssetLeaseBuyAnalysisForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseBuyAnalyses.py:71,77`). `requested_by` and `evaluated_by` querysets are set to `User.objects.filter(is_active=True)` without filtering by `tenant=self.tenant`, and both fields are omitted from `reject_foreign`. Users from other tenants leak in dropdowns and foreign users can be associated with local tenant records. Filter by `tenant=self.tenant` and include in `reject_foreign`.
+- [ ] **C3**: Contract edit and re-calculate actions reset current amortized liability and ROU carrying balances to initial inception amounts (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:351-352`, `apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:156,204-206`). In `calculate_present_value()`, `current_lease_liability` and `current_rou_asset_carrying_value` are unconditionally reset to `initial_liability` and `initial_rou`. If an active lease has already settled installments, editing contract notes or title wipes out all amortization progress. Only reset current balances if `self.status == 'draft'` or if no payment schedules have been paid/accrued.
 
 ---
 
-## Pass 2: Explorer (`explorer`)
+## Important Findings
 
-### Critical
-*None.*
-
-### Important
-*None.*
-
-### Minor
-- [ ] **MR6**: `AssetLeaseScheduleAdmin` list_filter lacks temporal filter (`apps/assets/admin.py:383`). Add `due_date` filter for periodic reconciliation in admin.
-- [ ] **MR7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). Cancel button unconditionally navigates to list even when originating from a lease contract detail page via `?lease=<id>`.
-- [ ] **MR8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
-
----
-
-## Pass 3: Frontend Reviewer (`frontend-reviewer`)
-
-### Critical
-*None.*
-
-### Important
-- [ ] **IR6**: Undefined design system badge class `badge-purple` in templates and models (`list.html:135`, `detail.html:19`, `AssetLeaseContracts.py:56,61`, `AssetLeaseModifications.py:51`, `AssetLeaseBuyAnalyses.py:41`). `badge-purple` does not exist in `theme.css`. Replace with valid colour-named badge (e.g. `badge-info` or `badge-slate`).
-- [ ] **IR7**: Non-standard utility classes `text-success` and `text-purple` used in financial displays (`contract/detail.html:41,271,323`, `schedule/list.html:125`, `modification/list.html:129`, etc.). Replace with valid `theme.css` `.text-ok` or `.text-brand`.
-- [ ] **IR8**: Orphan dollar signs and `$N/A` displayed on nullable numeric values (`contract/detail.html:172,196`, `buy_analysis/detail.html:150,154,162`). Guard nullable numeric figures with `{% if ... %}`.
-
-### Minor
-- [ ] **MR9**: Missing `aria-label` on filter and search inputs across all 4 list templates (`contract/list.html:61`, `schedule/list.html:61`, `modification/list.html:54`, `buy_analysis/list.html:54`).
-- [ ] **MR10**: Missing `aria-label` on icon-only table action buttons across all list templates (view, edit, delete).
-- [ ] **MR11**: Missing `scope="col"` on table header `<th>` cells across all list and detail child tables.
-- [ ] **MR12**: Hardcoded light-slate utility classes lacking dark mode contrast variants in cards and detail sections.
+- [ ] **I1**: Day-of-month collapse bug in amortization schedule date incrementation (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:459-463`). Clamping `_d` to February length permanently degrades subsequent months' day to 28 instead of returning to 30/31. Store `base_day = (self.first_payment_date or self.commencement_date).day` outside the loop, and use `_d = min(base_day, calendar.monthrange(_y, _m)[1])`.
+- [ ] **I2**: Undefined design system badge class `badge-purple` in templates and models (`templates/assets/assetleaserental/asset_lease_contract/list.html:135`, `detail.html:19`, `apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:56,61`, `AssetLeaseModifications.py:51`, `AssetLeaseBuyAnalyses.py:41`). `badge-purple` is NOT defined in `theme.css`. Replace with valid colour-named badge (e.g. `badge-info` or `badge-slate`).
+- [ ] **I3**: Non-standard utility classes `text-success` and `text-purple` in financial displays (`contract/detail.html:41,271,323`, `schedule/list.html:125`, `modification/list.html:129`, `buy_analysis/detail.html:55,82,133`). Neither class exists in `theme.css`. Replace with valid `theme.css` classes `.text-ok` and `.text-brand`.
+- [ ] **I4**: Missing audit logging on `asset_lease_contract_calculate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:201-213`). Mutating action updates contract in DB but lacks `write_audit_log`. Add audit logging.
+- [ ] **I5**: Termination and buyout actions do not cancel remaining scheduled installments (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:238-242`). When a lease contract is terminated or bought out, remaining future payment schedules (`status="scheduled"`) must be transitioned to `status="cancelled"`.
+- [ ] **I6**: Paid schedules and executed modifications can be deleted without restriction (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:165-180`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:191-206`). Disallow deleting settled installments (`status == "paid"`) and executed modifications (`status == "executed"`), returning a warning message.
+- [ ] **I7**: Unchecked state re-settlement in `asset_lease_schedule_mark_paid` overwriting contract balances (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:185-215`). Guard against re-submitting `mark_paid` on already paid schedules to prevent reverting parent contract liability to earlier periods.
+- [ ] **I8**: Flawed salvage tax treatment, horizon logic, and potential division-by-zero in Lease vs. Buy Analysis (`apps/assets/models/AssetLeaseRental/AssetLeaseBuyAnalyses.py:278-281,311-312,333,339-342`). Under straight-line depreciation down to salvage, book value equals salvage so tax should not be applied to 100% of salvage; buyout option should be evaluated at `min(years, lease_years)`; guard loan interest rate calculations against division-by-zero or negative exponents.
+- [ ] **I9**: Orphan dollar signs and `$N/A` displayed on nullable numeric fields (`contract/detail.html:172,196`, `buy_analysis/detail.html:150,154,162`). Guard nullable numeric values with `{% if ... %}`.
+- [ ] **I10**: Unbounded `lease_term_months` causing potential DoS and calendar year overflow (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:134-137,421-464`, `apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py:63`). Add `MaxValueValidator(600)` (50 years max) to `lease_term_months` on `AssetLeaseContract` and validate in form.
+- [ ] **I11**: Unbounded full-model QuerySets in filter dropdowns fetching heavy text columns (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:60`, `AssetLeaseModifications.py:68`, `AssetLeaseContracts.py:73`). In filter dropdown querysets, use `.only("id", "number", "title")` and `.only("id", "name")`.
+- [ ] **I12**: Foreign key traversal in model `__str__` creates latent N+1 vulnerability (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:124`, `AssetLeaseModifications.py:194`). In `__str__`, guard with `self.lease_contract.number if self.lease_contract_id else ""`.
+- [ ] **I13**: Schedule generation atomicity and sequence locking (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:406,465-467`). Wrap schedule deletion and schedule creation inside a unified `with transaction.atomic():` block.
+- [ ] **I14**: Missing role/admin authorization on contract activation and modification execution (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:216-247`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:209-265`). Decorate `asset_lease_contract_activate` and `asset_lease_modification_approve` with `@tenant_admin_required`.
 
 ---
 
-## Pass 4: Performance Reviewer (`performance-reviewer`)
+## Minor Findings
 
-### Critical
-*None.*
-
-### Important
-- [ ] **IR9**: Line-by-line `save()` iteration during schedule generation holding prolonged database locks (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:406,465-467`). Wrap deletion and generation inside a unified atomic block and optimize sequence generation.
-- [ ] **IR10**: Unbounded full-model QuerySets in filter dropdowns fetching heavy text columns (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:60`, `AssetLeaseModifications.py:68`, `AssetLeaseContracts.py:73`). Use `.only("id", "number", "title")` and `.only("id", "name")`.
-- [ ] **IR11**: Foreign key traversal in model `__str__` creates latent N+1 vulnerability (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:124`, `AssetLeaseModifications.py:194`). Guard with `self.lease_contract.number if self.lease_contract_id else ""`.
-
-### Minor
-- [ ] **MR13**: Large text fields not deferred in modification and buy-analysis list views (`AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
-- [ ] **MR14**: Unconstrained tenant party querying for lessor filter dropdown (`AssetLeaseContracts.py:73`). Restrict party query to relevant vendor/lessor roles or parties with lease contracts.
-- [ ] **MR15**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
-
----
-
-## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
-
-### Critical
-- [ ] **CR3**: Invalid `write_audit_log` call signature causing HTTP 500 on all form submissions and lifecycle POST mutations (`AssetLeaseContracts.py`, `AssetLeaseSchedules.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). `write_audit_log(user, obj, action, changes=None, tenant=None)` called with 6 arguments instead of canonical signature across 17 mutating views.
-
-### Important
-*None.*
-
-### Minor
-- [ ] **MR16**: Schedule Create does not validate tenant ownership of `?lease=<id>` GET parameter (`AssetLeaseSchedules.py:98-100`). Return 404 when foreign/invalid lease ID is passed (same as MR4).
+- [ ] **M1**: Form clean methods lack non-negative and range validation (`apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). Validate non-negative financial amounts and percentages between 0 and 100 in `clean()`.
+- [ ] **M2**: `AssetLeaseModification` model lacks automatic computation of adjustment deltas on `save()` (`apps/assets/models/AssetLeaseRental/AssetLeaseModifications.py`). Implement model `save()` calculation for `liability_adjustment` and `rou_asset_adjustment`.
+- [ ] **M3**: Missing unique constraint on `(tenant, lease_contract, period_number)` in `AssetLeaseSchedule` (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:111-121`). Enforce uniqueness in `AssetLeaseScheduleForm.clean()`.
+- [ ] **M4**: Schedule Create does not validate tenant ownership of `?lease=<id>` GET parameter (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:98-100`). Use `assets_object(request, AssetLeaseContract, int(lease_param))` to validate tenant ownership and 404 on foreign ID.
+- [ ] **M5**: Deleting a schedule line from schedule list redirects to contract detail (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:180`). Check referer or query param to redirect back to `assets:asset_lease_schedule_list`.
+- [ ] **M6**: Schedule Admin list_filter lacks temporal filter (`apps/assets/admin.py:383`). Add `due_date` filter for periodic reconciliation in admin.
+- [ ] **M7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). If `request.GET.lease` is present, cancel links back to originating contract detail page.
+- [ ] **M8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
+- [ ] **M9**: Accessibility improvements in templates (`templates/assets/assetleaserental/`). Add `aria-label` to filter inputs and action icon buttons, add `scope="col"` to table header cells.
+- [ ] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
+- [ ] **M11**: Large text fields not deferred in modification and buy-analysis list views (`apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
+- [ ] **M12**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
+- [ ] **M13**: Unchecked state transition in `asset_lease_contract_terminate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`). Guard `if lease.status not in ["active", "modified"]:` returning a warning message.
+- [ ] **M14**: Form status exposure allowing direct "executed" bypass in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:29`). Restrict selectable status choices to `("draft", "submitted")` or default to `"draft"`.
