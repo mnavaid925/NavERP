@@ -40,9 +40,9 @@ def asset_disposal_request_list(request):
         qs = qs.filter(
             Q(number__icontains=q)
             | Q(title__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
             | Q(fixed_asset__name__icontains=q)
-            | Q(operational_asset__tag_code__icontains=q)
+            | Q(operational_asset__code__icontains=q)
             | Q(operational_asset__name__icontains=q)
         )
 
