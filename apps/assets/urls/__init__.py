@@ -27,6 +27,9 @@ from apps.assets.urls.AssetReliability import (
 from apps.assets.urls.AssetWarrantyInsurance import (
     urlpatterns as asset_warranty_insurance_urlpatterns,
 )
+from apps.assets.urls.AssetCompliance import (
+    urlpatterns as asset_compliance_urlpatterns,
+)
 from apps.assets.views.overview import overview
 
 app_name = "assets"
@@ -44,4 +47,5 @@ urlpatterns = (
     + asset_reliability_urlpatterns
     + asset_warranty_insurance_urlpatterns
     + asset_disposal_urlpatterns
+    + asset_compliance_urlpatterns
 )
