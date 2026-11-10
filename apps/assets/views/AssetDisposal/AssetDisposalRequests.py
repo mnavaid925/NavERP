@@ -247,6 +247,7 @@ def asset_disposal_request_appraise(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_disposal_request_approve(request, pk):
     instance = assets_object(request, AssetDisposalRequest, pk)
