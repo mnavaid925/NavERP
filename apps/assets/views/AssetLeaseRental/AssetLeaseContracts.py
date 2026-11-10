@@ -257,6 +257,13 @@ def asset_lease_contract_activate(request, pk):
 @login_required
 def asset_lease_contract_terminate(request, pk):
     lease = assets_object(request, AssetLeaseContract, pk)
+    if lease.status not in ["active", "modified"]:
+        messages.warning(
+            request,
+            f"Cannot terminate or buyout lease contract {lease.number} with status '{lease.get_status_display()}'.",
+        )
+        return redirect("assets:asset_lease_contract_detail", pk=lease.pk)
+
     action_type = request.POST.get("action_type", "terminated")
     if action_type == "buyout":
         lease.status = "buyout"
