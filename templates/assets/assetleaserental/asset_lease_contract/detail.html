@@ -38,7 +38,7 @@
         <form method="post" action="{% url 'assets:asset_lease_contract_terminate' lease.pk %}" class="inline" onsubmit="return confirm('Mark lease contract {{ lease.number }} as asset purchase buyout?');">
             {% csrf_token %}
             <input type="hidden" name="action_type" value="buyout">
-            <button type="submit" class="btn btn-outline text-purple" title="Record asset purchase buyout">
+            <button type="submit" class="btn btn-outline text-brand" title="Record asset purchase buyout">
                 <i data-lucide="shopping-cart" class="w-4 h-4 me-1"></i> Asset Buyout
             </button>
         </form>
@@ -268,7 +268,7 @@
                     <td class="font-medium">${{ sch.payment_amount|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ sch.beginning_liability|floatformat:2 }}</td>
                     <td class="font-mono text-xs text-danger">${{ sch.interest_expense|floatformat:2 }}</td>
-                    <td class="font-mono text-xs text-success">${{ sch.principal_reduction|floatformat:2 }}</td>
+                    <td class="font-mono text-xs text-ok">${{ sch.principal_reduction|floatformat:2 }}</td>
                     <td class="font-mono text-xs font-medium">${{ sch.ending_liability|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ sch.rou_depreciation|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ sch.ending_rou_asset_value|floatformat:2 }}</td>
@@ -320,7 +320,7 @@
                     <td>{{ mod.effective_date|date:"Y-m-d" }}</td>
                     <td class="font-mono text-xs">${{ mod.prior_lease_liability|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ mod.revised_lease_liability|floatformat:2 }}</td>
-                    <td class="font-mono text-xs font-semibold {% if mod.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                    <td class="font-mono text-xs font-semibold {% if mod.liability_adjustment >= 0 %}text-danger{% else %}text-ok{% endif %}">
                         ${{ mod.liability_adjustment|floatformat:2 }}
                     </td>
                     <td class="font-mono text-xs">${{ mod.gain_loss_on_modification|floatformat:2 }}</td>
