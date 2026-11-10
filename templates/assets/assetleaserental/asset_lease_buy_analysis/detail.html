@@ -147,11 +147,11 @@
                 </div>
                 <div>
                     <dt class="text-muted">Upfront Lease Fees</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.upfront_lease_fees|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if analysis.upfront_lease_fees is not None %}${{ analysis.upfront_lease_fees|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Buyout Option at Expiration</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.end_of_lease_purchase_option|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if analysis.end_of_lease_purchase_option is not None %}${{ analysis.end_of_lease_purchase_option|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Lessor Maintenance Coverage</dt>
@@ -159,7 +159,7 @@
                 </div>
                 <div>
                     <dt class="text-muted">Annual Lessee Maint. (Lease)</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.annual_maintenance_cost_lease|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900">{% if analysis.annual_maintenance_cost_lease is not None %}${{ analysis.annual_maintenance_cost_lease|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
             </dl>
             <div class="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center text-sm">
