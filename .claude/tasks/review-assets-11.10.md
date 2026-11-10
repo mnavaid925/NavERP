@@ -2,7 +2,7 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: IN PROGRESS (Pass 3 of 6 complete)
+**Status**: IN PROGRESS (Pass 4 of 6 complete)
 
 ---
 
@@ -58,3 +58,20 @@
 - [ ] **MR10**: Missing `aria-label` on icon-only table action buttons across all list templates (view, edit, delete).
 - [ ] **MR11**: Missing `scope="col"` on table header `<th>` cells across all list and detail child tables.
 - [ ] **MR12**: Hardcoded light-slate utility classes lacking dark mode contrast variants in cards and detail sections.
+
+---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+*None.*
+
+### Important
+- [ ] **IR9**: Line-by-line `save()` iteration during schedule generation holding prolonged database locks (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:406,465-467`). Wrap deletion and generation inside a unified atomic block and optimize sequence generation.
+- [ ] **IR10**: Unbounded full-model QuerySets in filter dropdowns fetching heavy text columns (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:60`, `AssetLeaseModifications.py:68`, `AssetLeaseContracts.py:73`). Use `.only("id", "number", "title")` and `.only("id", "name")`.
+- [ ] **IR11**: Foreign key traversal in model `__str__` creates latent N+1 vulnerability (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:124`, `AssetLeaseModifications.py:194`). Guard with `self.lease_contract.number if self.lease_contract_id else ""`.
+
+### Minor
+- [ ] **MR13**: Large text fields not deferred in modification and buy-analysis list views (`AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
+- [ ] **MR14**: Unconstrained tenant party querying for lessor filter dropdown (`AssetLeaseContracts.py:73`). Restrict party query to relevant vendor/lessor roles or parties with lease contracts.
+- [ ] **MR15**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
