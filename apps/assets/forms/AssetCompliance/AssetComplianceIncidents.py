@@ -68,5 +68,5 @@ class AssetComplianceIncidentForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        reject_foreign(self, cleaned, ["asset", "permit", "audit", "enforcement_agency"])
+        reject_foreign(self, cleaned, ["asset", "permit", "audit", "enforcement_agency", "assigned_investigator"])
         return cleaned
