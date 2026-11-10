@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Warranty Claims — Warranty & Insurance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Warranty & Insurance</span>
+            <span>/</span>
+            <span>Warranty Claims</span>
+        </div>
+        <h1 class="page-title">Warranty Claims Processing</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_warranty_claim_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> File Warranty Claim
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Claims</div>
+            <div class="stat-value">{{ total_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending OEM Review</div>
+            <div class="stat-value">{{ pending_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Settled & Closed</div>
+            <div class="stat-value">{{ settled_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="badge-dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Net Recovered</div>
+            <div class="stat-value">${{ total_net_recovered|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Claim #, RMA, title, warranty..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Claim Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in claim_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="res-filter" class="form-label">Resolution</label>
+                <select id="res-filter" name="resolution_type" class="form-select">
+                    <option value="">All Resolutions</option>
+                    {% for val, label in resolution_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.resolution_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="return-filter" class="form-label">Part Return Status</label>
+                <select id="return-filter" name="part_return_status" class="form-select">
+                    <option value="">All Part Statuses</option>
+                    {% for val, label in part_return_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.part_return_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_warranty_claim_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Claims Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Claim #</th>
+                        <th>Defect Title & Warranty</th>
+                        <th>Incident Date</th>
+                        <th>Claimed</th>
+                        <th>Net Recovered</th>
+                        <th>Resolution</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in warranty_claims %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'assets:asset_warranty_claim_detail' c.pk %}" class="font-semibold text-primary-600 hover:underline">
+                                {{ c.number }}
+                            </a>
+                            {% if c.warrantor_claim_reference %}
+                            <div class="text-xs text-slate-500 font-mono">Ref: {{ c.warrantor_claim_reference }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ c.title }}</div>
+                            <div class="text-xs text-slate-500">
+                                War: <a href="{% url 'assets:asset_warranty_detail' c.warranty.pk %}" class="hover:underline">{{ c.warranty.number }}</a>
+                                {% if c.fixed_asset %} • FA: {{ c.fixed_asset.name }}{% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="text-xs text-slate-700">{{ c.incident_date|date:"M d, Y" }}</div>
+                            {% if c.submission_date %}
+                            <div class="text-xs text-slate-500">Sub: {{ c.submission_date|date:"M d, Y" }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800">{{ c.currency.code|default:"USD" }} {{ c.claimed_amount }}</div>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-emerald-700">{{ c.currency.code|default:"USD" }} {{ c.net_recovery_amount }}</div>
+                            {% if c.deductible_applied > 0 %}
+                            <div class="text-xs text-slate-500">Ded: {{ c.deductible_applied }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ c.resolution_type_css }}">{{ c.get_resolution_type_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ c.claim_status_css }}">{{ c.get_claim_status_display }}</span>
+                        </td>
+                        <td class="table-actions text-end">
+                            <a href="{% url 'assets:asset_warranty_claim_detail' c.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_warranty_claim_edit' c.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_staff or request.user.is_superuser %}
+                            <form method="post" action="{% url 'assets:asset_warranty_claim_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete claim {{ c.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <i data-lucide="file-x" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No Warranty Claims Found</div>
+                                <div class="empty-state-description">No warranty claims match your search. Submit a new defect claim against an active warranty.</div>
+                                <a href="{% url 'assets:asset_warranty_claim_create' %}" class="btn btn-primary mt-3">
+                                    <i data-lucide="plus" class="w-4 h-4 me-1"></i> File Warranty Claim
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if is_paginated %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.resolution_type %}&resolution_type={{ request.GET.resolution_type }}{% endif %}{% if request.GET.part_return_status %}&part_return_status={{ request.GET.part_return_status }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.resolution_type %}&resolution_type={{ request.GET.resolution_type }}{% endif %}{% if request.GET.part_return_status %}&part_return_status={{ request.GET.part_return_status }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
