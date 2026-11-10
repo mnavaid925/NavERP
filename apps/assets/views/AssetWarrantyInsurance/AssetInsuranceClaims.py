@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -255,15 +255,25 @@ def asset_insurance_claim_file_proof(request, pk):
 @require_POST
 def asset_insurance_claim_settle(request, pk):
     claim = get_object_or_404(AssetInsuranceClaim, pk=pk, tenant=request.tenant)
+    raw_payout = request.POST.get("settlement_payout_amount", "0.00")
     try:
-        payout_amt = Decimal(request.POST.get("settlement_payout_amount", "0.00"))
-    except Exception:
-        payout_amt = Decimal("0.00")
+        payout_amt = Decimal(str(raw_payout).strip()) if raw_payout and str(raw_payout).strip() else Decimal("0.00")
+        if not payout_amt.is_finite() or payout_amt < Decimal("0.00") or payout_amt > Decimal("999999999999.99"):
+            messages.error(request, "Invalid settlement payout amount. Must be a finite non-negative number up to 999,999,999,999.99.")
+            return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
+    except (InvalidOperation, TypeError, ValueError):
+        messages.error(request, "Invalid numeric value for settlement payout amount.")
+        return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
 
+    raw_salvage = request.POST.get("salvage_recovery_amount", "0.00")
     try:
-        salvage_amt = Decimal(request.POST.get("salvage_recovery_amount", "0.00"))
-    except Exception:
-        salvage_amt = Decimal("0.00")
+        salvage_amt = Decimal(str(raw_salvage).strip()) if raw_salvage and str(raw_salvage).strip() else Decimal("0.00")
+        if not salvage_amt.is_finite() or salvage_amt < Decimal("0.00") or salvage_amt > Decimal("9999999999.99"):
+            messages.error(request, "Invalid salvage recovery amount. Must be a finite non-negative number up to 9,999,999,999.99.")
+            return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
+    except (InvalidOperation, TypeError, ValueError):
+        messages.error(request, "Invalid numeric value for salvage recovery amount.")
+        return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
 
     settlement_method = request.POST.get("settlement_method", "direct_indemnity_check")
     notes = request.POST.get("settlement_notes", "").strip()
