@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Violations & Incidents — Asset Compliance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Compliance & Regulatory</span>
+            <span>/</span>
+            <span>Violations & Incidents</span>
+        </div>
+        <h1 class="page-title">Statutory Citations & Non-Compliance Incidents</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_compliance_incident_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Report Incident
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Incidents</div>
+            <div class="stat-value">{{ total_incidents }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Open / In Progress</div>
+            <div class="stat-value">{{ open_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Serious / Critical</div>
+            <div class="stat-value">{{ critical_severity_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Fines Assessed</div>
+            <div class="stat-value">${{ total_fines_assessed|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, citation #, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="incident_type" class="form-select">
+                    <option value="">All Incident Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.incident_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.incident_type or request.GET.severity or request.GET.status or request.GET.agency %}
+                <a href="{% url 'assets:asset_compliance_incident_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Incident Title</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Asset</th>
+                    <th>Citing Agency</th>
+                    <th>Date</th>
+                    <th>Assessed Fine</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inc in incidents %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_compliance_incident_detail' inc.pk %}" class="text-brand hover:underline">
+                            {{ inc.number }}
+                        </a>
+                    </td>
+                    <td class="max-w-xs truncate font-medium text-slate-900" title="{{ inc.title }}">
+                        {{ inc.title }}
+                    </td>
+                    <td><span class="badge {{ inc.incident_type_badge_class }}">{{ inc.get_incident_type_display }}</span></td>
+                    <td><span class="badge {{ inc.severity_badge_class }}">{{ inc.get_severity_display }}</span></td>
+                    <td>
+                        {% if inc.asset %}
+                        <span class="text-sm font-medium">{{ inc.asset.name }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if inc.enforcement_agency %}
+                        {{ inc.enforcement_agency.name }}
+                        {% else %}
+                        <span class="text-muted">Internal Report</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ inc.incident_date|date:"M d, Y" }}</td>
+                    <td class="font-mono text-sm">
+                        {% if inc.fine_assessed > 0 %}
+                        ${{ inc.fine_assessed|floatformat:2 }}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ inc.status_badge_class }}">{{ inc.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'assets:asset_compliance_incident_detail' inc.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_compliance_incident_edit' inc.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_compliance_incident_delete' inc.pk %}" onsubmit="return confirm('Delete incident {{ inc.number }}? This cannot be undone.');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state">
+                            <div class="empty-icon"><i data-lucide="shield-check"></i></div>
+                            <div class="empty-title">No compliance violations or citations logged</div>
+                            <div class="empty-description">Record regulatory citations, environmental exceedances, and OSHA safety infractions for CAPA remediation.</div>
+                            <a href="{% url 'assets:asset_compliance_incident_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log First Incident
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center py-3 px-4">
+        <span class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} incidents
+        </span>
+        <div class="pagination flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.incident_type %}&incident_type={{ request.GET.incident_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Prev
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}{% if request.GET.incident_type %}&incident_type={{ request.GET.incident_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
