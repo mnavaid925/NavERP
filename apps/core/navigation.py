@@ -3270,6 +3270,24 @@ LIVE_LINKS = {
         "Certificates of Destruction": "assets:asset_scrap_salvage_list",
         "Asset Disposal & Retirement": "assets:asset_disposal_request_list",
     },
+    "11.11": {
+        "Regulatory Standards Mapping": "assets:asset_compliance_framework_list",
+        "Audit Preparation & Documentation": "assets:asset_compliance_audit_list",
+        "Environmental & Safety Compliance": "assets:asset_compliance_incident_list",
+        "License & Permit Tracking": "assets:asset_permit_license_list",
+        "Penalty & Violation Management": "assets:asset_compliance_incident_list",
+        # Plural and convenience aliases
+        "Compliance Frameworks": "assets:asset_compliance_framework_list",
+        "Regulatory Standards": "assets:asset_compliance_framework_list",
+        "Compliance Audits": "assets:asset_compliance_audit_list",
+        "Audit Preparation": "assets:asset_compliance_audit_list",
+        "Operating Permits": "assets:asset_permit_license_list",
+        "Permits & Licenses": "assets:asset_permit_license_list",
+        "Compliance Incidents": "assets:asset_compliance_incident_list",
+        "Notices of Violation": "assets:asset_compliance_incident_list",
+        "Penalties & Violations": "assets:asset_compliance_incident_list",
+        "Compliance & Regulatory Management": "assets:asset_compliance_framework_list",
+    },
 
 
 
