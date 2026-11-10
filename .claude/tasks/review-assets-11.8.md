@@ -64,7 +64,8 @@
 
 ## Minor
 
-- [ ] **M1: Invalid Design System Badge CSS Class `badge-purple` in `AssetInsurancePolicies.py`**
+- [x] **M1: Invalid Design System Badge CSS Class `badge-purple` in `AssetInsurancePolicies.py`**
+  - **Status:** [x] fixed — change badge-purple to badge-info (b6d93ebc)
   - **Location:** `apps/assets/models/AssetWarrantyInsurance/AssetInsurancePolicies.py:66`
   - **Description:** `POLICY_TYPE_CSS` maps `"business_interruption"` to `"badge-purple"`. Per `theme.css` and lesson L33, badges only support color-named classes (`badge-green/red/amber/info/slate/muted`).
   - **Fix:** Change to `"badge-info"` or `"badge-slate"`.
