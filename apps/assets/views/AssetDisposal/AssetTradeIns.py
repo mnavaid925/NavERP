@@ -133,8 +133,8 @@ def asset_trade_in_create(request):
         if dr_id and dr_id.isdigit():
             initial["disposal_request"] = int(dr_id)
             dr = assets_scope(AssetDisposalRequest.objects.all(), request).filter(pk=int(dr_id)).first()
-            if dr and dr.fixed_asset:
-                initial["retired_fixed_asset"] = dr.fixed_asset.pk
+            if dr and dr.fixed_asset_id:
+                initial["retired_fixed_asset"] = dr.fixed_asset_id
                 initial["trade_in_allowance"] = dr.estimated_residual_value or Decimal("0.00")
         form = AssetTradeInForm(initial=initial, tenant=request.tenant)
 
