@@ -125,7 +125,7 @@
                 </div>
                 <div>
                     <dt class="text-muted">Approved By</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.approved_by.get_full_name|default:lease.approved_by.username|default:"Pending" }}</dd>
+                    <dd class="font-medium text-slate-900">{% if lease.approved_by %}{{ lease.approved_by.get_full_name|default:lease.approved_by.username }}{% else %}Pending{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Inception Date</dt>
