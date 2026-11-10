@@ -191,7 +191,10 @@ class AssetLeaseModification(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.get_modification_type_display()} ({self.lease_contract.number})"
+        contract_num = self.lease_contract.number if self.lease_contract_id else ""
+        if contract_num:
+            return f"{self.number} — {self.get_modification_type_display()} ({contract_num})"
+        return f"{self.number} — {self.get_modification_type_display()}"
 
     @property
     def status_css(self):
