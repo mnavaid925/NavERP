@@ -83,7 +83,7 @@ def asset_scrap_salvage_list(request):
         "is_paginated": page_obj.has_other_pages(),
         "status_choices": AssetScrapSalvage.STATUS_CHOICES,
         "scrap_method_choices": AssetScrapSalvage.SCRAP_METHOD_CHOICES,
-        "recycler_list": Party.objects.filter(tenant=request.tenant),
+        "recycler_list": Party.objects.filter(tenant=request.tenant).only("id", "name"),
         "total_scraps": total_scraps,
         "in_progress_count": in_progress_count,
         "certified_destroyed_count": certified_destroyed_count,
