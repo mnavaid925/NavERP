@@ -425,6 +425,7 @@ class AssetLeaseContract(TenantNumbered):
 
         months_per_period = 12 // self.periods_per_year
         current_date = self.first_payment_date or self.commencement_date
+        base_day = current_date.day
 
         schedules = []
         for period in range(1, n + 1):
@@ -468,7 +469,7 @@ class AssetLeaseContract(TenantNumbered):
             _m = current_date.month - 1 + months_per_period
             _y = current_date.year + _m // 12
             _m = _m % 12 + 1
-            _d = min(current_date.day, calendar.monthrange(_y, _m)[1])
+            _d = min(base_day, calendar.monthrange(_y, _m)[1])
             current_date = datetime.date(_y, _m, _d)
 
         with transaction.atomic():
