@@ -202,6 +202,10 @@ def asset_trade_in_surrender(request, pk):
 @require_POST
 def asset_trade_in_settle(request, pk):
     instance = assets_object(request, AssetTradeIn, pk)
+    if instance.status == "credit_settled":
+        messages.info(request, f"Trade-in {instance.number} has already been settled.")
+        return redirect("assets:asset_trade_in_detail", pk=instance.pk)
+
     with transaction.atomic():
         instance.settled_at = timezone.now()
         instance.status = "credit_settled"
