@@ -265,13 +265,15 @@ def asset_lease_contract_terminate(request, pk):
         lease.status = "terminated"
         msg = f"Lease contract {lease.number} early terminated."
 
-    lease.save()
-    write_audit_log(
-        request.user,
-        lease,
-        "terminate",
-        changes=msg,
-        tenant=request.tenant,
-    )
+    with transaction.atomic():
+        lease.save()
+        lease.payment_schedules.filter(status="scheduled").update(status="cancelled")
+        write_audit_log(
+            request.user,
+            lease,
+            "terminate",
+            changes=msg,
+            tenant=request.tenant,
+        )
     messages.success(request, msg)
     return redirect("assets:asset_lease_contract_detail", pk=lease.pk)
