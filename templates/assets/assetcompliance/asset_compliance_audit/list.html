@@ -57,8 +57,16 @@
 <div class="card mb-6">
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div class="md:col-span-2">
+            <div>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, framework, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="framework" class="form-select">
+                    <option value="">All Frameworks</option>
+                    {% for fw in framework_list %}
+                    <option value="{{ fw.pk }}" {% if request.GET.framework == fw.pk|stringformat:"d" %}selected{% endif %}>{{ fw.code }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <select name="audit_type" class="form-select">
