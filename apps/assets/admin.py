@@ -14,6 +14,8 @@ from apps.assets.models import (
     AssetEnergyReading,
     AssetFailureMode,
     AssetIncidentReport,
+    AssetInsuranceClaim,
+    AssetInsurancePolicy,
     AssetMaintenanceLog,
     AssetMaintenanceRequest,
     AssetMaintenanceSchedule,
@@ -28,6 +30,8 @@ from apps.assets.models import (
     AssetTag,
     AssetTelemetryReading,
     AssetTransfer,
+    AssetWarranty,
+    AssetWarrantyClaim,
     CapitalizationPolicy,
 )
 
@@ -254,6 +258,39 @@ class AssetCalibrationRecordAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "fixed_asset", "operational_asset", "calibrated_by", "service_vendor")
     list_filter = ("status", "calibration_result", "tolerance_unit")
     search_fields = ("number", "instrument_tag", "reference_standard_used", "certificate_number")
+
+
+@admin.register(AssetWarranty)
+class AssetWarrantyAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "warranty_type", "coverage_scope", "start_date", "end_date", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "asset_category", "warrantor_party", "currency")
+    list_filter = ("status", "warranty_type", "coverage_scope")
+    search_fields = ("number", "title", "warranty_certificate_number")
+
+
+@admin.register(AssetWarrantyClaim)
+class AssetWarrantyClaimAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "warranty", "incident_date", "claimed_amount", "approved_amount", "net_recovery_amount", "claim_status", "tenant")
+    list_select_related = ("tenant", "warranty", "fixed_asset", "operational_asset", "currency")
+    list_filter = ("claim_status", "resolution_type", "part_return_status")
+    search_fields = ("number", "title", "warrantor_claim_reference", "rma_tracking_number")
+
+
+@admin.register(AssetInsurancePolicy)
+class AssetInsurancePolicyAdmin(admin.ModelAdmin):
+    list_display = ("number", "policy_number", "title", "policy_type", "effective_date", "expiration_date", "total_insured_value", "status", "tenant")
+    list_select_related = ("tenant", "underwriter_party", "broker_party", "currency")
+    list_filter = ("status", "policy_type", "valuation_basis")
+    search_fields = ("number", "policy_number", "title")
+
+
+@admin.register(AssetInsuranceClaim)
+class AssetInsuranceClaimAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "policy", "peril_type", "incident_date", "claimed_loss_amount", "settlement_payout_amount", "claim_status", "tenant")
+    list_select_related = ("tenant", "policy", "currency", "adjuster_party")
+    list_filter = ("claim_status", "peril_type", "settlement_method")
+    search_fields = ("number", "title", "carrier_claim_number", "incident_location")
+
 
 
 
