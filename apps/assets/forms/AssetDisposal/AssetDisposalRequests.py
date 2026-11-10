@@ -130,7 +130,7 @@ class AssetDisposalAppraisalForm(forms.Form):
         required=False,
     )
 
-    def __init__(self, tenant, *args, **kwargs):
+    def __init__(self, tenant=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tenant = tenant
         if tenant:
