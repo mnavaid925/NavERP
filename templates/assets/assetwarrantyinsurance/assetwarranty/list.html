@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Warranties — Warranty & Insurance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Warranty & Insurance</span>
+            <span>/</span>
+            <span>Asset Warranties</span>
+        </div>
+        <h1 class="page-title">Asset Warranties & Protection Plans</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_warranty_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Warranty
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Warranties</div>
+            <div class="stat-value">{{ total_warranties }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Coverage</div>
+            <div class="stat-value">{{ active_warranties }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expiring (< 60 Days)</div>
+            <div class="stat-value">{{ expiring_soon_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Claims</div>
+            <div class="stat-value">{{ claimed_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Number, cert #, asset, title..." class="form-input">
+            </div>
+            <div>
+                <label for="warranty-type-filter" class="form-label">Type</label>
+                <select id="warranty-type-filter" name="warranty_type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for val, label in warranty_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.warranty_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="scope-filter" class="form-label">Scope</label>
+                <select id="scope-filter" name="coverage_scope" class="form-select">
+                    <option value="">All Scopes</option>
+                    {% for val, label in coverage_scope_choices %}
+                    <option value="{{ val }}" {% if request.GET.coverage_scope == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="category-filter" class="form-label">Category</label>
+                <select id="category-filter" name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in category_list %}
+                    <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-6 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_warranty_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Warranties Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Warranty #</th>
+                        <th>Title / Asset</th>
+                        <th>Warrantor</th>
+                        <th>Type & Scope</th>
+                        <th>Coverage Period</th>
+                        <th>Parts / Labor</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in warranties %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'assets:asset_warranty_detail' w.pk %}" class="font-semibold text-primary-600 hover:underline">
+                                {{ w.number }}
+                            </a>
+                            {% if w.warranty_certificate_number %}
+                            <div class="text-xs text-slate-500 font-mono">Cert: {{ w.warranty_certificate_number }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ w.title }}</div>
+                            <div class="text-xs text-slate-500">
+                                {% if w.fixed_asset %}
+                                    FA: {{ w.fixed_asset.number }} - {{ w.fixed_asset.name }}
+                                {% elif w.operational_asset %}
+                                    Equip: {{ w.operational_asset.tag_code }} - {{ w.operational_asset.name }}
+                                {% elif w.asset_category %}
+                                    Cat: {{ w.asset_category.name }}
+                                {% else %}
+                                    General Schedule
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if w.warrantor_party %}
+                                <span class="font-medium text-slate-800">{{ w.warrantor_party.name }}</span>
+                            {% else %}
+                                <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div><span class="badge {{ w.warranty_type_css }}">{{ w.get_warranty_type_display }}</span></div>
+                            <div class="text-xs text-slate-500 mt-1"><span class="badge {{ w.coverage_scope_css }}">{{ w.get_coverage_scope_display }}</span></div>
+                        </td>
+                        <td>
+                            <div class="text-xs text-slate-700">{{ w.start_date|date:"M d, Y" }} — {{ w.end_date|date:"M d, Y" }}</div>
+                            {% if w.meter_limit %}
+                            <div class="text-xs text-slate-500">Limit: {{ w.meter_limit }} {{ w.get_meter_type_display }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="text-xs">Parts: <span class="font-semibold">{{ w.parts_coverage_percent }}%</span></div>
+                            <div class="text-xs">Labor: <span class="font-semibold">{{ w.labor_coverage_percent }}%</span></div>
+                        </td>
+                        <td>
+                            <span class="badge {{ w.status_css }}">{{ w.get_status_display }}</span>
+                        </td>
+                        <td class="table-actions text-end">
+                            <a href="{% url 'assets:asset_warranty_detail' w.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_warranty_edit' w.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_staff or request.user.is_superuser %}
+                            <form method="post" action="{% url 'assets:asset_warranty_delete' w.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete warranty {{ w.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <i data-lucide="shield-off" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No Warranties Found</div>
+                                <div class="empty-state-description">No equipment warranties match the selected criteria. Register a manufacturer or extended warranty.</div>
+                                <a href="{% url 'assets:asset_warranty_create' %}" class="btn btn-primary mt-3">
+                                    <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Warranty
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if is_paginated %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.warranty_type %}&warranty_type={{ request.GET.warranty_type }}{% endif %}{% if request.GET.coverage_scope %}&coverage_scope={{ request.GET.coverage_scope }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.warranty_type %}&warranty_type={{ request.GET.warranty_type }}{% endif %}{% if request.GET.coverage_scope %}&coverage_scope={{ request.GET.coverage_scope }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
