@@ -128,12 +128,11 @@ def asset_lease_modification_create(request):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "created",
-                    "AssetLeaseModification",
-                    instance.pk,
-                    f"Created lease modification {instance.number} ({instance.get_modification_type_display()})",
+                    instance,
+                    "create",
+                    changes=f"Created lease modification {instance.number} ({instance.get_modification_type_display()})",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease modification {instance.number} created.")
@@ -166,12 +165,11 @@ def asset_lease_modification_edit(request, pk):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "updated",
-                    "AssetLeaseModification",
-                    instance.pk,
-                    f"Updated lease modification {instance.number}",
+                    instance,
+                    "update",
+                    changes=f"Updated lease modification {instance.number}",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease modification {instance.number} updated.")
@@ -192,16 +190,14 @@ def asset_lease_modification_delete(request, pk):
     modification = assets_object(request, AssetLeaseModification, pk)
     num = modification.number
     contract_pk = modification.lease_contract_id
-    modification.delete()
-
     write_audit_log(
-        request.tenant,
         request.user,
-        "deleted",
-        "AssetLeaseModification",
-        pk,
-        f"Deleted lease modification {num}",
+        modification,
+        "delete",
+        changes=f"Deleted lease modification {num}",
+        tenant=request.tenant,
     )
+    modification.delete()
     messages.success(request, f"Modification {num} deleted.")
     return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
 
@@ -250,12 +246,11 @@ def asset_lease_modification_approve(request, pk):
         contract.save()
 
         write_audit_log(
-            request.tenant,
             request.user,
-            "executed",
-            "AssetLeaseModification",
-            modification.pk,
-            f"Approved and executed lease modification {modification.number} on contract {contract.number}",
+            modification,
+            "execute",
+            changes=f"Approved and executed lease modification {modification.number} on contract {contract.number}",
+            tenant=request.tenant,
         )
 
         messages.success(
