@@ -39,6 +39,10 @@ from apps.assets.models import (
     AssetWarrantyClaim,
     AssetInsurancePolicy,
     AssetInsuranceClaim,
+    AssetDisposalRequest,
+    AssetResaleListing,
+    AssetTradeIn,
+    AssetScrapSalvage,
 )
 
 
@@ -1798,6 +1802,171 @@ def insurance_claim_b(db, tenant_b, insurance_policy_b, fixed_asset_b, operation
         currency=currency_usd,
         claim_status="proof_of_loss_filed",
         claims_officer=admin_b,
+    )
+
+
+# ==========================================
+# Sub-module 11.9: Asset Disposal Fixtures
+# ==========================================
+
+@pytest.fixture
+def disposal_request_a(db, tenant_a, fixed_asset_a, operational_asset_a, category_a, admin_user):
+    return AssetDisposalRequest.objects.create(
+        tenant=tenant_a,
+        title="CNC Milling Center Secondary Market Resale Initiative",
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        category=category_a,
+        requested_by=admin_user,
+        disposal_method="resale",
+        retirement_reason="technological_obsolescence",
+        justification_notes="Production upgraded to high-speed machining centers.",
+        acquisition_cost=Decimal("75000.00"),
+        accumulated_depreciation=Decimal("45000.00"),
+        net_book_value=Decimal("30000.00"),
+        estimated_residual_value=Decimal("35000.00"),
+        estimated_removal_cost=Decimal("2000.00"),
+        status="approved",
+    )
+
+
+@pytest.fixture
+def disposal_request_b(db, tenant_b, fixed_asset_b, operational_asset_b, category_b, admin_b):
+    return AssetDisposalRequest.objects.create(
+        tenant=tenant_b,
+        title="Globex Hydraulic Press Scrapping and Salvage Order",
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        category=category_b,
+        requested_by=admin_b,
+        disposal_method="scrap_salvage",
+        retirement_reason="uneconomical_repair",
+        justification_notes="Catastrophic hydraulic manifold blowout beyond repair.",
+        acquisition_cost=Decimal("50000.00"),
+        accumulated_depreciation=Decimal("40000.00"),
+        net_book_value=Decimal("10000.00"),
+        estimated_residual_value=Decimal("5000.00"),
+        estimated_removal_cost=Decimal("1500.00"),
+        status="in_progress",
+    )
+
+
+@pytest.fixture
+def resale_listing_a(db, tenant_a, disposal_request_a, fixed_asset_a, vendor_party_a, admin_user):
+    today = timezone.now().date()
+    return AssetResaleListing.objects.create(
+        tenant=tenant_a,
+        disposal_request=disposal_request_a,
+        fixed_asset=fixed_asset_a,
+        buyer=vendor_party_a,
+        broker_auctioneer=vendor_party_a,
+        managed_by=admin_user,
+        listing_channel="online_marketplace",
+        listing_reference="LOT-CNC-9901",
+        listing_date=today - timezone.timedelta(days=10),
+        reserve_price=Decimal("30000.00"),
+        asking_price=Decimal("38000.00"),
+        highest_bid_amount=Decimal("36500.00"),
+        gross_sale_proceeds=Decimal("36500.00"),
+        commission_rate_percent=Decimal("5.00"),
+        commission_amount=Decimal("1825.00"),
+        net_sale_proceeds=Decimal("34675.00"),
+        status="sold",
+        payment_status="pending_invoice",
+    )
+
+
+@pytest.fixture
+def resale_listing_b(db, tenant_b, disposal_request_b, fixed_asset_b, vendor_party_b, admin_b):
+    today = timezone.now().date()
+    return AssetResaleListing.objects.create(
+        tenant=tenant_b,
+        disposal_request=disposal_request_b,
+        fixed_asset=fixed_asset_b,
+        buyer=vendor_party_b,
+        managed_by=admin_b,
+        listing_channel="direct_sale",
+        listing_reference="LOT-HYD-5502",
+        listing_date=today - timezone.timedelta(days=5),
+        reserve_price=Decimal("8000.00"),
+        asking_price=Decimal("12000.00"),
+        highest_bid_amount=Decimal("9500.00"),
+        status="listed",
+        payment_status="pending_invoice",
+    )
+
+
+@pytest.fixture
+def trade_in_a(db, tenant_a, disposal_request_a, fixed_asset_a, vendor_party_a, admin_user):
+    today = timezone.now().date()
+    return AssetTradeIn.objects.create(
+        tenant=tenant_a,
+        disposal_request=disposal_request_a,
+        retired_fixed_asset=fixed_asset_a,
+        vendor=vendor_party_a,
+        managed_by=admin_user,
+        agreement_number="AGR-TRD-2026-001",
+        agreement_date=today - timezone.timedelta(days=12),
+        agreed_trade_allowance=Decimal("15000.00"),
+        credit_application_method="po_credit_offset",
+        status="accepted",
+    )
+
+
+@pytest.fixture
+def trade_in_b(db, tenant_b, disposal_request_b, fixed_asset_b, vendor_party_b, admin_b):
+    today = timezone.now().date()
+    return AssetTradeIn.objects.create(
+        tenant=tenant_b,
+        disposal_request=disposal_request_b,
+        retired_fixed_asset=fixed_asset_b,
+        vendor=vendor_party_b,
+        managed_by=admin_b,
+        agreement_number="AGR-GLX-2026-999",
+        agreement_date=today - timezone.timedelta(days=15),
+        agreed_trade_allowance=Decimal("8000.00"),
+        credit_application_method="direct_refund",
+        status="proposed",
+    )
+
+
+@pytest.fixture
+def scrap_salvage_a(db, tenant_a, disposal_request_a, fixed_asset_a, operational_asset_a, vendor_party_a, admin_user):
+    return AssetScrapSalvage.objects.create(
+        tenant=tenant_a,
+        disposal_request=disposal_request_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        recycler_partner=vendor_party_a,
+        supervisor=admin_user,
+        scrap_method="recycling_recovery",
+        is_hazardous_waste=True,
+        hazardous_material_details="Industrial hydraulic fluid ISO-46 and lead ballast",
+        epa_manifest_number="EPA-MNF-2026-4412",
+        cod_number="COD-REC-9941",
+        scrap_weight_kg=Decimal("1250.00"),
+        salvage_proceeds=Decimal("2500.00"),
+        dismantling_cost=Decimal("450.00"),
+        net_salvage_recovery=Decimal("2050.00"),
+        status="dismantling",
+    )
+
+
+@pytest.fixture
+def scrap_salvage_b(db, tenant_b, disposal_request_b, fixed_asset_b, operational_asset_b, vendor_party_b, admin_b):
+    return AssetScrapSalvage.objects.create(
+        tenant=tenant_b,
+        disposal_request=disposal_request_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        recycler_partner=vendor_party_b,
+        supervisor=admin_b,
+        scrap_method="metal_shredding",
+        scrap_weight_kg=Decimal("850.00"),
+        salvage_proceeds=Decimal("1200.00"),
+        dismantling_cost=Decimal("200.00"),
+        net_salvage_recovery=Decimal("1000.00"),
+        status="scrap_transferred",
     )
 
 
