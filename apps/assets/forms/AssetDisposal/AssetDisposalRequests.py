@@ -24,7 +24,6 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
             "cost_center",
             "requested_by",
             "appraised_by",
-            "approved_by",
             "disposal_method",
             "retirement_reason",
             "justification_notes",
@@ -42,7 +41,6 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
             "cost_center": forms.Select(attrs={"class": "form-select"}),
             "requested_by": forms.Select(attrs={"class": "form-select"}),
             "appraised_by": forms.Select(attrs={"class": "form-select"}),
-            "approved_by": forms.Select(attrs={"class": "form-select"}),
             "disposal_method": forms.Select(attrs={"class": "form-select"}),
             "retirement_reason": forms.Select(attrs={"class": "form-select"}),
             "justification_notes": forms.Textarea(attrs={"class": "form-textarea", "rows": 4, "placeholder": "Technical, economic, or safety justification for asset decommissioning..."}),
@@ -63,7 +61,6 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
             user_qs = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
             self.fields["requested_by"].queryset = user_qs
             self.fields["appraised_by"].queryset = user_qs
-            self.fields["approved_by"].queryset = user_qs
 
     def clean(self):
         cleaned = super().clean()
@@ -77,7 +74,6 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
                 "cost_center",
                 "requested_by",
                 "appraised_by",
-                "approved_by",
             ],
         )
 
