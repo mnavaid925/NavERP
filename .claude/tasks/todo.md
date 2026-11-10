@@ -134,53 +134,53 @@
 ## Sub-module 11.9 Implementation Checklist
 
 ### Phase 3.1: Spec & Contract
-- [ ] Freeze contract in `.claude/tasks/contract-assets-11.9.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+- [x] Freeze contract in `.claude/tasks/contract-assets-11.9.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
 
 ### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
-- [ ] App `apps/assets` already scaffolded in 11.1
+- [x] App `apps/assets` already scaffolded in 11.1
 
 ### Phase 3.3: Entity by Entity Build (Strictly Serial)
-- [ ] **Entity 1: AssetDisposalRequest (`ADSP`)**
-  - [ ] `apps/assets/models/AssetDisposal/AssetDisposalRequests.py`
-  - [ ] `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py`
-  - [ ] `apps/assets/views/AssetDisposal/AssetDisposalRequests.py` (CRUD + submit + appraise + approve + reject + complete)
-  - [ ] `apps/assets/urls/AssetDisposal/AssetDisposalRequests.py`
-  - [ ] `templates/assets/assetdisposal/asset_disposal_request/list.html`
-  - [ ] `templates/assets/assetdisposal/asset_disposal_request/detail.html`
-  - [ ] `templates/assets/assetdisposal/asset_disposal_request/form.html`
-- [ ] **Entity 2: AssetResaleListing (`ARSL`)**
-  - [ ] `apps/assets/models/AssetDisposal/AssetResaleListings.py`
-  - [ ] `apps/assets/forms/AssetDisposal/AssetResaleListings.py`
-  - [ ] `apps/assets/views/AssetDisposal/AssetResaleListings.py` (CRUD + record_bid + accept_sale + mark_paid + mark_delivered)
-  - [ ] `apps/assets/urls/AssetDisposal/AssetResaleListings.py`
-  - [ ] `templates/assets/assetdisposal/asset_resale_listing/list.html`
-  - [ ] `templates/assets/assetdisposal/asset_resale_listing/detail.html`
-  - [ ] `templates/assets/assetdisposal/asset_resale_listing/form.html`
-- [ ] **Entity 3: AssetTradeIn (`ATRD`)**
-  - [ ] `apps/assets/models/AssetDisposal/AssetTradeIns.py`
-  - [ ] `apps/assets/forms/AssetDisposal/AssetTradeIns.py`
-  - [ ] `apps/assets/views/AssetDisposal/AssetTradeIns.py` (CRUD + surrender + settle)
-  - [ ] `apps/assets/urls/AssetDisposal/AssetTradeIns.py`
-  - [ ] `templates/assets/assetdisposal/asset_trade_in/list.html`
-  - [ ] `templates/assets/assetdisposal/asset_trade_in/detail.html`
-  - [ ] `templates/assets/assetdisposal/asset_trade_in/form.html`
-- [ ] **Entity 4: AssetScrapSalvage (`ASCR`)**
-  - [ ] `apps/assets/models/AssetDisposal/AssetScrapSalvages.py`
-  - [ ] `apps/assets/forms/AssetDisposal/AssetScrapSalvages.py`
-  - [ ] `apps/assets/views/AssetDisposal/AssetScrapSalvages.py` (CRUD + certify_abatement + record_cod + settle)
-  - [ ] `apps/assets/urls/AssetDisposal/AssetScrapSalvages.py`
-  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/list.html`
-  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/detail.html`
-  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/form.html`
+- [x] **Entity 1: AssetDisposalRequest (`ADSP`)**
+  - [x] `apps/assets/models/AssetDisposal/AssetDisposalRequests.py`
+  - [x] `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py`
+  - [x] `apps/assets/views/AssetDisposal/AssetDisposalRequests.py` (CRUD + submit + appraise + approve + reject + complete)
+  - [x] `apps/assets/urls/AssetDisposal/AssetDisposalRequests.py`
+  - [x] `templates/assets/assetdisposal/asset_disposal_request/list.html`
+  - [x] `templates/assets/assetdisposal/asset_disposal_request/detail.html`
+  - [x] `templates/assets/assetdisposal/asset_disposal_request/form.html`
+- [x] **Entity 2: AssetResaleListing (`ARSL`)**
+  - [x] `apps/assets/models/AssetDisposal/AssetResaleListings.py`
+  - [x] `apps/assets/forms/AssetDisposal/AssetResaleListings.py`
+  - [x] `apps/assets/views/AssetDisposal/AssetResaleListings.py` (CRUD + record_bid + accept_sale + mark_paid + mark_delivered)
+  - [x] `apps/assets/urls/AssetDisposal/AssetResaleListings.py`
+  - [x] `templates/assets/assetdisposal/asset_resale_listing/list.html`
+  - [x] `templates/assets/assetdisposal/asset_resale_listing/detail.html`
+  - [x] `templates/assets/assetdisposal/asset_resale_listing/form.html`
+- [x] **Entity 3: AssetTradeIn (`ATRD`)**
+  - [x] `apps/assets/models/AssetDisposal/AssetTradeIns.py`
+  - [x] `apps/assets/forms/AssetDisposal/AssetTradeIns.py`
+  - [x] `apps/assets/views/AssetDisposal/AssetTradeIns.py` (CRUD + surrender + settle)
+  - [x] `apps/assets/urls/AssetDisposal/AssetTradeIns.py`
+  - [x] `templates/assets/assetdisposal/asset_trade_in/list.html`
+  - [x] `templates/assets/assetdisposal/asset_trade_in/detail.html`
+  - [x] `templates/assets/assetdisposal/asset_trade_in/form.html`
+- [x] **Entity 4: AssetScrapSalvage (`ASCR`)**
+  - [x] `apps/assets/models/AssetDisposal/AssetScrapSalvages.py`
+  - [x] `apps/assets/forms/AssetDisposal/AssetScrapSalvages.py`
+  - [x] `apps/assets/views/AssetDisposal/AssetScrapSalvages.py` (CRUD + certify_abatement + record_cod + settle)
+  - [x] `apps/assets/urls/AssetDisposal/AssetScrapSalvages.py`
+  - [x] `templates/assets/assetdisposal/asset_scrap_salvage/list.html`
+  - [x] `templates/assets/assetdisposal/asset_scrap_salvage/detail.html`
+  - [x] `templates/assets/assetdisposal/asset_scrap_salvage/form.html`
 
 ### Phase 3.4: Integrate (Single Writer)
-- [ ] Re-export all 4 models in `apps/assets/models/AssetDisposal/__init__.py` and `apps/assets/models/__init__.py`
-- [ ] Re-export all 4 forms in `apps/assets/forms/AssetDisposal/__init__.py` and `apps/assets/forms/__init__.py`
-- [ ] Re-export all views in `apps/assets/views/AssetDisposal/__init__.py` and `apps/assets/views/__init__.py`
-- [ ] Re-export all urls in `apps/assets/urls/AssetDisposal/__init__.py` and `apps/assets/urls/__init__.py`
-- [ ] Register 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.9 models (`_seed_tenant_11_9`)
-- [ ] Add `LIVE_LINKS["11.9"]` in `apps/core/navigation.py`:
+- [x] Re-export all 4 models in `apps/assets/models/AssetDisposal/__init__.py` and `apps/assets/models/__init__.py`
+- [x] Re-export all 4 forms in `apps/assets/forms/AssetDisposal/__init__.py` and `apps/assets/forms/__init__.py`
+- [x] Re-export all views in `apps/assets/views/AssetDisposal/__init__.py` and `apps/assets/views/__init__.py`
+- [x] Re-export all urls in `apps/assets/urls/AssetDisposal/__init__.py` and `apps/assets/urls/__init__.py`
+- [x] Register 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.9 models (`_seed_tenant_11_9`)
+- [x] Add `LIVE_LINKS["11.9"]` in `apps/core/navigation.py`:
   - `"Disposal Request & Approval"`: `assets:asset_disposal_request_list`
   - `"Asset Resale & Auction"`: `assets:asset_resale_listing_list`
   - `"Trade-in & Exchange Programs"`: `assets:asset_trade_in_list`
@@ -200,38 +200,51 @@
     - `"Certificates of Destruction"`: `assets:asset_scrap_salvage_list`
     - `"Disposal Compliance"`: `assets:asset_scrap_salvage_list`
     - `"Asset Disposal & Retirement"`: `assets:asset_disposal_request_list`
-- [ ] Run `makemigrations assets` (claiming `0012_...`) & `migrate`
-- [ ] Run `seed_assets` twice to verify idempotency
-- [ ] Run `manage.py check`
+- [x] Run `makemigrations assets` (claiming `0012_...`) & `migrate`
+- [x] Run `seed_assets` twice to verify idempotency
+- [x] Run `manage.py check`
 
 ### Phase 3.5: Smoke Test
-- [ ] Create `temp/smoke_11_9.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+- [x] Create `temp/smoke_11_9.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions) — 55/55 passed
 
 ### Phase 4: Six Reviewers (Strictly Serial)
-- [ ] 1. Code Reviewer
-- [ ] 2. Explorer (Contract Compliance)
-- [ ] 3. Frontend Reviewer
-- [ ] 4. Performance Reviewer
-- [ ] 5. QA Smoke Tester
-- [ ] 6. Security Reviewer
-- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.9.md`
+- [x] 1. Code Reviewer
+- [x] 2. Explorer (Contract Compliance)
+- [x] 3. Frontend Reviewer
+- [x] 4. Performance Reviewer
+- [x] 5. QA Smoke Tester
+- [x] 6. Security Reviewer
+- [x] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.9.md` (0 Critical, 11 Important, 7 Minor)
 
 ### Phase 5: Code Fixer
-- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+- [x] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit (18/18 burned down)
 
 ### Phase 6: Tests (Strictly Serial)
-- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
-- [ ] `test_asset_disposal_models.py`
-- [ ] `test_asset_disposal_forms.py`
-- [ ] `test_asset_disposal_views.py`
-- [ ] `test_asset_disposal_security.py`
-- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+- [x] Extend fixtures in `apps/assets/tests/conftest.py`
+- [x] `test_assetdisposal_models.py` (48 passed)
+- [x] `test_assetdisposal_forms.py` (21 passed)
+- [x] `test_assetdisposal_views.py` (20 passed)
+- [x] `test_assetdisposal_security.py` (10 passed)
+- [x] Run full unfiltered test suite: `pytest apps/assets/tests/` (1,392 passed, 0 failed)
 
 ### Phase 7: Skill & Close-Out
-- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
-- [ ] Update `README.md` marking 11.9 complete
-- [ ] Document review and close-out in `.claude/tasks/todo.md`
-- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.9.md`
+- [x] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [x] Update `README.md` marking 11.9 complete
+- [x] Document review and close-out in `.claude/tasks/todo.md`
+- [x] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.9.md`
+
+### Sub-module 11.9 Close-Out Summary (2026-11-10)
+- **Sub-module**: 11.9 Asset Disposal & Retirement (`apps/assets`)
+- **Base SHA**: `1c4c993c57123c7630d1d69159a02530b42a579c`
+- **Delivered Entities**:
+  1. `AssetDisposalRequest` (`ADSP-`): Retirement requests, residual appraisals, multi-channel disposal routing, gain/loss calculations, asset decommissioning lifecycle.
+  2. `AssetResaleListing` (`ARSL-`): Auction/broker/private secondary market remarketing, bid logging, sales contract acceptance, proceeds reconciliation, delivery sign-offs.
+  3. `AssetTradeIn` (`ATIN-`): Equipment trade-in agreements, dealer appraisal & allowances, replacement requisition offsets (`AREQ-`), surrender tracking, credit settlement.
+  4. `AssetScrapSalvage` (`ASCR-`): Decommissioning teardown, scrap weight recovery, hazardous material abatement certification, ITAD sanitization, Certificate of Destruction (CoD) compliance, salvage proceeds settlement.
+- **Review Pass**: 6 serial reviewers run; all 18 findings (11 Important, 7 Minor) burned down in `.claude/tasks/review-assets-11.9.md`.
+- **Automated Tests**: 99 dedicated 11.9 tests passed green; full unfiltered app suite verified with **1,392 passed, 0 failed** in 340.92s.
+- **Navigation & Seeder**: Wired into `LIVE_LINKS["11.9"]` in `apps/core/navigation.py`; idempotent seeder `seed_assets` verified.
+- **Gaps**: None. Recorded in `.agents/tasks/gaps-assets-11.9.md`.
 
 ## Later passes / deferred (Parked from research)
 - Live scrap metal commodity index API sync (London Metal Exchange / AMM)
