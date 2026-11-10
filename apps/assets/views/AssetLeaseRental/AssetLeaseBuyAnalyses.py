@@ -107,12 +107,11 @@ def asset_lease_buy_analysis_create(request):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "created",
-                    "AssetLeaseBuyAnalysis",
-                    instance.pk,
-                    f"Created Lease vs Buy Analysis {instance.number} ({instance.title})",
+                    instance,
+                    "create",
+                    changes=f"Created Lease vs Buy Analysis {instance.number} ({instance.title})",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease vs. Buy Analysis {instance.number} created and evaluated.")
@@ -140,12 +139,11 @@ def asset_lease_buy_analysis_edit(request, pk):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "updated",
-                    "AssetLeaseBuyAnalysis",
-                    instance.pk,
-                    f"Updated Lease vs Buy Analysis {instance.number}",
+                    instance,
+                    "update",
+                    changes=f"Updated Lease vs Buy Analysis {instance.number}",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease vs. Buy Analysis {instance.number} updated and recalculated.")
@@ -165,16 +163,14 @@ def asset_lease_buy_analysis_edit(request, pk):
 def asset_lease_buy_analysis_delete(request, pk):
     analysis = assets_object(request, AssetLeaseBuyAnalysis, pk)
     num = analysis.number
-    analysis.delete()
-
     write_audit_log(
-        request.tenant,
         request.user,
-        "deleted",
-        "AssetLeaseBuyAnalysis",
-        pk,
-        f"Deleted Lease vs Buy Analysis {num}",
+        analysis,
+        "delete",
+        changes=f"Deleted Lease vs Buy Analysis {num}",
+        tenant=request.tenant,
     )
+    analysis.delete()
     messages.success(request, f"Analysis {num} was deleted.")
     return redirect("assets:asset_lease_buy_analysis_list")
 
@@ -187,12 +183,11 @@ def asset_lease_buy_analysis_evaluate(request, pk):
     analysis.save()
 
     write_audit_log(
-        request.tenant,
         request.user,
-        "evaluated",
-        "AssetLeaseBuyAnalysis",
-        analysis.pk,
-        f"Recalculated financial metrics for {analysis.number}: Recommendation={analysis.get_recommendation_display()}",
+        analysis,
+        "evaluate",
+        changes=f"Recalculated financial metrics for {analysis.number}: Recommendation={analysis.get_recommendation_display()}",
+        tenant=request.tenant,
     )
 
     messages.info(
