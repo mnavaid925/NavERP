@@ -53,7 +53,7 @@
   - **Issue**: `AssetComplianceAudit.framework` uses `on_delete=models.PROTECT`. Deleting a framework with audits causes an unhandled `ProtectedError` (HTTP 500).
   - **Fix**: Wrap `framework.delete()` in `try...except ProtectedError`, set user-friendly error message, and redirect to detail page.
 
-- [ ] **I4: Seeder `--flush` Omission Leaves 11.11 Records in Database**
+- [x] **I4: Seeder `--flush` Omission Leaves 11.11 Records in Database**
   - **Files**:
     - `apps/assets/management/commands/seed_assets.py:75-109`
   - **Issue**: `--flush` deletes models from 11.1-11.10 but does not purge 11.11 compliance models.
