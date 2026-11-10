@@ -37,7 +37,7 @@ def asset_trade_in_list(request):
             Q(number__icontains=q)
             | Q(agreement_number__icontains=q)
             | Q(retired_fixed_asset__name__icontains=q)
-            | Q(retired_fixed_asset__asset_number__icontains=q)
+            | Q(retired_fixed_asset__number__icontains=q)
             | Q(vendor__name__icontains=q)
         )
 
