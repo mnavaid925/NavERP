@@ -295,7 +295,7 @@ def asset_warranty_claim_settle(request, pk):
             claim_status__in=["draft", "submitted", "under_review"]
         ).exclude(pk=claim.pk).exists()
         if not other_open and claim.warranty.status == "claimed":
-            claim.warranty.status = "active"
+            claim.warranty.status = "expired" if claim.warranty.end_date < timezone.now().date() else "active"
             claim.warranty.save(update_fields=["status", "updated_at"])
 
         write_audit_log(
@@ -331,7 +331,7 @@ def asset_warranty_claim_reject(request, pk):
             claim_status__in=["draft", "submitted", "under_review"]
         ).exclude(pk=claim.pk).exists()
         if not other_open and claim.warranty.status == "claimed":
-            claim.warranty.status = "active"
+            claim.warranty.status = "expired" if claim.warranty.end_date < timezone.now().date() else "active"
             claim.warranty.save(update_fields=["status", "updated_at"])
 
         write_audit_log(
