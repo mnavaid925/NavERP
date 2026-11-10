@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Frameworks — Asset Compliance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Compliance & Regulatory</span>
+            <span>/</span>
+            <span>Frameworks</span>
+        </div>
+        <h1 class="page-title">Regulatory Standards & Compliance Frameworks</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_compliance_framework_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Framework
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Frameworks</div>
+            <div class="stat-value">{{ total_frameworks }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active & Enforced</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="gauge"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Avg Readiness Score</div>
+            <div class="stat-value">{{ avg_readiness_score }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search code, name, agency..." class="form-input" />
+            </div>
+            <div>
+                <select name="framework_type" class="form-select">
+                    <option value="">All Framework Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.framework_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.framework_type or request.GET.status or request.GET.category %}
+                <a href="{% url 'assets:asset_compliance_framework_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Standard Code</th>
+                    <th>Framework Name</th>
+                    <th>Type</th>
+                    <th>Agency / Body</th>
+                    <th>Applicable Category</th>
+                    <th>Readiness</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in frameworks %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_compliance_framework_detail' f.pk %}" class="text-brand hover:underline">
+                            {{ f.number }}
+                        </a>
+                    </td>
+                    <td class="font-medium text-slate-900">{{ f.code }}</td>
+                    <td class="max-w-xs truncate" title="{{ f.name }}">{{ f.name }}</td>
+                    <td>
+                        <span class="badge {{ f.framework_type_badge_class }}">
+                            {{ f.get_framework_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if f.regulatory_agency %}
+                        {{ f.regulatory_agency.name }}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if f.applicable_category %}
+                        {{ f.applicable_category.name }}
+                        {% else %}
+                        <span class="text-muted">All Categories</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-xs">{{ f.readiness_score }}%</span>
+                            <div class="progress w-16">
+                                <div class="progress-bar" style="width: {{ f.readiness_score }}%;"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ f.status_badge_class }}">
+                            {{ f.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'assets:asset_compliance_framework_detail' f.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_compliance_framework_edit' f.pk %}" class="btn-icon" title="Edit Framework">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_compliance_framework_delete' f.pk %}" onsubmit="return confirm('Delete compliance framework {{ f.code }}? This action cannot be undone.');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon"><i data-lucide="shield-alert"></i></div>
+                            <div class="empty-title">No compliance frameworks found</div>
+                            <div class="empty-description">Define statutory regulations, safety mandates, and ISO frameworks to track asset compliance.</div>
+                            <a href="{% url 'assets:asset_compliance_framework_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register First Framework
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center py-3 px-4">
+        <span class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} frameworks
+        </span>
+        <div class="pagination flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Prev
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
