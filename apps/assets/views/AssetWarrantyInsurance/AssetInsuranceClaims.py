@@ -125,7 +125,11 @@ def asset_insurance_claim_create(request):
     initial = {}
     policy_pk = request.GET.get("policy")
     if policy_pk and policy_pk.isdigit():
-        pol = AssetInsurancePolicy.objects.filter(pk=int(policy_pk), tenant=request.tenant).first()
+        pol = (
+            AssetInsurancePolicy.objects.filter(pk=int(policy_pk), tenant=request.tenant)
+            .select_related("fixed_asset", "operational_asset", "currency")
+            .first()
+        )
         if pol:
             initial["policy"] = pol
             initial["fixed_asset"] = pol.fixed_asset
