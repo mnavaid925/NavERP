@@ -78,7 +78,8 @@
   - **Description:** POST parameters are assigned to model fields without verifying they exist in `RESOLUTION_TYPE_CHOICES` or `SETTLEMENT_METHOD_CHOICES`. An invalid or oversized string causes a 500 error or invalid data state.
   - **Fix:** Validate choices against `dict(Model.CHOICES)` and fall back to safe default if invalid.
 
-- [ ] **M3: Resurrecting Voided Warranties and Cancelled Policies via Renewal Endpoint**
+- [x] **M3: Resurrecting Voided Warranties and Cancelled Policies via Renewal Endpoint**
+  - **Status:** [x] fixed — disallow renewal on voided/cancelled/draft records (111c124e, b54b9956)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarranties.py:230-247`
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsurancePolicies.py:231-247`
