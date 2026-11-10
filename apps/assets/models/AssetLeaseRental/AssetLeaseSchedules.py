@@ -121,7 +121,10 @@ class AssetLeaseSchedule(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.lease_contract.number} (Period {self.period_number})"
+        contract_num = self.lease_contract.number if self.lease_contract_id else ""
+        if contract_num:
+            return f"{self.number} — {contract_num} (Period {self.period_number})"
+        return f"{self.number} (Period {self.period_number})"
 
     @property
     def status_css(self):
