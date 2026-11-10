@@ -66,7 +66,7 @@ class AssetInsuranceClaimForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant,
                 roles__role="vendor",
             ).distinct()
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["proof_of_loss_document"].queryset = Document.objects.filter(tenant=self.tenant)
 
     def clean(self):
@@ -85,7 +85,6 @@ class AssetInsuranceClaimForm(TenantUniqueMixin, TenantModelForm):
                 "operational_asset",
                 "incident_report",
                 "adjuster_party",
-                "currency",
                 "proof_of_loss_document",
             ],
         )
