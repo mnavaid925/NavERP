@@ -207,6 +207,10 @@ def asset_resale_listing_delete(request, pk):
 @require_POST
 def asset_resale_listing_record_bid(request, pk):
     instance = assets_object(request, AssetResaleListing, pk)
+    if instance.status not in ["draft", "listed", "bid_received", "negotiation"]:
+        messages.warning(request, f"Bids cannot be recorded on listing {instance.number} with status {instance.get_status_display()}.")
+        return redirect("assets:asset_resale_listing_detail", pk=instance.pk)
+
     form = AssetResaleBidForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -238,6 +242,10 @@ def asset_resale_listing_record_bid(request, pk):
 @require_POST
 def asset_resale_listing_accept_sale(request, pk):
     instance = assets_object(request, AssetResaleListing, pk)
+    if instance.status not in ["draft", "listed", "bid_received", "negotiation"]:
+        messages.warning(request, f"Sale cannot be awarded for listing {instance.number} with status {instance.get_status_display()}.")
+        return redirect("assets:asset_resale_listing_detail", pk=instance.pk)
+
     form = AssetResaleAcceptForm(request.tenant, request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -301,6 +309,13 @@ def asset_resale_listing_mark_paid(request, pk):
 @require_POST
 def asset_resale_listing_mark_delivered(request, pk):
     instance = assets_object(request, AssetResaleListing, pk)
+    if instance.status == "delivered":
+        messages.info(request, f"Listing {instance.number} has already been marked as delivered.")
+        return redirect("assets:asset_resale_listing_detail", pk=instance.pk)
+    if instance.status not in ["sold", "payment_received"]:
+        messages.warning(request, f"Listing {instance.number} must be sold or payment received before marking delivered.")
+        return redirect("assets:asset_resale_listing_detail", pk=instance.pk)
+
     with transaction.atomic():
         instance.pickup_delivery_date = timezone.now().date()
         instance.status = "delivered"
