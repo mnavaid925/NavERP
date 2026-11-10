@@ -167,8 +167,8 @@ def asset_disposal_request_create(request):
 @login_required
 def asset_disposal_request_edit(request, pk):
     instance = assets_object(request, AssetDisposalRequest, pk)
-    if instance.status in ["completed", "cancelled"]:
-        messages.error(request, f"Disposal request {instance.number} is {instance.get_status_display()} and cannot be edited.")
+    if instance.status not in ["draft", "submitted"]:
+        messages.warning(request, f"Disposal request {instance.number} is {instance.get_status_display()} and cannot be edited.")
         return redirect("assets:asset_disposal_request_detail", pk=instance.pk)
 
     if request.method == "POST":
