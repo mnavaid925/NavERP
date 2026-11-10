@@ -118,7 +118,7 @@
   - **Issue:** Direct `+=` concatenation on `instance.justification_notes` and `instance.notes` raises `TypeError` if field value is `None`.
   - **Fix:** Guard with `(instance.notes or "") + f"\n..."`.
 
-- [ ] **M3: `buyer_contact_phone` Omitted in Resale Listing Form Template**
+- [x] **M3: `buyer_contact_phone` Omitted in Resale Listing Form Template** — fixed (commit 23778635)
   - **Location:** `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161`
   - **Issue:** Included in `AssetResaleListingForm.Meta.fields:34`, but omitted from the contact details section in `form.html`.
   - **Fix:** Add `buyer_contact_phone` input block to Section 4 in `form.html`.
