@@ -103,7 +103,7 @@
 
 ## Minor
 
-- [ ] **M1: Form Cross-Entity Reference Validation (Parent vs Child Fixed Asset)**
+- [x] **M1: Form Cross-Entity Reference Validation (Parent vs Child Fixed Asset)** — fixed (commits f39e0c10, 3e00808d, 2297f949)
   - **Location:**
     - `apps/assets/forms/AssetDisposal/AssetResaleListings.py:75-81`
     - `apps/assets/forms/AssetDisposal/AssetTradeIns.py:70-85`
