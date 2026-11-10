@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_contract_list' %}">Contracts</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ lease.number }}{% else %}New Contract{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Basics & Identification -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">1. Agreement Identity & Associations</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Contract Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.master_lease_agreement_ref.id_for_label }}">MLA Reference</label>
+                {{ form.master_lease_agreement_ref }}
+                {% if form.master_lease_agreement_ref.errors %}<div class="form-error">{{ form.master_lease_agreement_ref.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lessor.id_for_label }}">Lessor / Equipment Vendor *</label>
+                {{ form.lessor }}
+                {% if form.lessor.errors %}<div class="form-error">{{ form.lessor.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.asset.id_for_label }}">Operational Plant Equipment</label>
+                {{ form.asset }}
+                {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.category.id_for_label }}">Asset Category</label>
+                {{ form.category }}
+                {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Capitalized Fixed Asset (ROU)</label>
+                {{ form.fixed_asset }}
+                {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Status</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Key Dates & Horizons -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">2. Key Dates & Term Horizon</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.inception_date.id_for_label }}">Inception Date *</label>
+                {{ form.inception_date }}
+                {% if form.inception_date.errors %}<div class="form-error">{{ form.inception_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.commencement_date.id_for_label }}">Commencement Date *</label>
+                {{ form.commencement_date }}
+                {% if form.commencement_date.errors %}<div class="form-error">{{ form.commencement_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.expiration_date.id_for_label }}">Expiration Date *</label>
+                {{ form.expiration_date }}
+                {% if form.expiration_date.errors %}<div class="form-error">{{ form.expiration_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.first_payment_date.id_for_label }}">First Payment Date *</label>
+                {{ form.first_payment_date }}
+                {% if form.first_payment_date.errors %}<div class="form-error">{{ form.first_payment_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.early_termination_notice_date.id_for_label }}">Early Notice Cutoff</label>
+                {{ form.early_termination_notice_date }}
+                {% if form.early_termination_notice_date.errors %}<div class="form-error">{{ form.early_termination_notice_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lease_term_months.id_for_label }}">Lease Term (Months) *</label>
+                {{ form.lease_term_months }}
+                {% if form.lease_term_months.errors %}<div class="form-error">{{ form.lease_term_months.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.economic_life_months.id_for_label }}">Economic Life (Months) *</label>
+                {{ form.economic_life_months }}
+                {% if form.economic_life_months.errors %}<div class="form-error">{{ form.economic_life_months.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Financial Terms & Valuation -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">3. Payment Installments & Actuarial Valuation</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.payment_amount.id_for_label }}">Periodic Payment ($) *</label>
+                {{ form.payment_amount }}
+                {% if form.payment_amount.errors %}<div class="form-error">{{ form.payment_amount.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.payment_frequency.id_for_label }}">Payment Frequency *</label>
+                {{ form.payment_frequency }}
+                {% if form.payment_frequency.errors %}<div class="form-error">{{ form.payment_frequency.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.payment_timing.id_for_label }}">Payment Timing *</label>
+                {{ form.payment_timing }}
+                {% if form.payment_timing.errors %}<div class="form-error">{{ form.payment_timing.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.discount_rate_pct.id_for_label }}">Discount Rate / IBR (%) *</label>
+                {{ form.discount_rate_pct }}
+                {% if form.discount_rate_pct.errors %}<div class="form-error">{{ form.discount_rate_pct.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.fair_market_value.id_for_label }}">Fair Market Value ($)</label>
+                {{ form.fair_market_value }}
+                {% if form.fair_market_value.errors %}<div class="form-error">{{ form.fair_market_value.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.initial_direct_costs.id_for_label }}">Initial Direct Costs ($)</label>
+                {{ form.initial_direct_costs }}
+                {% if form.initial_direct_costs.errors %}<div class="form-error">{{ form.initial_direct_costs.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lease_incentives.id_for_label }}">Lease Incentives ($)</label>
+                {{ form.lease_incentives }}
+                {% if form.lease_incentives.errors %}<div class="form-error">{{ form.lease_incentives.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.residual_value_guarantee.id_for_label }}">Residual Value Guarantee ($)</label>
+                {{ form.residual_value_guarantee }}
+                {% if form.residual_value_guarantee.errors %}<div class="form-error">{{ form.residual_value_guarantee.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.purchase_option_price.id_for_label }}">Purchase Option Price ($)</label>
+                {{ form.purchase_option_price }}
+                {% if form.purchase_option_price.errors %}<div class="form-error">{{ form.purchase_option_price.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Statutory Classification Criteria -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">4. Statutory Classification Tests (ASC 842 & IFRS 16)</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                    {{ form.transfer_of_ownership }}
+                    <label class="text-sm font-medium" for="{{ form.transfer_of_ownership.id_for_label }}">
+                        Ownership transfers at end of term
+                    </label>
+                </div>
+                <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                    {{ form.has_purchase_option }}
+                    <label class="text-sm font-medium" for="{{ form.has_purchase_option.id_for_label }}">
+                        Purchase option reasonably certain
+                    </label>
+                </div>
+                <div class="flex items-center gap-2 p-3 bg-slate-50 rounded border border-slate-200">
+                    {{ form.is_specialized_asset }}
+                    <label class="text-sm font-medium" for="{{ form.is_specialized_asset.id_for_label }}">
+                        Specialized asset (no alternative use)
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.classification.id_for_label }}">Lease Classification</label>
+                    {{ form.classification }}
+                    {% if form.classification.errors %}<div class="form-error">{{ form.classification.errors }}</div>{% endif %}
+                </div>
+                <div class="flex items-center gap-2 pt-6">
+                    {{ form.classification_overridden }}
+                    <label class="text-sm font-medium text-amber-800" for="{{ form.classification_overridden.id_for_label }}">
+                        Manually override automated classification calculation
+                    </label>
+                </div>
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.classification_notes.id_for_label }}">Classification Technical Notes</label>
+                    {{ form.classification_notes }}
+                    {% if form.classification_notes.errors %}<div class="form-error">{{ form.classification_notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 5: Notes & Submit -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">5. Administrative Remarks</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Contract Terms & Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'assets:asset_lease_contract_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Contract
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
