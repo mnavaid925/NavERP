@@ -273,7 +273,10 @@ def asset_warranty_claim_settle(request, pk):
         messages.error(request, "Invalid numeric value for approved amount.")
         return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
 
+    valid_resolutions = dict(AssetWarrantyClaim.RESOLUTION_TYPE_CHOICES)
     res_type = request.POST.get("resolution_type", "cash_reimbursement")
+    if res_type not in valid_resolutions:
+        res_type = "cash_reimbursement"
     settlement_notes = request.POST.get("settlement_notes", "").strip()
 
     with transaction.atomic():
