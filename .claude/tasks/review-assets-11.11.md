@@ -87,3 +87,21 @@
 - **M5: Unused `tenant_admin_required` Imports in Views** (Confirmed)
 
 ---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+- *None.*
+
+### Important
+- **I1 / I3: Missing Filter `<select>` Elements and Pagination Drop in List Templates** (Confirmed)
+  - `templates/assets/assetcompliance/asset_compliance_framework/list.html:52-82, 188, 198` (missing `<select name="category">` and `&category=`)
+  - `templates/assets/assetcompliance/asset_compliance_audit/list.html:59-97, 186, 196` (missing `<select name="framework">` and `&framework=`)
+  - `templates/assets/assetcompliance/asset_compliance_incident/list.html:59-97, 198, 208` (missing `<select name="agency">` and `&agency=`)
+
+### Minor
+- **M6: Guard Potential `None` in Expiration Days Comparison**
+  - `templates/assets/assetcompliance/asset_permit_license/detail.html:152`
+  - *Fix:* Use `{% if permit.days_to_expiration is not None and permit.days_to_expiration < 0 %}`.
+
+---
