@@ -94,7 +94,7 @@
   - **Issue:** Invoking `.count` on `resale_listings`, `trade_ins`, and `scrap_salvages` executes 3 distinct `SELECT COUNT(*)` queries immediately prior to iterating them in `{% for %}` loops.
   - **Fix:** Replace `.count` with `|length` in `detail.html`.
 
-- [ ] **I11: Missing `select_related` on Child Queries for Relations Accessed by `__str__`**
+- [x] **I11: Missing `select_related` on Child Queries for Relations Accessed by `__str__`** — fixed (commit b729806f)
   - **Location:** `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:114-116`
   - **Issue:** Child queries `resale_listings`, `trade_ins`, and `scrap_salvages` omit `fixed_asset` / `retired_fixed_asset`, triggering lazy N+1 queries when `__str__` evaluates `self.fixed_asset.name`.
   - **Fix:** Add `"fixed_asset"` to `select_related` for `resale_listings` and `scrap_salvages`, and `"retired_fixed_asset"` for `trade_ins`.
