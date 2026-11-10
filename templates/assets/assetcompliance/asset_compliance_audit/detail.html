@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}{{ audit.number }} — Compliance Audit Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_compliance_audit_list' %}">Compliance Audits</a>
+            <span>/</span>
+            <span>{{ audit.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ audit.title }}</h1>
+            <span class="badge {{ audit.status_badge_class }}">{{ audit.get_status_display }}</span>
+            <span class="badge {{ audit.compliance_rating_badge_class }}">{{ audit.get_compliance_rating_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if audit.status == "scheduled" %}
+        <form method="post" action="{% url 'assets:asset_compliance_audit_start' audit.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-brand">
+                <i data-lucide="play" class="w-4 h-4 me-1"></i> Start Fieldwork
+            </button>
+        </form>
+        {% endif %}
+        {% if audit.status != "completed" and audit.status != "cancelled" %}
+        <form method="post" action="{% url 'assets:asset_compliance_audit_complete' audit.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle-2" class="w-4 h-4 me-1"></i> Complete & Sign Off
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_compliance_audit_edit' audit.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <a href="{% url 'assets:asset_compliance_audit_list' %}" class="btn btn-outline">
+            Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Audit Scope & Details</h2>
+                <span class="font-mono text-sm text-muted">{{ audit.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Governing Framework</span>
+                        <a href="{% url 'assets:asset_compliance_framework_detail' audit.framework.pk %}" class="font-medium text-brand hover:underline">
+                            {{ audit.framework.code }} — {{ audit.framework.name }}
+                        </a>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Audit Type</span>
+                        <span class="badge {{ audit.audit_type_badge_class }}">{{ audit.get_audit_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Subject Asset</span>
+                        {% if audit.asset %}
+                        <span class="font-medium text-slate-900">{{ audit.asset.code }} — {{ audit.asset.name }}</span>
+                        {% else %}
+                        <span class="text-muted">Plant-Wide / Multi-Asset Scope</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Audit Date</span>
+                        <span class="font-medium text-slate-900">{{ audit.audit_date }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Internal Lead Auditor</span>
+                        <span class="font-medium text-slate-900">
+                            {% if audit.lead_auditor_user %}
+                            {{ audit.lead_auditor_user.get_full_name|default:audit.lead_auditor_user.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">External Auditor / Registrar</span>
+                        <span class="font-medium text-slate-900">
+                            {% if audit.auditor_party %}
+                            {{ audit.auditor_party.name }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                {% if audit.scope_description %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-2">Scope Description</span>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ audit.scope_description }}</div>
+                </div>
+                {% endif %}
+
+                {% if audit.summary_findings %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-2">Executive Summary of Findings</span>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ audit.summary_findings }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Linked Incidents & Breaches -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Linked Violations & Incident Findings</h2>
+                <a href="{% url 'assets:asset_compliance_incident_create' %}?audit={{ audit.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Log Incident
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Title</th>
+                            <th>Severity</th>
+                            <th>Assessed Fine</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incidents %}
+                        <tr>
+                            <td class="font-mono text-sm font-semibold">
+                                <a href="{% url 'assets:asset_compliance_incident_detail' inc.pk %}" class="text-brand hover:underline">
+                                    {{ inc.number }}
+                                </a>
+                            </td>
+                            <td class="max-w-xs truncate">{{ inc.title }}</td>
+                            <td><span class="badge {{ inc.severity_badge_class }}">{{ inc.get_severity_display }}</span></td>
+                            <td>${{ inc.fine_assessed|floatformat:2 }}</td>
+                            <td><span class="badge {{ inc.status_badge_class }}">{{ inc.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">No non-compliance violations linked to this audit.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Findings Breakdown -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Findings Breakdown</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-700">Total Checkpoints</span>
+                    <span class="font-bold text-slate-900">{{ audit.total_checkpoints }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-green-700">Passed / Conforming</span>
+                    <span class="font-bold text-green-700">{{ audit.passed_checkpoints }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-amber-700">Minor Deficiencies</span>
+                    <span class="font-bold text-amber-700">{{ audit.minor_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-red-600">Major Non-Conformances</span>
+                    <span class="font-bold text-red-600">{{ audit.major_findings_count }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-red-800 font-semibold">Critical Breaches</span>
+                    <span class="font-bold text-red-800">{{ audit.critical_findings_count }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Audit Status & Metadata</h2>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-muted">Status</span>
+                    <span class="badge {{ audit.status_badge_class }}">{{ audit.get_status_display }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Completed At</span>
+                    <span class="font-medium text-slate-800">
+                        {% if audit.completed_at %}
+                        {{ audit.completed_at|date:"M d, Y H:i" }}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Created</span>
+                    <span class="font-medium text-slate-800">{{ audit.created_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
