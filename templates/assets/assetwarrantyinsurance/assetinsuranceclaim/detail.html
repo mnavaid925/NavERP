@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ claim.number }} — {{ claim.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_insurance_claim_list' %}">Insurance Claims</a>
+            <span>/</span>
+            <span>{{ claim.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ claim.number }} — {{ claim.title }}</h1>
+            <span class="badge {{ claim.claim_status_css }}">{{ claim.get_claim_status_display }}</span>
+            <span class="badge {{ claim.peril_type_css }}">{{ claim.get_peril_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if claim.claim_status == 'incident_reported' %}
+        <button type="button" onclick="document.getElementById('adjuster-modal').classList.remove('hidden')" class="btn btn-primary">
+            <i data-lucide="user-check" class="w-4 h-4 me-1"></i> Assign Adjuster
+        </button>
+        {% endif %}
+        {% if claim.claim_status == 'adjuster_assigned' %}
+        <form method="post" action="{% url 'assets:asset_insurance_claim_file_proof' claim.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="file-check" class="w-4 h-4 me-1"></i> File Proof of Loss
+            </button>
+        </form>
+        {% endif %}
+        {% if claim.claim_status == 'proof_of_loss_filed' or claim.claim_status == 'under_carrier_review' or claim.claim_status == 'approved_pending_payout' or claim.claim_status == 'adjuster_assigned' %}
+        <button type="button" onclick="document.getElementById('settle-modal').classList.remove('hidden')" class="btn btn-primary">
+            <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Record Settlement
+        </button>
+        <button type="button" onclick="document.getElementById('deny-modal').classList.remove('hidden')" class="btn btn-outline text-red-600 hover:text-red-800">
+            <i data-lucide="x-circle" class="w-4 h-4 me-1"></i> Record Denial
+        </button>
+        {% endif %}
+        <a href="{% url 'assets:asset_insurance_claim_edit' claim.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <form method="post" action="{% url 'assets:asset_insurance_claim_delete' claim.pk %}" class="inline" onsubmit="return confirm('Delete claim {{ claim.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Casualty Incident Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Peril Occurrence & Damage Scope</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Incident Occurrence Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ claim.incident_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Physical Loss Location</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ claim.incident_location }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Carrier Claim Reference #</div>
+                        <div class="text-sm font-semibold text-slate-900 font-mono">{{ claim.carrier_claim_number|default:"Pending assignment" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Independent Loss Adjuster</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {% if claim.adjuster_party %}
+                                {{ claim.adjuster_party.name }}
+                                {% if claim.adjuster_name %} ({{ claim.adjuster_name }}){% endif %}
+                            {% elif claim.adjuster_name %}
+                                {{ claim.adjuster_name }}
+                            {% else %}
+                                Unassigned
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Settlement Method</div>
+                        <div><span class="badge {{ claim.settlement_method_css }}">{{ claim.get_settlement_method_display }}</span></div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Proof of Loss Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ claim.proof_of_loss_date|date:"F d, Y"|default:"Not yet submitted" }}</div>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Casualty Narrative & Immediate Actions</h3>
+                    <div class="p-3 bg-slate-50 rounded text-sm text-slate-800 whitespace-pre-line">{{ claim.incident_description }}</div>
+                </div>
+
+                {% if claim.settlement_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Settlement Accounting & Subrogation Remarks</h3>
+                    <div class="p-3 bg-emerald-50 text-emerald-900 rounded text-sm whitespace-pre-line">{{ claim.settlement_notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Loss Valuation & Indemnity Reconciliation</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-4 bg-slate-50 rounded">
+                        <div class="text-xs text-slate-500">Gross Loss Claimed</div>
+                        <div class="text-lg font-bold text-slate-900">{{ claim.currency.code|default:"USD" }} {{ claim.claimed_loss_amount }}</div>
+                    </div>
+                    <div class="p-4 bg-amber-50 rounded">
+                        <div class="text-xs text-amber-700">Deductible Applied</div>
+                        <div class="text-lg font-bold text-amber-900">{{ claim.currency.code|default:"USD" }} {{ claim.deductible_applied }}</div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded">
+                        <div class="text-xs text-blue-700">Salvage Recovery Offset</div>
+                        <div class="text-lg font-bold text-blue-900">{{ claim.currency.code|default:"USD" }} {{ claim.salvage_recovery_amount }}</div>
+                    </div>
+                    <div class="p-4 bg-emerald-50 rounded">
+                        <div class="text-xs text-emerald-700">Actual Payout Received</div>
+                        <div class="text-lg font-bold text-emerald-900">{{ claim.currency.code|default:"USD" }} {{ claim.settlement_payout_amount }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Policy & Cross-Module Links -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Covering Insurance Policy</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Policy Reference</div>
+                    <a href="{% url 'assets:asset_insurance_policy_detail' claim.policy.pk %}" class="text-sm font-semibold text-primary-600 hover:underline">
+                        {{ claim.policy.number }} ({{ claim.policy.policy_number }})
+                    </a>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Policy Title</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.policy.title }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Lead Carrier</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.policy.underwriter_party.name|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Policy Insured Limit (SOV)</div>
+                    <div class="text-sm font-semibold text-purple-900">{{ claim.policy.currency.code|default:"USD" }} {{ claim.policy.total_insured_value }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Affected Asset & Incident Record</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if claim.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Financial Fixed Asset</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.fixed_asset.number }} — {{ claim.fixed_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if claim.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Operational Machinery</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.operational_asset.tag_code }} — {{ claim.operational_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if claim.incident_report %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">11.2 Operational Incident Record</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.incident_report.number }} — {{ claim.incident_report.title }}</div>
+                </div>
+                {% endif %}
+                {% if claim.proof_of_loss_document %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Sworn Proof of Loss Document</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.proof_of_loss_document.title }}</div>
+                </div>
+                {% endif %}
+                <div class="pt-3 border-t border-slate-200 text-xs text-slate-500 space-y-1">
+                    <div>Claims Officer: {{ claim.claims_officer.username|default:"System" }}</div>
+                    {% if claim.date_reported_to_carrier %}<div>Reported to Carrier: {{ claim.date_reported_to_carrier|date:"M d, Y" }}</div>{% endif %}
+                    {% if claim.settlement_date %}<div>Settlement Date: {{ claim.settlement_date|date:"M d, Y" }}</div>{% endif %}
+                    <div>Created: {{ claim.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Adjuster Modal -->
+<div id="adjuster-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-slate-900">Assign Loss Adjuster</h3>
+        <p class="text-sm text-slate-600">Assign independent loss adjuster and record carrier claim reference.</p>
+        <form method="post" action="{% url 'assets:asset_insurance_claim_assign_adjuster' claim.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_adjuster_name" class="form-label">Adjuster Name / Contact *</label>
+                <input type="text" id="id_adjuster_name" name="adjuster_name" value="{{ claim.adjuster_name }}" class="form-input" required>
+            </div>
+            <div>
+                <label for="id_carrier_claim_number" class="form-label">Carrier Claim Reference #</label>
+                <input type="text" id="id_carrier_claim_number" name="carrier_claim_number" value="{{ claim.carrier_claim_number }}" class="form-input">
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('adjuster-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Assignment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Settlement Modal -->
+<div id="settle-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-slate-900">Record Claim Settlement</h3>
+        <p class="text-sm text-slate-600">Record final indemnity payout dispatched by the insurance carrier.</p>
+        <form method="post" action="{% url 'assets:asset_insurance_claim_settle' claim.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_settlement_payout" class="form-label">Net Indemnity Payout ({{ claim.currency.code|default:"USD" }}) *</label>
+                <input type="number" step="0.01" id="id_settlement_payout" name="settlement_payout_amount" value="{{ claim.claimed_loss_amount }}" class="form-input" required>
+            </div>
+            <div>
+                <label for="id_salvage_recovery" class="form-label">Salvage Recovery Amount</label>
+                <input type="number" step="0.01" id="id_salvage_recovery" name="salvage_recovery_amount" value="0.00" class="form-input">
+            </div>
+            <div>
+                <label for="id_settlement_method" class="form-label">Settlement Method</label>
+                <select id="id_settlement_method" name="settlement_method" class="form-select">
+                    {% for val, label in claim.SETTLEMENT_METHOD_CHOICES %}
+                    <option value="{{ val }}" {% if val == 'direct_indemnity_check' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_claim_settle_notes" class="form-label">Settlement Notes</label>
+                <textarea id="id_claim_settle_notes" name="settlement_notes" rows="3" class="form-textarea" placeholder="EFT batch reference, salvage agreement, release execution..."></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('settle-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Confirm Settlement</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Denial Modal -->
+<div id="deny-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-red-700">Record Carrier Claim Denial</h3>
+        <p class="text-sm text-slate-600">Document grounds for carrier denial or exclusion dispute.</p>
+        <form method="post" action="{% url 'assets:asset_insurance_claim_deny' claim.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_deny_notes" class="form-label">Denial Justification & Policy Exclusion Clause *</label>
+                <textarea id="id_deny_notes" name="settlement_notes" rows="4" class="form-textarea" placeholder="Carrier formal denial letter grounds, unendorsed peril, maintenance lapse exclusion..." required></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('deny-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Denial</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
