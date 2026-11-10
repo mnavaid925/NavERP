@@ -86,6 +86,10 @@ class AssetResaleListingForm(TenantUniqueMixin, TenantModelForm):
             cleaned,
             ["disposal_request", "fixed_asset", "buyer", "broker_auctioneer", "managed_by", "bill_of_sale_document"],
         )
+        dr = cleaned.get("disposal_request")
+        fa = cleaned.get("fixed_asset")
+        if dr and fa and dr.fixed_asset_id and fa.pk != dr.fixed_asset_id:
+            self.add_error("fixed_asset", f"Fixed asset must match the asset linked to disposal request {dr.number} ({dr.fixed_asset}).")
         return cleaned
 
 
