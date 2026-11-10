@@ -70,7 +70,7 @@ def asset_lease_contract_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    lessor_list = Party.objects.filter(tenant=request.tenant).order_by("name")
+    lessor_list = Party.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "leases": page_obj.object_list,
