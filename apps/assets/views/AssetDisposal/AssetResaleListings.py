@@ -40,7 +40,7 @@ def asset_resale_listing_list(request):
             Q(number__icontains=q)
             | Q(listing_reference__icontains=q)
             | Q(fixed_asset__name__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
             | Q(buyer__name__icontains=q)
             | Q(buyer_contact_name__icontains=q)
         )
