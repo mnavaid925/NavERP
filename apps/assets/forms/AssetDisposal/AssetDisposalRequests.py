@@ -53,6 +53,16 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        for f in [
+            "acquisition_cost",
+            "accumulated_depreciation",
+            "net_book_value",
+            "estimated_residual_value",
+            "estimated_removal_cost",
+        ]:
+            if f in self.fields:
+                self.fields[f].required = False
+
         if self.tenant:
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
@@ -88,6 +98,10 @@ class AssetDisposalRequestForm(TenantUniqueMixin, TenantModelForm):
                 cleaned["net_book_value"] = getattr(fa, "net_book_value", Decimal("0.00")) or (
                     cleaned["acquisition_cost"] - cleaned["accumulated_depreciation"]
                 )
+
+        for f in ["acquisition_cost", "accumulated_depreciation", "net_book_value", "estimated_residual_value", "estimated_removal_cost"]:
+            if cleaned.get(f) is None:
+                cleaned[f] = Decimal("0.00")
 
         return cleaned
 
