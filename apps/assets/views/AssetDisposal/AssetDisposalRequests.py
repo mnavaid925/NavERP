@@ -117,9 +117,9 @@ def asset_disposal_request_detail(request, pk):
         ],
     )
 
-    resale_listings = disposal_request.resale_listings.select_related("buyer", "broker_auctioneer").order_by("-created_at")
-    trade_ins = disposal_request.trade_ins.select_related("vendor", "replacement_fixed_asset").order_by("-created_at")
-    scrap_salvages = disposal_request.scrap_salvages.select_related("recycler_partner", "supervisor").order_by("-created_at")
+    resale_listings = disposal_request.resale_listings.select_related("fixed_asset", "buyer", "broker_auctioneer").order_by("-created_at")
+    trade_ins = disposal_request.trade_ins.select_related("retired_fixed_asset", "vendor", "replacement_fixed_asset").order_by("-created_at")
+    scrap_salvages = disposal_request.scrap_salvages.select_related("fixed_asset", "recycler_partner", "supervisor").order_by("-created_at")
 
     appraisal_form = AssetDisposalAppraisalForm(tenant=request.tenant)
     reject_form = AssetDisposalRejectForm()
