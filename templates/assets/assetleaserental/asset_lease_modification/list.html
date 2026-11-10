@@ -51,10 +51,10 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div class="md:col-span-2">
-                <input type="text" name="q" value="{{ q }}" placeholder="Search mod #, contract, justification..." class="form-input">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search mod #, contract, justification..." class="form-input" aria-label="Search modifications">
             </div>
             <div>
-                <select name="status" class="form-select">
+                <select name="status" class="form-select" aria-label="Filter by status">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
@@ -62,7 +62,7 @@
                 </select>
             </div>
             <div>
-                <select name="type" class="form-select">
+                <select name="type" class="form-select" aria-label="Filter by modification type">
                     <option value="">All Types</option>
                     {% for code, label in type_choices %}
                     <option value="{{ code }}" {% if type == code %}selected{% endif %}>{{ label }}</option>
@@ -70,7 +70,7 @@
                 </select>
             </div>
             <div>
-                <select name="lease" class="form-select">
+                <select name="lease" class="form-select" aria-label="Filter by lease contract">
                     <option value="">All Contracts</option>
                     {% for l in lease_list %}
                     <option value="{{ l.pk }}" {% if lease == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.number }} — {{ l.title|truncatechars:25 }}</option>
@@ -93,15 +93,15 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th>Mod #</th>
-                    <th>Contract</th>
-                    <th>Modification Type</th>
-                    <th>Effective Date</th>
-                    <th>Prior Liability</th>
-                    <th>Revised Liability</th>
-                    <th>Adjustment</th>
-                    <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th scope="col">Mod #</th>
+                    <th scope="col">Contract</th>
+                    <th scope="col">Modification Type</th>
+                    <th scope="col">Effective Date</th>
+                    <th scope="col">Prior Liability</th>
+                    <th scope="col">Revised Liability</th>
+                    <th scope="col">Adjustment</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -135,15 +135,15 @@
                         </span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'assets:asset_lease_modification_detail' mod.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'assets:asset_lease_modification_detail' mod.pk %}" class="btn btn-icon" title="View Detail" aria-label="View modification {{ mod.number }}">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'assets:asset_lease_modification_edit' mod.pk %}" class="btn btn-icon" title="Edit Modification">
+                        <a href="{% url 'assets:asset_lease_modification_edit' mod.pk %}" class="btn btn-icon" title="Edit Modification" aria-label="Edit modification {{ mod.number }}">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'assets:asset_lease_modification_delete' mod.pk %}" class="inline" onsubmit="return confirm('Delete modification {{ mod.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete modification {{ mod.number }}">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
