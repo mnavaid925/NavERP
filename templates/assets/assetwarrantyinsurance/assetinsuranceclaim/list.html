@@ -154,16 +154,16 @@
                             <span class="badge {{ c.claim_status_css }}">{{ c.get_claim_status_display }}</span>
                         </td>
                         <td class="table-actions text-end">
-                            <a href="{% url 'assets:asset_insurance_claim_detail' c.pk %}" class="btn btn-icon" title="View Details">
+                            <a href="{% url 'assets:asset_insurance_claim_detail' c.pk %}" class="btn btn-icon" title="View Details" aria-label="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
-                            <a href="{% url 'assets:asset_insurance_claim_edit' c.pk %}" class="btn btn-icon" title="Edit">
+                            <a href="{% url 'assets:asset_insurance_claim_edit' c.pk %}" class="btn btn-icon" title="Edit" aria-label="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'assets:asset_insurance_claim_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete claim {{ c.number }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete" aria-label="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
