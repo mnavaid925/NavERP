@@ -167,6 +167,9 @@ def asset_compliance_incident_create(request):
 @login_required
 def asset_compliance_incident_edit(request, pk):
     incident = assets_object(request, AssetComplianceIncident, pk)
+    if incident.status == "closed" and (incident.fine_assessed or 0) > 0:
+        messages.error(request, f"Settled compliance incident {incident.number} with assessed fines cannot be edited.")
+        return redirect("assets:asset_compliance_incident_detail", pk=incident.pk)
     if request.method == "POST":
         form = AssetComplianceIncidentForm(request.POST, instance=incident, tenant=request.tenant)
         if form.is_valid():
@@ -198,6 +201,9 @@ def asset_compliance_incident_edit(request, pk):
 @require_POST
 def asset_compliance_incident_delete(request, pk):
     incident = assets_object(request, AssetComplianceIncident, pk)
+    if incident.status == "closed" and (incident.fine_assessed or 0) > 0:
+        messages.error(request, f"Settled compliance incident {incident.number} with assessed fines cannot be deleted.")
+        return redirect("assets:asset_compliance_incident_detail", pk=incident.pk)
     num = incident.number
     write_audit_log(
         request.user,
