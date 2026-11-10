@@ -1,0 +1,1 @@
+"""AssetDisposal views package."""
