@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Audit — {{ audit.number }}{% else %}Schedule Compliance Audit{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_compliance_audit_list' %}">Compliance Audits</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ audit.number }}{% else %}Schedule Audit{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Compliance Audit{% else %}Schedule New Compliance Audit{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Audit Plan & Checkpoints</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Audit Title *</label>
+                    {{ form.title }}
+                    <span class="text-xs text-muted">{{ form.title.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.framework.id_for_label }}">Governing Framework *</label>
+                    {{ form.framework }}
+                    <span class="text-xs text-muted">{{ form.framework.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset</label>
+                    {{ form.asset }}
+                    <span class="text-xs text-muted">{{ form.asset.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.audit_type.id_for_label }}">Audit Type *</label>
+                    {{ form.audit_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.audit_date.id_for_label }}">Audit Date *</label>
+                    {{ form.audit_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lead_auditor_user.id_for_label }}">Lead Internal Auditor</label>
+                    {{ form.lead_auditor_user }}
+                    <span class="text-xs text-muted">{{ form.lead_auditor_user.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.auditor_party.id_for_label }}">External Registrar / Inspection Body</label>
+                    {{ form.auditor_party }}
+                    <span class="text-xs text-muted">{{ form.auditor_party.help_text }}</span>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.scope_description.id_for_label }}">Scope Description</label>
+                    {{ form.scope_description }}
+                    <span class="text-xs text-muted">{{ form.scope_description.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.total_checkpoints.id_for_label }}">Total Checkpoints</label>
+                    {{ form.total_checkpoints }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.passed_checkpoints.id_for_label }}">Passed Checkpoints</label>
+                    {{ form.passed_checkpoints }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.minor_findings_count.id_for_label }}">Minor Findings Count</label>
+                    {{ form.minor_findings_count }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.major_findings_count.id_for_label }}">Major Non-Conformances</label>
+                    {{ form.major_findings_count }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.critical_findings_count.id_for_label }}">Critical Safety Breaches</label>
+                    {{ form.critical_findings_count }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.compliance_rating.id_for_label }}">Overall Compliance Rating</label>
+                    {{ form.compliance_rating }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.summary_findings.id_for_label }}">Summary Findings & Remedial Directives</label>
+                    {{ form.summary_findings }}
+                    <span class="text-xs text-muted">{{ form.summary_findings.help_text }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'assets:asset_compliance_audit_list' %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Save Audit Plan{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
