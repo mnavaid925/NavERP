@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Lease Amortization Schedules — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <span>Schedules</span>
+        </div>
+        <h1 class="page-title">Lease Amortization & Payment Schedules</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_lease_schedule_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Schedule Line
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Installments</div>
+            <div class="stat-value">{{ total_schedules }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending / Scheduled</div>
+            <div class="stat-value">{{ scheduled_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Paid & Settled</div>
+            <div class="stat-value">{{ paid_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Paid Amount</div>
+            <div class="stat-value">${{ total_paid_amount|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search schedule #, payment ref, contract..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lease" class="form-select">
+                    <option value="">All Lease Contracts</option>
+                    {% for l in lease_list %}
+                    <option value="{{ l.pk }}" {% if lease == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.number }} — {{ l.title|truncatechars:30 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-4 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_lease_schedule_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Schedule #</th>
+                    <th>Contract</th>
+                    <th>Prd</th>
+                    <th>Due Date</th>
+                    <th>Payment</th>
+                    <th>Interest</th>
+                    <th>Principal</th>
+                    <th>Ending Liability</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sch in schedules %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_lease_schedule_detail' sch.pk %}" class="text-primary hover:underline">
+                            {{ sch.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'assets:asset_lease_contract_detail' sch.lease_contract.pk %}" class="hover:underline font-medium">
+                            {{ sch.lease_contract.number }}
+                        </a>
+                        <div class="text-xs text-muted">{{ sch.lease_contract.lessor.name }}</div>
+                    </td>
+                    <td class="font-mono text-xs">{{ sch.period_number }}</td>
+                    <td>{{ sch.due_date|date:"Y-m-d" }}</td>
+                    <td class="font-medium">${{ sch.payment_amount|floatformat:2 }}</td>
+                    <td class="font-mono text-xs text-danger">${{ sch.interest_expense|floatformat:2 }}</td>
+                    <td class="font-mono text-xs text-success">${{ sch.principal_reduction|floatformat:2 }}</td>
+                    <td class="font-mono text-xs font-semibold">${{ sch.ending_liability|floatformat:2 }}</td>
+                    <td>
+                        <span class="badge {{ sch.status_css }}">
+                            {{ sch.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_lease_schedule_detail' sch.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_lease_schedule_edit' sch.pk %}" class="btn btn-icon" title="Edit Schedule Line">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_lease_schedule_delete' sch.pk %}" class="inline" onsubmit="return confirm('Delete schedule line {{ sch.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state py-8">
+                            <i data-lucide="calendar" class="w-12 h-12 text-muted mb-2"></i>
+                            <div class="text-base font-medium">No payment schedules found</div>
+                            <p class="text-sm text-muted mt-1">Payment schedule lines are created when activating a lease contract.</p>
+                            <a href="{% url 'assets:asset_lease_contract_list' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> View Lease Contracts
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if lease %}&lease={{ lease }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if lease %}&lease={{ lease }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
