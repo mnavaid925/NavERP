@@ -201,6 +201,18 @@ def asset_lease_contract_calculate(request, pk):
     classification = lease.evaluate_statutory_classification()
     lease.save()
 
+    write_audit_log(
+        request.user,
+        lease,
+        "calculate",
+        changes=(
+            f"Calculated present value for contract {lease.number}: "
+            f"PV Liability=${pv_liability:,.2f}, Initial ROU=${initial_rou:,.2f}, "
+            f"Classification={lease.get_classification_display()}"
+        ),
+        tenant=request.tenant,
+    )
+
     messages.info(
         request,
         f"Contract calculated: Liability PV=${pv_liability:,.2f}, ROU Asset=${initial_rou:,.2f}, "
