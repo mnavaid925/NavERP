@@ -44,7 +44,7 @@
 - [x] **M7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). If `request.GET.lease` is present, cancel links back to originating contract detail page.
 - [x] **M8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
 - [x] **M9**: Accessibility improvements in templates (`templates/assets/assetleaserental/`). Add `aria-label` to filter inputs and action icon buttons, add `scope="col"` to table header cells.
-- [ ] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
+- [x] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
 - [ ] **M11**: Large text fields not deferred in modification and buy-analysis list views (`apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
 - [ ] **M12**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
 - [ ] **M13**: Unchecked state transition in `asset_lease_contract_terminate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`). Guard `if lease.status not in ["active", "modified"]:` returning a warning message.
