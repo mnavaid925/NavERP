@@ -151,8 +151,8 @@ def asset_resale_listing_create(request):
         if dr_id and dr_id.isdigit():
             initial["disposal_request"] = int(dr_id)
             dr = assets_scope(AssetDisposalRequest.objects.all(), request).filter(pk=int(dr_id)).first()
-            if dr and dr.fixed_asset:
-                initial["fixed_asset"] = dr.fixed_asset.pk
+            if dr and dr.fixed_asset_id:
+                initial["fixed_asset"] = dr.fixed_asset_id
                 initial["asking_price"] = dr.estimated_residual_value or Decimal("0.00")
         form = AssetResaleListingForm(initial=initial, tenant=request.tenant)
 
