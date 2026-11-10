@@ -82,46 +82,46 @@
                 <i data-lucide="shopping-bag" class="w-5 h-5 text-ok"></i>
                 <h2 class="text-base font-semibold">Scenario A: Outright Purchase / Loan</h2>
             </div>
-            <span class="font-mono text-sm font-bold text-slate-800">NPV: ${{ analysis.npv_purchase_option|floatformat:2 }}</span>
+            <span class="font-mono text-sm font-bold text-slate-800 dark:text-slate-100">NPV: ${{ analysis.npv_purchase_option|floatformat:2 }}</span>
         </div>
         <div class="card-body">
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm mb-4">
                 <div>
                     <dt class="text-muted">Target Asset Name</dt>
-                    <dd class="font-medium text-slate-900">{{ analysis.target_asset_name }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ analysis.target_asset_name }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Useful Life Horizon</dt>
-                    <dd class="font-medium text-slate-900">{{ analysis.expected_useful_life_years }} Years</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ analysis.expected_useful_life_years }} Years</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Purchase Quote Price</dt>
-                    <dd class="font-bold text-slate-900">${{ analysis.purchase_price|floatformat:2 }}</dd>
+                    <dd class="font-bold text-slate-900 dark:text-slate-100">${{ analysis.purchase_price|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Down Payment</dt>
-                    <dd class="font-medium text-slate-900">{{ analysis.down_payment_pct }}%</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ analysis.down_payment_pct }}%</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Loan Financing Rate</dt>
-                    <dd class="font-medium text-slate-900">{{ analysis.loan_interest_rate_pct }}% ({{ analysis.loan_term_years }} yrs)</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ analysis.loan_interest_rate_pct }}% ({{ analysis.loan_term_years }} yrs)</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Estimated Salvage Value</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.estimated_salvage_value|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">${{ analysis.estimated_salvage_value|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Annual Maintenance (Buy)</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.annual_maintenance_cost_buy|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">${{ analysis.annual_maintenance_cost_buy|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Annual Property Tax & Ins.</dt>
-                    <dd class="font-medium text-slate-900">${{ analysis.annual_insurance_tax_buy|floatformat:2 }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">${{ analysis.annual_insurance_tax_buy|floatformat:2 }}</dd>
                 </div>
             </dl>
-            <div class="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center text-sm">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center text-sm">
                 <span class="text-muted">Undiscounted Total Cost (TCO):</span>
-                <span class="font-mono font-semibold text-slate-900">${{ analysis.tco_purchase_option|floatformat:2 }}</span>
+                <span class="font-mono font-semibold text-slate-900 dark:text-slate-100">${{ analysis.tco_purchase_option|floatformat:2 }}</span>
             </div>
         </div>
     </div>
@@ -133,38 +133,38 @@
                 <i data-lucide="repeat" class="w-5 h-5 text-brand"></i>
                 <h2 class="text-base font-semibold">Scenario B: Lease Agreement</h2>
             </div>
-            <span class="font-mono text-sm font-bold text-slate-800">NPV: ${{ analysis.npv_lease_option|floatformat:2 }}</span>
+            <span class="font-mono text-sm font-bold text-slate-800 dark:text-slate-100">NPV: ${{ analysis.npv_lease_option|floatformat:2 }}</span>
         </div>
         <div class="card-body">
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm mb-4">
                 <div>
                     <dt class="text-muted">Proposed Lease Term</dt>
-                    <dd class="font-medium text-slate-900">{{ analysis.lease_term_months }} Months</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ analysis.lease_term_months }} Months</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Monthly Rental Installment</dt>
-                    <dd class="font-bold text-slate-900">${{ analysis.monthly_lease_payment|floatformat:2 }}</dd>
+                    <dd class="font-bold text-slate-900 dark:text-slate-100">${{ analysis.monthly_lease_payment|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Upfront Lease Fees</dt>
-                    <dd class="font-medium text-slate-900">{% if analysis.upfront_lease_fees is not None %}${{ analysis.upfront_lease_fees|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if analysis.upfront_lease_fees is not None %}${{ analysis.upfront_lease_fees|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Buyout Option at Expiration</dt>
-                    <dd class="font-medium text-slate-900">{% if analysis.end_of_lease_purchase_option is not None %}${{ analysis.end_of_lease_purchase_option|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if analysis.end_of_lease_purchase_option is not None %}${{ analysis.end_of_lease_purchase_option|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Lessor Maintenance Coverage</dt>
-                    <dd class="font-medium text-slate-900">{% if analysis.lessor_covers_maintenance %}<span class="badge badge-green">Included</span>{% else %}<span class="badge badge-amber">Lessee Incurred</span>{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if analysis.lessor_covers_maintenance %}<span class="badge badge-green">Included</span>{% else %}<span class="badge badge-amber">Lessee Incurred</span>{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Annual Lessee Maint. (Lease)</dt>
-                    <dd class="font-medium text-slate-900">{% if analysis.annual_maintenance_cost_lease is not None %}${{ analysis.annual_maintenance_cost_lease|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if analysis.annual_maintenance_cost_lease is not None %}${{ analysis.annual_maintenance_cost_lease|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
             </dl>
-            <div class="p-3 bg-slate-50 rounded border border-slate-200 flex justify-between items-center text-sm">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center text-sm">
                 <span class="text-muted">Undiscounted Total Cost (TCO):</span>
-                <span class="font-mono font-semibold text-slate-900">${{ analysis.tco_lease_option|floatformat:2 }}</span>
+                <span class="font-mono font-semibold text-slate-900 dark:text-slate-100">${{ analysis.tco_lease_option|floatformat:2 }}</span>
             </div>
         </div>
     </div>
@@ -176,36 +176,36 @@
         <h2 class="text-base font-semibold">Corporate Financial Parameters & Executive Decision</h2>
     </div>
     <div class="card-body space-y-4">
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm p-3 bg-slate-50 rounded border border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
             <div>
                 <span class="text-muted">Discount Rate (WACC):</span>
-                <span class="font-medium text-slate-900 ml-1">{{ analysis.discount_rate_wacc_pct }}%</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{{ analysis.discount_rate_wacc_pct }}%</span>
             </div>
             <div>
                 <span class="text-muted">Corporate Tax Rate:</span>
-                <span class="font-medium text-slate-900 ml-1">{{ analysis.corporate_tax_rate_pct }}%</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{{ analysis.corporate_tax_rate_pct }}%</span>
             </div>
             <div>
                 <span class="text-muted">Evaluated By:</span>
-                <span class="font-medium text-slate-900 ml-1">{% if analysis.evaluated_by %}{{ analysis.evaluated_by.get_full_name|default:analysis.evaluated_by.username }}{% else %}Not specified{% endif %}</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{% if analysis.evaluated_by %}{{ analysis.evaluated_by.get_full_name|default:analysis.evaluated_by.username }}{% else %}Not specified{% endif %}</span>
             </div>
             <div>
                 <span class="text-muted">Approved By:</span>
-                <span class="font-medium text-slate-900 ml-1">{% if analysis.approved_by %}{{ analysis.approved_by.get_full_name|default:analysis.approved_by.username }}{% else %}Pending{% endif %}</span>
+                <span class="font-medium text-slate-900 dark:text-slate-100 ml-1">{% if analysis.approved_by %}{{ analysis.approved_by.get_full_name|default:analysis.approved_by.username }}{% else %}Pending{% endif %}</span>
             </div>
         </div>
 
         {% if analysis.description %}
         <div class="text-sm">
-            <div class="font-semibold text-slate-900 mb-1">Scenario Background:</div>
-            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ analysis.description }}</div>
+            <div class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Scenario Background:</div>
+            <div class="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">{{ analysis.description }}</div>
         </div>
         {% endif %}
 
         {% if analysis.evaluation_notes %}
         <div class="text-sm">
-            <div class="font-semibold text-slate-900 mb-1">Executive Conclusion:</div>
-            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ analysis.evaluation_notes }}</div>
+            <div class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Executive Conclusion:</div>
+            <div class="text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">{{ analysis.evaluation_notes }}</div>
         </div>
         {% endif %}
     </div>
