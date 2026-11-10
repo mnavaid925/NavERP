@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ disposal_request.number }}{% else %}New Asset Disposal Request{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_disposal_request_list' %}">Disposal Requests</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ disposal_request.number }}{% else %}New Request{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Disposal Request: {{ disposal_request.number }}{% else %}New Asset Disposal Request{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Identification & Target Asset -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">1. Asset Identification & Governance</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2 form-group">
+                        <label class="form-label" for="{{ form.title.id_for_label }}">Request Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset *</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-slate-400 mt-1">Capital asset record from financial register</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Plant Asset</label>
+                        {{ form.operational_asset }}
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors.0 }}</div>{% endif %}
+                        <div class="text-xs text-slate-400 mt-1">Optional runtime machinery tag link</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.category.id_for_label }}">Asset Category</label>
+                        {{ form.category }}
+                        {% if form.category.errors %}<div class="form-error">{{ form.category.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.cost_center.id_for_label }}">Department / Cost Center</label>
+                        {{ form.cost_center }}
+                        {% if form.cost_center.errors %}<div class="form-error">{{ form.cost_center.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.requested_by.id_for_label }}">Initiating Custodian</label>
+                        {{ form.requested_by }}
+                        {% if form.requested_by.errors %}<div class="form-error">{{ form.requested_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.appraised_by.id_for_label }}">Technical Appraiser</label>
+                        {{ form.appraised_by }}
+                        {% if form.appraised_by.errors %}<div class="form-error">{{ form.appraised_by.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Disposal Strategy & Justification -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">2. Disposal Strategy & Justification</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.disposal_method.id_for_label }}">Disposal Method *</label>
+                        {{ form.disposal_method }}
+                        {% if form.disposal_method.errors %}<div class="form-error">{{ form.disposal_method.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.retirement_reason.id_for_label }}">Retirement Reason *</label>
+                        {{ form.retirement_reason }}
+                        {% if form.retirement_reason.errors %}<div class="form-error">{{ form.retirement_reason.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2 form-group">
+                        <label class="form-label" for="{{ form.justification_notes.id_for_label }}">Decommissioning Justification *</label>
+                        {{ form.justification_notes }}
+                        {% if form.justification_notes.errors %}<div class="form-error">{{ form.justification_notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Financial Basis & Estimates -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">3. Financial Basis & Valuation Estimates</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.acquisition_cost.id_for_label }}">Acquisition Cost ($)</label>
+                        {{ form.acquisition_cost }}
+                        {% if form.acquisition_cost.errors %}<div class="form-error">{{ form.acquisition_cost.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.accumulated_depreciation.id_for_label }}">Accumulated Depreciation ($)</label>
+                        {{ form.accumulated_depreciation }}
+                        {% if form.accumulated_depreciation.errors %}<div class="form-error">{{ form.accumulated_depreciation.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.net_book_value.id_for_label }}">Net Book Value ($)</label>
+                        {{ form.net_book_value }}
+                        {% if form.net_book_value.errors %}<div class="form-error">{{ form.net_book_value.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.estimated_residual_value.id_for_label }}">Estimated Residual Value ($)</label>
+                        {{ form.estimated_residual_value }}
+                        {% if form.estimated_residual_value.errors %}<div class="form-error">{{ form.estimated_residual_value.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.estimated_removal_cost.id_for_label }}">Estimated Removal / Freight Cost ($)</label>
+                        {{ form.estimated_removal_cost }}
+                        {% if form.estimated_removal_cost.errors %}<div class="form-error">{{ form.estimated_removal_cost.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'assets:asset_disposal_request_detail' disposal_request.pk %}{% else %}{% url 'assets:asset_disposal_request_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Disposal Request{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
