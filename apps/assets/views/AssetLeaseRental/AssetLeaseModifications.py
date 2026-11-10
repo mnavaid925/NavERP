@@ -207,7 +207,7 @@ def asset_lease_modification_delete(request, pk):
 
 
 @require_POST
-@login_required
+@tenant_admin_required
 def asset_lease_modification_approve(request, pk):
     modification = assets_object(
         request,
