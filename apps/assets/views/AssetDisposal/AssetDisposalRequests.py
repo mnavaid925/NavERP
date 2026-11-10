@@ -307,25 +307,7 @@ def asset_disposal_request_complete(request, pk):
         return redirect("assets:asset_disposal_request_detail", pk=instance.pk)
 
     with transaction.atomic():
-        instance.calculate_gain_loss()
-        instance.status = "completed"
-        instance.completed_at = timezone.now()
-        instance.save(update_fields=["status", "completed_at", "realized_gain_loss", "updated_at"])
-
-        # Update FixedAsset status in accounting register
-        if instance.fixed_asset:
-            fa = instance.fixed_asset
-            if hasattr(fa, "status"):
-                fa.status = "disposed"
-                fa.save(update_fields=["status", "updated_at"] if hasattr(fa, "updated_at") else ["status"])
-
-        # Update scm.Asset status in operational plant equipment
-        if instance.operational_asset:
-            oa = instance.operational_asset
-            if hasattr(oa, "status"):
-                oa.status = "disposed"
-                oa.save(update_fields=["status", "updated_at"] if hasattr(oa, "updated_at") else ["status"])
-
+        instance.complete_disposal()
         write_audit_log(request.user, instance, "update", tenant=request.tenant)
 
     messages.success(
