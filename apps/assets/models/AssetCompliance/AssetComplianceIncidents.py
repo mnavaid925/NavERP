@@ -240,3 +240,16 @@ class AssetComplianceIncident(TenantNumbered):
     @property
     def outstanding_fine(self):
         return max(Decimal("0.00"), self.fine_assessed - self.fine_paid)
+
+    @property
+    def outstanding_penalty(self):
+        return self.outstanding_fine
+
+    @property
+    def has_outstanding_fine(self):
+        return self.outstanding_fine > Decimal("0.00")
+
+    @property
+    def is_resolved(self):
+        return self.status in ["resolved", "closed"]
+
