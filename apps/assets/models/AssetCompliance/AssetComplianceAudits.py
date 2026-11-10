@@ -158,6 +158,7 @@ class AssetComplianceAudit(TenantNumbered):
             models.Index(fields=["tenant", "audit_type"], name="idx_aca_ten_type"),
             models.Index(fields=["tenant", "compliance_rating"], name="idx_aca_ten_rate"),
             models.Index(fields=["tenant", "audit_date"], name="idx_aca_ten_adate"),
+            models.Index(fields=["tenant", "framework"], name="idx_aca_ten_fw"),
         ]
 
     def __str__(self):
