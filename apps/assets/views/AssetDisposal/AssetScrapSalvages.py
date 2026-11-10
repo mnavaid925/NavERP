@@ -236,7 +236,9 @@ def asset_scrap_salvage_certify_abatement(request, pk):
             if form.cleaned_data.get("hazardous_waste_class"):
                 instance.hazardous_waste_class = form.cleaned_data["hazardous_waste_class"]
             if form.cleaned_data.get("abatement_notes"):
-                instance.notes += f"\n[Abatement Verified]: {form.cleaned_data['abatement_notes']}"
+                existing = instance.notes or ""
+                sep = "\n" if existing else ""
+                instance.notes = f"{existing}{sep}[Abatement Verified]: {form.cleaned_data['abatement_notes']}"
             instance.status = "scrap_transferred"
             instance.save(update_fields=[
                 "abatement_certified",
