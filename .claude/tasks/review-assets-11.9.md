@@ -35,7 +35,7 @@
     - In `asset_trade_in_settle`: `if instance.status == "credit_settled": messages.info(request, ...); return redirect(...)`
     - In `asset_scrap_salvage_settle`: `if instance.status == "settled": messages.info(request, ...); return redirect(...)`
 
-- [ ] **I3: Missing Administrative Privilege Guard on Capital Asset Disposal Approval**
+- [x] **I3: Missing Administrative Privilege Guard on Capital Asset Disposal Approval** — fixed (commit b9331e22)
   - **Location:** `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:248-264` (`asset_disposal_request_approve`)
   - **Issue:** Derecognizing capitalized balance sheet assets carries financial governance implications. `asset_disposal_request_approve` is currently decorated only with `@login_required` and `@require_POST`, allowing any non-admin tenant employee to approve asset retirements.
   - **Fix:** Add `@tenant_admin_required` to `asset_disposal_request_approve`.
