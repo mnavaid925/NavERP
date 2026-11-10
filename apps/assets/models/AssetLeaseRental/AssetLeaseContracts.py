@@ -413,68 +413,68 @@ class AssetLeaseContract(TenantNumbered):
         """
         from apps.assets.models.AssetLeaseRental.AssetLeaseSchedules import AssetLeaseSchedule
 
-        # Delete any existing scheduled lines
-        self.payment_schedules.filter(status="scheduled").delete()
-
-        r = self.periodic_discount_rate
-        pmt = self.payment_amount
-        liability = self.initial_lease_liability
-        rou_balance = self.initial_rou_asset_value
-        n = self.total_periods
-        rou_deprec_per_period = (
-            rou_balance / Decimal(str(n)) if n > 0 else Decimal("0.00")
-        )
-
-        months_per_period = 12 // self.periods_per_year
-        current_date = self.first_payment_date or self.commencement_date
-        base_day = current_date.day
-
-        schedules = []
-        for period in range(1, n + 1):
-            beginning_liability = liability
-
-            if self.payment_timing == "advance" and period == 1:
-                # First payment in advance incurs zero interest for period 1
-                interest = Decimal("0.00")
-                principal = min(beginning_liability, pmt)
-                ending_liability = max(Decimal("0.00"), beginning_liability - principal)
-            else:
-                interest = Decimal(str(round(float(beginning_liability) * float(r), 2)))
-                principal = min(beginning_liability, pmt - interest)
-                ending_liability = max(Decimal("0.00"), beginning_liability - principal)
-
-            ending_rou = max(Decimal("0.00"), rou_balance - rou_deprec_per_period)
-            if period == n:
-                # Force clean zeroing on final period
-                ending_liability = Decimal("0.00")
-                ending_rou = Decimal("0.00")
-
-            schedule = AssetLeaseSchedule(
-                tenant=self.tenant,
-                lease_contract=self,
-                period_number=period,
-                due_date=current_date,
-                payment_amount=pmt,
-                beginning_liability=beginning_liability,
-                interest_expense=interest,
-                principal_reduction=principal,
-                ending_liability=ending_liability,
-                rou_depreciation=rou_deprec_per_period,
-                ending_rou_asset_value=ending_rou,
-                status="scheduled",
-            )
-            schedules.append(schedule)
-
-            liability = ending_liability
-            rou_balance = ending_rou
-            # Add months safely using calendar
-            _m = current_date.month - 1 + months_per_period
-            _y = current_date.year + _m // 12
-            _m = _m % 12 + 1
-            _d = min(base_day, calendar.monthrange(_y, _m)[1])
-            current_date = datetime.date(_y, _m, _d)
-
         with transaction.atomic():
+            # Delete any existing scheduled lines
+            self.payment_schedules.filter(status="scheduled").delete()
+
+            r = self.periodic_discount_rate
+            pmt = self.payment_amount
+            liability = self.initial_lease_liability
+            rou_balance = self.initial_rou_asset_value
+            n = self.total_periods
+            rou_deprec_per_period = (
+                rou_balance / Decimal(str(n)) if n > 0 else Decimal("0.00")
+            )
+
+            months_per_period = 12 // self.periods_per_year
+            current_date = self.first_payment_date or self.commencement_date
+            base_day = current_date.day
+
+            schedules = []
+            for period in range(1, n + 1):
+                beginning_liability = liability
+
+                if self.payment_timing == "advance" and period == 1:
+                    # First payment in advance incurs zero interest for period 1
+                    interest = Decimal("0.00")
+                    principal = min(beginning_liability, pmt)
+                    ending_liability = max(Decimal("0.00"), beginning_liability - principal)
+                else:
+                    interest = Decimal(str(round(float(beginning_liability) * float(r), 2)))
+                    principal = min(beginning_liability, pmt - interest)
+                    ending_liability = max(Decimal("0.00"), beginning_liability - principal)
+
+                ending_rou = max(Decimal("0.00"), rou_balance - rou_deprec_per_period)
+                if period == n:
+                    # Force clean zeroing on final period
+                    ending_liability = Decimal("0.00")
+                    ending_rou = Decimal("0.00")
+
+                schedule = AssetLeaseSchedule(
+                    tenant=self.tenant,
+                    lease_contract=self,
+                    period_number=period,
+                    due_date=current_date,
+                    payment_amount=pmt,
+                    beginning_liability=beginning_liability,
+                    interest_expense=interest,
+                    principal_reduction=principal,
+                    ending_liability=ending_liability,
+                    rou_depreciation=rou_deprec_per_period,
+                    ending_rou_asset_value=ending_rou,
+                    status="scheduled",
+                )
+                schedules.append(schedule)
+
+                liability = ending_liability
+                rou_balance = ending_rou
+                # Add months safely using calendar
+                _m = current_date.month - 1 + months_per_period
+                _y = current_date.year + _m // 12
+                _m = _m % 12 + 1
+                _d = min(base_day, calendar.monthrange(_y, _m)[1])
+                current_date = datetime.date(_y, _m, _d)
+
             for schedule in schedules:
                 schedule.save()
-        return len(schedules)
+            return len(schedules)
