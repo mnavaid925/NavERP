@@ -2203,6 +2203,264 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] 11.9 Seeding complete (3 disposal requests, 1 resale listing, 1 trade-in, 1 scrap salvage).")
 
+        # -------------------------------------------------------------
+        # Sub-module 11.11: Compliance & Regulatory Management
+        # -------------------------------------------------------------
+        if AssetComplianceFramework.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.11 Compliance already seeded; skipping.")
+        else:
+            cat = AssetCategory.objects.filter(tenant=tenant).first()
+            oa_primary = Asset.objects.filter(tenant=tenant).first()
+            vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+
+            with transaction.atomic():
+                # 1. Compliance Framework 1: OSHA PSM
+                fw_osha = AssetComplianceFramework.objects.create(
+                    tenant=tenant,
+                    name="OSHA 1910.119 Process Safety Management",
+                    code="OSHA-1910-PSM",
+                    framework_type="regulatory",
+                    regulatory_agency=vendor,
+                    applicable_category=cat,
+                    effective_date=today - timezone.timedelta(days=365),
+                    revision="2024 Edition",
+                    mandatory_audit_cycle_months=12,
+                    readiness_score=94,
+                    description="Mandatory federal standard governing management of hazards associated with highly hazardous chemicals in process facilities.",
+                    status="active",
+                )
+
+                # 2. Compliance Framework 2: ISO 55001
+                fw_iso = AssetComplianceFramework.objects.create(
+                    tenant=tenant,
+                    name="ISO 55001:2024 Asset Management Systems",
+                    code="ISO-55001",
+                    framework_type="voluntary_standard",
+                    regulatory_agency=vendor,
+                    applicable_category=cat,
+                    effective_date=today - timezone.timedelta(days=180),
+                    revision="2024 Reissue",
+                    mandatory_audit_cycle_months=36,
+                    readiness_score=90,
+                    description="International management system standard defining requirements for establishing, implementing, maintaining, and improving physical asset lifecycle governance.",
+                    status="active",
+                )
+
+                # 3. Compliance Framework 3: EPA Title V
+                fw_epa = AssetComplianceFramework.objects.create(
+                    tenant=tenant,
+                    name="EPA Clean Air Act Title V Operating Permit Standard",
+                    code="EPA-TITLE-V",
+                    framework_type="regulatory",
+                    regulatory_agency=vendor,
+                    applicable_category=cat,
+                    effective_date=today - timezone.timedelta(days=500),
+                    revision="Rev 4",
+                    mandatory_audit_cycle_months=12,
+                    readiness_score=88,
+                    description="Federal and delegated state Clean Air Act requirements for stationary source emissions, continuous emission monitoring, and compliance certifications.",
+                    status="active",
+                )
+
+                # 4. Compliance Audit 1: Annual OSHA Safety Audit
+                audit1 = AssetComplianceAudit.objects.create(
+                    tenant=tenant,
+                    title="Annual Plant Machine Guarding & LOTO Verification",
+                    framework=fw_osha,
+                    asset=oa_primary,
+                    audit_type="internal",
+                    lead_auditor_user=user,
+                    auditor_party=None,
+                    audit_date=today - timezone.timedelta(days=45),
+                    scope_description="Verification of physical barrier interlocks, emergency stop switches, and lockout/tagout procedures across production machinery.",
+                    total_checkpoints=45,
+                    passed_checkpoints=45,
+                    minor_findings_count=0,
+                    major_findings_count=0,
+                    critical_findings_count=0,
+                    compliance_rating="fully_compliant",
+                    summary_findings="All machine guards secure. Dual interlocks tested and verified conforming. Operator sign-offs current.",
+                    status="completed",
+                    completed_at=today - timezone.timedelta(days=44),
+                )
+
+                # 5. Compliance Audit 2: ISO 55001 Surveillance Audit
+                audit2 = AssetComplianceAudit.objects.create(
+                    tenant=tenant,
+                    title="ISO 55001 Stage 2 Asset Lifecycle Surveillance Audit",
+                    framework=fw_iso,
+                    asset=None,
+                    audit_type="third_party_certification",
+                    lead_auditor_user=user,
+                    auditor_party=vendor,
+                    audit_date=today - timezone.timedelta(days=10),
+                    scope_description="Corporate asset governance, maintenance strategy alignment, and criticality assessment completeness audit.",
+                    total_checkpoints=60,
+                    passed_checkpoints=57,
+                    minor_findings_count=3,
+                    major_findings_count=0,
+                    critical_findings_count=0,
+                    compliance_rating="minor_deficiencies",
+                    summary_findings="3 minor observations relating to calibration interval documentation. Remedial corrective action submitted.",
+                    status="in_progress",
+                )
+
+                # 6. Compliance Audit 3: EPA Emissions Audit
+                audit3 = AssetComplianceAudit.objects.create(
+                    tenant=tenant,
+                    title="EPA Title V Stationary Source Emission Testing & Inspection",
+                    framework=fw_epa,
+                    asset=oa_primary,
+                    audit_type="external_regulatory",
+                    lead_auditor_user=user,
+                    auditor_party=vendor,
+                    audit_date=today - timezone.timedelta(days=5),
+                    scope_description="Emissions sampling, CEMS sensor calibration checks, and continuous flare opacity verification.",
+                    total_checkpoints=30,
+                    passed_checkpoints=28,
+                    minor_findings_count=1,
+                    major_findings_count=1,
+                    critical_findings_count=0,
+                    compliance_rating="major_non_conformance",
+                    summary_findings="One major non-conformance for hourly NOX spike during cold boiler startup. Formal NOV expected.",
+                    status="under_review",
+                )
+
+                # 7. Operating Permits & Licenses
+                permit1 = AssetPermitLicense.objects.create(
+                    tenant=tenant,
+                    permit_name="High-Pressure Steam Boiler Operating Certificate",
+                    permit_number=f"BOILER-CERT-{tenant.pk}-7731",
+                    permit_type="pressure_vessel",
+                    asset=oa_primary,
+                    issuing_authority=vendor,
+                    issue_date=today - timezone.timedelta(days=120),
+                    effective_date=today - timezone.timedelta(days=120),
+                    expiration_date=today + timezone.timedelta(days=245),
+                    renewal_lead_days=60,
+                    renewal_fee=Decimal("750.00"),
+                    operating_conditions="Maximum allowable working pressure 250 PSIG. Relief valve annual hydro-test certificate required.",
+                    status="active",
+                )
+
+                permit2 = AssetPermitLicense.objects.create(
+                    tenant=tenant,
+                    permit_name="Title V Stationary Source Air Quality Operating Permit",
+                    permit_number=f"EPA-AIR-{tenant.pk}-9042",
+                    permit_type="environmental_emissions",
+                    asset=oa_primary,
+                    issuing_authority=vendor,
+                    issue_date=today - timezone.timedelta(days=320),
+                    effective_date=today - timezone.timedelta(days=320),
+                    expiration_date=today + timezone.timedelta(days=45),
+                    renewal_lead_days=60,
+                    renewal_fee=Decimal("3500.00"),
+                    operating_conditions="NOX emissions capped at 25 PPM. Annual flue gas testing and semi-annual electronic filing required.",
+                    status="active",
+                )
+
+                permit3 = AssetPermitLicense.objects.create(
+                    tenant=tenant,
+                    permit_name="Industrial Wastewater Pre-Treatment Discharge Permit",
+                    permit_number=f"NPDES-DISCH-{tenant.pk}-4410",
+                    permit_type="water_discharge",
+                    asset=oa_primary,
+                    issuing_authority=vendor,
+                    issue_date=today - timezone.timedelta(days=180),
+                    effective_date=today - timezone.timedelta(days=180),
+                    expiration_date=today + timezone.timedelta(days=185),
+                    renewal_lead_days=60,
+                    renewal_fee=Decimal("1200.00"),
+                    operating_conditions="Effluent pH must remain between 6.0 and 9.0. Total suspended solids <= 250 mg/L.",
+                    status="active",
+                )
+
+                permit4 = AssetPermitLicense.objects.create(
+                    tenant=tenant,
+                    permit_name="Flammable & Combustible Liquids Bulk Storage License",
+                    permit_number=f"FIRE-HAZ-{tenant.pk}-019",
+                    permit_type="hazardous_material",
+                    asset=oa_primary,
+                    issuing_authority=vendor,
+                    issue_date=today - timezone.timedelta(days=380),
+                    effective_date=today - timezone.timedelta(days=380),
+                    expiration_date=today - timezone.timedelta(days=15),
+                    renewal_lead_days=30,
+                    renewal_fee=Decimal("500.00"),
+                    operating_conditions="Secondary containment capacity must exceed 110% of tank volume. Fire suppression foam tested quarterly.",
+                    status="expired",
+                )
+
+                # 8. Compliance Incidents & Citations
+                inc1 = AssetComplianceIncident.objects.create(
+                    tenant=tenant,
+                    title="EPA Title V Hourly NOX Emission Spike During Cold Startup",
+                    incident_date=today - timezone.timedelta(days=6),
+                    discovery_date=today - timezone.timedelta(days=5),
+                    incident_type="emissions_exceedance",
+                    severity="serious",
+                    asset=oa_primary,
+                    permit=permit2,
+                    audit=audit3,
+                    enforcement_agency=vendor,
+                    citation_reference=f"EPA-NOV-{tenant.pk}-2026-081",
+                    fine_assessed=Decimal("15000.00"),
+                    fine_paid=Decimal("15000.00"),
+                    fine_payment_date=today - timezone.timedelta(days=1),
+                    root_cause="mechanical_failure",
+                    root_cause_analysis="Fuel-air actuator damper stuck at 30% position during cold burner ignition, creating incomplete combustion spike.",
+                    corrective_action_plan="Replaced pneumatic damper actuator with redundant closed-loop electronic positioner. Added automated startup interlock.",
+                    assigned_investigator=user,
+                    target_resolution_date=today + timezone.timedelta(days=15),
+                    actual_resolution_date=today - timezone.timedelta(days=1),
+                    status="resolved",
+                )
+
+                inc2 = AssetComplianceIncident.objects.create(
+                    tenant=tenant,
+                    title="OSHA Citation 1910.212 — Missing Interlock on Stamping Feed Table",
+                    incident_date=today - timezone.timedelta(days=14),
+                    discovery_date=today - timezone.timedelta(days=14),
+                    incident_type="safety_infraction",
+                    severity="serious",
+                    asset=oa_primary,
+                    permit=None,
+                    audit=None,
+                    enforcement_agency=vendor,
+                    citation_reference=f"OSHA-CIT-{tenant.pk}-99182",
+                    fine_assessed=Decimal("8500.00"),
+                    fine_paid=Decimal("0.00"),
+                    root_cause="inadequate_procedure",
+                    root_cause_analysis="Maintenance technician temporarily bypassed light curtain during tooling changeover and neglected to re-arm.",
+                    corrective_action_plan="Hardwired tamper-resistant keyed interlock switches. Conducted mandatory LOTO refresher for all toolmakers.",
+                    assigned_investigator=user,
+                    target_resolution_date=today + timezone.timedelta(days=10),
+                    status="capa_in_progress",
+                )
+
+                inc3 = AssetComplianceIncident.objects.create(
+                    tenant=tenant,
+                    title="Unpermitted Coolant Fluid Sump Overflow in Machining Bay 3",
+                    incident_date=today - timezone.timedelta(days=2),
+                    discovery_date=today - timezone.timedelta(days=2),
+                    incident_type="unpermitted_discharge",
+                    severity="other_than_serious",
+                    asset=oa_primary,
+                    permit=None,
+                    audit=None,
+                    enforcement_agency=None,
+                    fine_assessed=Decimal("0.00"),
+                    fine_paid=Decimal("0.00"),
+                    root_cause="human_error",
+                    root_cause_analysis="Automatic replenishment valve left open manually during shift transition.",
+                    corrective_action_plan="Installed fail-safe high-level float cutoff switch with alarm buzzer.",
+                    assigned_investigator=user,
+                    target_resolution_date=today + timezone.timedelta(days=7),
+                    status="open",
+                )
+
+            self.stdout.write(f"[{tenant.name}] 11.11 Seeding complete (3 frameworks, 3 audits, 4 permits, 3 incidents).")
+
         # =====================================================================
         # 11.10 Lease & Rental Management
         # =====================================================================
