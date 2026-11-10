@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Scrap & Salvage Operations — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Disposal & Retirement</span>
+            <span>/</span>
+            <span>Scrap & Salvage</span>
+        </div>
+        <h1 class="page-title">Scrap, Teardown & Recycling Management</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_scrap_salvage_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Scrap Job
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="hammer"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Scrap Jobs</div>
+            <div class="stat-value">{{ total_scraps }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Teardown / Transit</div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="award"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Destruction Certified</div>
+            <div class="stat-value">{{ certified_destroyed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="scale"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Scrap Metal Recovered</div>
+            <div class="stat-value">{{ total_weight_recovered|floatformat:1 }} kg</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, asset, manifest, CoD, or recycler..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="scrap_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in scrap_method_choices %}
+                    <option value="{{ val }}" {% if request.GET.scrap_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.scrap_method or request.GET.recycler %}
+                <a href="{% url 'assets:asset_scrap_salvage_list' %}" class="btn btn-outline px-3" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if scrap_salvages %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Job No</th>
+                        <th>Asset / Request</th>
+                        <th>Method</th>
+                        <th>Recycler Partner</th>
+                        <th>Total Weight</th>
+                        <th>Salvage Revenue</th>
+                        <th>Net Recovery</th>
+                        <th>CoD / Manifest</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in scrap_salvages %}
+                    <tr>
+                        <td class="font-mono text-sm font-semibold text-slate-800">
+                            <a href="{% url 'assets:asset_scrap_salvage_detail' s.pk %}" class="text-blue-600 hover:underline">
+                                {{ s.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ s.fixed_asset.name }}</div>
+                            <div class="text-xs text-slate-500">
+                                Tag: {{ s.fixed_asset.asset_number }} • Req: {{ s.disposal_request.number }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ s.scrap_method_css }}">{{ s.get_scrap_method_display }}</span>
+                        </td>
+                        <td class="text-sm font-medium text-slate-800">
+                            {{ s.recycler_partner.name|default:"Internal Teardown" }}
+                        </td>
+                        <td class="font-mono text-sm">
+                            {{ s.total_scrap_weight_kg|floatformat:2 }} kg
+                        </td>
+                        <td class="font-mono text-sm font-semibold text-emerald-700">
+                            ${{ s.salvage_proceeds|floatformat:2 }}
+                        </td>
+                        <td class="font-mono text-sm font-bold text-slate-800">
+                            ${{ s.net_salvage_recovery|floatformat:2 }}
+                        </td>
+                        <td class="text-xs font-mono">
+                            {% if s.cod_number %}
+                            <div class="text-emerald-700 font-semibold">CoD: {{ s.cod_number }}</div>
+                            {% endif %}
+                            {% if s.epa_manifest_number %}
+                            <div class="text-amber-700">EPA: {{ s.epa_manifest_number }}</div>
+                            {% endif %}
+                            {% if not s.cod_number and not s.epa_manifest_number %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span>
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions">
+                                <a href="{% url 'assets:asset_scrap_salvage_detail' s.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                {% if s.status != 'settled' and s.status != 'cancelled' %}
+                                <a href="{% url 'assets:asset_scrap_salvage_edit' s.pk %}" class="btn btn-icon" title="Edit Job">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_scrap_salvage_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete scrap work order {{ s.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="p-4 border-t border-slate-200">
+            <div class="pagination flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} jobs
+                </div>
+                <div class="flex gap-1">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.scrap_method %}&scrap_method={{ request.GET.scrap_method }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                    {% endif %}
+                    <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.scrap_method %}&scrap_method={{ request.GET.scrap_method }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 text-slate-300">
+                <i data-lucide="hammer" class="w-full h-full"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-800 mb-1">No Scrap Work Orders</h3>
+            <p class="text-slate-500 text-sm mb-4">No machinery teardowns, e-waste recycling, or hazardous abatement jobs recorded.</p>
+            <a href="{% url 'assets:asset_scrap_salvage_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Scrap Work Order
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
