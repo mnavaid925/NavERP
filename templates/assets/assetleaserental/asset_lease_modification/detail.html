@@ -105,11 +105,11 @@
                 </div>
                 <div>
                     <dt class="text-muted">Requested By</dt>
-                    <dd class="font-medium text-slate-900">{{ modification.requested_by.get_full_name|default:modification.requested_by.username|default:"Not specified" }}</dd>
+                    <dd class="font-medium text-slate-900">{% if modification.requested_by %}{{ modification.requested_by.get_full_name|default:modification.requested_by.username }}{% else %}Not specified{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Approved By</dt>
-                    <dd class="font-medium text-slate-900">{{ modification.approved_by.get_full_name|default:modification.approved_by.username|default:"Pending Approval" }}</dd>
+                    <dd class="font-medium text-slate-900">{% if modification.approved_by %}{{ modification.approved_by.get_full_name|default:modification.approved_by.username }}{% else %}Pending Approval{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Status</dt>
