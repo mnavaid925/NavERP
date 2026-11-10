@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_schedule_list' %}">Schedules</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ schedule.number }}{% else %}New Schedule Line{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Contract & Installment Scope -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">1. Installment Identification</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.lease_contract.id_for_label }}">Lease Contract *</label>
+                {{ form.lease_contract }}
+                {% if form.lease_contract.errors %}<div class="form-error">{{ form.lease_contract.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.period_number.id_for_label }}">Period Number *</label>
+                {{ form.period_number }}
+                {% if form.period_number.errors %}<div class="form-error">{{ form.period_number.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.due_date.id_for_label }}">Payment Due Date *</label>
+                {{ form.due_date }}
+                {% if form.due_date.errors %}<div class="form-error">{{ form.due_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.payment_amount.id_for_label }}">Installment Payment ($) *</label>
+                {{ form.payment_amount }}
+                {% if form.payment_amount.errors %}<div class="form-error">{{ form.payment_amount.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Payment Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Amortization Breakdown -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">2. Financial Amortization Breakdown</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.beginning_liability.id_for_label }}">Beginning Liability ($)</label>
+                {{ form.beginning_liability }}
+                {% if form.beginning_liability.errors %}<div class="form-error">{{ form.beginning_liability.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.interest_expense.id_for_label }}">Interest Expense ($)</label>
+                {{ form.interest_expense }}
+                {% if form.interest_expense.errors %}<div class="form-error">{{ form.interest_expense.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.principal_reduction.id_for_label }}">Principal Reduction ($)</label>
+                {{ form.principal_reduction }}
+                {% if form.principal_reduction.errors %}<div class="form-error">{{ form.principal_reduction.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.ending_liability.id_for_label }}">Ending Liability ($)</label>
+                {{ form.ending_liability }}
+                {% if form.ending_liability.errors %}<div class="form-error">{{ form.ending_liability.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.rou_depreciation.id_for_label }}">ROU Depreciation ($)</label>
+                {{ form.rou_depreciation }}
+                {% if form.rou_depreciation.errors %}<div class="form-error">{{ form.rou_depreciation.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.ending_rou_asset_value.id_for_label }}">Ending ROU Asset Value ($)</label>
+                {{ form.ending_rou_asset_value }}
+                {% if form.ending_rou_asset_value.errors %}<div class="form-error">{{ form.ending_rou_asset_value.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Settlement Details -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">3. Settlement & Remarks</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.payment_reference.id_for_label }}">Payment / Check Reference</label>
+                {{ form.payment_reference }}
+                {% if form.payment_reference.errors %}<div class="form-error">{{ form.payment_reference.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.paid_date.id_for_label }}">Settlement Date</label>
+                {{ form.paid_date }}
+                {% if form.paid_date.errors %}<div class="form-error">{{ form.paid_date.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Settlement Remarks</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+            <div class="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'assets:asset_lease_schedule_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Schedule Line
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
