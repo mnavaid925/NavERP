@@ -222,7 +222,7 @@ def asset_lease_contract_calculate(request, pk):
 
 
 @require_POST
-@login_required
+@tenant_admin_required
 def asset_lease_contract_activate(request, pk):
     lease = assets_object(request, AssetLeaseContract, pk)
     if lease.status not in ["draft", "pending_approval"]:
