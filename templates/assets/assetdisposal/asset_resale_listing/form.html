@@ -136,6 +136,12 @@
                     </div>
 
                     <div class="form-group">
+                        <label class="form-label" for="{{ form.buyer_contact_phone.id_for_label }}">Buyer Phone</label>
+                        {{ form.buyer_contact_phone }}
+                        {% if form.buyer_contact_phone.errors %}<div class="form-error">{{ form.buyer_contact_phone.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
                         <label class="form-label" for="{{ form.gross_sale_proceeds.id_for_label }}">Gross Sale Price ($)</label>
                         {{ form.gross_sale_proceeds }}
                         {% if form.gross_sale_proceeds.errors %}<div class="form-error">{{ form.gross_sale_proceeds.errors.0 }}</div>{% endif %}
