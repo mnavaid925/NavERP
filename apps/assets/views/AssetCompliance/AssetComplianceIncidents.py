@@ -132,12 +132,11 @@ def asset_compliance_incident_create(request):
             incident.tenant = request.tenant
             incident.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                incident,
                 "create",
-                "AssetComplianceIncident",
-                incident.pk,
-                f"Reported compliance incident {incident.number} ({incident.title})",
+                changes={"details": f"Reported compliance incident {incident.number} ({incident.title})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance incident {incident.number} logged successfully.")
             return redirect("assets:asset_compliance_incident_detail", pk=incident.pk)
@@ -173,12 +172,11 @@ def asset_compliance_incident_edit(request, pk):
         if form.is_valid():
             incident = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                incident,
                 "update",
-                "AssetComplianceIncident",
-                incident.pk,
-                f"Updated compliance incident {incident.number} ({incident.title})",
+                changes={"details": f"Updated compliance incident {incident.number} ({incident.title})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance incident {incident.number} updated successfully.")
             return redirect("assets:asset_compliance_incident_detail", pk=incident.pk)
@@ -201,15 +199,14 @@ def asset_compliance_incident_edit(request, pk):
 def asset_compliance_incident_delete(request, pk):
     incident = assets_object(request, AssetComplianceIncident, pk)
     num = incident.number
-    incident.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        incident,
         "delete",
-        "AssetComplianceIncident",
-        pk,
-        f"Deleted compliance incident {num}",
+        changes={"details": f"Deleted compliance incident {num}"},
+        tenant=request.tenant,
     )
+    incident.delete()
     messages.success(request, f"Compliance incident {num} was deleted.")
     return redirect("assets:asset_compliance_incident_list")
 
@@ -223,12 +220,11 @@ def asset_compliance_incident_resolve(request, pk):
         incident.actual_resolution_date = timezone.now().date()
         incident.save(update_fields=["status", "actual_resolution_date", "updated_at"])
         write_audit_log(
-            request.tenant,
             request.user,
+            incident,
             "update",
-            "AssetComplianceIncident",
-            incident.pk,
-            f"Resolved compliance incident {incident.number} with CAPA verification",
+            changes={"details": f"Resolved compliance incident {incident.number} with CAPA verification"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Incident {incident.number} is marked as Resolved.")
     else:
@@ -244,12 +240,11 @@ def asset_compliance_incident_close(request, pk):
         incident.status = "closed"
         incident.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            request.tenant,
             request.user,
+            incident,
             "update",
-            "AssetComplianceIncident",
-            incident.pk,
-            f"Closed compliance incident {incident.number}",
+            changes={"details": f"Closed compliance incident {incident.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Incident {incident.number} is now Closed.")
     else:
