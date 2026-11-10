@@ -2,7 +2,7 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: IN PROGRESS (Pass 2 of 6 complete)
+**Status**: IN PROGRESS (Pass 3 of 6 complete)
 
 ---
 
@@ -40,3 +40,21 @@
 - [ ] **MR6**: `AssetLeaseScheduleAdmin` list_filter lacks temporal filter (`apps/assets/admin.py:383`). Add `due_date` filter for periodic reconciliation in admin.
 - [ ] **MR7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). Cancel button unconditionally navigates to list even when originating from a lease contract detail page via `?lease=<id>`.
 - [ ] **MR8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
+
+---
+
+## Pass 3: Frontend Reviewer (`frontend-reviewer`)
+
+### Critical
+*None.*
+
+### Important
+- [ ] **IR6**: Undefined design system badge class `badge-purple` in templates and models (`list.html:135`, `detail.html:19`, `AssetLeaseContracts.py:56,61`, `AssetLeaseModifications.py:51`, `AssetLeaseBuyAnalyses.py:41`). `badge-purple` does not exist in `theme.css`. Replace with valid colour-named badge (e.g. `badge-info` or `badge-slate`).
+- [ ] **IR7**: Non-standard utility classes `text-success` and `text-purple` used in financial displays (`contract/detail.html:41,271,323`, `schedule/list.html:125`, `modification/list.html:129`, etc.). Replace with valid `theme.css` `.text-ok` or `.text-brand`.
+- [ ] **IR8**: Orphan dollar signs and `$N/A` displayed on nullable numeric values (`contract/detail.html:172,196`, `buy_analysis/detail.html:150,154,162`). Guard nullable numeric figures with `{% if ... %}`.
+
+### Minor
+- [ ] **MR9**: Missing `aria-label` on filter and search inputs across all 4 list templates (`contract/list.html:61`, `schedule/list.html:61`, `modification/list.html:54`, `buy_analysis/list.html:54`).
+- [ ] **MR10**: Missing `aria-label` on icon-only table action buttons across all list templates (view, edit, delete).
+- [ ] **MR11**: Missing `scope="col"` on table header `<th>` cells across all list and detail child tables.
+- [ ] **MR12**: Hardcoded light-slate utility classes lacking dark mode contrast variants in cards and detail sections.
