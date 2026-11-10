@@ -119,7 +119,7 @@
   - **File**: `templates/assets/assetcompliance/asset_permit_license/detail.html:152`
   - **Fix**: Guard with `{% if permit.days_to_expiration is not None and permit.days_to_expiration < 0 %}`.
 
-- [ ] **M6: Model Index Optimization on High-Traffic Foreign Keys**
+- [x] **M6: Model Index Optimization on High-Traffic Foreign Keys**
   - **Files**: Models under `apps/assets/models/AssetCompliance/`
   - **Fix**: Add composite indexes on `(tenant, framework)` and `(tenant, applicable_category)` where needed.
 
