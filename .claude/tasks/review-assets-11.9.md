@@ -144,7 +144,7 @@
   - **Issue:** Positional `tenant` argument without default breaks standard Django form conventions.
   - **Fix:** Change signature to `def __init__(self, tenant=None, *args, **kwargs):`.
 
-- [ ] **M7: Restrict Edit Mode on Post-Approval Disposal Requests**
+- [x] **M7: Restrict Edit Mode on Post-Approval Disposal Requests** — fixed (commits a1cbe557, 05b1ef30, 8edc39eb)
   - **Location:** `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:164`
   - **Issue:** An approved request (`approved` or `in_progress`) can currently still be modified via standard edit form.
   - **Fix:** Restrict edit access to preliminary states (`draft`, `submitted`), redirecting with a warning once approved.
