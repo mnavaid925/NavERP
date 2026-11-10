@@ -252,6 +252,9 @@ def test_assetdisposal_resale_listing_create_view(client_a, disposal_request_a, 
 
 @pytest.mark.django_db
 def test_assetdisposal_resale_listing_actions_and_idempotency(client_a, resale_listing_a, disposal_request_a):
+    resale_listing_a.status = "listed"
+    resale_listing_a.save()
+
     # 1. Record Bid
     url_bid = reverse("assets:asset_resale_listing_record_bid", kwargs={"pk": resale_listing_a.pk})
     bid_data = {
@@ -362,13 +365,13 @@ def test_assetdisposal_trade_in_actions_and_idempotency(client_a, trade_in_a, di
     assert trade_in_a.status == "credit_settled"
 
     disposal_request_a.refresh_from_db()
-    assert disposal_request_a.actual_gross_proceeds == initial_proceeds + trade_in_a.agreed_trade_allowance
+    assert disposal_request_a.actual_gross_proceeds == initial_proceeds + trade_in_a.trade_in_allowance
 
     # Repeat Settle - must NOT duplicate allowance onto parent disposal request
     resp2 = client_a.post(url_settle)
     assert resp2.status_code == 302
     disposal_request_a.refresh_from_db()
-    assert disposal_request_a.actual_gross_proceeds == initial_proceeds + trade_in_a.agreed_trade_allowance
+    assert disposal_request_a.actual_gross_proceeds == initial_proceeds + trade_in_a.trade_in_allowance
 
 
 # ==============================================================================
@@ -382,7 +385,7 @@ def test_assetdisposal_scrap_salvage_list_view(client_a, scrap_salvage_a):
     assert resp.status_code == 200
     assert "scrap_salvages" in resp.context
     assert scrap_salvage_a in resp.context["scrap_salvages"]
-    assert "total_jobs" in resp.context
+    assert "total_scraps" in resp.context
     assert "recycler_list" in resp.context
 
 
@@ -434,6 +437,8 @@ def test_assetdisposal_scrap_salvage_actions_and_idempotency(client_a, scrap_sal
     assert scrap_salvage_a.status == "scrap_transferred"
 
     # 2. Record CoD
+    scrap_salvage_a.cod_number = ""
+    scrap_salvage_a.save()
     url_cod = reverse("assets:asset_scrap_salvage_record_cod", kwargs={"pk": scrap_salvage_a.pk})
     resp = client_a.post(url_cod, {
         "cod_number": "COD-CERT-VIEW-88",
