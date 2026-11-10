@@ -221,6 +221,10 @@ def asset_disposal_request_submit(request, pk):
 @require_POST
 def asset_disposal_request_appraise(request, pk):
     instance = assets_object(request, AssetDisposalRequest, pk)
+    if instance.status not in ["submitted", "appraised"]:
+        messages.warning(request, f"Disposal request {instance.number} cannot be appraised from {instance.get_status_display()}.")
+        return redirect("assets:asset_disposal_request_detail", pk=instance.pk)
+
     form = AssetDisposalAppraisalForm(request.tenant, request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -269,6 +273,10 @@ def asset_disposal_request_approve(request, pk):
 @require_POST
 def asset_disposal_request_reject(request, pk):
     instance = assets_object(request, AssetDisposalRequest, pk)
+    if instance.status not in ["submitted", "appraised"]:
+        messages.warning(request, f"Disposal request {instance.number} cannot be rejected from {instance.get_status_display()}.")
+        return redirect("assets:asset_disposal_request_detail", pk=instance.pk)
+
     form = AssetDisposalRejectForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
