@@ -146,7 +146,13 @@
                 {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
             </div>
             <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                {% if request.GET.lease %}
+                <a href="{% url 'assets:asset_lease_contract_detail' request.GET.lease %}" class="btn btn-outline">Cancel</a>
+                {% elif is_edit and modification.lease_contract_id %}
+                <a href="{% url 'assets:asset_lease_contract_detail' modification.lease_contract_id %}" class="btn btn-outline">Cancel</a>
+                {% else %}
                 <a href="{% url 'assets:asset_lease_modification_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
                 <button type="submit" class="btn btn-primary">
                     <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Modification
                 </button>
