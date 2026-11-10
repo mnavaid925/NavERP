@@ -239,7 +239,9 @@ def asset_disposal_request_appraise(request, pk):
             if form.cleaned_data.get("estimated_removal_cost"):
                 instance.estimated_removal_cost = form.cleaned_data["estimated_removal_cost"]
             if form.cleaned_data.get("appraisal_notes"):
-                instance.justification_notes += f"\n[Appraisal Notes]: {form.cleaned_data['appraisal_notes']}"
+                existing = instance.justification_notes or ""
+                sep = "\n" if existing else ""
+                instance.justification_notes = f"{existing}{sep}[Appraisal Notes]: {form.cleaned_data['appraisal_notes']}"
             instance.status = "appraised"
             instance.save(update_fields=[
                 "appraised_by",
