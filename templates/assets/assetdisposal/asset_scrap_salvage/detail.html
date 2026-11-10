@@ -75,7 +75,7 @@
                     <div>
                         <div class="text-xs text-slate-400 font-medium uppercase">Scrapped Fixed Asset</div>
                         <div class="text-sm font-semibold text-slate-800 mt-1">
-                            {{ scrap_salvage.fixed_asset.asset_number }} — {{ scrap_salvage.fixed_asset.name }}
+                            {{ scrap_salvage.fixed_asset.number }} — {{ scrap_salvage.fixed_asset.name }}
                         </div>
                     </div>
                     <div>
@@ -89,7 +89,7 @@
                     <div>
                         <div class="text-xs text-slate-400 font-medium uppercase">Plant Machinery Tag</div>
                         <div class="text-sm text-slate-800 mt-1">
-                            {{ scrap_salvage.operational_asset.tag_code|default:"No operational asset linked" }}
+                            {{ scrap_salvage.operational_asset.code|default:"No operational asset linked" }}
                         </div>
                     </div>
                     <div>
