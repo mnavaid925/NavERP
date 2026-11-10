@@ -29,7 +29,7 @@
 - [x] **I11**: Unbounded full-model QuerySets in filter dropdowns fetching heavy text columns (`apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py:60`, `AssetLeaseModifications.py:68`, `AssetLeaseContracts.py:73`). In filter dropdown querysets, use `.only("id", "number", "title")` and `.only("id", "name")`.
 - [x] **I12**: Foreign key traversal in model `__str__` creates latent N+1 vulnerability (`apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py:124`, `AssetLeaseModifications.py:194`). In `__str__`, guard with `self.lease_contract.number if self.lease_contract_id else ""`.
 - [x] **I13**: Schedule generation atomicity and sequence locking (`apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py:406,465-467`). Wrap schedule deletion and schedule creation inside a unified `with transaction.atomic():` block.
-- [ ] **I14**: Missing role/admin authorization on contract activation and modification execution (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:216-247`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:209-265`). Decorate `asset_lease_contract_activate` and `asset_lease_modification_approve` with `@tenant_admin_required`.
+- [x] **I14**: Missing role/admin authorization on contract activation and modification execution (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:216-247`, `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:209-265`). Decorate `asset_lease_contract_activate` and `asset_lease_modification_approve` with `@tenant_admin_required`.
 
 ---
 
