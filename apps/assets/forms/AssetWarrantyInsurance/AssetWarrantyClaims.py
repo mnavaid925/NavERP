@@ -58,7 +58,7 @@ class AssetWarrantyClaimForm(TenantUniqueMixin, TenantModelForm):
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
             self.fields["operational_asset"].queryset = OperationalAsset.objects.filter(tenant=self.tenant)
             self.fields["maintenance_request"].queryset = AssetMaintenanceRequest.objects.filter(tenant=self.tenant)
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["supporting_document"].queryset = Document.objects.filter(tenant=self.tenant)
 
     def clean(self):
@@ -76,7 +76,6 @@ class AssetWarrantyClaimForm(TenantUniqueMixin, TenantModelForm):
                 "fixed_asset",
                 "operational_asset",
                 "maintenance_request",
-                "currency",
                 "supporting_document",
             ],
         )
