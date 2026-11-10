@@ -209,9 +209,9 @@
 
 <!-- Settlement Modal -->
 <div id="settle-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-        <h3 class="text-lg font-semibold text-slate-900">Settle Warranty Claim</h3>
-        <p class="text-sm text-slate-600">Enter final authorized reimbursement amount from OEM/warrantor.</p>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4 text-slate-900 dark:text-slate-100">
+        <h3 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Settle Warranty Claim</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400">Enter final authorized reimbursement amount from OEM/warrantor.</p>
         <form method="post" action="{% url 'assets:asset_warranty_claim_settle' claim.pk %}" class="space-y-4">
             {% csrf_token %}
             <div>
@@ -240,9 +240,9 @@
 
 <!-- Rejection Modal -->
 <div id="reject-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
-        <h3 class="text-lg font-semibold text-red-700">Record Warranty Rejection</h3>
-        <p class="text-sm text-slate-600">Document OEM justification for claim denial or uncovered defect.</p>
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4 text-slate-900 dark:text-slate-100">
+        <h3 class="text-lg font-semibold text-red-700 dark:text-red-400">Record Warranty Rejection</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400">Document OEM justification for claim denial or uncovered defect.</p>
         <form method="post" action="{% url 'assets:asset_warranty_claim_reject' claim.pk %}" class="space-y-4">
             {% csrf_token %}
             <div>
