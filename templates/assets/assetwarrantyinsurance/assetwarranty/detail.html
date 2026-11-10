@@ -233,7 +233,7 @@
                 <div>
                     <div class="text-xs text-slate-500 font-medium">Linked 11.5 Service Contract (SLA)</div>
                     {% if warranty.service_contract %}
-                        <div class="text-sm font-semibold text-slate-900">{{ warranty.service_contract.contract_number }} — {{ warranty.service_contract.provider_name }}</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.service_contract.contract_number }} — {{ warranty.service_contract.vendor.name|default:warranty.service_contract.title }}</div>
                     {% else %}
                         <div class="text-sm text-slate-400">Independent warranty agreement</div>
                     {% endif %}
