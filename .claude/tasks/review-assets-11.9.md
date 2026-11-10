@@ -72,7 +72,7 @@
   - **Issue:** When creating a disposal request in the browser, leaving `acquisition_cost`, `accumulated_depreciation`, or `net_book_value` blank triggers a validation error before `clean()` can auto-derive them from the selected fixed asset.
   - **Fix:** Set `required=False` for `acquisition_cost`, `accumulated_depreciation`, `net_book_value`, `estimated_residual_value`, and `estimated_removal_cost` in `AssetDisposalRequestForm.__init__`.
 
-- [ ] **I8: Missing Filter Dropdowns in List Templates and Pagination Parameter Preservation**
+- [x] **I8: Missing Filter Dropdowns in List Templates and Pagination Parameter Preservation** — fixed (commits ce1b3258, e5b8b248, a2987437)
   - **Location:**
     - `templates/assets/assetdisposal/asset_disposal_request/list.html:59-96, 187, 191` (`retirement_reason`)
     - `templates/assets/assetdisposal/asset_resale_listing/list.html:59-89, 180, 184` (`payment_status`)
