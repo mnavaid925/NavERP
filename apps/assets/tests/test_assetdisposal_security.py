@@ -212,8 +212,10 @@ def test_assetdisposal_mass_assignment_status_ignored_in_form(client_a, tenant_a
         "title": "Status Tamper Attempt - Modified",
         "fixed_asset": fixed_asset_a.pk,
         "category": category_root_a.pk,
+        "requested_by": admin_user.pk,
         "disposal_method": "resale",
         "retirement_reason": "technological_obsolescence",
+        "justification_notes": "Security test attempt to mass-assign status.",
         "status": "completed",
     })
     assert resp.status_code == 302
