@@ -67,6 +67,12 @@ from apps.assets.forms.AssetWarrantyInsurance import (
     AssetWarrantyClaimForm,
     AssetWarrantyForm,
 )
+from apps.assets.forms.AssetLeaseRental import (
+    AssetLeaseBuyAnalysisForm,
+    AssetLeaseContractForm,
+    AssetLeaseModificationForm,
+    AssetLeaseScheduleForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -120,4 +126,8 @@ __all__ = [
     "AssetScrapSalvageForm",
     "AssetScrapAbatementForm",
     "AssetScrapCertificateForm",
+    "AssetLeaseContractForm",
+    "AssetLeaseScheduleForm",
+    "AssetLeaseModificationForm",
+    "AssetLeaseBuyAnalysisForm",
 ]
