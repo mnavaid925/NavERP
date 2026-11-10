@@ -68,7 +68,7 @@
                     <div>
                         <div class="text-xs text-slate-400 font-medium uppercase">Retiring Fixed Asset</div>
                         <div class="text-sm font-semibold text-slate-800 mt-1">
-                            {{ trade_in.retired_fixed_asset.asset_number }} — {{ trade_in.retired_fixed_asset.name }}
+                            {{ trade_in.retired_fixed_asset.number }} — {{ trade_in.retired_fixed_asset.name }}
                         </div>
                     </div>
                     <div>
@@ -101,7 +101,7 @@
                         <div class="text-xs text-slate-400 font-medium uppercase">Replacement Fixed Asset</div>
                         <div class="text-sm text-slate-800 mt-1">
                             {% if trade_in.replacement_fixed_asset %}
-                            {{ trade_in.replacement_fixed_asset.asset_number }} — {{ trade_in.replacement_fixed_asset.name }}
+                            {{ trade_in.replacement_fixed_asset.number }} — {{ trade_in.replacement_fixed_asset.name }}
                             {% else %}
                             <span class="text-slate-400 italic">Pending Capitalization</span>
                             {% endif %}
