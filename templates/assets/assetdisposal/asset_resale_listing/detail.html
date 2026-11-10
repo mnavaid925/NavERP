@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}{{ resale_listing.number }} — Resale Listing — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_resale_listing_list' %}">Resale & Auctions</a>
+            <span>/</span>
+            <span>{{ resale_listing.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ resale_listing.fixed_asset.name }}</h1>
+            <span class="badge {{ resale_listing.status_css }}">{{ resale_listing.get_status_display }}</span>
+            <span class="badge {{ resale_listing.listing_channel_css }}">{{ resale_listing.get_listing_channel_display }}</span>
+            <span class="badge {{ resale_listing.payment_status_css }}">{{ resale_listing.get_payment_status_display }}</span>
+        </div>
+        <div class="text-sm text-slate-500 mt-1 font-mono">
+            Listing: {{ resale_listing.number }} • Created {{ resale_listing.created_at|date:"M d, Y H:i" }}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if resale_listing.status in 'draft,listed,bid_received,negotiation' %}
+        <button type="button" onclick="document.getElementById('bid-modal').classList.remove('hidden')" class="btn btn-outline">
+            <i data-lucide="arrow-up-right" class="w-4 h-4 me-1"></i> Record Standing Bid
+        </button>
+        <button type="button" onclick="document.getElementById('accept-modal').classList.remove('hidden')" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">
+            <i data-lucide="award" class="w-4 h-4 me-1"></i> Accept & Award Sale
+        </button>
+        {% endif %}
+
+        {% if resale_listing.status == 'sold' or resale_listing.payment_status == 'pending' %}
+        <form method="post" action="{% url 'assets:asset_resale_listing_mark_paid' resale_listing.pk %}" class="inline" onsubmit="return confirm('Reconcile buyer remittance and synchronize proceeds?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-700 border-emerald-300 hover:bg-emerald-50">
+                <i data-lucide="credit-card" class="w-4 h-4 me-1"></i> Mark Paid
+            </button>
+        </form>
+        {% endif %}
+
+        {% if resale_listing.status in 'sold,payment_received' and not resale_listing.pickup_delivery_date %}
+        <form method="post" action="{% url 'assets:asset_resale_listing_mark_delivered' resale_listing.pk %}" class="inline" onsubmit="return confirm('Log asset handover / delivery to buyer?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="truck" class="w-4 h-4 me-1"></i> Mark Delivered
+            </button>
+        </form>
+        {% endif %}
+
+        {% if resale_listing.status != 'delivered' and resale_listing.status != 'cancelled' %}
+        <a href="{% url 'assets:asset_resale_listing_edit' resale_listing.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_resale_listing_delete' resale_listing.pk %}" class="inline" onsubmit="return confirm('Delete resale listing {{ resale_listing.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Asset & Market Listing Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Remarketing & Channel Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Subject Fixed Asset</div>
+                        <div class="text-sm font-semibold text-slate-800 mt-1">
+                            {{ resale_listing.fixed_asset.asset_number }} — {{ resale_listing.fixed_asset.name }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Parent Disposal Request</div>
+                        <div class="text-sm font-mono text-slate-800 mt-1">
+                            <a href="{% url 'assets:asset_disposal_request_detail' resale_listing.disposal_request.pk %}" class="text-blue-600 hover:underline">
+                                {{ resale_listing.disposal_request.number }}
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Catalog Lot / Listing Ref</div>
+                        <div class="text-sm font-mono text-slate-700 mt-1">
+                            {{ resale_listing.listing_reference|default:"Not specified" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Remarketing Broker / Auctioneer</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {{ resale_listing.broker_auctioneer.name|default:"Internal Direct Sale" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Listing Published Date</div>
+                        <div class="text-sm text-slate-700 mt-1">
+                            {{ resale_listing.listing_date|date:"M d, Y" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Closing / Bidding Deadline</div>
+                        <div class="text-sm text-slate-700 mt-1">
+                            {{ resale_listing.closing_date|date:"M d, Y"|default:"Open-ended" }}
+                        </div>
+                    </div>
+                </div>
+
+                {% if resale_listing.terms_and_conditions %}
+                <div class="border-t border-slate-100 mt-4 pt-4">
+                    <div class="text-xs text-slate-400 font-medium uppercase mb-1">Sale Terms & Conditions</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ resale_listing.terms_and_conditions }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Financial Proceeds & Settlement -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Financial Proceeds & Settlement</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Asking Price</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ resale_listing.asking_price|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Confidential Reserve</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ resale_listing.reserve_price|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-blue-50 rounded border border-blue-100">
+                        <div class="text-xs text-blue-700 font-medium">Standing High Bid</div>
+                        <div class="text-base font-bold text-blue-900 mt-1 font-mono">${{ resale_listing.highest_bid_amount|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-emerald-50 rounded border border-emerald-100">
+                        <div class="text-xs text-emerald-700 font-medium">Gross Agreed Sale</div>
+                        <div class="text-base font-bold text-emerald-900 mt-1 font-mono">${{ resale_listing.gross_sale_proceeds|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                        <div class="text-xs text-slate-500">Broker Commission ({{ resale_listing.commission_rate_percent }}%)</div>
+                        <div class="text-base font-semibold text-red-600 mt-1 font-mono">-${{ resale_listing.commission_amount|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Sales Tax Collected</div>
+                        <div class="text-base font-semibold text-slate-700 mt-1 font-mono">${{ resale_listing.tax_amount|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Net Realized Proceeds</div>
+                        <div class="text-lg font-bold text-emerald-700 mt-1 font-mono">${{ resale_listing.net_sale_proceeds|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4 mt-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Payment Status</div>
+                        <div class="mt-1">
+                            <span class="badge {{ resale_listing.payment_status_css }}">{{ resale_listing.get_payment_status_display }}</span>
+                            {% if resale_listing.payment_date %}
+                            <span class="text-xs text-slate-500 ms-2">Settled on {{ resale_listing.payment_date|date:"M d, Y" }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Collection / Handover Date</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {{ resale_listing.pickup_delivery_date|date:"M d, Y"|default:"Pending Buyer Collection" }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Buyer & Documents -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Buyer Information</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Purchaser Organization</div>
+                    <div class="text-sm font-semibold text-slate-800 mt-1">
+                        {{ resale_listing.buyer.name|default:resale_listing.buyer_contact_name|default:"Unassigned" }}
+                    </div>
+                </div>
+                {% if resale_listing.buyer_contact_name %}
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Representative Name</div>
+                    <div class="text-sm text-slate-700 mt-0.5">{{ resale_listing.buyer_contact_name }}</div>
+                </div>
+                {% endif %}
+                {% if resale_listing.buyer_contact_email %}
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Email</div>
+                    <div class="text-sm text-slate-700 mt-0.5">{{ resale_listing.buyer_contact_email }}</div>
+                </div>
+                {% endif %}
+                {% if resale_listing.buyer_contact_phone %}
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Telephone</div>
+                    <div class="text-sm text-slate-700 mt-0.5">{{ resale_listing.buyer_contact_phone }}</div>
+                </div>
+                {% endif %}
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Remarketing Lead</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ resale_listing.managed_by.get_full_name|default:resale_listing.managed_by.username|default:"Unassigned" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Disposal Documentation</h3>
+            </div>
+            <div class="card-body">
+                {% if resale_listing.bill_of_sale_document %}
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                    <i data-lucide="file-text" class="w-6 h-6 text-blue-600"></i>
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">{{ resale_listing.bill_of_sale_document.title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ resale_listing.bill_of_sale_document.file_number }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-sm text-slate-500 italic">No digital Bill of Sale or auction settlement attachment linked.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Record Bid -->
+<div id="bid-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-slate-900">Record Standing Bid / Offer</h3>
+            <button type="button" onclick="document.getElementById('bid-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_resale_listing_record_bid' resale_listing.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Bid Amount ($) *</label>
+                    {{ bid_form.bid_amount }}
+                </div>
+                <div>
+                    <label class="form-label">Bidder / Company Name *</label>
+                    {{ bid_form.bidder_name }}
+                </div>
+                <div>
+                    <label class="form-label">Bidder Email</label>
+                    {{ bid_form.bidder_email }}
+                </div>
+                <div>
+                    <label class="form-label">Bidder Telephone</label>
+                    {{ bid_form.bidder_phone }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('bid-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Bid</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Accept Sale -->
+<div id="accept-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-emerald-700">Award & Accept Resale</h3>
+            <button type="button" onclick="document.getElementById('accept-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_resale_listing_accept_sale' resale_listing.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Final Gross Sale Price ($) *</label>
+                    {{ accept_form.final_sale_amount }}
+                </div>
+                <div>
+                    <label class="form-label">Commission Rate (%)</label>
+                    {{ accept_form.commission_rate_percent }}
+                </div>
+                <div>
+                    <label class="form-label">Winning Buyer (Party Register)</label>
+                    {{ accept_form.buyer }}
+                </div>
+                <div>
+                    <label class="form-label">Buyer Contact Name</label>
+                    {{ accept_form.buyer_contact_name }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('accept-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">Confirm Award</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
