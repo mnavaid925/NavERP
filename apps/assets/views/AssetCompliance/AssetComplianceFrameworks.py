@@ -9,6 +9,7 @@ from django.views.decorators.http import require_POST
 from apps.assets.forms.AssetCompliance.AssetComplianceFrameworks import AssetComplianceFrameworkForm
 from apps.assets.models import AssetCategory
 from apps.assets.models.AssetCompliance.AssetComplianceFrameworks import AssetComplianceFramework
+from apps.assets.models.AssetCompliance.AssetComplianceIncidents import AssetComplianceIncident
 from apps.assets.views._common import assets_object, assets_scope
 from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
@@ -90,12 +91,17 @@ def asset_compliance_framework_detail(request, pk):
         select_related=["regulatory_agency", "applicable_category"],
     )
     audits = framework.audits.select_related("asset", "lead_auditor_user").order_by("-audit_date")[:10]
+    incidents = AssetComplianceIncident.objects.filter(
+        tenant=request.tenant,
+        audit__framework=framework,
+    ).select_related("asset", "enforcement_agency").order_by("-incident_date")[:10]
     return render(
         request,
         "assets/assetcompliance/asset_compliance_framework/detail.html",
         {
             "framework": framework,
             "audits": audits,
+            "incidents": incidents,
         },
     )
 
