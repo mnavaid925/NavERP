@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -252,10 +252,18 @@ def asset_warranty_claim_review(request, pk):
 @require_POST
 def asset_warranty_claim_settle(request, pk):
     claim = get_object_or_404(AssetWarrantyClaim, pk=pk, tenant=request.tenant)
+    raw_amount = request.POST.get("approved_amount")
     try:
-        approved_amt = Decimal(request.POST.get("approved_amount", str(claim.claimed_amount)))
-    except Exception:
-        approved_amt = claim.claimed_amount
+        if raw_amount is None or str(raw_amount).strip() == "":
+            approved_amt = claim.claimed_amount
+        else:
+            approved_amt = Decimal(str(raw_amount).strip())
+            if not approved_amt.is_finite() or approved_amt < Decimal("0.00") or approved_amt > Decimal("9999999999.99"):
+                messages.error(request, "Invalid approved amount. Must be a finite non-negative number up to 9,999,999,999.99.")
+                return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
+    except (InvalidOperation, TypeError, ValueError):
+        messages.error(request, "Invalid numeric value for approved amount.")
+        return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
 
     res_type = request.POST.get("resolution_type", "cash_reimbursement")
     settlement_notes = request.POST.get("settlement_notes", "").strip()
