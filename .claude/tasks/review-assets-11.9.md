@@ -60,7 +60,7 @@
   - **Issue:** `approved_by` and `authorized_by` are included in form `Meta.fields`. A raw POST can supply an arbitrary user id and establish approval outside the official approval workflow.
   - **Fix:** Remove `approved_by` from `AssetDisposalRequestForm.Meta.fields` and `authorized_by` from `AssetTradeInForm.Meta.fields`.
 
-- [ ] **I6: Silent Form Validation Failure on Browser Create of `AssetResaleListing`**
+- [x] **I6: Silent Form Validation Failure on Browser Create of `AssetResaleListing`** — fixed (commit f3ee7d8b)
   - **Location:**
     - `apps/assets/forms/AssetDisposal/AssetResaleListings.py:20-41`
     - `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161`
