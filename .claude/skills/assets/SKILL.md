@@ -1,11 +1,11 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, and insurance claims with adjuster tracking, proof of loss, and indemnity settlements). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, and asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, and certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
 
-Comprehensive enterprise physical asset lifecycle and Enterprise Asset Management (EAM), spanning capital acquisition, physical intake inspection, balance sheet capitalization, barcode/RFID tracking, physical cycle count verification, room/bin/facility spatial movements, tool crib custody check-in/out lending, and loss/theft incident reporting with write-off authorization. Reuses the core spine (`accounting.FixedAsset`, `accounting.GLAccount`, `accounting.Currency`, `scm.PurchaseOrder`, `scm.Location`, `scm.Asset`, `core.Party`, `core.OrgUnit`).
+Comprehensive enterprise physical asset lifecycle and Enterprise Asset Management (EAM), spanning capital acquisition, physical intake inspection, balance sheet capitalization, barcode/RFID tracking, physical cycle count verification, room/bin/facility spatial movements, tool crib custody check-in/out lending, loss/theft incident reporting with write-off authorization, and end-of-life disposal/retirement through competitive resales, vendor trade-ins, and certified scrap/salvage recycling. Reuses the core spine (`accounting.FixedAsset`, `accounting.GLAccount`, `accounting.Currency`, `accounting.AssetDisposal`, `scm.PurchaseOrder`, `scm.Location`, `scm.Asset`, `core.Party`, `core.OrgUnit`).
 
 - **App path:** `apps/assets/`
 - **Templates:** `templates/assets/`
@@ -24,6 +24,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.6 Asset Performance & Utilization**: Operational downtime logging with hourly financial loss, Overall Equipment Effectiveness (OEE) tracking with TPM Six Big Losses, smart sub-meter energy readings with GHG Scope 1/2/3 carbon footprint metrics, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking.
 - **11.7 Asset Reliability & Condition Monitoring**: Multi-technique non-destructive testing (NDT) condition assessments, continuous IoT & SCADA telemetry streaming with threshold anomaly alerts, FMEA failure mode cataloging with RPN risk matrix & RCM strategies, and metrology calibration records with automated drift/error calculation and corrective maintenance work order generation.
 - **11.8 Warranty & Insurance Management**: Manufacturer OEM and extended warranty policies with meter/calendar limits and deductible tracking, warranty claim submissions with OEM defect resolution and net financial recovery, industrial property & machinery breakdown insurance policies with premium/limit tracking, and casualty insurance claims with adjuster assignments, proof-of-loss filings, salvage recovery, and direct indemnity settlements.
+- **11.9 Asset Disposal & Retirement**: Asset decommissioning requests, technical & residual value appraisals, multi-channel disposal execution (competitive auctions / private resales with bid tracking, equipment vendor trade-ins with dealer allowance netting, and certified scrap/salvage de-manufacturing with EPA hazardous waste abatement compliance and Certificate of Destruction COD tracking).
 
 ---
 
@@ -75,6 +76,11 @@ apps/assets/
       AssetWarrantyClaims.py                  <- AssetWarrantyClaim [AWCL-]
       AssetInsurancePolicies.py               <- AssetInsurancePolicy [AINS-]
       AssetInsuranceClaims.py                 <- AssetInsuranceClaim [AICL-]
+    AssetDisposal/                            <- Sub-module 11.9 models
+      AssetDisposalRequests.py                <- AssetDisposalRequest [ADSP-]
+      AssetResaleListings.py                  <- AssetResaleListing [ARSL-]
+      AssetTradeIns.py                        <- AssetTradeIn [ATIN-]
+      AssetScrapSalvages.py                   <- AssetScrapSalvage [ASCR-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -118,6 +124,11 @@ apps/assets/
       AssetWarrantyClaims.py                  <- AssetWarrantyClaimForm
       AssetInsurancePolicies.py               <- AssetInsurancePolicyForm
       AssetInsuranceClaims.py                 <- AssetInsuranceClaimForm
+    AssetDisposal/                            <- Sub-module 11.9 forms
+      AssetDisposalRequests.py                <- AssetDisposalRequestForm
+      AssetResaleListings.py                  <- AssetResaleListingForm
+      AssetTradeIns.py                        <- AssetTradeInForm
+      AssetScrapSalvages.py                   <- AssetScrapSalvageForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -162,6 +173,11 @@ apps/assets/
       AssetWarrantyClaims.py                  <- Warranty Claim CRUD + submit, review, settle, reject
       AssetInsurancePolicies.py               <- Insurance Policy CRUD + activate, renew, cancel
       AssetInsuranceClaims.py                 <- Insurance Claim CRUD + assign_adjuster, file_proof, settle, deny
+    AssetDisposal/                            <- Sub-module 11.9 views
+      AssetDisposalRequests.py                <- Request CRUD + submit, appraise, approve, reject, complete
+      AssetResaleListings.py                  <- Listing CRUD + record_bid, accept_sale, mark_paid, mark_delivered
+      AssetTradeIns.py                        <- Trade-In CRUD + surrender, settle
+      AssetScrapSalvages.py                   <- Scrap/Salvage CRUD + certify_abatement, record_cod, settle
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -204,11 +220,16 @@ apps/assets/
       AssetWarrantyClaims.py
       AssetInsurancePolicies.py
       AssetInsuranceClaims.py
+    AssetDisposal/                            <- Sub-module 11.9 URL route definitions
+      AssetDisposalRequests.py
+      AssetResaleListings.py
+      AssetTradeIns.py
+      AssetScrapSalvages.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7 & 11.8)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 & 11.9)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -241,6 +262,10 @@ apps/assets/
     test_assetwarrantyinsurance_forms.py      <- 11.8 Form validation, date order checks, reject_foreign, mass assignment
     test_assetwarrantyinsurance_views.py      <- 11.8 View contracts, filters, settlement math, status guards, actions
     test_assetwarrantyinsurance_security.py   <- 11.8 IDOR (404), RBAC gates, numeric hardening (L35), state tampering
+    test_assetdisposal_models.py              <- 11.9 Model invariants, gain/loss math, sequences, badges
+    test_assetdisposal_forms.py               <- 11.9 Form validations, clean rules, tenant foreign key isolation
+    test_assetdisposal_views.py               <- 11.9 View contracts, filters, status guards, settlements
+    test_assetdisposal_security.py            <- 11.9 IDOR (404), RBAC gates, mass assignment, idempotency
 ```
 
 ---
@@ -598,6 +623,47 @@ Namespace: `assets:`
   - `assets:asset_insurance_claim_settle`: `/assets/warranty-insurance/insurance-claims/<pk>/settle/` [POST]
   - `assets:asset_insurance_claim_deny`: `/assets/warranty-insurance/insurance-claims/<pk>/deny/` [POST]
 
+### 11.9 Asset Disposal & Retirement
+Namespace: `assets:`
+- **Disposal Requests:**
+  - `assets:asset_disposal_request_list`: `/assets/disposal/requests/`
+  - `assets:asset_disposal_request_create`: `/assets/disposal/requests/create/`
+  - `assets:asset_disposal_request_detail`: `/assets/disposal/requests/<pk>/`
+  - `assets:asset_disposal_request_edit`: `/assets/disposal/requests/<pk>/edit/`
+  - `assets:asset_disposal_request_delete`: `/assets/disposal/requests/<pk>/delete/` [POST, Admin]
+  - `assets:asset_disposal_request_submit`: `/assets/disposal/requests/<pk>/submit/` [POST]
+  - `assets:asset_disposal_request_appraise`: `/assets/disposal/requests/<pk>/appraise/` [POST]
+  - `assets:asset_disposal_request_approve`: `/assets/disposal/requests/<pk>/approve/` [POST, Admin]
+  - `assets:asset_disposal_request_reject`: `/assets/disposal/requests/<pk>/reject/` [POST, Admin]
+  - `assets:asset_disposal_request_complete`: `/assets/disposal/requests/<pk>/complete/` [POST, Admin]
+- **Resale Listings:**
+  - `assets:asset_resale_listing_list`: `/assets/disposal/resale-listings/`
+  - `assets:asset_resale_listing_create`: `/assets/disposal/resale-listings/create/`
+  - `assets:asset_resale_listing_detail`: `/assets/disposal/resale-listings/<pk>/`
+  - `assets:asset_resale_listing_edit`: `/assets/disposal/resale-listings/<pk>/edit/`
+  - `assets:asset_resale_listing_delete`: `/assets/disposal/resale-listings/<pk>/delete/` [POST, Admin]
+  - `assets:asset_resale_listing_record_bid`: `/assets/disposal/resale-listings/<pk>/record-bid/` [POST]
+  - `assets:asset_resale_listing_accept_sale`: `/assets/disposal/resale-listings/<pk>/accept-sale/` [POST]
+  - `assets:asset_resale_listing_mark_paid`: `/assets/disposal/resale-listings/<pk>/mark-paid/` [POST]
+  - `assets:asset_resale_listing_mark_delivered`: `/assets/disposal/resale-listings/<pk>/mark-delivered/` [POST]
+- **Asset Trade-Ins:**
+  - `assets:asset_trade_in_list`: `/assets/disposal/trade-ins/`
+  - `assets:asset_trade_in_create`: `/assets/disposal/trade-ins/create/`
+  - `assets:asset_trade_in_detail`: `/assets/disposal/trade-ins/<pk>/`
+  - `assets:asset_trade_in_edit`: `/assets/disposal/trade-ins/<pk>/edit/`
+  - `assets:asset_trade_in_delete`: `/assets/disposal/trade-ins/<pk>/delete/` [POST, Admin]
+  - `assets:asset_trade_in_surrender`: `/assets/disposal/trade-ins/<pk>/surrender/` [POST]
+  - `assets:asset_trade_in_settle`: `/assets/disposal/trade-ins/<pk>/settle/` [POST, Admin]
+- **Scrap & Salvage:**
+  - `assets:asset_scrap_salvage_list`: `/assets/disposal/scrap-salvage/`
+  - `assets:asset_scrap_salvage_create`: `/assets/disposal/scrap-salvage/create/`
+  - `assets:asset_scrap_salvage_detail`: `/assets/disposal/scrap-salvage/<pk>/`
+  - `assets:asset_scrap_salvage_edit`: `/assets/disposal/scrap-salvage/<pk>/edit/`
+  - `assets:asset_scrap_salvage_delete`: `/assets/disposal/scrap-salvage/<pk>/delete/` [POST, Admin]
+  - `assets:asset_scrap_salvage_certify_abatement`: `/assets/disposal/scrap-salvage/<pk>/certify-abatement/` [POST]
+  - `assets:asset_scrap_salvage_record_cod`: `/assets/disposal/scrap-salvage/<pk>/record-cod/` [POST]
+  - `assets:asset_scrap_salvage_settle`: `/assets/disposal/scrap-salvage/<pk>/settle/` [POST, Admin]
+
 ---
 
 ## Conventions & Gotchas
@@ -632,7 +698,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (821 passing tests across 11.1, 11.2, 11.3, 11.4, 11.5, and 11.6).
+Unfiltered run on SQLite in-memory test database (1,392 passing tests across 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, and 11.9).
 
 ---
 
@@ -645,4 +711,5 @@ Unfiltered run on SQLite in-memory test database (821 passing tests across 11.1,
 - `11.6`: Performance & Utilization (`assets:asset_downtime_log_list`)
 - `11.7`: Reliability & Condition Monitoring (`assets:asset_condition_assessment_list`)
 - `11.8`: Warranty & Insurance Management (`assets:asset_warranty_list`)
+- `11.9`: Asset Disposal & Retirement (`assets:asset_disposal_request_list`)
 
