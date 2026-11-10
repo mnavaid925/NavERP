@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Permits & Licenses — Asset Compliance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Compliance & Regulatory</span>
+            <span>/</span>
+            <span>Operating Permits</span>
+        </div>
+        <h1 class="page-title">Asset Operating Permits & Licenses</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_permit_license_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register Permit
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="file-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Permits</div>
+            <div class="stat-value">{{ total_permits }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active & Valid</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="bell-ring"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expiring in 60 Days</div>
+            <div class="stat-value">{{ expiring_soon_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Expired / Non-Compliant</div>
+            <div class="stat-value">{{ expired_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search permit name, number, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="permit_type" class="form-select">
+                    <option value="">All Permit Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.permit_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="authority" class="form-select">
+                    <option value="">All Authorities</option>
+                    {% for auth in authority_list %}
+                    <option value="{{ auth.pk }}" {% if request.GET.authority == auth.pk|stringformat:"d" %}selected{% endif %}>{{ auth.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="submit" class="btn btn-outline w-full justify-center">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.permit_type or request.GET.status or request.GET.authority %}
+                <a href="{% url 'assets:asset_permit_license_list' %}" class="btn btn-outline text-muted" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Permit / License #</th>
+                    <th>Permit Title</th>
+                    <th>Type</th>
+                    <th>Asset</th>
+                    <th>Issuing Authority</th>
+                    <th>Expiration Date</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in permits %}
+                <tr>
+                    <td class="font-mono text-sm font-semibold">
+                        <a href="{% url 'assets:asset_permit_license_detail' p.pk %}" class="text-brand hover:underline">
+                            {{ p.number }}
+                        </a>
+                    </td>
+                    <td class="font-mono text-xs font-semibold text-slate-900">{{ p.permit_number }}</td>
+                    <td class="max-w-xs truncate" title="{{ p.permit_name }}">{{ p.permit_name }}</td>
+                    <td><span class="badge {{ p.permit_type_badge_class }}">{{ p.get_permit_type_display }}</span></td>
+                    <td>
+                        <span class="font-medium text-sm text-slate-900">{{ p.asset.name }}</span>
+                        <span class="text-xs text-muted block">{{ p.asset.code }}</span>
+                    </td>
+                    <td>
+                        {% if p.issuing_authority %}
+                        {{ p.issuing_authority.name }}
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="text-sm {% if p.is_expiring_soon %}text-amber-600 font-semibold{% endif %}">
+                            {{ p.expiration_date }}
+                        </span>
+                        {% if p.is_expiring_soon %}
+                        <span class="text-xs text-amber-600 block">({{ p.days_to_expiration }} days left)</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ p.status_badge_class }}">{{ p.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="table-actions justify-end">
+                            <a href="{% url 'assets:asset_permit_license_detail' p.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_permit_license_edit' p.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_permit_license_delete' p.pk %}" onsubmit="return confirm('Delete permit {{ p.permit_number }}? This cannot be undone.');" class="inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <div class="empty-icon"><i data-lucide="file-x"></i></div>
+                            <div class="empty-title">No operating permits or licenses found</div>
+                            <div class="empty-description">Register environmental permits, boiler certifications, and municipal operating licenses for your assets.</div>
+                            <a href="{% url 'assets:asset_permit_license_create' %}" class="btn btn-primary mt-3">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register First Permit
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="card-footer flex justify-between items-center py-3 px-4">
+        <span class="text-sm text-muted">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} permits
+        </span>
+        <div class="pagination flex items-center gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.permit_type %}&permit_type={{ request.GET.permit_type }}{% endif %}{% if request.GET.authority %}&authority={{ request.GET.authority }}{% endif %}" class="btn btn-outline btn-sm">
+                Prev
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Prev</span>
+            {% endif %}
+
+            <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.permit_type %}&permit_type={{ request.GET.permit_type }}{% endif %}{% if request.GET.authority %}&authority={{ request.GET.authority }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
