@@ -102,7 +102,8 @@
   - **Description:** Templates check `{% if request.user.is_staff or request.user.is_superuser %}`, while views enforce `@tenant_admin_required`.
   - **Fix:** Update template condition to `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 
-- [ ] **M6: Lazy FK Lookups During Claim Form Initial Pre-Population**
+- [x] **M6: Lazy FK Lookups During Claim Form Initial Pre-Population**
+  - **Status:** [x] fixed — prefetch asset and currency in initial populate (dff3f79e, 6ac039cb)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:123`
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:124`
