@@ -145,6 +145,9 @@ def asset_compliance_audit_create(request):
 @login_required
 def asset_compliance_audit_edit(request, pk):
     audit = assets_object(request, AssetComplianceAudit, pk)
+    if audit.status == "completed":
+        messages.error(request, f"Completed compliance audit {audit.number} cannot be edited.")
+        return redirect("assets:asset_compliance_audit_detail", pk=audit.pk)
     if request.method == "POST":
         form = AssetComplianceAuditForm(request.POST, instance=audit, tenant=request.tenant)
         if form.is_valid():
@@ -176,6 +179,9 @@ def asset_compliance_audit_edit(request, pk):
 @require_POST
 def asset_compliance_audit_delete(request, pk):
     audit = assets_object(request, AssetComplianceAudit, pk)
+    if audit.status == "completed":
+        messages.error(request, f"Completed compliance audit {audit.number} cannot be deleted.")
+        return redirect("assets:asset_compliance_audit_detail", pk=audit.pk)
     num = audit.number
     write_audit_log(
         request.user,
