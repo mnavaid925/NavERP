@@ -67,7 +67,7 @@
   - **Issue:** `highest_bid_amount`, `gross_sale_proceeds`, `commission_rate_percent`, and `tax_amount` default to `required=True` because the model fields lack `blank=True`. In browser form submissions, these fields are either unrendered or inappropriate for a new listing, causing silent validation failure.
   - **Fix:** Set `required=False` with `initial=Decimal('0.00')` for these fields in `AssetResaleListingForm.__init__`.
 
-- [ ] **I7: Validation Failure on Auto-Derived Financial Fields in `AssetDisposalRequestForm`**
+- [x] **I7: Validation Failure on Auto-Derived Financial Fields in `AssetDisposalRequestForm`** — fixed (commit bbb609e8)
   - **Location:** `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py:31-36, 84-95`
   - **Issue:** When creating a disposal request in the browser, leaving `acquisition_cost`, `accumulated_depreciation`, or `net_book_value` blank triggers a validation error before `clean()` can auto-derive them from the selected fixed asset.
   - **Fix:** Set `required=False` for `acquisition_cost`, `accumulated_depreciation`, `net_book_value`, `estimated_residual_value`, and `estimated_removal_cost` in `AssetDisposalRequestForm.__init__`.
