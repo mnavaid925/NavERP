@@ -22,7 +22,8 @@
 
 ## Important
 
-- [ ] **I1: Hand-Parsed Numeric Input Lacks `is_finite()`, Magnitude Cap, and Non-Negative Guards (Lesson L35)**
+- [x] **I1: Hand-Parsed Numeric Input Lacks `is_finite()`, Magnitude Cap, and Non-Negative Guards (Lesson L35)**
+  - **Status:** [x] fixed — harden decimal parsing and bounds checking on claim settlements (5df5ae62, 30f8ff67)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:260-264` (`approved_amount`)
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:263-272` (`settlement_payout_amount`, `salvage_recovery_amount`)
