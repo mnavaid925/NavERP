@@ -273,6 +273,10 @@ def asset_resale_listing_accept_sale(request, pk):
 @require_POST
 def asset_resale_listing_mark_paid(request, pk):
     instance = assets_object(request, AssetResaleListing, pk)
+    if instance.payment_status == "paid":
+        messages.info(request, f"Listing {instance.number} has already been marked as paid.")
+        return redirect("assets:asset_resale_listing_detail", pk=instance.pk)
+
     with transaction.atomic():
         instance.payment_status = "paid"
         instance.payment_date = timezone.now().date()
