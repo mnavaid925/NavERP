@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Disposal Requests — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Disposal & Retirement</span>
+            <span>/</span>
+            <span>Disposal Requests</span>
+        </div>
+        <h1 class="page-title">Asset Disposal & Retirement Requests</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_disposal_request_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Request
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="archive"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-value">{{ total_requests }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Pending Approval</div>
+            <div class="stat-value">{{ pending_approval_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Progress</div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Realized Gain / Loss</div>
+            <div class="stat-value">${{ total_gain_loss|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, title, asset tag..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="disposal_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in method_choices %}
+                    <option value="{{ val }}" {% if request.GET.disposal_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in category_list %}
+                    <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.disposal_method or request.GET.category or request.GET.retirement_reason %}
+                <a href="{% url 'assets:asset_disposal_request_list' %}" class="btn btn-outline px-3" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if disposal_requests %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Number</th>
+                        <th>Title / Asset</th>
+                        <th>Method</th>
+                        <th>Reason</th>
+                        <th>Net Book Value</th>
+                        <th>Gain / Loss</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in disposal_requests %}
+                    <tr>
+                        <td class="font-mono text-sm font-semibold text-slate-800">
+                            <a href="{% url 'assets:asset_disposal_request_detail' req.pk %}" class="text-blue-600 hover:underline">
+                                {{ req.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ req.title }}</div>
+                            <div class="text-xs text-slate-500">
+                                {{ req.fixed_asset.asset_number }} — {{ req.fixed_asset.name }}
+                                {% if req.operational_asset %}
+                                <span class="text-slate-400">| {{ req.operational_asset.tag_code }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ req.disposal_method_css }}">{{ req.get_disposal_method_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ req.retirement_reason_css }}">{{ req.get_retirement_reason_display }}</span>
+                        </td>
+                        <td class="font-mono text-sm">
+                            ${{ req.net_book_value|floatformat:2 }}
+                        </td>
+                        <td class="font-mono text-sm {% if req.realized_gain_loss >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                            ${{ req.realized_gain_loss|floatformat:2 }}
+                        </td>
+                        <td>
+                            <span class="badge {{ req.status_css }}">{{ req.get_status_display }}</span>
+                        </td>
+                        <td class="text-sm text-slate-500">
+                            {{ req.submitted_at|date:"M d, Y"|default:"—" }}
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions">
+                                <a href="{% url 'assets:asset_disposal_request_detail' req.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                {% if req.status != 'completed' and req.status != 'cancelled' %}
+                                <a href="{% url 'assets:asset_disposal_request_edit' req.pk %}" class="btn btn-icon" title="Edit Request">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_disposal_request_delete' req.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete request {{ req.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="p-4 border-t border-slate-200">
+            <div class="pagination flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} requests
+                </div>
+                <div class="flex gap-1">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                    {% endif %}
+                    <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 text-slate-300">
+                <i data-lucide="archive" class="w-full h-full"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-800 mb-1">No Disposal Requests Found</h3>
+            <p class="text-slate-500 text-sm mb-4">No asset retirement or disposal requests match your current filters.</p>
+            <a href="{% url 'assets:asset_disposal_request_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Disposal Request
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
