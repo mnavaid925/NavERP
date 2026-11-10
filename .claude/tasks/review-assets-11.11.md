@@ -105,3 +105,28 @@
   - *Fix:* Use `{% if permit.days_to_expiration is not None and permit.days_to_expiration < 0 %}`.
 
 ---
+
+## Pass 4: Performance Reviewer (`performance-reviewer`)
+
+### Critical
+- *None.* Zero N+1 regressions. Complete `select_related()` and `.defer()` on large text fields.
+
+### Important
+- **I5: Consolidate Multi-Query KPI Metrics in List Views**
+  - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:49-54` (3 queries -> 1 single aggregate)
+  - `apps/assets/views/AssetCompliance/AssetComplianceAudits.py:57-64` (4 queries -> 1 single aggregate)
+  - `apps/assets/views/AssetCompliance/AssetPermitLicenses.py:57-68` (4 queries -> 1 single aggregate)
+  - `apps/assets/views/AssetCompliance/AssetComplianceIncidents.py:60-75` (4 queries -> 1 single aggregate)
+  - *Fix:* Use Django conditional aggregation `Count("id", filter=Q(...))` and `Sum(...)` to consolidate KPI metrics into 1 query per view.
+- **I6: Add Composite Foreign-Key Indexes on Tenant-Scoped Models**
+  - `AssetComplianceAudit`: `(tenant, framework)`, `(tenant, asset)`
+  - `AssetComplianceIncident`: `(tenant, audit)`, `(tenant, permit)`
+  - `AssetComplianceFramework`: `(tenant, applicable_category)`
+  - *Fix:* Add composite `models.Index(fields=["tenant", "<fk>"])` to `Meta.indexes`.
+
+### Minor
+- **M7: Use `.only('id', 'name')` for Filter Dropdown QuerySets**
+  - `apps/assets/views/AssetCompliance/AssetPermitLicenses.py:69`
+  - *Fix:* Project only required fields for dropdown choices (`Party.objects.filter(...).only("id", "name")`).
+
+---
