@@ -47,11 +47,15 @@ def asset_compliance_framework_list(request):
         qs = qs.filter(applicable_category_id=int(category_id))
 
     # Aggregate KPI metrics over tenant-scoped records
-    base_all = AssetComplianceFramework.objects.filter(tenant=request.tenant)
-    total_frameworks = base_all.count()
-    active_count = base_all.filter(status="active").count()
-    avg_readiness = base_all.aggregate(avg=Avg("readiness_score"))["avg"]
-    avg_readiness_score = round(avg_readiness or 100)
+    metrics = AssetComplianceFramework.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+        avg_readiness=Avg("readiness_score"),
+    )
+    total_frameworks = metrics["total"]
+    active_count = metrics["active"]
+    avg_readiness = metrics["avg_readiness"]
+    avg_readiness_score = round(avg_readiness if avg_readiness is not None else 100)
 
     category_list = AssetCategory.objects.filter(tenant=request.tenant).order_by("name")
 
