@@ -177,6 +177,7 @@ def asset_compliance_audit_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_compliance_audit_delete(request, pk):
     audit = assets_object(request, AssetComplianceAudit, pk)
     if audit.status == "completed":
