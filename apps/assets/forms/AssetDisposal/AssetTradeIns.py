@@ -22,7 +22,6 @@ class AssetTradeInForm(TenantUniqueMixin, TenantModelForm):
             "vendor",
             "replacement_requisition",
             "replacement_fixed_asset",
-            "authorized_by",
             "agreement_document",
             "agreement_number",
             "agreement_date",
@@ -41,7 +40,6 @@ class AssetTradeInForm(TenantUniqueMixin, TenantModelForm):
             "vendor": forms.Select(attrs={"class": "form-select"}),
             "replacement_requisition": forms.Select(attrs={"class": "form-select"}),
             "replacement_fixed_asset": forms.Select(attrs={"class": "form-select"}),
-            "authorized_by": forms.Select(attrs={"class": "form-select"}),
             "agreement_document": forms.Select(attrs={"class": "form-select"}),
             "agreement_number": forms.TextInput(attrs={"class": "form-input", "placeholder": "e.g. CAT-DEALER-TI-2026-09"}),
             "agreement_date": forms.DateInput(attrs={"type": "date", "class": "form-input"}),
@@ -64,7 +62,6 @@ class AssetTradeInForm(TenantUniqueMixin, TenantModelForm):
             self.fields["replacement_fixed_asset"].queryset = fa_qs
             self.fields["vendor"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["replacement_requisition"].queryset = AssetRequisition.objects.filter(tenant=self.tenant)
-            self.fields["authorized_by"].queryset = User.objects.filter(tenant=self.tenant, is_active=True).order_by("username")
             self.fields["agreement_document"].queryset = Document.objects.filter(tenant=self.tenant)
 
     def clean(self):
@@ -78,7 +75,6 @@ class AssetTradeInForm(TenantUniqueMixin, TenantModelForm):
                 "vendor",
                 "replacement_requisition",
                 "replacement_fixed_asset",
-                "authorized_by",
                 "agreement_document",
             ],
         )
