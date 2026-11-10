@@ -8,6 +8,12 @@ from django.utils import timezone
 from apps.accounting.models import Currency, FixedAsset, GLAccount
 from apps.accounting.models import FiscalPeriod
 from apps.assets.models import (
+    AssetComplianceAudit,
+    AssetComplianceFramework,
+    AssetComplianceIncident,
+    AssetPermitLicense,
+)
+from apps.assets.models import (
     AssetCalibrationRecord,
     AssetConditionAssessment,
     AssetFailureMode,
@@ -16,6 +22,10 @@ from apps.assets.models import (
     AssetResaleListing,
     AssetScrapSalvage,
     AssetTradeIn,
+    AssetLeaseBuyAnalysis,
+    AssetLeaseContract,
+    AssetLeaseModification,
+    AssetLeaseSchedule,
     AssetAcquisitionReceipt,
     AssetAudit,
     AssetCapitalization,
@@ -2192,3 +2202,227 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.9 Seeding complete (3 disposal requests, 1 resale listing, 1 trade-in, 1 scrap salvage).")
+
+        # =====================================================================
+        # 11.10 Lease & Rental Management
+        # =====================================================================
+        if not AssetLeaseContract.objects.filter(tenant=tenant).exists():
+            lessor_party = Party.objects.filter(tenant=tenant).first()
+            if not lessor_party:
+                lessor_party = Party.objects.create(
+                    tenant=tenant,
+                    name=f"CAT Equipment Financial Services — {tenant.name}",
+                    party_type="organization",
+                    status="active",
+                )
+
+            cat_node = AssetCategory.objects.filter(tenant=tenant).first()
+            op_asset = Asset.objects.filter(tenant=tenant).first()
+            fa_node = FixedAsset.objects.filter(tenant=tenant).first()
+
+            # Contract 1: Active Finance Lease (5-Axis CNC Machine)
+            alc1 = AssetLeaseContract.objects.create(
+                tenant=tenant,
+                title="Finance Lease for 5-Axis CNC Machining Center",
+                master_lease_agreement_ref=f"MLA-2025-IND-{tenant.pk}01",
+                lessor=lessor_party,
+                asset=op_asset,
+                category=cat_node,
+                fixed_asset=fa_node,
+                inception_date=today - timezone.timedelta(days=180),
+                commencement_date=today - timezone.timedelta(days=180),
+                expiration_date=today + timezone.timedelta(days=900),
+                first_payment_date=today - timezone.timedelta(days=180),
+                lease_term_months=36,
+                economic_life_months=48,
+                payment_amount=Decimal("4500.00"),
+                payment_frequency="monthly",
+                payment_timing="arrears",
+                discount_rate_pct=Decimal("5.5000"),
+                fair_market_value=Decimal("160000.00"),
+                initial_direct_costs=Decimal("1200.00"),
+                lease_incentives=Decimal("500.00"),
+                residual_value_guarantee=Decimal("10000.00"),
+                purchase_option_price=Decimal("15000.00"),
+                has_purchase_option=True,
+                transfer_of_ownership=False,
+                is_specialized_asset=False,
+                classification="finance",
+                status="active",
+                approved_by=user,
+                notes="Primary plant CNC cell lease with equipment buyout clause at month 36.",
+            )
+            alc1.calculate_present_value()
+            alc1.save()
+            alc1.generate_amortization_schedule()
+
+            # Mark first 6 installments as paid
+            for sch in alc1.payment_schedules.filter(period_number__lte=6):
+                sch.status = "paid"
+                sch.paid_date = sch.due_date
+                sch.payment_reference = f"ACH-{tenant.pk}90{sch.period_number}"
+                sch.save()
+            last_paid = alc1.payment_schedules.filter(period_number=6).first()
+            if last_paid:
+                alc1.current_lease_liability = last_paid.ending_liability
+                alc1.current_rou_asset_carrying_value = last_paid.ending_rou_asset_value
+                alc1.save()
+
+            # Contract 2: Active Operating Lease (Warehouse Forklift Fleet)
+            alc2 = AssetLeaseContract.objects.create(
+                tenant=tenant,
+                title="Operating Lease for High-Reach Warehouse Forklift Fleet",
+                master_lease_agreement_ref=f"MLA-2026-FLT-{tenant.pk}09",
+                lessor=lessor_party,
+                asset=op_asset,
+                category=cat_node,
+                fixed_asset=None,
+                inception_date=today - timezone.timedelta(days=60),
+                commencement_date=today - timezone.timedelta(days=60),
+                expiration_date=today + timezone.timedelta(days=660),
+                first_payment_date=today - timezone.timedelta(days=60),
+                lease_term_months=24,
+                economic_life_months=84,
+                payment_amount=Decimal("2800.00"),
+                payment_frequency="monthly",
+                payment_timing="advance",
+                discount_rate_pct=Decimal("4.7500"),
+                fair_market_value=Decimal("110000.00"),
+                initial_direct_costs=Decimal("500.00"),
+                lease_incentives=Decimal("0.00"),
+                residual_value_guarantee=Decimal("0.00"),
+                purchase_option_price=None,
+                has_purchase_option=False,
+                transfer_of_ownership=False,
+                is_specialized_asset=False,
+                classification="operating",
+                status="active",
+                approved_by=user,
+                notes="Logistics material handling fleet lease under full service maintenance contract.",
+            )
+            alc2.calculate_present_value()
+            alc2.save()
+            alc2.generate_amortization_schedule()
+
+            # Mark first 2 installments as paid
+            for sch in alc2.payment_schedules.filter(period_number__lte=2):
+                sch.status = "paid"
+                sch.paid_date = sch.due_date
+                sch.payment_reference = f"WIRE-{tenant.pk}41{sch.period_number}"
+                sch.save()
+            last_paid2 = alc2.payment_schedules.filter(period_number=2).first()
+            if last_paid2:
+                alc2.current_lease_liability = last_paid2.ending_liability
+                alc2.current_rou_asset_carrying_value = last_paid2.ending_rou_asset_value
+                alc2.save()
+
+            # Contract 3: Draft Lease Contract
+            alc3 = AssetLeaseContract.objects.create(
+                tenant=tenant,
+                title="Master Equipment Lease: Autonomous Mobile Robots (AMRs)",
+                master_lease_agreement_ref=f"MLA-2026-ROB-{tenant.pk}14",
+                lessor=lessor_party,
+                asset=None,
+                category=cat_node,
+                fixed_asset=None,
+                inception_date=today,
+                commencement_date=today + timezone.timedelta(days=30),
+                expiration_date=today + timezone.timedelta(days=1125),
+                first_payment_date=today + timezone.timedelta(days=30),
+                lease_term_months=36,
+                economic_life_months=60,
+                payment_amount=Decimal("3600.00"),
+                payment_frequency="monthly",
+                payment_timing="arrears",
+                discount_rate_pct=Decimal("5.2500"),
+                fair_market_value=Decimal("135000.00"),
+                status="draft",
+                notes="Pending final vendor pricing addendum and risk review.",
+            )
+            alc3.calculate_present_value()
+            alc3.evaluate_statutory_classification()
+            alc3.save()
+
+            # Modification 1: Term Extension on Contract 1
+            AssetLeaseModification.objects.create(
+                tenant=tenant,
+                lease_contract=alc1,
+                modification_type="term_extension",
+                request_date=today - timezone.timedelta(days=30),
+                effective_date=today - timezone.timedelta(days=15),
+                prior_lease_liability=Decimal("125000.00"),
+                revised_lease_liability=Decimal("142000.00"),
+                liability_adjustment=Decimal("17000.00"),
+                prior_rou_asset_value=Decimal("120000.00"),
+                revised_rou_asset_value=Decimal("137000.00"),
+                rou_asset_adjustment=Decimal("17000.00"),
+                revised_term_months=48,
+                requested_by=user,
+                approved_by=user,
+                status="executed",
+                justification="Production volume increases necessitate extending lease duration by 12 months.",
+                notes="Executed remeasurement approved by Controller.",
+            )
+
+            # Lease vs. Buy Analysis 1: Gantry Crane (Evaluated -> Buy recommended)
+            alba1 = AssetLeaseBuyAnalysis.objects.create(
+                tenant=tenant,
+                title="CapEx Decision: High-Capacity 50-Ton Overhead Gantry Crane",
+                description="Evaluation of outright debt purchase vs 5-year operating lease for heavy fab bay.",
+                target_asset_name="Konecranes 50T Industrial Gantry Crane",
+                category=cat_node,
+                expected_useful_life_years=Decimal("10.0"),
+                purchase_price=Decimal("240000.00"),
+                down_payment_pct=Decimal("15.00"),
+                loan_interest_rate_pct=Decimal("5.75"),
+                loan_term_years=Decimal("5.0"),
+                estimated_salvage_value=Decimal("35000.00"),
+                annual_maintenance_cost_buy=Decimal("6500.00"),
+                annual_insurance_tax_buy=Decimal("3200.00"),
+                lease_term_months=60,
+                monthly_lease_payment=Decimal("4200.00"),
+                upfront_lease_fees=Decimal("5000.00"),
+                end_of_lease_purchase_option=Decimal("25000.00"),
+                lessor_covers_maintenance=True,
+                annual_maintenance_cost_lease=Decimal("0.00"),
+                discount_rate_wacc_pct=Decimal("8.00"),
+                corporate_tax_rate_pct=Decimal("21.00"),
+                evaluated_by=user,
+                status="evaluated",
+                evaluation_notes="Long expected useful life (10 yrs) and favorable terminal salvage make loan purchase financially superior.",
+            )
+            alba1.evaluate_financial_models()
+            alba1.save()
+
+            # Lease vs. Buy Analysis 2: Palletizing Robot (Approved -> Lease recommended)
+            alba2 = AssetLeaseBuyAnalysis.objects.create(
+                tenant=tenant,
+                title="CapEx Decision: Automated Packaging Palletizer System",
+                description="Rapid technological turnover favors 3-year operating lease with vendor tech refresh.",
+                target_asset_name="Fanuc M-410iC Robotic Palletizing Cell",
+                category=cat_node,
+                expected_useful_life_years=Decimal("4.0"),
+                purchase_price=Decimal("185000.00"),
+                down_payment_pct=Decimal("20.00"),
+                loan_interest_rate_pct=Decimal("6.50"),
+                loan_term_years=Decimal("4.0"),
+                estimated_salvage_value=Decimal("15000.00"),
+                annual_maintenance_cost_buy=Decimal("8500.00"),
+                annual_insurance_tax_buy=Decimal("2400.00"),
+                lease_term_months=36,
+                monthly_lease_payment=Decimal("2900.00"),
+                upfront_lease_fees=Decimal("2500.00"),
+                end_of_lease_purchase_option=Decimal("10000.00"),
+                lessor_covers_maintenance=True,
+                annual_maintenance_cost_lease=Decimal("0.00"),
+                discount_rate_wacc_pct=Decimal("8.50"),
+                corporate_tax_rate_pct=Decimal("21.00"),
+                evaluated_by=user,
+                approved_by=user,
+                status="approved",
+                evaluation_notes="Leasing minimizes capital lock-up and mitigates robotics obsolescence risk.",
+            )
+            alba2.evaluate_financial_models()
+            alba2.save()
+
+        self.stdout.write(f"[{tenant.name}] 11.10 Seeding complete (3 lease contracts, schedules, 1 modification, 2 lease vs buy analyses).")
