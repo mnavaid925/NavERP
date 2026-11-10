@@ -185,6 +185,7 @@ def asset_disposal_request_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_disposal_request_delete(request, pk):
     instance = assets_object(request, AssetDisposalRequest, pk)
