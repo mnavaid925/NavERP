@@ -380,7 +380,7 @@ class AssetLeaseContractAdmin(admin.ModelAdmin):
 class AssetLeaseScheduleAdmin(admin.ModelAdmin):
     list_display = ("number", "lease_contract", "period_number", "due_date", "payment_amount", "interest_expense", "principal_reduction", "ending_liability", "status", "tenant")
     list_select_related = ("tenant", "lease_contract", "lease_contract__lessor")
-    list_filter = ("status",)
+    list_filter = ("status", "due_date")
     search_fields = ("number", "payment_reference", "lease_contract__number")
 
 
