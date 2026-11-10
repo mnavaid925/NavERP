@@ -10,6 +10,10 @@ from apps.assets.models import (
     AssetCriticalityAssessment,
     AssetCustodyLog,
     AssetDepreciationSchedule,
+    AssetDisposalRequest,
+    AssetResaleListing,
+    AssetScrapSalvage,
+    AssetTradeIn,
     AssetDowntimeLog,
     AssetEnergyReading,
     AssetFailureMode,
@@ -290,6 +294,39 @@ class AssetInsuranceClaimAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "policy", "currency", "adjuster_party")
     list_filter = ("claim_status", "peril_type", "settlement_method")
     search_fields = ("number", "title", "carrier_claim_number", "incident_location")
+
+
+@admin.register(AssetDisposalRequest)
+class AssetDisposalRequestAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "fixed_asset", "disposal_method", "retirement_reason", "net_book_value", "realized_gain_loss", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "operational_asset", "category")
+    list_filter = ("status", "disposal_method", "retirement_reason")
+    search_fields = ("number", "title", "justification_notes")
+
+
+@admin.register(AssetResaleListing)
+class AssetResaleListingAdmin(admin.ModelAdmin):
+    list_display = ("number", "fixed_asset", "listing_channel", "asking_price", "highest_bid_amount", "gross_sale_proceeds", "status", "payment_status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "disposal_request", "buyer")
+    list_filter = ("status", "listing_channel", "payment_status")
+    search_fields = ("number", "listing_reference", "buyer_contact_name")
+
+
+@admin.register(AssetTradeIn)
+class AssetTradeInAdmin(admin.ModelAdmin):
+    list_display = ("number", "retired_fixed_asset", "vendor", "trade_in_allowance", "net_credit_applied", "net_cash_outflow", "status", "tenant")
+    list_select_related = ("tenant", "retired_fixed_asset", "vendor", "disposal_request")
+    list_filter = ("status", "like_kind_exchange")
+    search_fields = ("number", "agreement_number")
+
+
+@admin.register(AssetScrapSalvage)
+class AssetScrapSalvageAdmin(admin.ModelAdmin):
+    list_display = ("number", "fixed_asset", "scrap_method", "recycler_partner", "total_scrap_weight_kg", "salvage_proceeds", "status", "tenant")
+    list_select_related = ("tenant", "fixed_asset", "disposal_request", "recycler_partner")
+    list_filter = ("status", "scrap_method", "has_hazardous_materials", "abatement_certified", "data_sanitized")
+    search_fields = ("number", "cod_number", "epa_manifest_number", "carrier_name")
+
 
 
 
