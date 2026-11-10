@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}{{ incident.number }} — Incident Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_compliance_incident_list' %}">Violations & Incidents</a>
+            <span>/</span>
+            <span>{{ incident.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ incident.title }}</h1>
+            <span class="badge {{ incident.status_badge_class }}">{{ incident.get_status_display }}</span>
+            <span class="badge {{ incident.severity_badge_class }}">{{ incident.get_severity_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if incident.status != "resolved" and incident.status != "closed" %}
+        <form method="post" action="{% url 'assets:asset_compliance_incident_resolve' incident.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-green-700">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Mark Resolved
+            </button>
+        </form>
+        {% endif %}
+        {% if incident.status == "resolved" %}
+        <form method="post" action="{% url 'assets:asset_compliance_incident_close' incident.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Close Incident
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_compliance_incident_edit' incident.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <a href="{% url 'assets:asset_compliance_incident_list' %}" class="btn btn-outline">
+            Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Incident Specification & Investigation -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Incident & Citation Details</h2>
+                <span class="font-mono text-sm text-muted">{{ incident.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Incident Type</span>
+                        <span class="badge {{ incident.incident_type_badge_class }}">{{ incident.get_incident_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Severity Classification</span>
+                        <span class="badge {{ incident.severity_badge_class }}">{{ incident.get_severity_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Incident Occurred</span>
+                        <span class="font-medium text-slate-900">{{ incident.incident_date|date:"M d, Y H:i" }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Discovery / Cited Date</span>
+                        <span class="font-medium text-slate-900">{{ incident.discovery_date }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Subject Asset</span>
+                        {% if incident.asset %}
+                        <span class="font-medium text-slate-900">{{ incident.asset.code }} — {{ incident.asset.name }}</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Citing Enforcement Agency</span>
+                        <span class="font-medium text-slate-900">
+                            {% if incident.enforcement_agency %}
+                            {{ incident.enforcement_agency.name }}
+                            {% else %}
+                            <span class="text-muted">Internal Self-Report</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Citation / Docket Reference</span>
+                        <span class="font-mono font-medium text-slate-900">
+                            {% if incident.citation_reference %}
+                            {{ incident.citation_reference }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Lead Investigator</span>
+                        <span class="font-medium text-slate-900">
+                            {% if incident.assigned_investigator %}
+                            {{ incident.assigned_investigator.get_full_name|default:incident.assigned_investigator.username }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Cross Links to Permit and Audit -->
+                {% if incident.permit or incident.audit %}
+                <div class="mt-6 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% if incident.permit %}
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Violated Permit</span>
+                        <a href="{% url 'assets:asset_permit_license_detail' incident.permit.pk %}" class="font-medium text-brand hover:underline">
+                            {{ incident.permit.permit_number }} — {{ incident.permit.permit_name }}
+                        </a>
+                    </div>
+                    {% endif %}
+                    {% if incident.audit %}
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Source Compliance Audit</span>
+                        <a href="{% url 'assets:asset_compliance_audit_detail' incident.audit.pk %}" class="font-medium text-brand hover:underline">
+                            {{ incident.audit.number }} — {{ incident.audit.title }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Root Cause Analysis & CAPA Plan -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Investigation & Corrective Action Plan (CAPA)</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-1">Identified Root Cause</span>
+                    <span class="badge {{ incident.root_cause_badge_class }}">{{ incident.get_root_cause_display }}</span>
+                </div>
+
+                {% if incident.root_cause_analysis %}
+                <div>
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-1">Root Cause Investigation Analysis</span>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        {{ incident.root_cause_analysis }}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if incident.corrective_action_plan %}
+                <div>
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-1">Mandated Corrective & Preventive Action Plan</span>
+                    <div class="text-sm text-slate-700 whitespace-pre-line bg-slate-50 p-3 rounded-lg border border-slate-100">
+                        {{ incident.corrective_action_plan }}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Target Resolution Date</span>
+                        <span class="font-medium text-slate-900">
+                            {% if incident.target_resolution_date %}
+                            {{ incident.target_resolution_date }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Actual Resolution Date</span>
+                        <span class="font-medium text-slate-900">
+                            {% if incident.actual_resolution_date %}
+                            {{ incident.actual_resolution_date }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Exposure & Penalties Sidebar -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Financial Penalty Settlement</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-600">Fine Assessed</span>
+                    <span class="font-bold text-red-600 font-mono text-base">${{ incident.fine_assessed|floatformat:2 }}</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-600">Fine Paid / Settled</span>
+                    <span class="font-bold text-green-700 font-mono text-base">${{ incident.fine_paid|floatformat:2 }}</span>
+                </div>
+                <div class="border-t border-slate-100 pt-2 flex justify-between items-center">
+                    <span class="text-sm font-medium text-slate-900">Outstanding Liability</span>
+                    <span class="font-bold font-mono text-base {% if incident.outstanding_fine > 0 %}text-red-600{% else %}text-slate-700{% endif %}">
+                        ${{ incident.outstanding_fine|floatformat:2 }}
+                    </span>
+                </div>
+                {% if incident.fine_payment_date %}
+                <div class="text-xs text-muted pt-1">
+                    Settlement payment confirmed on {{ incident.fine_payment_date }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Incident Lifecycle</h2>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-muted">Status</span>
+                    <span class="badge {{ incident.status_badge_class }}">{{ incident.get_status_display }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Reported</span>
+                    <span class="font-medium text-slate-800">{{ incident.created_at|date:"M d, Y" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Last Modified</span>
+                    <span class="font-medium text-slate-800">{{ incident.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
