@@ -35,6 +35,10 @@ from apps.assets.models import (
     AssetSpecificationTemplate,
     AssetTag,
     AssetTransfer,
+    AssetWarranty,
+    AssetWarrantyClaim,
+    AssetInsurancePolicy,
+    AssetInsuranceClaim,
     CapitalizationPolicy,
 )
 from apps.core.models import OrgUnit, Party, Tenant
@@ -56,6 +60,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetInsuranceClaim.objects.all().delete()
+            AssetInsurancePolicy.objects.all().delete()
+            AssetWarrantyClaim.objects.all().delete()
+            AssetWarranty.objects.all().delete()
             AssetCalibrationRecord.objects.all().delete()
             AssetFailureMode.objects.all().delete()
             AssetTelemetryReading.objects.all().delete()
@@ -99,6 +107,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_5(tenant)
             self._seed_tenant_11_6(tenant)
             self._seed_tenant_11_7(tenant)
+            self._seed_tenant_11_8(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -1735,3 +1744,256 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.7 Seeding complete (3 assessments, 4 telemetry readings, 3 failure modes, 3 calibration records).")
+
+    def _seed_tenant_11_8(self, tenant):
+        # Idempotency guard for 11.8
+        if AssetWarranty.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.8 Warranty & Insurance data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.8 Warranty & Insurance Management...")
+
+        user = User.objects.filter(tenant=tenant).first()
+        fa_primary = FixedAsset.objects.filter(tenant=tenant).first()
+        fa_secondary = FixedAsset.objects.filter(tenant=tenant).last()
+        oa_primary = Asset.objects.filter(tenant=tenant).first()
+        cat = AssetCategory.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(tenant=tenant).first()
+        maint_req = AssetMaintenanceRequest.objects.filter(tenant=tenant).first()
+        incident_rep = AssetIncidentReport.objects.filter(tenant=tenant).first()
+        service_contract = AssetServiceContract.objects.filter(tenant=tenant).first()
+
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # 1. Asset Warranties
+            war1 = AssetWarranty.objects.create(
+                tenant=tenant,
+                title="CNC Vertical Milling Machine OEM Factory Warranty",
+                warranty_certificate_number=f"OEM-WTY-{tenant.pk}-001",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                warrantor_party=vendor,
+                currency=currency,
+                warranty_type="oem_standard",
+                coverage_scope="comprehensive",
+                start_date=today - timezone.timedelta(days=365),
+                end_date=today + timezone.timedelta(days=365),
+                meter_type="hours",
+                meter_limit=6000,
+                parts_coverage_percent=100,
+                labor_coverage_percent=100,
+                travel_dispatch_covered=True,
+                deductible_amount=Decimal("0.00"),
+                contract_purchase_price=Decimal("0.00"),
+                terms_and_conditions="Comprehensive 24-month or 6,000-operating-hour manufacturer warranty covering spindle assembly, linear guideways, servomotors, and CNC controller. Requires OEM certified lubrication schedule.",
+                service_contract=service_contract,
+                status="active",
+                registered_by=user,
+            )
+
+            war2 = AssetWarranty.objects.create(
+                tenant=tenant,
+                title="Industrial Backup Diesel Generator Extended Powertrain Warranty",
+                warranty_certificate_number=f"EXT-POW-{tenant.pk}-002",
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                warrantor_party=vendor,
+                currency=currency,
+                warranty_type="oem_extended",
+                coverage_scope="powertrain_major_components",
+                start_date=today - timezone.timedelta(days=180),
+                end_date=today + timezone.timedelta(days=45),  # Expiring soon (<60d)
+                meter_type="hours",
+                meter_limit=2500,
+                parts_coverage_percent=100,
+                labor_coverage_percent=80,
+                travel_dispatch_covered=False,
+                deductible_amount=Decimal("250.00"),
+                contract_purchase_price=Decimal("3500.00"),
+                terms_and_conditions="Extended 36-month protection on engine block, crankshaft, turbocharger, and stator alternator coils. Excludes consumables, belts, and filters.",
+                status="expiring_soon",
+                registered_by=user,
+            )
+
+            war3 = AssetWarranty.objects.create(
+                tenant=tenant,
+                title="Electric Material Handling Fleet Certified Pre-Owned Warranty",
+                warranty_certificate_number=f"DLR-CPO-{tenant.pk}-003",
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                warrantor_party=vendor,
+                currency=currency,
+                warranty_type="dealer_certified",
+                coverage_scope="parts_and_labor",
+                start_date=today - timezone.timedelta(days=90),
+                end_date=today + timezone.timedelta(days=275),
+                meter_type="hours",
+                meter_limit=4000,
+                parts_coverage_percent=90,
+                labor_coverage_percent=90,
+                travel_dispatch_covered=True,
+                deductible_amount=Decimal("150.00"),
+                contract_purchase_price=Decimal("1200.00"),
+                terms_and_conditions="Dealer certified pre-owned coverage on drive motor, hydraulic pump, and lift mast cylinder. Regular battery electrolyte inspection required.",
+                status="active",
+                registered_by=user,
+            )
+
+            # 2. Asset Warranty Claims
+            claim1 = AssetWarrantyClaim.objects.create(
+                tenant=tenant,
+                title="Spindle Drive Cooling Fan Failure & Thermal Shutdown",
+                warranty=war1,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                maintenance_request=maint_req,
+                incident_date=today - timezone.timedelta(days=45),
+                operating_meter_at_failure=1820,
+                defect_description="Spindle cooling circuit internal blower motor seized due to bearing race flaw, triggering high-temperature alarm 0x4B and emergency stop.",
+                warrantor_claim_reference=f"OEM-RMA-{tenant.pk}-8812",
+                currency=currency,
+                claimed_amount=Decimal("2450.00"),
+                approved_amount=Decimal("2450.00"),
+                deductible_applied=Decimal("0.00"),
+                net_recovery_amount=Decimal("2450.00"),
+                resolution_type="parts_replacement",
+                claim_status="settled_closed",
+                part_return_status="received_inspected_by_oem",
+                rma_tracking_number="1Z9999999948192837",
+                submission_date=today - timezone.timedelta(days=40),
+                settlement_date=today - timezone.timedelta(days=20),
+                settlement_notes="OEM validated bearing cage fatigue defect under warranty. Replacement blower fan kit and harness dispatched at zero charge. Full credit issued.",
+                filed_by=user,
+                approved_by=user,
+            )
+
+            claim2 = AssetWarrantyClaim.objects.create(
+                tenant=tenant,
+                title="Generator Alternator Automatic Voltage Regulator (AVR) Breakdown",
+                warranty=war2,
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                incident_date=today - timezone.timedelta(days=12),
+                operating_meter_at_failure=980,
+                defect_description="AVR component diode breakdown causing AC voltage fluctuation beyond +/- 15%. Voltage hunt observed on load test.",
+                warrantor_claim_reference=f"CAT-CLM-{tenant.pk}-3910",
+                currency=currency,
+                claimed_amount=Decimal("1850.00"),
+                approved_amount=Decimal("0.00"),
+                deductible_applied=Decimal("250.00"),
+                net_recovery_amount=Decimal("0.00"),
+                resolution_type="pending_evaluation",
+                claim_status="submitted",
+                part_return_status="return_required_pending",
+                submission_date=today - timezone.timedelta(days=10),
+                settlement_notes="Formal defect documentation and diagnostic datalogs transmitted to OEM regional technical service center. Awaiting field inspection approval.",
+                filed_by=user,
+            )
+
+            # 3. Asset Insurance Policies
+            pol1 = AssetInsurancePolicy.objects.create(
+                tenant=tenant,
+                policy_number=f"POL-PROP-{tenant.pk}-2026",
+                title="Commercial Plant & Industrial Equipment All-Risk Schedule",
+                policy_type="comprehensive_all_risk",
+                valuation_basis="replacement_cost_value",
+                underwriter_party=vendor,
+                broker_party=vendor,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                asset_category=cat,
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=120),
+                expiration_date=today + timezone.timedelta(days=245),
+                total_insured_value=Decimal("750000.00"),
+                deductible_retention=Decimal("5000.00"),
+                coinsurance_percentage=90,
+                annual_premium=Decimal("8400.00"),
+                premium_frequency="annual",
+                coverage_terms="Broadform property, explosion, lightning, windstorm, sprinkler leakage, and accidental direct physical loss. Territorial coverage: Plant Main Facility.",
+                status="active",
+                risk_manager=user,
+            )
+
+            pol2 = AssetInsurancePolicy.objects.create(
+                tenant=tenant,
+                policy_number=f"POL-MB-{tenant.pk}-2026",
+                title="Machinery Breakdown, Electrical Arcing & Boiler Pressure Vessel Policy",
+                policy_type="machinery_breakdown",
+                valuation_basis="replacement_cost_value",
+                underwriter_party=vendor,
+                broker_party=vendor,
+                currency=currency,
+                effective_date=today - timezone.timedelta(days=330),
+                expiration_date=today + timezone.timedelta(days=35),  # Pending renewal (<45d)
+                total_insured_value=Decimal("450000.00"),
+                deductible_retention=Decimal("2500.00"),
+                coinsurance_percentage=100,
+                annual_premium=Decimal("6200.00"),
+                premium_frequency="semi_annual",
+                coverage_terms="Mechanical breakdown, centrifugal force rupture, electrical arcing short circuit, and boiler tube expansion failure across all plant CNC and power assets.",
+                status="pending_renewal",
+                risk_manager=user,
+            )
+
+            # 4. Asset Insurance Claims
+            ins_claim1 = AssetInsuranceClaim.objects.create(
+                tenant=tenant,
+                title="Main Substation High-Voltage Surge Damage",
+                policy=pol2,
+                fixed_asset=fa_secondary,
+                operational_asset=oa_primary,
+                incident_report=incident_rep,
+                incident_date=today - timezone.timedelta(days=60),
+                peril_type="electrical_arcing_surge",
+                incident_description="Severe atmospheric transient voltage surge propagated through utility grid, burning out substation step-down transformer insulation and switchgear relays.",
+                incident_location="Building B - Electrical Substation Room 102",
+                carrier_claim_number=f"CLM-SURGE-{tenant.pk}-9021",
+                adjuster_party=vendor,
+                adjuster_name="Marcus Vance (Crawford Forensic Loss Consulting)",
+                currency=currency,
+                claimed_loss_amount=Decimal("42000.00"),
+                deductible_applied=Decimal("2500.00"),
+                salvage_recovery_amount=Decimal("3500.00"),
+                settlement_payout_amount=Decimal("36000.00"),
+                claim_status="settled_paid",
+                settlement_method="direct_indemnity_check",
+                date_reported_to_carrier=today - timezone.timedelta(days=58),
+                proof_of_loss_date=today - timezone.timedelta(days=45),
+                settlement_date=today - timezone.timedelta(days=15),
+                settlement_notes="Forensic engineer confirmed external grid lightning surge as primary proximate peril. Gross loss appraised at $42,000. Net indemnity $36,000 after $2,500 deductible and $3,500 transformer copper core salvage.",
+                claims_officer=user,
+            )
+
+            ins_claim2 = AssetInsuranceClaim.objects.create(
+                tenant=tenant,
+                title="Hydraulic Press Catastrophic Cylinder Seal Blowout & Flood",
+                policy=pol1,
+                fixed_asset=fa_primary,
+                operational_asset=oa_primary,
+                incident_report=incident_rep,
+                incident_date=today - timezone.timedelta(days=14),
+                peril_type="mechanical_breakdown",
+                incident_description="Sudden high-pressure hydraulic ram cylinder head seal blowout resulting in 300 gallons of synthetic oil release and damage to floor electronics.",
+                incident_location="Main Machine Shop - Bay 4 Press Area",
+                carrier_claim_number=f"CLM-HYD-{tenant.pk}-4482",
+                adjuster_party=vendor,
+                adjuster_name="Elena Rostova (Sedgwick Global Claims)",
+                currency=currency,
+                claimed_loss_amount=Decimal("18500.00"),
+                deductible_applied=Decimal("5000.00"),
+                salvage_recovery_amount=Decimal("0.00"),
+                settlement_payout_amount=Decimal("0.00"),
+                claim_status="adjuster_assigned",
+                settlement_method="direct_indemnity_check",
+                date_reported_to_carrier=today - timezone.timedelta(days=12),
+                settlement_notes="Carrier adjuster conducted on-site physical damage assessment and hydraulic fluid oil testing. Proof of Loss statement currently being assembled.",
+                claims_officer=user,
+            )
+
+        self.stdout.write(f"[{tenant.name}] 11.8 Seeding complete (3 warranties, 2 warranty claims, 2 insurance policies, 2 insurance claims).")
