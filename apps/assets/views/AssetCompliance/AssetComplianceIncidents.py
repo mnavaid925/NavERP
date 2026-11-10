@@ -199,6 +199,7 @@ def asset_compliance_incident_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_compliance_incident_delete(request, pk):
     incident = assets_object(request, AssetComplianceIncident, pk)
     if incident.status == "closed" and (incident.fine_assessed or 0) > 0:
