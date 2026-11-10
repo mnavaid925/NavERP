@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Insurance Claims — Warranty & Insurance — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Warranty & Insurance</span>
+            <span>/</span>
+            <span>Insurance Claims</span>
+        </div>
+        <h1 class="page-title">Casualty & Property Loss Claims</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_insurance_claim_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Report Casualty Loss
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Claims</div>
+            <div class="stat-value">{{ total_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active / Adjuster Review</div>
+            <div class="stat-value">{{ active_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Settled & Paid</div>
+            <div class="stat-value">{{ settled_claims }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="badge-dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Indemnity Recovered</div>
+            <div class="stat-value">${{ total_payout_recovered|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="md:col-span-2">
+                <label for="q-filter" class="form-label">Search</label>
+                <input type="text" id="q-filter" name="q" value="{{ request.GET.q }}" placeholder="Claim #, carrier ref, title, location, policy..." class="form-input">
+            </div>
+            <div>
+                <label for="status-filter" class="form-label">Claim Status</label>
+                <select id="status-filter" name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in claim_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="peril-filter" class="form-label">Peril Type</label>
+                <select id="peril-filter" name="peril_type" class="form-select">
+                    <option value="">All Perils</option>
+                    {% for val, label in peril_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.peril_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="method-filter" class="form-label">Settlement Method</label>
+                <select id="method-filter" name="settlement_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in settlement_method_choices %}
+                    <option value="{{ val }}" {% if request.GET.settlement_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_insurance_claim_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary"><i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Claims Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Claim #</th>
+                        <th>Title / Policy</th>
+                        <th>Peril Cause</th>
+                        <th>Incident Date & Site</th>
+                        <th>Gross Claimed</th>
+                        <th>Payout Recovered</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in insurance_claims %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'assets:asset_insurance_claim_detail' c.pk %}" class="font-semibold text-primary-600 hover:underline">
+                                {{ c.number }}
+                            </a>
+                            {% if c.carrier_claim_number %}
+                            <div class="text-xs text-slate-500 font-mono">Carrier: {{ c.carrier_claim_number }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ c.title }}</div>
+                            <div class="text-xs text-slate-500">
+                                Policy: <a href="{% url 'assets:asset_insurance_policy_detail' c.policy.pk %}" class="hover:underline">{{ c.policy.number }}</a>
+                                {% if c.fixed_asset %} • {{ c.fixed_asset.name }}{% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ c.peril_type_css }}">{{ c.get_peril_type_display }}</span>
+                        </td>
+                        <td>
+                            <div class="text-xs text-slate-800 font-medium">{{ c.incident_date|date:"M d, Y" }}</div>
+                            <div class="text-xs text-slate-500 truncate max-w-xs">{{ c.incident_location }}</div>
+                        </td>
+                        <td>
+                            <div class="font-semibold text-slate-800">{{ c.currency.code|default:"USD" }} {{ c.claimed_loss_amount }}</div>
+                            {% if c.deductible_applied > 0 %}
+                            <div class="text-xs text-slate-500">Ded: {{ c.deductible_applied }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="font-bold text-emerald-700">{{ c.currency.code|default:"USD" }} {{ c.settlement_payout_amount }}</div>
+                            {% if c.salvage_recovery_amount > 0 %}
+                            <div class="text-xs text-slate-500">Salvage: {{ c.salvage_recovery_amount }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ c.claim_status_css }}">{{ c.get_claim_status_display }}</span>
+                        </td>
+                        <td class="table-actions text-end">
+                            <a href="{% url 'assets:asset_insurance_claim_detail' c.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_insurance_claim_edit' c.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            {% if request.user.is_staff or request.user.is_superuser %}
+                            <form method="post" action="{% url 'assets:asset_insurance_claim_delete' c.pk %}" class="inline" onsubmit="return confirm('Delete claim {{ c.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">
+                            <div class="empty-state">
+                                <i data-lucide="file-x" class="empty-state-icon"></i>
+                                <div class="empty-state-title">No Insurance Claims Found</div>
+                                <div class="empty-state-description">No property loss or casualty claims match your filter. File a new loss report against an active policy.</div>
+                                <a href="{% url 'assets:asset_insurance_claim_create' %}" class="btn btn-primary mt-3">
+                                    <i data-lucide="plus" class="w-4 h-4 me-1"></i> Report Casualty Loss
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% if is_paginated %}
+    <div class="card-footer">
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.peril_type %}&peril_type={{ request.GET.peril_type }}{% endif %}{% if request.GET.settlement_method %}&settlement_method={{ request.GET.settlement_method }}{% endif %}" class="pagination-link">
+                Previous
+            </a>
+            {% endif %}
+            <span class="pagination-info">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.peril_type %}&peril_type={{ request.GET.peril_type }}{% endif %}{% if request.GET.settlement_method %}&settlement_method={{ request.GET.settlement_method }}{% endif %}" class="pagination-link">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
