@@ -57,7 +57,7 @@ def asset_lease_schedule_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    lease_list = AssetLeaseContract.objects.filter(tenant=request.tenant).order_by("-id")
+    lease_list = AssetLeaseContract.objects.filter(tenant=request.tenant).only("id", "number", "title").order_by("-id")
 
     context = {
         "schedules": page_obj.object_list,
