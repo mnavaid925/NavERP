@@ -119,12 +119,11 @@ def asset_permit_license_create(request):
             permit.tenant = request.tenant
             permit.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                permit,
                 "create",
-                "AssetPermitLicense",
-                permit.pk,
-                f"Registered permit/license {permit.number} ({permit.permit_number}) for {permit.asset.code}",
+                changes={"details": f"Registered permit/license {permit.number} ({permit.permit_number}) for {permit.asset.code}"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Permit/license {permit.number} registered successfully.")
             return redirect("assets:asset_permit_license_detail", pk=permit.pk)
@@ -154,12 +153,11 @@ def asset_permit_license_edit(request, pk):
         if form.is_valid():
             permit = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                permit,
                 "update",
-                "AssetPermitLicense",
-                permit.pk,
-                f"Updated permit/license {permit.number} ({permit.permit_number})",
+                changes={"details": f"Updated permit/license {permit.number} ({permit.permit_number})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Permit/license {permit.number} updated successfully.")
             return redirect("assets:asset_permit_license_detail", pk=permit.pk)
@@ -183,15 +181,14 @@ def asset_permit_license_delete(request, pk):
     permit = assets_object(request, AssetPermitLicense, pk)
     num = permit.number
     pnum = permit.permit_number
-    permit.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        permit,
         "delete",
-        "AssetPermitLicense",
-        pk,
-        f"Deleted permit/license {num} ({pnum})",
+        changes={"details": f"Deleted permit/license {num} ({pnum})"},
+        tenant=request.tenant,
     )
+    permit.delete()
     messages.success(request, f"Permit/license {num} ({pnum}) was deleted.")
     return redirect("assets:asset_permit_license_list")
 
@@ -203,12 +200,11 @@ def asset_permit_license_renew(request, pk):
     permit.status = "pending_renewal"
     permit.save(update_fields=["status", "updated_at"])
     write_audit_log(
-        request.tenant,
         request.user,
+        permit,
         "update",
-        "AssetPermitLicense",
-        permit.pk,
-        f"Marked permit/license {permit.number} as pending renewal",
+        changes={"details": f"Marked permit/license {permit.number} as pending renewal"},
+        tenant=request.tenant,
     )
     messages.success(request, f"Permit {permit.number} marked as Pending Renewal.")
     return redirect("assets:asset_permit_license_detail", pk=permit.pk)
