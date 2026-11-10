@@ -78,3 +78,21 @@
 2. `apps/assets/views/AssetDisposal/` create views — Replace `dr.fixed_asset.pk` and `dr.operational_asset.pk` with `dr.fixed_asset_id` and `dr.operational_asset_id` to avoid lazy foreign key lookups.
 
 ---
+
+## Pass 5: QA Smoke Tester Findings
+
+### Critical
+*None.*
+
+### Important
+1. `apps/assets/views/AssetDisposal/` settlement actions (`ResaleListings:273-290`, `TradeIns:202-218`, `ScrapSalvages:277-293`) — Double-counting proceeds on repeated settlement actions verified at runtime (invoking `mark_paid` multiple times on a paid listing escalates parent disposal request gross proceeds and removal costs).
+2. `apps/assets/forms/AssetDisposal/AssetResaleListings.py:20-41` & `asset_resale_listing/form.html:120-161` — Browser form create fails validation with 4 errors (`highest_bid_amount`, `gross_sale_proceeds`, `commission_rate_percent`, `tax_amount` required) because model fields lack `blank=True`. In form `__init__`, set `required=False` with `default=Decimal('0.00')`.
+3. `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py:31-36, 84-95` — Auto-derived financial fields (`acquisition_cost`, `accumulated_depreciation`, `net_book_value`) fail validation when left blank before `clean()` can auto-derive them. Set `required=False` in `__init__`.
+4. `apps/assets/views/AssetDisposal/` delete views (`AssetDisposalRequests.py:187`, `AssetResaleListings.py:190`, `AssetTradeIns.py:172`, `AssetScrapSalvages.py:204`) — Delete actions lack `@tenant_admin_required` decorator.
+
+### Minor
+1. `templates/assets/assetdisposal/` list templates — Filter dropdowns for `retirement_reason`, `payment_status`, and `recycler` omitted from UI filter bar despite view support.
+2. `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:231`, `AssetScrapSalvages.py:232` — String concatenation on notes fields without `None` guard (`(instance.notes or "") + ...`).
+3. `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py:133` — In `AssetDisposalAppraisalForm`, change positional argument `tenant` to keyword `tenant=None`.
+
+---
