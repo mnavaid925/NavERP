@@ -348,8 +348,17 @@ class AssetLeaseContract(TenantNumbered):
 
         self.initial_lease_liability = initial_liability
         self.initial_rou_asset_value = initial_rou
-        self.current_lease_liability = initial_liability
-        self.current_rou_asset_carrying_value = initial_rou
+
+        # Only reset current amortized balances if draft or no payments paid/accrued yet
+        should_reset_current = False
+        if not self.pk or self.current_lease_liability is None or self.status in ["draft", "pending_approval"]:
+            should_reset_current = True
+        elif not self.payment_schedules.filter(status__in=["paid", "accrued"]).exists():
+            should_reset_current = True
+
+        if should_reset_current:
+            self.current_lease_liability = initial_liability
+            self.current_rou_asset_carrying_value = initial_rou
         return initial_liability, initial_rou
 
     def evaluate_statutory_classification(self):
