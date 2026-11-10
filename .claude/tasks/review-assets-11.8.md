@@ -70,7 +70,8 @@
   - **Description:** `POLICY_TYPE_CSS` maps `"business_interruption"` to `"badge-purple"`. Per `theme.css` and lesson L33, badges only support color-named classes (`badge-green/red/amber/info/slate/muted`).
   - **Fix:** Change to `"badge-info"` or `"badge-slate"`.
 
-- [ ] **M2: Direct POST Settlement Does Not Validate Model Choice Inputs**
+- [x] **M2: Direct POST Settlement Does Not Validate Model Choice Inputs**
+  - **Status:** [x] fixed — validate choice inputs with fallback defaults (9291f170, 9b501ae1)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:265` (`resolution_type`)
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:273` (`settlement_method`)
