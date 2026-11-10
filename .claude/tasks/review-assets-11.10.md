@@ -2,7 +2,7 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: IN PROGRESS (Pass 4 of 6 complete)
+**Status**: IN PROGRESS (Pass 5 of 6 complete)
 
 ---
 
@@ -75,3 +75,16 @@
 - [ ] **MR13**: Large text fields not deferred in modification and buy-analysis list views (`AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
 - [ ] **MR14**: Unconstrained tenant party querying for lessor filter dropdown (`AssetLeaseContracts.py:73`). Restrict party query to relevant vendor/lessor roles or parties with lease contracts.
 - [ ] **MR15**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
+
+---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- [ ] **CR3**: Invalid `write_audit_log` call signature causing HTTP 500 on all form submissions and lifecycle POST mutations (`AssetLeaseContracts.py`, `AssetLeaseSchedules.py`, `AssetLeaseModifications.py`, `AssetLeaseBuyAnalyses.py`). `write_audit_log(user, obj, action, changes=None, tenant=None)` called with 6 arguments instead of canonical signature across 17 mutating views.
+
+### Important
+*None.*
+
+### Minor
+- [ ] **MR16**: Schedule Create does not validate tenant ownership of `?lease=<id>` GET parameter (`AssetLeaseSchedules.py:98-100`). Return 404 when foreign/invalid lease ID is passed (same as MR4).
