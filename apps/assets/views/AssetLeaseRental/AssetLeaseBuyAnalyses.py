@@ -20,7 +20,9 @@ from apps.core.utils import write_audit_log
 @login_required
 def asset_lease_buy_analysis_list(request):
     qs = assets_scope(
-        AssetLeaseBuyAnalysis.objects.select_related("category", "evaluated_by", "approved_by"),
+        AssetLeaseBuyAnalysis.objects.select_related(
+            "category", "evaluated_by", "approved_by"
+        ).defer("description", "evaluation_notes"),
         request,
     )
 
