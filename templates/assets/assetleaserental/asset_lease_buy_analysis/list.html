@@ -51,10 +51,10 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div class="md:col-span-2">
-                <input type="text" name="q" value="{{ q }}" placeholder="Search analysis #, title, asset name..." class="form-input">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search analysis #, title, asset name..." class="form-input" aria-label="Search analyses">
             </div>
             <div>
-                <select name="status" class="form-select">
+                <select name="status" class="form-select" aria-label="Filter by status">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
@@ -62,7 +62,7 @@
                 </select>
             </div>
             <div>
-                <select name="recommendation" class="form-select">
+                <select name="recommendation" class="form-select" aria-label="Filter by recommendation">
                     <option value="">All Recommendations</option>
                     {% for code, label in recommendation_choices %}
                     <option value="{{ code }}" {% if recommendation == code %}selected{% endif %}>{{ label }}</option>
@@ -70,7 +70,7 @@
                 </select>
             </div>
             <div>
-                <select name="category" class="form-select">
+                <select name="category" class="form-select" aria-label="Filter by category">
                     <option value="">All Categories</option>
                     {% for c in category_list %}
                     <option value="{{ c.pk }}" {% if category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
@@ -93,16 +93,16 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th>Analysis #</th>
-                    <th>Title & Target Asset</th>
-                    <th>Category</th>
-                    <th>Purchase Price</th>
-                    <th>Monthly Rent</th>
-                    <th>NPV (Buy)</th>
-                    <th>NPV (Lease)</th>
-                    <th>NAL Advantage</th>
-                    <th>Recommendation</th>
-                    <th class="text-right">Actions</th>
+                    <th scope="col">Analysis #</th>
+                    <th scope="col">Title & Target Asset</th>
+                    <th scope="col">Category</th>
+                    <th scope="col">Purchase Price</th>
+                    <th scope="col">Monthly Rent</th>
+                    <th scope="col">NPV (Buy)</th>
+                    <th scope="col">NPV (Lease)</th>
+                    <th scope="col">NAL Advantage</th>
+                    <th scope="col">Recommendation</th>
+                    <th scope="col" class="text-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -131,15 +131,15 @@
                         </span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'assets:asset_lease_buy_analysis_detail' a.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'assets:asset_lease_buy_analysis_detail' a.pk %}" class="btn btn-icon" title="View Detail" aria-label="View analysis {{ a.number }}">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'assets:asset_lease_buy_analysis_edit' a.pk %}" class="btn btn-icon" title="Edit Analysis">
+                        <a href="{% url 'assets:asset_lease_buy_analysis_edit' a.pk %}" class="btn btn-icon" title="Edit Analysis" aria-label="Edit analysis {{ a.number }}">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'assets:asset_lease_buy_analysis_delete' a.pk %}" class="inline" onsubmit="return confirm('Delete analysis {{ a.number }}?');">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete analysis {{ a.number }}">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
