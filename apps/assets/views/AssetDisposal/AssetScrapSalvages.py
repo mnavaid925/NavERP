@@ -40,7 +40,7 @@ def asset_scrap_salvage_list(request):
         qs = qs.filter(
             Q(number__icontains=q)
             | Q(fixed_asset__name__icontains=q)
-            | Q(fixed_asset__asset_number__icontains=q)
+            | Q(fixed_asset__number__icontains=q)
             | Q(cod_number__icontains=q)
             | Q(epa_manifest_number__icontains=q)
             | Q(recycler_partner__name__icontains=q)
