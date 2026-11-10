@@ -24,7 +24,7 @@
   - **Issue:** All 4 delete actions are decorated with `@login_required` and `@require_POST`, but lack `@tenant_admin_required`. Any authenticated tenant employee could delete disposal requests, resale listings, trade-in agreements, or scrap records.
   - **Fix:** Add `@tenant_admin_required` decorator to all four delete view functions.
 
-- [ ] **I2: Missing Idempotency & Status Guards on Financial Settlement Actions (Proceeds Double-Counting)**
+- [x] **I2: Missing Idempotency & Status Guards on Financial Settlement Actions (Proceeds Double-Counting)** — fixed (commits ff69eb4b, a64cf7e7, 930041a4)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetResaleListings.py:273-292` (`asset_resale_listing_mark_paid`)
     - `apps/assets/views/AssetDisposal/AssetTradeIns.py:202-223` (`asset_trade_in_settle`)
