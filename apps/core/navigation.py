@@ -3239,6 +3239,19 @@ LIVE_LINKS = {
         "RCM Strategy": "assets:asset_failure_mode_list",
         "Asset Reliability & Condition Monitoring": "assets:asset_condition_assessment_list",
     },
+    "11.8": {
+        "Warranty Registration & Tracking": "assets:asset_warranty_list",
+        "Warranty Claim Processing": "assets:asset_warranty_claim_list",
+        "Insurance Policy Management": "assets:asset_insurance_policy_list",
+        "Claim Filing & Settlement": "assets:asset_insurance_claim_list",
+        "Extended Warranty & Service Contracts": "assets:asset_warranty_list",
+        # Plural and convenience aliases
+        "Asset Warranties": "assets:asset_warranty_list",
+        "Warranty Claims": "assets:asset_warranty_claim_list",
+        "Insurance Policies": "assets:asset_insurance_policy_list",
+        "Insurance Claims": "assets:asset_insurance_claim_list",
+        "Warranty & Insurance Management": "assets:asset_warranty_list",
+    },
 
 
 
