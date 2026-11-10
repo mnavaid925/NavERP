@@ -60,6 +60,12 @@ from apps.assets.models.AssetLeaseRental import (
     AssetLeaseModification,
     AssetLeaseSchedule,
 )
+from apps.assets.models.AssetCompliance import (
+    AssetComplianceAudit,
+    AssetComplianceFramework,
+    AssetComplianceIncident,
+    AssetPermitLicense,
+)
 
 __all__ = [
     "TenantOwned",
@@ -104,4 +110,8 @@ __all__ = [
     "AssetLeaseSchedule",
     "AssetLeaseModification",
     "AssetLeaseBuyAnalysis",
+    "AssetComplianceFramework",
+    "AssetComplianceAudit",
+    "AssetPermitLicense",
+    "AssetComplianceIncident",
 ]
