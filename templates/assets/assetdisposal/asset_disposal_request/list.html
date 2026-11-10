@@ -165,10 +165,12 @@
                                 <a href="{% url 'assets:asset_disposal_request_detail' req.pk %}" class="btn btn-icon" title="View Details">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </a>
-                                {% if req.status != 'completed' and req.status != 'cancelled' %}
+                                {% if req.status in 'draft,submitted' %}
                                 <a href="{% url 'assets:asset_disposal_request_edit' req.pk %}" class="btn btn-icon" title="Edit Request">
                                     <i data-lucide="pencil" class="w-4 h-4"></i>
                                 </a>
+                                {% endif %}
+                                {% if req.status != 'completed' %}
                                 <form method="post" action="{% url 'assets:asset_disposal_request_delete' req.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete request {{ req.number }}?');">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
