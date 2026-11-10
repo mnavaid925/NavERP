@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Claim {{ claim.number }}{% else %}File Warranty Claim{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_warranty_claim_list' %}">Warranty Claims</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ claim.number }}{% else %}New Claim{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Claim {{ claim.number }}{% else %}File Equipment Warranty Claim{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_warranty_claim_detail' claim.pk %}{% else %}{% url 'assets:asset_warranty_claim_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">{% if is_edit %}Update Claim Details{% else %}Warranty Claim Intake Form{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Defect & Warranty Association -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Defect Summary & Covering Policy
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Claim Title / Defect Summary *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.warranty.id_for_label }}" class="form-label">Covering Warranty Policy *</label>
+                        {{ form.warranty }}
+                        {% if form.warranty.errors %}<div class="form-error">{{ form.warranty.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.maintenance_request.id_for_label }}" class="form-label">Linked Maintenance Request</label>
+                        {{ form.maintenance_request }}
+                        {% if form.maintenance_request.errors %}<div class="form-error">{{ form.maintenance_request.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                        {{ form.operational_asset }}
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Incident Occurrence & Technical Diagnostics -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Incident Timeline & Failure Symptoms
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.incident_date.id_for_label }}" class="form-label">Incident / Failure Date *</label>
+                        {{ form.incident_date }}
+                        {% if form.incident_date.errors %}<div class="form-error">{{ form.incident_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.operating_meter_at_failure.id_for_label }}" class="form-label">Operating Meter at Failure (Hours/Km)</label>
+                        {{ form.operating_meter_at_failure }}
+                        {% if form.operating_meter_at_failure.errors %}<div class="form-error">{{ form.operating_meter_at_failure.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.defect_description.id_for_label }}" class="form-label">Defect Physical Symptoms & Diagnostic Findings *</label>
+                        {{ form.defect_description }}
+                        {% if form.defect_description.errors %}<div class="form-error">{{ form.defect_description.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Financials & Tracking -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Claim Valuation & OEM Logistics
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label for="{{ form.currency.id_for_label }}" class="form-label">Currency</label>
+                        {{ form.currency }}
+                        {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.claimed_amount.id_for_label }}" class="form-label">Claimed Cost (Parts/Labor) *</label>
+                        {{ form.claimed_amount }}
+                        {% if form.claimed_amount.errors %}<div class="form-error">{{ form.claimed_amount.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.deductible_applied.id_for_label }}" class="form-label">Deductible Applied</label>
+                        {{ form.deductible_applied }}
+                        {% if form.deductible_applied.errors %}<div class="form-error">{{ form.deductible_applied.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.warrantor_claim_reference.id_for_label }}" class="form-label">Warrantor Reference / RMA #</label>
+                        {{ form.warrantor_claim_reference }}
+                        {% if form.warrantor_claim_reference.errors %}<div class="form-error">{{ form.warrantor_claim_reference.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.resolution_type.id_for_label }}" class="form-label">Requested Resolution</label>
+                        {{ form.resolution_type }}
+                        {% if form.resolution_type.errors %}<div class="form-error">{{ form.resolution_type.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.part_return_status.id_for_label }}" class="form-label">Part Return Status</label>
+                        {{ form.part_return_status }}
+                        {% if form.part_return_status.errors %}<div class="form-error">{{ form.part_return_status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="{{ form.rma_tracking_number.id_for_label }}" class="form-label">Courier Shipping Tracking Number</label>
+                        {{ form.rma_tracking_number }}
+                        {% if form.rma_tracking_number.errors %}<div class="form-error">{{ form.rma_tracking_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.supporting_document.id_for_label }}" class="form-label">Diagnostic Document / Photos</label>
+                        {{ form.supporting_document }}
+                        {% if form.supporting_document.errors %}<div class="form-error">{{ form.supporting_document.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-3">
+                        <label for="{{ form.settlement_notes.id_for_label }}" class="form-label">Settlement / Communication Notes</label>
+                        {{ form.settlement_notes }}
+                        {% if form.settlement_notes.errors %}<div class="form-error">{{ form.settlement_notes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'assets:asset_warranty_claim_detail' claim.pk %}{% else %}{% url 'assets:asset_warranty_claim_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}File Claim{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
