@@ -178,7 +178,7 @@
         <!-- Resale Listings -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Commercial Resale & Auctions ({{ resale_listings.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Commercial Resale & Auctions ({{ resale_listings|length }})</h3>
                 <a href="{% url 'assets:asset_resale_listing_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
                     <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Listing
                 </a>
@@ -226,7 +226,7 @@
         <!-- Trade-in Agreements -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Trade-in & Exchange Programs ({{ trade_ins.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Trade-in & Exchange Programs ({{ trade_ins|length }})</h3>
                 <a href="{% url 'assets:asset_trade_in_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
                     <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Trade-in
                 </a>
@@ -274,7 +274,7 @@
         <!-- Scrap & Salvage -->
         <div class="card">
             <div class="card-header flex justify-between items-center">
-                <h3 class="font-semibold text-slate-800">Scrap & Salvage Operations ({{ scrap_salvages.count }})</h3>
+                <h3 class="font-semibold text-slate-800">Scrap & Salvage Operations ({{ scrap_salvages|length }})</h3>
                 <a href="{% url 'assets:asset_scrap_salvage_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
                     <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Scrap Record
                 </a>
