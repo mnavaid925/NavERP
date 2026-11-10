@@ -193,7 +193,7 @@
         </span>
         <div class="pagination flex items-center gap-1">
             {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">
                 Prev
             </a>
             {% else %}
@@ -203,7 +203,7 @@
             <span class="text-sm font-medium px-2">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}" class="btn btn-outline btn-sm">
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.framework_type %}&framework_type={{ request.GET.framework_type }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">
                 Next
             </a>
             {% else %}
