@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}{{ claim.number }} — {{ claim.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_warranty_claim_list' %}">Warranty Claims</a>
+            <span>/</span>
+            <span>{{ claim.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ claim.number }} — {{ claim.title }}</h1>
+            <span class="badge {{ claim.claim_status_css }}">{{ claim.get_claim_status_display }}</span>
+            <span class="badge {{ claim.resolution_type_css }}">{{ claim.get_resolution_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if claim.claim_status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_warranty_claim_submit' claim.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit to OEM
+            </button>
+        </form>
+        {% endif %}
+        {% if claim.claim_status == 'submitted' %}
+        <form method="post" action="{% url 'assets:asset_warranty_claim_review' claim.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="search" class="w-4 h-4 me-1"></i> Mark Under Review
+            </button>
+        </form>
+        {% endif %}
+        {% if claim.claim_status == 'under_review' or claim.claim_status == 'submitted' %}
+        <!-- Settle Claim Trigger Button -->
+        <button type="button" onclick="document.getElementById('settle-modal').classList.remove('hidden')" class="btn btn-primary">
+            <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Settle Claim
+        </button>
+        <button type="button" onclick="document.getElementById('reject-modal').classList.remove('hidden')" class="btn btn-outline text-red-600 hover:text-red-800">
+            <i data-lucide="x-circle" class="w-4 h-4 me-1"></i> Reject Claim
+        </button>
+        {% endif %}
+        <a href="{% url 'assets:asset_warranty_claim_edit' claim.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <form method="post" action="{% url 'assets:asset_warranty_claim_delete' claim.pk %}" class="inline" onsubmit="return confirm('Delete claim {{ claim.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Claim Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Defect Description & Incident Information</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Incident / Failure Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ claim.incident_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Operating Meter at Failure</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {% if claim.operating_meter_at_failure %}
+                                {{ claim.operating_meter_at_failure }}
+                            {% else %}
+                                Not recorded
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Warrantor Reference / RMA #</div>
+                        <div class="text-sm font-semibold text-slate-900 font-mono">{{ claim.warrantor_claim_reference|default:"Pending assignment" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Defective Part Return Status</div>
+                        <div><span class="badge {{ claim.part_return_status_css }}">{{ claim.get_part_return_status_display }}</span></div>
+                    </div>
+                    {% if claim.rma_tracking_number %}
+                    <div class="md:col-span-2">
+                        <div class="text-xs text-slate-500 font-medium">Courier Shipping Tracking Number</div>
+                        <div class="text-sm font-semibold text-slate-900 font-mono">{{ claim.rma_tracking_number }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Defect Symptom & Diagnostic Notes</h3>
+                    <div class="p-3 bg-slate-50 rounded text-sm text-slate-800 whitespace-pre-line">{{ claim.defect_description }}</div>
+                </div>
+
+                {% if claim.settlement_notes %}
+                <div class="mt-4 pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Settlement & Technical Reconciliation Notes</h3>
+                    <div class="p-3 bg-emerald-50 text-emerald-900 rounded text-sm whitespace-pre-line">{{ claim.settlement_notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Financial Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Financial Recovery Breakdown</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="p-4 bg-slate-50 rounded">
+                        <div class="text-xs text-slate-500">Gross Claimed</div>
+                        <div class="text-lg font-bold text-slate-900">{{ claim.currency.code|default:"USD" }} {{ claim.claimed_amount }}</div>
+                    </div>
+                    <div class="p-4 bg-blue-50 rounded">
+                        <div class="text-xs text-blue-700">Approved by OEM</div>
+                        <div class="text-lg font-bold text-blue-900">{{ claim.currency.code|default:"USD" }} {{ claim.approved_amount }}</div>
+                    </div>
+                    <div class="p-4 bg-amber-50 rounded">
+                        <div class="text-xs text-amber-700">Deductible Applied</div>
+                        <div class="text-lg font-bold text-amber-900">{{ claim.currency.code|default:"USD" }} {{ claim.deductible_applied }}</div>
+                    </div>
+                    <div class="p-4 bg-emerald-50 rounded">
+                        <div class="text-xs text-emerald-700">Net Recovery</div>
+                        <div class="text-lg font-bold text-emerald-900">{{ claim.currency.code|default:"USD" }} {{ claim.net_recovery_amount }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Associated Warranty & Metadata -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Covering Warranty</h2>
+            </div>
+            <div class="card-body space-y-3">
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Warranty Policy</div>
+                    <a href="{% url 'assets:asset_warranty_detail' claim.warranty.pk %}" class="text-sm font-semibold text-primary-600 hover:underline">
+                        {{ claim.warranty.number }} — {{ claim.warranty.title }}
+                    </a>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Warrantor</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.warranty.warrantor_party.name|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Warranty Period</div>
+                    <div class="text-xs text-slate-700">{{ claim.warranty.start_date|date:"M d, Y" }} — {{ claim.warranty.end_date|date:"M d, Y" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Parts / Labor Terms</div>
+                    <div class="text-xs text-slate-700">Parts: {{ claim.warranty.parts_coverage_percent }}% • Labor: {{ claim.warranty.labor_coverage_percent }}%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Equipment & Maintenance Links</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if claim.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Fixed Asset</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.fixed_asset.number }} — {{ claim.fixed_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if claim.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Operational Machinery</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.operational_asset.tag_code }} — {{ claim.operational_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if claim.maintenance_request %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Originating Maintenance Work Order</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.maintenance_request.number }} — {{ claim.maintenance_request.title }}</div>
+                </div>
+                {% endif %}
+                {% if claim.supporting_document %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Diagnostic Document</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ claim.supporting_document.title }}</div>
+                </div>
+                {% endif %}
+                <div class="pt-3 border-t border-slate-200 text-xs text-slate-500 space-y-1">
+                    <div>Filed By: {{ claim.filed_by.username|default:"System" }}</div>
+                    {% if claim.approved_by %}<div>Authorized By: {{ claim.approved_by.username }}</div>{% endif %}
+                    {% if claim.settlement_date %}<div>Settlement Date: {{ claim.settlement_date|date:"M d, Y" }}</div>{% endif %}
+                    <div>Created: {{ claim.created_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settlement Modal -->
+<div id="settle-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-slate-900">Settle Warranty Claim</h3>
+        <p class="text-sm text-slate-600">Enter final authorized reimbursement amount from OEM/warrantor.</p>
+        <form method="post" action="{% url 'assets:asset_warranty_claim_settle' claim.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_approved_amount" class="form-label">Approved Amount ({{ claim.currency.code|default:"USD" }}) *</label>
+                <input type="number" step="0.01" id="id_approved_amount" name="approved_amount" value="{{ claim.claimed_amount }}" class="form-input" required>
+            </div>
+            <div>
+                <label for="id_resolution_type" class="form-label">Settlement / Resolution Type</label>
+                <select id="id_resolution_type" name="resolution_type" class="form-select">
+                    {% for val, label in claim.RESOLUTION_TYPE_CHOICES %}
+                    <option value="{{ val }}" {% if val == 'cash_reimbursement' %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="id_settlement_notes" class="form-label">Reconciliation Notes</label>
+                <textarea id="id_settlement_notes" name="settlement_notes" rows="3" class="form-textarea" placeholder="Credit memo number, check reference, parts dispatched..."></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('settle-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Confirm Settlement</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Rejection Modal -->
+<div id="reject-modal" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 space-y-4">
+        <h3 class="text-lg font-semibold text-red-700">Record Warranty Rejection</h3>
+        <p class="text-sm text-slate-600">Document OEM justification for claim denial or uncovered defect.</p>
+        <form method="post" action="{% url 'assets:asset_warranty_claim_reject' claim.pk %}" class="space-y-4">
+            {% csrf_token %}
+            <div>
+                <label for="id_reject_notes" class="form-label">Rejection / Denial Justification *</label>
+                <textarea id="id_reject_notes" name="settlement_notes" rows="4" class="form-textarea" placeholder="OEM inspection findings, exclusion clause cited, customer maintenance lapse..." required></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('reject-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
