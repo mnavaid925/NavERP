@@ -105,43 +105,43 @@
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 <div>
                     <dt class="text-muted">Lessor</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.lessor.name }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.lessor.name }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">MLA Reference</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.master_lease_agreement_ref|default:"None / Direct" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.master_lease_agreement_ref|default:"None / Direct" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Operational Asset</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.asset.name|default:"Not Linked" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.asset.name|default:"Not Linked" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Asset Category</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.category.name|default:"Not Categorized" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.category.name|default:"Not Categorized" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Capitalized Fixed Asset</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.fixed_asset.name|default:"Not Linked" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.fixed_asset.name|default:"Not Linked" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Approved By</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.approved_by %}{{ lease.approved_by.get_full_name|default:lease.approved_by.username }}{% else %}Pending{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.approved_by %}{{ lease.approved_by.get_full_name|default:lease.approved_by.username }}{% else %}Pending{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Inception Date</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.inception_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.inception_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Commencement Date</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.commencement_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.commencement_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Expiration Date</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.expiration_date|date:"Y-m-d" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.expiration_date|date:"Y-m-d" }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Early Notice Date</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.early_termination_notice_date|date:"Y-m-d"|default:"None" }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.early_termination_notice_date|date:"Y-m-d"|default:"None" }}</dd>
                 </div>
             </dl>
         </div>
@@ -157,43 +157,43 @@
             <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
                 <div>
                     <dt class="text-muted">Payment Installment</dt>
-                    <dd class="font-medium text-slate-900">${{ lease.payment_amount|floatformat:2 }} ({{ lease.get_payment_frequency_display }})</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">${{ lease.payment_amount|floatformat:2 }} ({{ lease.get_payment_frequency_display }})</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Payment Timing</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.get_payment_timing_display }}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.get_payment_timing_display }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Discount Rate (IBR)</dt>
-                    <dd class="font-medium text-slate-900">{{ lease.discount_rate_pct }}%</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{{ lease.discount_rate_pct }}%</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Fair Market Value (FMV)</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.fair_market_value is not None %}${{ lease.fair_market_value|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.fair_market_value is not None %}${{ lease.fair_market_value|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Initial Direct Costs</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.initial_direct_costs is not None %}${{ lease.initial_direct_costs|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.initial_direct_costs is not None %}${{ lease.initial_direct_costs|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Lease Incentives Received</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.lease_incentives is not None %}${{ lease.lease_incentives|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.lease_incentives is not None %}${{ lease.lease_incentives|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Initial Lease Liability</dt>
-                    <dd class="font-bold text-slate-900">${{ lease.initial_lease_liability|floatformat:2 }}</dd>
+                    <dd class="font-bold text-slate-900 dark:text-slate-100">${{ lease.initial_lease_liability|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Initial ROU Asset Value</dt>
-                    <dd class="font-bold text-slate-900">${{ lease.initial_rou_asset_value|floatformat:2 }}</dd>
+                    <dd class="font-bold text-slate-900 dark:text-slate-100">${{ lease.initial_rou_asset_value|floatformat:2 }}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Residual Value Guarantee</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.residual_value_guarantee is not None %}${{ lease.residual_value_guarantee|floatformat:2 }}{% else %}—{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.residual_value_guarantee is not None %}${{ lease.residual_value_guarantee|floatformat:2 }}{% else %}—{% endif %}</dd>
                 </div>
                 <div>
                     <dt class="text-muted">Purchase Option Price</dt>
-                    <dd class="font-medium text-slate-900">{% if lease.purchase_option_price is not None %}${{ lease.purchase_option_price|floatformat:2 }}{% else %}N/A{% endif %}</dd>
+                    <dd class="font-medium text-slate-900 dark:text-slate-100">{% if lease.purchase_option_price is not None %}${{ lease.purchase_option_price|floatformat:2 }}{% else %}N/A{% endif %}</dd>
                 </div>
             </dl>
         </div>
@@ -208,24 +208,24 @@
     </div>
     <div class="card-body">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
-            <div class="p-3 bg-slate-50 rounded border border-slate-200">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
                 <div class="text-xs text-muted">Criterion 1 & 2</div>
                 <div class="font-medium mt-1">Ownership Transfer: {% if lease.transfer_of_ownership %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</div>
                 <div class="font-medium mt-1">Purchase Option: {% if lease.has_purchase_option %}<span class="badge badge-green">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</div>
             </div>
-            <div class="p-3 bg-slate-50 rounded border border-slate-200">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
                 <div class="text-xs text-muted">Criterion 3 & 4 (Economic Horizons)</div>
                 <div class="font-medium mt-1">Term / Life: {{ lease.lease_term_months }}m / {{ lease.economic_life_months }}m</div>
                 <div class="font-medium mt-1">Specialized Asset: {% if lease.is_specialized_asset %}<span class="badge badge-amber">Yes</span>{% else %}<span class="badge badge-slate">No</span>{% endif %}</div>
             </div>
-            <div class="p-3 bg-slate-50 rounded border border-slate-200">
+            <div class="p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
                 <div class="text-xs text-muted">Classification Governance</div>
                 <div class="font-medium mt-1">Manual Override: {% if lease.classification_overridden %}<span class="badge badge-amber">Overridden</span>{% else %}<span class="badge badge-slate">Automated</span>{% endif %}</div>
                 <div class="text-xs text-muted mt-1 truncate">{{ lease.classification_notes|default:"Standard evaluation" }}</div>
             </div>
         </div>
         {% if lease.notes %}
-        <div class="mt-2 text-sm text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">
+        <div class="mt-2 text-sm text-slate-700 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 p-3 rounded border border-slate-200 dark:border-slate-700">
             <span class="font-medium">Contract Notes:</span> {{ lease.notes }}
         </div>
         {% endif %}
