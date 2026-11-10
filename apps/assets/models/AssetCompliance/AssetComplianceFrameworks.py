@@ -125,3 +125,20 @@ class AssetComplianceFramework(TenantNumbered):
     @property
     def framework_type_badge_class(self):
         return self.FRAMEWORK_TYPE_CSS.get(self.framework_type, "badge-slate")
+
+    @property
+    def is_active(self):
+        return self.status == "active"
+
+    @property
+    def is_audit_due(self):
+        if not self.is_active:
+            return False
+        latest_audit = self.audits.filter(status="completed").order_by("-audit_date").first()
+        ref_date = latest_audit.audit_date if latest_audit and latest_audit.audit_date else self.effective_date
+        if not ref_date:
+            return True
+        if hasattr(ref_date, "date"):
+            ref_date = ref_date.date()
+        cycle_days = (self.mandatory_audit_cycle_months or 12) * 30
+        return (timezone.now().date() - ref_date).days >= cycle_days
