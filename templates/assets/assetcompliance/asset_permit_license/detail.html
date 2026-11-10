@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}{{ permit.permit_number }} — Permit Details — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_permit_license_list' %}">Operating Permits</a>
+            <span>/</span>
+            <span>{{ permit.permit_number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ permit.permit_name }}</h1>
+            <span class="badge {{ permit.status_badge_class }}">{{ permit.get_status_display }}</span>
+            <span class="badge {{ permit.permit_type_badge_class }}">{{ permit.get_permit_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        {% if permit.status == "active" %}
+        <form method="post" action="{% url 'assets:asset_permit_license_renew' permit.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-amber-600">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Initiate Renewal
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_permit_license_edit' permit.pk %}" class="btn btn-primary">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <a href="{% url 'assets:asset_permit_license_list' %}" class="btn btn-outline">
+            Back to List
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Permit Details -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Permit Specification</h2>
+                <span class="font-mono text-sm text-muted">{{ permit.number }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Permit / License #</span>
+                        <span class="font-mono font-semibold text-slate-900">{{ permit.permit_number }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Permit Type</span>
+                        <span class="badge {{ permit.permit_type_badge_class }}">{{ permit.get_permit_type_display }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Permitted Asset</span>
+                        <span class="font-medium text-slate-900">{{ permit.asset.code }} — {{ permit.asset.name }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Issuing Authority</span>
+                        <span class="font-medium text-slate-900">
+                            {% if permit.issuing_authority %}
+                            {{ permit.issuing_authority.name }}
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Issue Date</span>
+                        <span class="font-medium text-slate-900">{{ permit.issue_date }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Effective Date</span>
+                        <span class="font-medium text-slate-900">{{ permit.effective_date }}</span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Expiration Date</span>
+                        <span class="font-medium text-slate-900 {% if permit.is_expiring_soon %}text-amber-600 font-semibold{% endif %}">
+                            {{ permit.expiration_date }}
+                        </span>
+                    </div>
+                    <div>
+                        <span class="text-xs text-muted block uppercase tracking-wider">Renewal Fee</span>
+                        <span class="font-medium text-slate-900">${{ permit.renewal_fee|floatformat:2 }}</span>
+                    </div>
+                </div>
+
+                {% if permit.operating_conditions %}
+                <div class="mt-6 pt-4 border-t border-slate-100">
+                    <span class="text-xs text-muted block uppercase tracking-wider mb-2">Mandated Operating Conditions & Limits</span>
+                    <div class="text-sm text-slate-700 whitespace-pre-line">{{ permit.operating_conditions }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Associated Non-Compliance Incidents -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="text-base font-semibold text-slate-900">Related Violations & Notices</h2>
+                <a href="{% url 'assets:asset_compliance_incident_create' %}?permit={{ permit.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Log Violation
+                </a>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Number</th>
+                            <th>Incident Title</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Fine Assessed</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inc in incidents %}
+                        <tr>
+                            <td class="font-mono text-sm font-semibold">
+                                <a href="{% url 'assets:asset_compliance_incident_detail' inc.pk %}" class="text-brand hover:underline">
+                                    {{ inc.number }}
+                                </a>
+                            </td>
+                            <td class="max-w-xs truncate">{{ inc.title }}</td>
+                            <td><span class="badge {{ inc.incident_type_badge_class }}">{{ inc.get_incident_type_display }}</span></td>
+                            <td><span class="badge {{ inc.severity_badge_class }}">{{ inc.get_severity_display }}</span></td>
+                            <td>${{ inc.fine_assessed|floatformat:2 }}</td>
+                            <td><span class="badge {{ inc.status_badge_class }}">{{ inc.get_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">No statutory citations or incidents recorded against this permit.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar Expiration Status -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">Expiration Status</h2>
+            </div>
+            <div class="card-body text-center py-6">
+                {% if permit.days_to_expiration < 0 %}
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 text-red-600 mb-3">
+                    <i data-lucide="alert-octagon" class="w-10 h-10"></i>
+                </div>
+                <div class="text-lg font-bold text-red-600">Expired</div>
+                <div class="text-xs text-muted mt-1">Permit lapsed {{ permit.days_to_expiration|stringformat:"d"|slice:"1:" }} days ago. Operating asset is at risk of regulatory citation.</div>
+                {% elif permit.is_expiring_soon %}
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 text-amber-600 mb-3">
+                    <i data-lucide="clock" class="w-10 h-10"></i>
+                </div>
+                <div class="text-lg font-bold text-amber-600">{{ permit.days_to_expiration }} Days Remaining</div>
+                <div class="text-xs text-muted mt-1">Within the {{ permit.renewal_lead_days }}-day renewal window. Initiate renewal filing immediately.</div>
+                {% else %}
+                <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 text-green-600 mb-3">
+                    <i data-lucide="check-circle" class="w-10 h-10"></i>
+                </div>
+                <div class="text-lg font-bold text-green-600">Active & Valid</div>
+                <div class="text-xs text-muted mt-1">{{ permit.days_to_expiration }} days remaining until renewal required.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="text-base font-semibold text-slate-900">System Metadata</h2>
+            </div>
+            <div class="card-body text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-muted">Lead Window</span>
+                    <span class="font-medium text-slate-800">{{ permit.renewal_lead_days }} days advance notice</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Registered</span>
+                    <span class="font-medium text-slate-800">{{ permit.created_at|date:"M d, Y" }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-muted">Last Updated</span>
+                    <span class="font-medium text-slate-800">{{ permit.updated_at|date:"M d, Y" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
