@@ -42,6 +42,12 @@ from apps.assets.models.AssetReliability import (
     AssetFailureMode,
     AssetTelemetryReading,
 )
+from apps.assets.models.AssetWarrantyInsurance import (
+    AssetInsuranceClaim,
+    AssetInsurancePolicy,
+    AssetWarranty,
+    AssetWarrantyClaim,
+)
 
 __all__ = [
     "TenantOwned",
@@ -74,4 +80,8 @@ __all__ = [
     "AssetTelemetryReading",
     "AssetFailureMode",
     "AssetCalibrationRecord",
+    "AssetWarranty",
+    "AssetWarrantyClaim",
+    "AssetInsurancePolicy",
+    "AssetInsuranceClaim",
 ]
