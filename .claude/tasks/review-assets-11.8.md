@@ -86,7 +86,8 @@
   - **Description:** `asset_warranty_renew` and `asset_insurance_policy_renew` allow renewing contracts that have been voided or cancelled by an administrator.
   - **Fix:** Verify status is in `["active", "expiring_soon", "expired"]` before renewing; reject renewal on voided/cancelled contracts.
 
-- [ ] **M4: Warranty Status Reactivation on Claim Resolution Ignores Calendar Expiration**
+- [x] **M4: Warranty Status Reactivation on Claim Resolution Ignores Calendar Expiration**
+  - **Status:** [x] fixed — check end_date < today before restoring to active (4a64b33a)
   - **Location:** `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:284, 318`
   - **Description:** Resolving or rejecting a claim sets `claim.warranty.status = "active"`, even if the warranty's `end_date` has already passed.
   - **Fix:** Set status to `"expired"` if `claim.warranty.end_date < timezone.now().date()`, else `"active"`.
