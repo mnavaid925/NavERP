@@ -56,7 +56,7 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="md:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, reference, asset, or buyer..." class="form-input">
             </div>
@@ -73,6 +73,14 @@
                     <option value="">All Channels</option>
                     {% for val, label in channel_choices %}
                     <option value="{{ val }}" {% if request.GET.listing_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="payment_status" class="form-select">
+                    <option value="">All Settlements</option>
+                    {% for val, label in payment_status_choices %}
+                    <option value="{{ val }}" {% if request.GET.payment_status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -177,11 +185,11 @@
                 </div>
                 <div class="flex gap-1">
                     {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}{% if request.GET.payment_status %}&payment_status={{ request.GET.payment_status }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
                     {% endif %}
                     <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                     {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}{% if request.GET.payment_status %}&payment_status={{ request.GET.payment_status }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
                     {% endif %}
                 </div>
             </div>
