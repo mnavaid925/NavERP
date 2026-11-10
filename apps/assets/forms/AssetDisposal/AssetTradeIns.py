@@ -78,4 +78,11 @@ class AssetTradeInForm(TenantUniqueMixin, TenantModelForm):
                 "agreement_document",
             ],
         )
+        dr = cleaned.get("disposal_request")
+        ret_fa = cleaned.get("retired_fixed_asset")
+        rep_fa = cleaned.get("replacement_fixed_asset")
+        if dr and ret_fa and dr.fixed_asset_id and ret_fa.pk != dr.fixed_asset_id:
+            self.add_error("retired_fixed_asset", f"Retiring fixed asset must match disposal request {dr.number} ({dr.fixed_asset}).")
+        if ret_fa and rep_fa and ret_fa == rep_fa:
+            self.add_error("replacement_fixed_asset", "Replacement fixed asset cannot be the same as the retiring asset.")
         return cleaned
