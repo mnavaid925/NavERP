@@ -52,12 +52,6 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label" for="{{ form.authorized_by.id_for_label }}">Authorizing Manager</label>
-                        {{ form.authorized_by }}
-                        {% if form.authorized_by.errors %}<div class="form-error">{{ form.authorized_by.errors.0 }}</div>{% endif %}
-                    </div>
-
-                    <div class="form-group">
                         <label class="form-label" for="{{ form.replacement_requisition.id_for_label }}">Replacement Purchase Requisition</label>
                         {{ form.replacement_requisition }}
                         {% if form.replacement_requisition.errors %}<div class="form-error">{{ form.replacement_requisition.errors.0 }}</div>{% endif %}
