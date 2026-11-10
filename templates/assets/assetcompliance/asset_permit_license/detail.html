@@ -149,7 +149,7 @@
                 <h2 class="text-base font-semibold text-slate-900">Expiration Status</h2>
             </div>
             <div class="card-body text-center py-6">
-                {% if permit.days_to_expiration < 0 %}
+                {% if permit.days_to_expiration is not None and permit.days_to_expiration < 0 %}
                 <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 text-red-600 mb-3">
                     <i data-lucide="alert-octagon" class="w-10 h-10"></i>
                 </div>
