@@ -35,6 +35,10 @@ from apps.assets.models import (
     AssetTelemetryReading,
     AssetFailureMode,
     AssetCalibrationRecord,
+    AssetWarranty,
+    AssetWarrantyClaim,
+    AssetInsurancePolicy,
+    AssetInsuranceClaim,
 )
 
 
@@ -1507,6 +1511,297 @@ def calibration_record_b(db, tenant_b, fixed_asset_b, operational_asset_b, admin
         status="valid",
         notes="Adjusted offset potentiometer by -2.6C.",
     )
+
+
+# ==============================================================================
+# Sub-module 11.8: Warranty & Insurance Management Fixtures
+# ==============================================================================
+
+@pytest.fixture
+def underwriter_party_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="Travelers Industrial Underwriters",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def underwriter_party_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="Zurich Commercial Global",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def broker_party_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="Marsh McLennan Risk Advisory",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def broker_party_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="Aon Risk Solutions",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def adjuster_party_a(db, tenant_a):
+    party = Party.objects.create(
+        tenant=tenant_a,
+        name="Crawford & Company Adjusters",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_a,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def adjuster_party_b(db, tenant_b):
+    party = Party.objects.create(
+        tenant=tenant_b,
+        name="Sedgwick Claims Management",
+        kind="organization",
+    )
+    PartyRole.objects.create(
+        tenant=tenant_b,
+        party=party,
+        role="partner",
+        status="active",
+    )
+    return party
+
+
+@pytest.fixture
+def warranty_a(db, tenant_a, fixed_asset_a, operational_asset_a, vendor_party_a, currency_usd, admin_user):
+    today = timezone.now().date()
+    return AssetWarranty.objects.create(
+        tenant=tenant_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        warrantor_party=vendor_party_a,
+        warranty_type="oem_standard",
+        coverage_scope="comprehensive",
+        title="Centrifugal Compressor OEM Factory Warranty",
+        certificate_reference="WARR-CERT-ACME-001",
+        start_date=today - timezone.timedelta(days=30),
+        end_date=today + timezone.timedelta(days=335),
+        max_claim_amount=Decimal("15000.00"),
+        deductible_amount=Decimal("250.00"),
+        currency=currency_usd,
+        status="active",
+        registered_by=admin_user,
+        terms_and_conditions="Full parts and labor for manufacturing defects.",
+    )
+
+
+@pytest.fixture
+def warranty_b(db, tenant_b, fixed_asset_b, operational_asset_b, vendor_party_b, currency_usd, admin_b):
+    today = timezone.now().date()
+    return AssetWarranty.objects.create(
+        tenant=tenant_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        warrantor_party=vendor_party_b,
+        warranty_type="extended_service",
+        coverage_scope="powertrain",
+        title="Globex Generator Extended Powertrain Warranty",
+        certificate_reference="WARR-CERT-GLOBEX-002",
+        start_date=today - timezone.timedelta(days=60),
+        end_date=today + timezone.timedelta(days=305),
+        max_claim_amount=Decimal("20000.00"),
+        deductible_amount=Decimal("500.00"),
+        currency=currency_usd,
+        status="active",
+        registered_by=admin_b,
+        terms_and_conditions="Powertrain component defects and mechanical seizure.",
+    )
+
+
+@pytest.fixture
+def warranty_claim_a(db, tenant_a, warranty_a, fixed_asset_a, operational_asset_a, currency_usd, admin_user):
+    today = timezone.now().date()
+    return AssetWarrantyClaim.objects.create(
+        tenant=tenant_a,
+        warranty=warranty_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        claim_title="Impeller Shaft Fatigue Fracture",
+        defect_description="Fatigue crack detected on high-pressure impeller shaft stage 2.",
+        incident_date=today - timezone.timedelta(days=10),
+        claim_amount=Decimal("3200.00"),
+        deductible_applied=Decimal("250.00"),
+        net_recovery_claimed=Decimal("2950.00"),
+        approved_amount=Decimal("0.00"),
+        currency=currency_usd,
+        claim_status="submitted",
+        filed_by=admin_user,
+    )
+
+
+@pytest.fixture
+def warranty_claim_b(db, tenant_b, warranty_b, fixed_asset_b, operational_asset_b, currency_usd, admin_b):
+    today = timezone.now().date()
+    return AssetWarrantyClaim.objects.create(
+        tenant=tenant_b,
+        warranty=warranty_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        claim_title="Rotor Core Insulation Breakdown",
+        defect_description="Insulation resistance dropped below 1M ohm during routine run.",
+        incident_date=today - timezone.timedelta(days=12),
+        claim_amount=Decimal("5500.00"),
+        deductible_applied=Decimal("500.00"),
+        net_recovery_claimed=Decimal("5000.00"),
+        approved_amount=Decimal("0.00"),
+        currency=currency_usd,
+        claim_status="submitted",
+        filed_by=admin_b,
+    )
+
+
+@pytest.fixture
+def insurance_policy_a(db, tenant_a, underwriter_party_a, broker_party_a, fixed_asset_a, operational_asset_a, currency_usd, admin_user):
+    today = timezone.now().date()
+    return AssetInsurancePolicy.objects.create(
+        tenant=tenant_a,
+        policy_number="POL-2026-ACME-IND-01",
+        title="Industrial Machinery Breakdown & All Risk Policy",
+        policy_type="machinery_breakdown",
+        underwriter_party=underwriter_party_a,
+        broker_party=broker_party_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        effective_date=today - timezone.timedelta(days=60),
+        expiration_date=today + timezone.timedelta(days=305),
+        annual_premium=Decimal("12000.00"),
+        premium_payment_frequency="annual",
+        total_insured_value=Decimal("250000.00"),
+        policy_limit=Decimal("200000.00"),
+        standard_deductible=Decimal("5000.00"),
+        valuation_basis="replacement_cost_value",
+        currency=currency_usd,
+        status="active",
+        created_by=admin_user,
+        coverage_terms="Covers sudden and accidental mechanical and electrical breakdown.",
+    )
+
+
+@pytest.fixture
+def insurance_policy_b(db, tenant_b, underwriter_party_b, broker_party_b, fixed_asset_b, operational_asset_b, currency_usd, admin_b):
+    today = timezone.now().date()
+    return AssetInsurancePolicy.objects.create(
+        tenant=tenant_b,
+        policy_number="POL-2026-GLOBEX-ENG-02",
+        title="Globex Fleet & Heavy Equipment All Risk Policy",
+        policy_type="property_all_risk",
+        underwriter_party=underwriter_party_b,
+        broker_party=broker_party_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        effective_date=today - timezone.timedelta(days=90),
+        expiration_date=today + timezone.timedelta(days=275),
+        annual_premium=Decimal("18500.00"),
+        premium_payment_frequency="semi_annual",
+        total_insured_value=Decimal("400000.00"),
+        policy_limit=Decimal("350000.00"),
+        standard_deductible=Decimal("7500.00"),
+        valuation_basis="replacement_cost_value",
+        currency=currency_usd,
+        status="active",
+        created_by=admin_b,
+        coverage_terms="Property damage, fire, flood, and equipment collision.",
+    )
+
+
+@pytest.fixture
+def insurance_claim_a(db, tenant_a, insurance_policy_a, fixed_asset_a, operational_asset_a, adjuster_party_a, currency_usd, admin_user):
+    today = timezone.now().date()
+    return AssetInsuranceClaim.objects.create(
+        tenant=tenant_a,
+        policy=insurance_policy_a,
+        fixed_asset=fixed_asset_a,
+        operational_asset=operational_asset_a,
+        adjuster_party=adjuster_party_a,
+        claim_title="Stator Winding Arcing and Core Damage",
+        incident_description="Grid power surge induced stator insulation flashover and thermal burn.",
+        incident_date=today - timezone.timedelta(days=15),
+        peril_type="electrical_arcing",
+        claimed_loss_amount=Decimal("28000.00"),
+        deductible_applied=Decimal("5000.00"),
+        net_claim_payable=Decimal("23000.00"),
+        settlement_payout_amount=Decimal("0.00"),
+        salvage_recovery_amount=Decimal("0.00"),
+        currency=currency_usd,
+        claim_status="proof_of_loss_filed",
+        claims_officer=admin_user,
+    )
+
+
+@pytest.fixture
+def insurance_claim_b(db, tenant_b, insurance_policy_b, fixed_asset_b, operational_asset_b, adjuster_party_b, currency_usd, admin_b):
+    today = timezone.now().date()
+    return AssetInsuranceClaim.objects.create(
+        tenant=tenant_b,
+        policy=insurance_policy_b,
+        fixed_asset=fixed_asset_b,
+        operational_asset=operational_asset_b,
+        adjuster_party=adjuster_party_b,
+        claim_title="Cooling Tower Basin Hydraulic Rupture",
+        incident_description="Freezing rupture on heat-exchanger supply piping and flooded sump.",
+        incident_date=today - timezone.timedelta(days=20),
+        peril_type="water_liquid_damage",
+        claimed_loss_amount=Decimal("35000.00"),
+        deductible_applied=Decimal("7500.00"),
+        net_claim_payable=Decimal("27500.00"),
+        settlement_payout_amount=Decimal("0.00"),
+        salvage_recovery_amount=Decimal("0.00"),
+        currency=currency_usd,
+        claim_status="proof_of_loss_filed",
+        claims_officer=admin_b,
+    )
+
 
 
 
