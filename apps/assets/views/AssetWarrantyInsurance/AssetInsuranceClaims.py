@@ -285,7 +285,10 @@ def asset_insurance_claim_settle(request, pk):
         messages.error(request, "Invalid numeric value for salvage recovery amount.")
         return redirect("assets:asset_insurance_claim_detail", pk=claim.pk)
 
+    valid_methods = dict(AssetInsuranceClaim.SETTLEMENT_METHOD_CHOICES)
     settlement_method = request.POST.get("settlement_method", "direct_indemnity_check")
+    if settlement_method not in valid_methods:
+        settlement_method = "direct_indemnity_check"
     notes = request.POST.get("settlement_notes", "").strip()
 
     with transaction.atomic():
