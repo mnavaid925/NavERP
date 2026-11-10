@@ -177,6 +177,7 @@ def asset_permit_license_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_permit_license_delete(request, pk):
     permit = assets_object(request, AssetPermitLicense, pk)
     num = permit.number
