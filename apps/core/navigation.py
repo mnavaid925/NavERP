@@ -3252,6 +3252,24 @@ LIVE_LINKS = {
         "Insurance Claims": "assets:asset_insurance_claim_list",
         "Warranty & Insurance Management": "assets:asset_warranty_list",
     },
+    "11.9": {
+        "Disposal Request & Approval": "assets:asset_disposal_request_list",
+        "Asset Resale & Auction": "assets:asset_resale_listing_list",
+        "Trade-in & Exchange Programs": "assets:asset_trade_in_list",
+        "Scrap & Salvage Management": "assets:asset_scrap_salvage_list",
+        "Disposal Documentation & Compliance": "assets:asset_scrap_salvage_list",
+        # Plural and convenience aliases
+        "Disposal Requests": "assets:asset_disposal_request_list",
+        "Asset Disposal Requests": "assets:asset_disposal_request_list",
+        "Resale & Auction": "assets:asset_resale_listing_list",
+        "Asset Resale Listings": "assets:asset_resale_listing_list",
+        "Trade-in & Exchange": "assets:asset_trade_in_list",
+        "Asset Trade-Ins": "assets:asset_trade_in_list",
+        "Scrap & Salvage": "assets:asset_scrap_salvage_list",
+        "Asset Scrap & Salvage": "assets:asset_scrap_salvage_list",
+        "Certificates of Destruction": "assets:asset_scrap_salvage_list",
+        "Asset Disposal & Retirement": "assets:asset_disposal_request_list",
+    },
 
 
 
