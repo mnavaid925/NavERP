@@ -2290,7 +2290,7 @@ class Command(BaseCommand):
                     compliance_rating="fully_compliant",
                     summary_findings="All machine guards secure. Dual interlocks tested and verified conforming. Operator sign-offs current.",
                     status="completed",
-                    completed_at=today - timezone.timedelta(days=44),
+                    completed_at=timezone.now() - timezone.timedelta(days=44),
                 )
 
                 # 5. Compliance Audit 2: ISO 55001 Surveillance Audit
