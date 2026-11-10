@@ -68,7 +68,7 @@ class AssetWarrantyForm(TenantUniqueMixin, TenantModelForm):
                 tenant=self.tenant,
                 roles__role="vendor",
             ).distinct()
-            self.fields["currency"].queryset = Currency.objects.filter(tenant=self.tenant)
+            self.fields["currency"].queryset = Currency.objects.filter(is_active=True)
             self.fields["contract_document"].queryset = Document.objects.filter(tenant=self.tenant)
             self.fields["service_contract"].queryset = AssetServiceContract.objects.filter(tenant=self.tenant)
 
@@ -87,7 +87,6 @@ class AssetWarrantyForm(TenantUniqueMixin, TenantModelForm):
                 "operational_asset",
                 "asset_category",
                 "warrantor_party",
-                "currency",
                 "contract_document",
                 "service_contract",
             ],
