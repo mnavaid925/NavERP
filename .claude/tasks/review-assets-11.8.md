@@ -48,7 +48,8 @@
   - **Description:** Warranty claim detail template renders `claim.warranty.warrantor_party.name`, and insurance claim detail renders `claim.policy.underwriter_party.name` and `claim.policy.currency.code`. These chained foreign keys are not pre-fetched in `select_related()`, triggering +1 and +2 lazy database queries per detail page view.
   - **Fix:** Add `"warranty__warrantor_party"` to `AssetWarrantyClaim.objects.select_related(...)`, and add `"policy__underwriter_party"` and `"policy__currency"` to `AssetInsuranceClaim.objects.select_related(...)`.
 
-- [ ] **I4: Non-Existent Attribute `warranty.service_contract.provider_name` Renders Blank in Warranty Detail**
+- [x] **I4: Non-Existent Attribute `warranty.service_contract.provider_name` Renders Blank in Warranty Detail**
+  - **Status:** [x] fixed — use vendor.name on service_contract (d13497b0)
   - **Location:** `templates/assets/assetwarrantyinsurance/assetwarranty/detail.html:236`
   - **Description:** Template attempts to render `warranty.service_contract.provider_name`, but `AssetServiceContract` has no `provider_name` attribute (it defines `vendor = models.ForeignKey("core.Party", ...)`).
   - **Fix:** Replace with `{{ warranty.service_contract.vendor.name }}` (with fallback to `{{ warranty.service_contract.title }}`).
