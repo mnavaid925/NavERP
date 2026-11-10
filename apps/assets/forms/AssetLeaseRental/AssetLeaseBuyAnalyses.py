@@ -75,4 +75,31 @@ class AssetLeaseBuyAnalysisForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["category", "evaluated_by"])
+
+        pct_fields = [
+            "down_payment_pct",
+            "loan_interest_rate_pct",
+            "discount_rate_wacc_pct",
+            "corporate_tax_rate_pct",
+        ]
+        for f in pct_fields:
+            val = cleaned.get(f)
+            if val is not None and (val < 0 or val > 100):
+                self.add_error(f, "Percentage must be between 0% and 100%.")
+
+        non_negative_fields = [
+            "purchase_price",
+            "estimated_salvage_value",
+            "annual_maintenance_cost_buy",
+            "annual_insurance_tax_buy",
+            "monthly_lease_payment",
+            "upfront_lease_fees",
+            "end_of_lease_purchase_option",
+            "annual_maintenance_cost_lease",
+        ]
+        for f in non_negative_fields:
+            val = cleaned.get(f)
+            if val is not None and val < 0:
+                self.add_error(f, "Amount cannot be negative.")
+
         return cleaned
