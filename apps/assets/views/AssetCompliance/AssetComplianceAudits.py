@@ -54,13 +54,16 @@ def asset_compliance_audit_list(request):
         qs = qs.filter(framework_id=int(framework_id))
 
     # Aggregate KPI counts
-    base_all = AssetComplianceAudit.objects.filter(tenant=request.tenant)
-    total_audits = base_all.count()
-    in_progress_count = base_all.filter(status="in_progress").count()
-    completed_count = base_all.filter(status="completed").count()
-    breaches_count = base_all.filter(
-        compliance_rating__in=["major_non_conformance", "critical_breach"]
-    ).count()
+    metrics = AssetComplianceAudit.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        in_progress=Count("id", filter=Q(status="in_progress")),
+        completed=Count("id", filter=Q(status="completed")),
+        breaches=Count("id", filter=Q(compliance_rating__in=["major_non_conformance", "critical_breach"])),
+    )
+    total_audits = metrics["total"]
+    in_progress_count = metrics["in_progress"]
+    completed_count = metrics["completed"]
+    breaches_count = metrics["breaches"]
 
     framework_list = AssetComplianceFramework.objects.filter(tenant=request.tenant).order_by("code")
 
