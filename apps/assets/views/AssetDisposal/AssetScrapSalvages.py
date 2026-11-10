@@ -221,6 +221,13 @@ def asset_scrap_salvage_delete(request, pk):
 @require_POST
 def asset_scrap_salvage_certify_abatement(request, pk):
     instance = assets_object(request, AssetScrapSalvage, pk)
+    if instance.abatement_certified:
+        messages.info(request, f"Hazardous waste abatement has already been certified for job {instance.number}.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+    if instance.status not in ["draft", "dismantling", "abatement_in_progress"]:
+        messages.warning(request, f"Abatement cannot be certified for job {instance.number} with status {instance.get_status_display()}.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+
     form = AssetScrapAbatementForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -252,6 +259,13 @@ def asset_scrap_salvage_certify_abatement(request, pk):
 @require_POST
 def asset_scrap_salvage_record_cod(request, pk):
     instance = assets_object(request, AssetScrapSalvage, pk)
+    if instance.status in ["certified_destroyed", "settled"] or instance.cod_number:
+        messages.info(request, f"Certificate of Destruction has already been recorded for job {instance.number}.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+    if instance.status not in ["dismantling", "scrap_transferred"]:
+        messages.warning(request, f"CoD cannot be recorded for job {instance.number} with status {instance.get_status_display()}.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+
     form = AssetScrapCertificateForm(request.POST)
     if form.is_valid():
         with transaction.atomic():
@@ -279,6 +293,9 @@ def asset_scrap_salvage_settle(request, pk):
     instance = assets_object(request, AssetScrapSalvage, pk)
     if instance.status == "settled":
         messages.info(request, f"Scrap job {instance.number} has already been settled.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+    if instance.status not in ["scrap_transferred", "certified_destroyed"]:
+        messages.warning(request, f"Scrap job {instance.number} must be scrap transferred or certified destroyed before settlement.")
         return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
 
     with transaction.atomic():
