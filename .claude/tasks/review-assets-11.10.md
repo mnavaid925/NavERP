@@ -2,7 +2,7 @@
 
 **Review Range**: `d469573958d456219878a4f3866014e78801de1e` (BASE) ... `ee669a93d2c307e35d5e736d59f25a083270d8fe` (HEAD)
 **Date**: 2026-11-10
-**Status**: IN PROGRESS (Pass 1 of 6 complete)
+**Status**: IN PROGRESS (Pass 2 of 6 complete)
 
 ---
 
@@ -25,3 +25,18 @@
 - [ ] **MR3**: Missing unique constraint on `(tenant, lease_contract, period_number)` in `AssetLeaseSchedule` (`AssetLeaseSchedules.py:111-121`). Enforce uniqueness.
 - [ ] **MR4**: Cross-tenant IDOR check in `asset_lease_schedule_create` GET parameter (`AssetLeaseSchedules.py:98-100`). Validate tenant ownership using `assets_object`.
 - [ ] **MR5**: Deleting a schedule line from schedule list redirects to contract detail (`AssetLeaseSchedules.py:180`). Redirect back to schedule list if invoked from schedule list.
+
+---
+
+## Pass 2: Explorer (`explorer`)
+
+### Critical
+*None.*
+
+### Important
+*None.*
+
+### Minor
+- [ ] **MR6**: `AssetLeaseScheduleAdmin` list_filter lacks temporal filter (`apps/assets/admin.py:383`). Add `due_date` filter for periodic reconciliation in admin.
+- [ ] **MR7**: Contextual Cancel Link on Modification Form (`templates/assets/assetleaserental/asset_lease_modification/form.html:149`). Cancel button unconditionally navigates to list even when originating from a lease contract detail page via `?lease=<id>`.
+- [ ] **MR8**: Contract Document Discrepancy on Schedule URL Path Prefix (`.claude/tasks/contract-assets-11.10.md:231-237`). Update contract doc to reflect `lease-schedules/` route prefix implemented to prevent collision with 11.5 maintenance schedules.
