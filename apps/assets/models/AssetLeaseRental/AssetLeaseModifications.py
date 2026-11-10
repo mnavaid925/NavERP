@@ -190,6 +190,13 @@ class AssetLeaseModification(TenantNumbered):
             models.Index(fields=["tenant", "modification_type"], name="idx_almd_ten_type"),
         ]
 
+    def save(self, *args, **kwargs):
+        if self.revised_lease_liability is not None and self.prior_lease_liability is not None:
+            self.liability_adjustment = self.revised_lease_liability - self.prior_lease_liability
+        if self.revised_rou_asset_value is not None and self.prior_rou_asset_value is not None:
+            self.rou_asset_adjustment = self.revised_rou_asset_value - self.prior_rou_asset_value
+        super().save(*args, **kwargs)
+
     def __str__(self):
         contract_num = self.lease_contract.number if self.lease_contract_id else ""
         if contract_num:
