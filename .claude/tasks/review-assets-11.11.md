@@ -47,7 +47,7 @@
   - **Issue**: Prev/Next pagination links drop the foreign key filter parameters when navigating across pages.
   - **Fix**: Append `{% if request.GET.<param> %}&<param>={{ request.GET.<param> }}{% endif %}` to pagination links.
 
-- [ ] **I3: Unhandled `ProtectedError` on Compliance Framework Deletion**
+- [x] **I3: Unhandled `ProtectedError` on Compliance Framework Deletion**
   - **Files**:
     - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:163-177`
   - **Issue**: `AssetComplianceAudit.framework` uses `on_delete=models.PROTECT`. Deleting a framework with audits causes an unhandled `ProtectedError` (HTTP 500).
