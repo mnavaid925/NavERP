@@ -7,6 +7,184 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.10: Lease & Rental Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.10.md` (2026-11-10)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.9.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0012_assetdisposalrequest_assetinsurancepolicy_and_more.py` (from 11.8/11.9), so **11.10 claims `0013_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.10.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetLeaseRental/<Entity>.py`
+> Template folder name: `templates/assets/assetleaserental/{asset_lease_contract,asset_lease_schedule,asset_lease_modification,asset_lease_buy_analysis}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Lease & Rental Multi-Tenant Base & Isolation (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links leased plant machinery, production equipment, and facilities infrastructure in `apps/scm` via string FK (`"scm.Asset"`).
+  - Authoritative Financial Fixed Asset Register (`accounting.FixedAsset` [FA-]): Links capital fixed asset records in `apps/accounting` via string FK (`"accounting.FixedAsset"`).
+  - Asset Taxonomy Integration: Reuses `"assets.AssetCategory"` [ACAT-] for category-level lease classification and reporting.
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for lessors, financing partners, and equipment leasing syndicates.
+    - Reuses `"core.Document"` for attached lease contracts, master lease agreements (MLAs), and modification addenda.
+    - Reuses `settings.AUTH_USER_MODEL` for contract administrators, approving controllers, and financial analysts.
+  - Collision-free 3-letter / 4-character uppercase prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetLeaseContract` -> `NUMBER_PREFIX = "ALC"` (format: `ALC-YYYYMM-XXXX`)
+    - `AssetLeaseSchedule` -> `NUMBER_PREFIX = "ALSP"` (format: `ALSP-YYYYMM-XXXX`)
+    - `AssetLeaseModification` -> `NUMBER_PREFIX = "ALMD"` (format: `ALMD-YYYYMM-XXXX`)
+    - `AssetLeaseBuyAnalysis` -> `NUMBER_PREFIX = "ALBA"` (format: `ALBA-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetLeaseContract` [ALC-]:
+      - Domain Purpose: Master lease agreement administration, statutory classification (ASC 842 / IFRS 16), right-of-use (ROU) asset and liability initial present value capitalization (NavERP.md Bullets 1 & 2: Lease Contract Administration & Operating vs. Finance Lease Classification).
+      - Identity & Association: `contract_number` (auto-numbered), `title` (CharField max_length=255), `master_lease_agreement_ref` (CharField max_length=100 blank=True), `lessor` (FK `"core.Party"`, on_delete=models.PROTECT, related_name="asset_leases"), `asset` (FK `"scm.Asset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="lease_contracts"), `category` (FK `"assets.AssetCategory"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="lease_contracts"), `fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="lease_contracts").
+      - Key Dates: `inception_date` (DateField default=timezone.now), `commencement_date` (DateField default=timezone.now), `expiration_date` (DateField), `first_payment_date` (DateField default=timezone.now), `early_termination_notice_date` (DateField null=True, blank=True).
+      - Terms & Horizon: `lease_term_months` (PositiveIntegerField default=36), `economic_life_months` (PositiveIntegerField default=60).
+      - Financial Terms: `payment_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00), `payment_frequency` (CharField max_length=20, choices: `monthly`, `quarterly`, `semi_annual`, `annual`, default `monthly`), `payment_timing` (CharField max_length=20, choices: `advance`, `arrears`, default `arrears`), `discount_rate_pct` (DecimalField max_digits=6, decimal_places=4, default=5.0000), `fair_market_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `initial_direct_costs` (DecimalField max_digits=12, decimal_places=2, default=0.00), `lease_incentives` (DecimalField max_digits=12, decimal_places=2, default=0.00), `residual_value_guarantee` (DecimalField max_digits=12, decimal_places=2, default=0.00), `purchase_option_price` (DecimalField max_digits=14, decimal_places=2, null=True, blank=True).
+      - Statutory Classification Engine (5 Criteria): `transfer_of_ownership` (BooleanField default=False), `has_purchase_option` (BooleanField default=False), `is_specialized_asset` (BooleanField default=False), `classification` (CharField max_length=20, choices: `operating`, `finance`, default `operating`), `classification_overridden` (BooleanField default=False), `classification_notes` (TextField blank=True).
+      - Balances: `initial_lease_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `initial_rou_asset_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `current_lease_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `current_rou_asset_carrying_value` (DecimalField max_digits=14, decimal_places=2, default=0.00).
+      - Lifecycle & Status: `status` (CharField max_length=24, choices: `draft`, `pending_approval`, `active`, `modified`, `expired`, `terminated`, `buyout`, default `draft`), `approved_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_asset_leases"), `notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `pending_approval -> badge-amber`, `active -> badge-green`, `modified -> badge-info`, `expired -> badge-muted`, `terminated -> badge-red`, `buyout -> badge-purple`.
+      - Classification / Badge CSS: `operating -> badge-info`, `finance -> badge-purple`.
+      - Business Logic & Actions:
+        - `asset_lease_contract_activate`: calculates classification, validates terms, generates payment schedule, updates status to `active`.
+        - `asset_lease_contract_calculate`: calculates present values of liability and ROU asset without activating.
+        - `asset_lease_contract_terminate`: records early buyout or return termination.
+      - Form exclusions: `tenant`, `number`, `initial_lease_liability`, `initial_rou_asset_value`, `current_lease_liability`, `current_rou_asset_carrying_value`, `approved_by`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `leases`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `classification_choices`, `lessor_list`, `total_leases`, `active_count`, `total_liability`, `total_rou_value`.
+        - Detail: `lease`, `schedules`, `modifications`.
+    - `AssetLeaseSchedule` [ALSP-]:
+      - Domain Purpose: Period payment amortization, interest accrual, principal liability reduction, and ROU depreciation (NavERP.md Bullet 3: Lease Payment & Amortization).
+      - Identity & Horizon: `schedule_number` (auto-numbered), `lease_contract` (FK `"assets.AssetLeaseContract"`, on_delete=models.CASCADE, related_name="payment_schedules"), `period_number` (PositiveIntegerField), `due_date` (DateField), `payment_amount` (DecimalField max_digits=14, decimal_places=2, default=0.00).
+      - Financial Amortization Breakdown: `beginning_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `interest_expense` (DecimalField max_digits=14, decimal_places=2, default=0.00), `principal_reduction` (DecimalField max_digits=14, decimal_places=2, default=0.00), `ending_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `rou_depreciation` (DecimalField max_digits=14, decimal_places=2, default=0.00), `ending_rou_asset_value` (DecimalField max_digits=14, decimal_places=2, default=0.00).
+      - Execution & Status: `status` (CharField max_length=20, choices: `scheduled`, `accrued`, `paid`, `cancelled`, default `scheduled`), `payment_reference` (CharField max_length=100 blank=True), `paid_date` (DateField null=True, blank=True), `notes` (TextField blank=True).
+      - Status / Badge CSS: `scheduled -> badge-slate`, `accrued -> badge-info`, `paid -> badge-green`, `cancelled -> badge-muted`.
+      - Business Logic & Actions:
+        - `asset_lease_schedule_mark_paid`: records payment reference and date, sets status to `paid`.
+        - `asset_lease_schedule_accrue`: transitions status from `scheduled` to `accrued`.
+      - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `schedules`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `lease_list`, `total_schedules`, `scheduled_count`, `paid_count`, `total_paid_amount`.
+        - Detail: `schedule`.
+    - `AssetLeaseModification` [ALMD-]:
+      - Domain Purpose: Remeasurements, lease renegotiation, term extensions, early terminations, and impairment write-downs (NavERP.md Bullet 4: Lease Modification & Termination).
+      - Identity & Scope: `modification_number` (auto-numbered), `lease_contract` (FK `"assets.AssetLeaseContract"`, on_delete=models.CASCADE, related_name="modifications"), `modification_type` (CharField max_length=30, choices: `term_extension`, `payment_change`, `partial_termination`, `full_termination`, `impairment`, `discount_rate_change`, default `term_extension`), `request_date` (DateField default=timezone.now), `effective_date` (DateField default=timezone.now).
+      - Balances Before & After: `prior_lease_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `revised_lease_liability` (DecimalField max_digits=14, decimal_places=2, default=0.00), `liability_adjustment` (DecimalField max_digits=14, decimal_places=2, default=0.00), `prior_rou_asset_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `revised_rou_asset_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `rou_asset_adjustment` (DecimalField max_digits=14, decimal_places=2, default=0.00).
+      - Gain / Loss & Impairment: `gain_loss_on_modification` (DecimalField max_digits=14, decimal_places=2, default=0.00), `impairment_loss_recognized` (DecimalField max_digits=14, decimal_places=2, default=0.00).
+      - Revised Terms: `revised_term_months` (PositiveIntegerField null=True, blank=True), `revised_payment_amount` (DecimalField max_digits=14, decimal_places=2, null=True, blank=True), `revised_discount_rate_pct` (DecimalField max_digits=6, decimal_places=4, null=True, blank=True).
+      - Governance & Lifecycle: `requested_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="requested_lease_modifications"), `approved_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_lease_modifications"), `status` (CharField max_length=20, choices: `draft`, `submitted`, `approved`, `rejected`, `executed`, default `draft`), `justification` (TextField blank=True), `notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `submitted -> badge-amber`, `approved -> badge-info`, `rejected -> badge-red`, `executed -> badge-green`.
+      - Modification Type / Badge CSS: `term_extension -> badge-info`, `payment_change -> badge-slate`, `partial_termination -> badge-amber`, `full_termination -> badge-red`, `impairment -> badge-red`, `discount_rate_change -> badge-purple`.
+      - Business Logic & Actions:
+        - `asset_lease_modification_approve`: approves modification, recalculates contract balances, updates contract status to `modified` (or `terminated`).
+      - Form exclusions: `tenant`, `number`, `liability_adjustment`, `rou_asset_adjustment`, `approved_by`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `modifications`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `type_choices`, `lease_list`, `total_modifications`, `executed_count`, `total_adjustments`.
+        - Detail: `modification`.
+    - `AssetLeaseBuyAnalysis` [ALBA-]:
+      - Domain Purpose: Capital acquisition comparative financial modeling, discounted cash flow (WACC), TCO, and Net Advantage to Leasing (NAL) decision engine (NavERP.md Bullet 5: Lease vs. Buy Analysis).
+      - Identity & Equipment Target: `analysis_number` (auto-numbered), `title` (CharField max_length=255), `description` (TextField blank=True), `target_asset_name` (CharField max_length=255), `category` (FK `"assets.AssetCategory"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="lease_buy_analyses"), `expected_useful_life_years` (DecimalField max_digits=4, decimal_places=1, default=5.0).
+      - Purchase Option Parameters: `purchase_price` (DecimalField max_digits=14, decimal_places=2, default=0.00), `down_payment_pct` (DecimalField max_digits=5, decimal_places=2, default=10.00), `loan_interest_rate_pct` (DecimalField max_digits=5, decimal_places=2, default=6.00), `loan_term_years` (DecimalField max_digits=4, decimal_places=1, default=5.0), `estimated_salvage_value` (DecimalField max_digits=14, decimal_places=2, default=0.00), `annual_maintenance_cost_buy` (DecimalField max_digits=12, decimal_places=2, default=0.00), `annual_insurance_tax_buy` (DecimalField max_digits=12, decimal_places=2, default=0.00).
+      - Lease Option Parameters: `lease_term_months` (PositiveIntegerField default=36), `monthly_lease_payment` (DecimalField max_digits=14, decimal_places=2, default=0.00), `upfront_lease_fees` (DecimalField max_digits=12, decimal_places=2, default=0.00), `end_of_lease_purchase_option` (DecimalField max_digits=14, decimal_places=2, default=0.00), `lessor_covers_maintenance` (BooleanField default=True), `annual_maintenance_cost_lease` (DecimalField max_digits=12, decimal_places=2, default=0.00).
+      - Corporate Financial Hurdles: `discount_rate_wacc_pct` (DecimalField max_digits=5, decimal_places=2, default=8.00), `corporate_tax_rate_pct` (DecimalField max_digits=5, decimal_places=2, default=21.00).
+      - Calculated Metrics: `npv_purchase_option` (DecimalField max_digits=14, decimal_places=2, default=0.00), `npv_lease_option` (DecimalField max_digits=14, decimal_places=2, default=0.00), `tco_purchase_option` (DecimalField max_digits=14, decimal_places=2, default=0.00), `tco_lease_option` (DecimalField max_digits=14, decimal_places=2, default=0.00), `net_advantage_to_leasing` (DecimalField max_digits=14, decimal_places=2, default=0.00), `recommendation` (CharField max_length=20, choices: `buy`, `lease`, `neutral`, default `neutral`).
+      - Governance & Lifecycle: `status` (CharField max_length=20, choices: `draft`, `evaluated`, `approved`, `rejected`, default `draft`), `evaluated_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="evaluated_lease_buy_analyses"), `approved_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_lease_buy_analyses"), `evaluation_notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `evaluated -> badge-info`, `approved -> badge-green`, `rejected -> badge-red`.
+      - Recommendation / Badge CSS: `buy -> badge-green`, `lease -> badge-purple`, `neutral -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_lease_buy_analysis_evaluate`: computes full NPV, TCO, NAL, and recommendation, sets status to `evaluated`.
+      - Form exclusions: `tenant`, `number`, `npv_purchase_option`, `npv_lease_option`, `tco_purchase_option`, `tco_lease_option`, `net_advantage_to_leasing`, `recommendation`, `approved_by`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `analyses`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `recommendation_choices`, `category_list`, `total_analyses`, `buy_recommended_count`, `lease_recommended_count`.
+        - Detail: `analysis`.
+
+---
+
+## Sub-module 11.10 Implementation Checklist
+
+- [x] **Phase 1: Research**
+  - [x] Competitive market research of 8 leading lease administration & equipment finance suites (`.claude/tasks/research-assets-11.10.md`)
+  - [x] Commit research catalog
+
+- [ ] **Phase 2: Planning & Specification**
+  - [x] Checkable implementation plan in `.claude/tasks/todo.md`
+  - [ ] Commit `todo.md`
+  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.10.md`
+  - [ ] Commit contract file
+
+- [ ] **Phase 3: Serial Build (Entity by Entity)**
+  - [ ] **Entity 1: `AssetLeaseContract`**
+    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py`
+    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`
+    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py`
+    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseContracts.py`
+    - [ ] `templates/assets/assetleaserental/asset_lease_contract/list.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_contract/detail.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_contract/form.html`
+  - [ ] **Entity 2: `AssetLeaseSchedule`**
+    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/list.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/detail.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/form.html`
+  - [ ] **Entity 3: `AssetLeaseModification`**
+    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseModifications.py`
+    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py`
+    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py`
+    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseModifications.py`
+    - [ ] `templates/assets/assetleaserental/asset_lease_modification/list.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_modification/detail.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_modification/form.html`
+  - [ ] **Entity 4: `AssetLeaseBuyAnalysis`**
+    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/list.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/detail.html`
+    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/form.html`
+  - [ ] **Integrate**
+    - [ ] Re-export all 4 entities in `apps/assets/models/__init__.py`
+    - [ ] Re-export all forms in `apps/assets/forms/__init__.py`
+    - [ ] Re-export all views in `apps/assets/views/__init__.py`
+    - [ ] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
+    - [ ] Register all 4 models in `apps/assets/admin.py`
+    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.10 seed data
+    - [ ] Wire `LIVE_LINKS["11.10"]` in `apps/core/navigation.py`
+    - [ ] Run `makemigrations assets` (claims `0013_...`)
+    - [ ] Run `migrate`
+    - [ ] Run `seed_assets` twice (idempotency check)
+    - [ ] Run `manage.py check`
+  - [ ] **Smoke Test**
+    - [ ] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
+
+- [ ] **Phase 4: Six Reviewers (Strictly Serial)**
+  - [ ] 1. `code-reviewer`
+  - [ ] 2. `explorer`
+  - [ ] 3. `frontend-reviewer`
+  - [ ] 4. `performance-reviewer`
+  - [ ] 5. `qa-smoke-tester`
+  - [ ] 6. `security-reviewer`
+  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.10.md` and commit
+
+- [ ] **Phase 5: Code Fixer**
+  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+
+- [ ] **Phase 6: Comprehensive Test Suite**
+  - [ ] Write `apps/assets/tests/test_assetleaserental_models.py`
+  - [ ] Write `apps/assets/tests/test_assetleaserental_forms.py`
+  - [ ] Write `apps/assets/tests/test_assetleaserental_views.py`
+  - [ ] Write `apps/assets/tests/test_assetleaserental_security.py`
+  - [ ] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green
+
+- [ ] **Phase 7: Documentation & Close-Out**
+  - [ ] Update `README.md`
+  - [ ] Update `.claude/skills/assets/SKILL.md`
+  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.10.md`
+  - [ ] Update close-out in `todo.md`
+
+---
 # Sub-module 11.11: Compliance & Regulatory Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.11.md` (2026-11-10)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.9.
