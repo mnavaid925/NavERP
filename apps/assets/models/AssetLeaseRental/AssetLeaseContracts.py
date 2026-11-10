@@ -462,5 +462,7 @@ class AssetLeaseContract(TenantNumbered):
             _d = min(current_date.day, calendar.monthrange(_y, _m)[1])
             current_date = datetime.date(_y, _m, _d)
 
-        AssetLeaseSchedule.objects.bulk_create(schedules)
+        with transaction.atomic():
+            for schedule in schedules:
+                schedule.save()
         return len(schedules)
