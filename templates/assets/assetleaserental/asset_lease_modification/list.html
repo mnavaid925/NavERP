@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Lease Modifications & Remeasurements — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <span>Modifications</span>
+        </div>
+        <h1 class="page-title">Lease Modifications & Remeasurements</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_lease_modification_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Modification
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="edit-3"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Modifications</div>
+            <div class="stat-value">{{ total_modifications }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Executed & Remeasured</div>
+            <div class="stat-value">{{ executed_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Net Adjustment</div>
+            <div class="stat-value">${{ total_adjustments|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search mod #, contract, justification..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="type" class="form-select">
+                    <option value="">All Types</option>
+                    {% for code, label in type_choices %}
+                    <option value="{{ code }}" {% if type == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lease" class="form-select">
+                    <option value="">All Contracts</option>
+                    {% for l in lease_list %}
+                    <option value="{{ l.pk }}" {% if lease == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.number }} — {{ l.title|truncatechars:25 }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_lease_modification_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mod #</th>
+                    <th>Contract</th>
+                    <th>Modification Type</th>
+                    <th>Effective Date</th>
+                    <th>Prior Liability</th>
+                    <th>Revised Liability</th>
+                    <th>Adjustment</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mod in modifications %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_lease_modification_detail' mod.pk %}" class="text-primary hover:underline">
+                            {{ mod.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'assets:asset_lease_contract_detail' mod.lease_contract.pk %}" class="hover:underline font-medium">
+                            {{ mod.lease_contract.number }}
+                        </a>
+                        <div class="text-xs text-muted">{{ mod.lease_contract.title|truncatechars:30 }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ mod.type_css }}">
+                            {{ mod.get_modification_type_display }}
+                        </span>
+                    </td>
+                    <td>{{ mod.effective_date|date:"Y-m-d" }}</td>
+                    <td class="font-mono text-xs">${{ mod.prior_lease_liability|floatformat:2 }}</td>
+                    <td class="font-mono text-xs">${{ mod.revised_lease_liability|floatformat:2 }}</td>
+                    <td class="font-mono text-xs font-semibold {% if mod.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                        ${{ mod.liability_adjustment|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="badge {{ mod.status_css }}">
+                            {{ mod.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_lease_modification_detail' mod.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_lease_modification_edit' mod.pk %}" class="btn btn-icon" title="Edit Modification">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_lease_modification_delete' mod.pk %}" class="inline" onsubmit="return confirm('Delete modification {{ mod.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state py-8">
+                            <i data-lucide="edit-3" class="w-12 h-12 text-muted mb-2"></i>
+                            <div class="text-base font-medium">No lease modifications found</div>
+                            <p class="text-sm text-muted mt-1">Amend contracts, extend terms, or log impairment write-downs using modifications.</p>
+                            <a href="{% url 'assets:asset_lease_modification_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Modification
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if type %}&type={{ type }}{% endif %}{% if lease %}&lease={{ lease }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if type %}&type={{ type }}{% endif %}{% if lease %}&lease={{ lease }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
