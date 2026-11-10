@@ -123,6 +123,8 @@ class Command(BaseCommand):
             self._seed_tenant_11_7(tenant)
             self._seed_tenant_11_8(tenant)
             self._seed_tenant_11_9(tenant)
+            self._seed_tenant_11_10(tenant)
+            self._seed_tenant_11_11(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -2203,17 +2205,21 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{tenant.name}] 11.9 Seeding complete (3 disposal requests, 1 resale listing, 1 trade-in, 1 scrap salvage).")
 
+    def _seed_tenant_11_11(self, tenant):
         # -------------------------------------------------------------
         # Sub-module 11.11: Compliance & Regulatory Management
         # -------------------------------------------------------------
         if AssetComplianceFramework.objects.filter(tenant=tenant).exists():
             self.stdout.write(f"[{tenant.name}] 11.11 Compliance already seeded; skipping.")
-        else:
-            cat = AssetCategory.objects.filter(tenant=tenant).first()
-            oa_primary = Asset.objects.filter(tenant=tenant).first()
-            vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+            return
 
-            with transaction.atomic():
+        today = timezone.now().date()
+        user = User.objects.filter(tenant=tenant).first()
+        cat = AssetCategory.objects.filter(tenant=tenant).first()
+        oa_primary = Asset.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
                 # 1. Compliance Framework 1: OSHA PSM
                 fw_osha = AssetComplianceFramework.objects.create(
                     tenant=tenant,
@@ -2459,12 +2465,19 @@ class Command(BaseCommand):
                     status="open",
                 )
 
-            self.stdout.write(f"[{tenant.name}] 11.11 Seeding complete (3 frameworks, 3 audits, 4 permits, 3 incidents).")
+        self.stdout.write(f"[{tenant.name}] 11.11 Seeding complete (3 frameworks, 3 audits, 4 permits, 3 incidents).")
 
+    def _seed_tenant_11_10(self, tenant):
         # =====================================================================
         # 11.10 Lease & Rental Management
         # =====================================================================
-        if not AssetLeaseContract.objects.filter(tenant=tenant).exists():
+        if AssetLeaseContract.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.10 Lease data already seeded; skipping.")
+            return
+
+        today = timezone.now().date()
+        user = User.objects.filter(tenant=tenant).first()
+        with transaction.atomic():
             lessor_party = Party.objects.filter(tenant=tenant).first()
             if not lessor_party:
                 lessor_party = Party.objects.create(
