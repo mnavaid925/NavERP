@@ -15,7 +15,7 @@
 
 ## Important
 
-- [ ] **I1: Delete Views Lack `@tenant_admin_required` (Authorization / Privilege Escalation)**
+- [x] **I1: Delete Views Lack `@tenant_admin_required` (Authorization / Privilege Escalation)** — fixed (commits 16636049, 853aa905, 05a48850, f5b53e71)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:187-190` (`asset_disposal_request_delete`)
     - `apps/assets/views/AssetDisposal/AssetResaleListings.py:190-193` (`asset_resale_listing_delete`)
