@@ -2217,6 +2217,9 @@ class Command(BaseCommand):
         user = User.objects.filter(tenant=tenant).first()
         cat = AssetCategory.objects.filter(tenant=tenant).first()
         oa_primary = Asset.objects.filter(tenant=tenant).first()
+        if not oa_primary:
+            self.stdout.write(f"[{tenant.name}] Warning: No SCM assets found; skipping 11.11 compliance seeding.")
+            return
         vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
 
         with transaction.atomic():
