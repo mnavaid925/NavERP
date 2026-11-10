@@ -63,7 +63,7 @@ class AssetInsurancePolicy(TenantNumbered):
         "machinery_breakdown": "badge-amber",
         "boiler_pressure_vessel": "badge-red",
         "inland_marine_transit": "badge-slate",
-        "business_interruption": "badge-purple",
+        "business_interruption": "badge-info",
         "commercial_auto_fleet": "badge-info",
         "comprehensive_all_risk": "badge-green",
     }
