@@ -67,7 +67,7 @@
   - **Issue**: Completed audits, settled incidents with assessed fines, and revoked/suspended permits lack status guards in view logic on delete/edit/renew.
   - **Fix**: Add view-level status validation guards preventing modification or deletion of completed audits and settled incidents with fines, and blocking renewal of revoked/suspended permits.
 
-- [ ] **I6: Missing `@tenant_admin_required` on Delete Views**
+- [x] **I6: Missing `@tenant_admin_required` on Delete Views**
   - **Files**:
     - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:161`
     - `apps/assets/views/AssetCompliance/AssetComplianceAudits.py:177`
@@ -123,7 +123,7 @@
   - **Files**: Models under `apps/assets/models/AssetCompliance/`
   - **Fix**: Add composite indexes on `(tenant, framework)` and `(tenant, applicable_category)` where needed.
 
-- [ ] **M7: Unused `tenant_admin_required` Import Cleanup**
+- [x] **M7: Unused `tenant_admin_required` Import Cleanup**
   - **Files**: All 4 view files in `apps/assets/views/AssetCompliance/`
   - **Fix**: Use the decorator for delete views (resolving I6 and M7 together).
 
