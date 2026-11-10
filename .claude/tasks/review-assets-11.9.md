@@ -53,7 +53,7 @@
   - **Issue:** Workflow action endpoints lack status validation guards, permitting out-of-order execution (e.g. appraising or rejecting already completed requests, recording bids on closed listings, or delivering equipment before sale).
   - **Fix:** Add explicit status precondition checks in each transition view.
 
-- [ ] **I5: Mass-Assignment Risk on Authorization Authority (`approved_by` / `authorized_by` in Form Meta.fields)**
+- [x] **I5: Mass-Assignment Risk on Authorization Authority (`approved_by` / `authorized_by` in Form Meta.fields)** — fixed (commits cc14694b, 29d97b32, dd661808)
   - **Location:**
     - `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py:27` (`approved_by`)
     - `apps/assets/forms/AssetDisposal/AssetTradeIns.py:25` (`authorized_by`)
