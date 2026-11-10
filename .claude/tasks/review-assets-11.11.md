@@ -115,7 +115,7 @@
     - `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py` (`fine_paid <= fine_assessed`)
   - **Fix**: Add validation logic in form `clean()` methods.
 
-- [ ] **M5: None-Safe Comparison in Permit Detail Template**
+- [x] **M5: None-Safe Comparison in Permit Detail Template**
   - **File**: `templates/assets/assetcompliance/asset_permit_license/detail.html:152`
   - **Fix**: Guard with `{% if permit.days_to_expiration is not None and permit.days_to_expiration < 0 %}`.
 
