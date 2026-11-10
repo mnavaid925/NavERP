@@ -97,7 +97,8 @@ def asset_lease_schedule_create(request):
     initial = {}
     lease_param = request.GET.get("lease")
     if lease_param and lease_param.isdigit():
-        initial["lease_contract"] = int(lease_param)
+        lease_obj = assets_object(request, AssetLeaseContract, int(lease_param))
+        initial["lease_contract"] = lease_obj.pk
 
     if request.method == "POST":
         form = AssetLeaseScheduleForm(request.POST, tenant=request.tenant)
