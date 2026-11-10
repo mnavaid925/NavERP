@@ -139,7 +139,7 @@
   - **Issue:** Accessing `dr.fixed_asset.pk` triggers lazy model instantiation when `dr.fixed_asset_id` is already loaded.
   - **Fix:** Use `dr.fixed_asset_id` and `dr.operational_asset_id`.
 
-- [ ] **M6: `AssetDisposalAppraisalForm` Initializer Signature**
+- [x] **M6: `AssetDisposalAppraisalForm` Initializer Signature** — fixed (commit 300de5fb)
   - **Location:** `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py:133`
   - **Issue:** Positional `tenant` argument without default breaks standard Django form conventions.
   - **Fix:** Change signature to `def __init__(self, tenant=None, *args, **kwargs):`.
