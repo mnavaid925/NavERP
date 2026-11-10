@@ -11,7 +11,7 @@
 
 ### Critical
 
-- [ ] **C1: Broken `write_audit_log` Call Signature Across All 17 View Call Sites (HTTP 500 on all POST actions)**
+- [x] **C1: Broken `write_audit_log` Call Signature Across All 17 View Call Sites (HTTP 500 on all POST actions)**
   - **Files**:
     - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:106, 137, 168`
     - `apps/assets/views/AssetCompliance/AssetComplianceAudits.py:118, 153, 183, 202, 224`
