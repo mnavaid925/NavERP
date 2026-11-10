@@ -46,6 +46,6 @@
 - [x] **M9**: Accessibility improvements in templates (`templates/assets/assetleaserental/`). Add `aria-label` to filter inputs and action icon buttons, add `scope="col"` to table header cells.
 - [x] **M10**: Dark mode contrast styling in cards and detail sections (`templates/assets/assetleaserental/`). Add `dark:text-slate-100`, `dark:bg-slate-800`, `dark:border-slate-700` to detail templates.
 - [x] **M11**: Large text fields not deferred in modification and buy-analysis list views (`apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py:22-30`, `AssetLeaseBuyAnalyses.py:22-26`). Apply `.defer(...)` to unused large text columns.
-- [ ] **M12**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
+- [x] **M12**: Unused `category` foreign-key join in `AssetLeaseBuyAnalysis` detail view (`apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py:89`). Remove unused `category` from `select_related`.
 - [ ] **M13**: Unchecked state transition in `asset_lease_contract_terminate` (`apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py:251-271`). Guard `if lease.status not in ["active", "modified"]:` returning a warning message.
 - [ ] **M14**: Form status exposure allowing direct "executed" bypass in `AssetLeaseModificationForm` (`apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py:29`). Restrict selectable status choices to `("draft", "submitted")` or default to `"draft"`.
