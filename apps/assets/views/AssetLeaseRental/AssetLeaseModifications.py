@@ -190,6 +190,10 @@ def asset_lease_modification_delete(request, pk):
     modification = assets_object(request, AssetLeaseModification, pk)
     num = modification.number
     contract_pk = modification.lease_contract_id
+    if modification.status == "executed":
+        messages.warning(request, f"Cannot delete modification {num} because it has already been executed.")
+        return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
+
     write_audit_log(
         request.user,
         modification,
