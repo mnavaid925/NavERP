@@ -124,12 +124,11 @@ def asset_lease_contract_create(request):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "created",
-                    "AssetLeaseContract",
-                    instance.pk,
-                    f"Created lease contract {instance.number} ({instance.title})",
+                    instance,
+                    "create",
+                    changes=f"Created lease contract {instance.number} ({instance.title})",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease contract {instance.number} created successfully.")
@@ -158,12 +157,11 @@ def asset_lease_contract_edit(request, pk):
                 instance.save()
 
                 write_audit_log(
-                    request.tenant,
                     request.user,
-                    "updated",
-                    "AssetLeaseContract",
-                    instance.pk,
-                    f"Updated lease contract {instance.number}",
+                    instance,
+                    "update",
+                    changes=f"Updated lease contract {instance.number}",
+                    tenant=request.tenant,
                 )
 
                 messages.success(request, f"Lease contract {instance.number} updated successfully.")
@@ -183,16 +181,14 @@ def asset_lease_contract_edit(request, pk):
 def asset_lease_contract_delete(request, pk):
     lease = assets_object(request, AssetLeaseContract, pk)
     num = lease.number
-    lease.delete()
-
     write_audit_log(
-        request.tenant,
         request.user,
-        "deleted",
-        "AssetLeaseContract",
-        pk,
-        f"Deleted lease contract {num}",
+        lease,
+        "delete",
+        changes=f"Deleted lease contract {num}",
+        tenant=request.tenant,
     )
+    lease.delete()
     messages.success(request, f"Lease contract {num} was deleted.")
     return redirect("assets:asset_lease_contract_list")
 
@@ -231,12 +227,11 @@ def asset_lease_contract_activate(request, pk):
         count = lease.generate_amortization_schedule()
 
         write_audit_log(
-            request.tenant,
             request.user,
-            "activated",
-            "AssetLeaseContract",
-            lease.pk,
-            f"Activated lease contract {lease.number} and generated {count} payment schedule rows",
+            lease,
+            "activate",
+            changes=f"Activated lease contract {lease.number} and generated {count} payment schedule rows",
+            tenant=request.tenant,
         )
 
         messages.success(
@@ -260,12 +255,11 @@ def asset_lease_contract_terminate(request, pk):
 
     lease.save()
     write_audit_log(
-        request.tenant,
         request.user,
-        "terminated",
-        "AssetLeaseContract",
-        lease.pk,
-        msg,
+        lease,
+        "terminate",
+        changes=msg,
+        tenant=request.tenant,
     )
     messages.success(request, msg)
     return redirect("assets:asset_lease_contract_detail", pk=lease.pk)
