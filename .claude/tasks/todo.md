@@ -7,6 +7,239 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.9: Asset Disposal & Retirement (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.9.md` (2026-11-10)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, and 11.7.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0011_assetcalibrationrecord_idx_acal_ten_cdate_and_more.py` (from 11.7), so **11.9 claims `0012_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.9.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetDisposal/<Entity>.py`
+> Template folder name: `templates/assets/assetdisposal/{asset_disposal_request,asset_resale_listing,asset_trade_in,asset_scrap_salvage}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Disposal & Retirement Multi-Tenant Base & Isolation (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Financial Fixed Asset Register Spine (`accounting.FixedAsset` [FA-]): Links to the master financial register in `apps/accounting` via string FK (`"accounting.FixedAsset"`), maintaining direct continuity between financial capital assets and operational retirement workflows.
+  - Authoritative Financial Disposal Subledger (`accounting.AssetDisposal` [DISP-]): Links to the financial disposal journal entry subledger in `apps/accounting` via string FK (`"accounting.AssetDisposal"`), allowing GL journal posting synchronization upon final disposal completion.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational machinery and runtime equipment master in `apps/scm` via string FK (`"scm.Asset"`), supporting plant machinery decommissioning, status updates (`planned`, `in_service`, `under_maintenance`, `standby`, `idle`, `retired`, `disposed`), and maintenance decoupling.
+  - Asset Taxonomy Integration: Reuses `"assets.AssetCategory"` [ACAT-] for category-level disposal categorization and reporting.
+  - Replacement Procurement Requisition Spine: Reuses `"assets.AssetRequisition"` [AREQ-] to link and directly offset trade-in allowance credits against active capital purchase requisitions.
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for external equipment buyers, auctioneers/brokers, OEM equipment dealers, certified scrap yards, ITAD recyclers, and hazardous waste transporters.
+    - Reuses `"core.Document"` for attached digital compliance documents: Bills of Sale, dealer trade-in agreements, EPA Uniform Hazardous Waste Manifests, and certified Certificates of Destruction (CoD).
+    - Reuses `"core.OrgUnit"` for the asset holding facility, workshop, or department cost center.
+    - Reuses `settings.AUTH_USER_MODEL` for internal initiators, asset appraisers, authorizing executive officers, remarketing managers, teardown supervisors, and EHS compliance verifiers.
+  - Collision-free 4-character uppercase prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetDisposalRequest` -> `NUMBER_PREFIX = "ADSP"` (format: `ADSP-YYYYMM-XXXX`)
+    - `AssetResaleListing` -> `NUMBER_PREFIX = "ARSL"` (format: `ARSL-YYYYMM-XXXX`)
+    - `AssetTradeIn` -> `NUMBER_PREFIX = "ATRD"` (format: `ATRD-YYYYMM-XXXX`)
+    - `AssetScrapSalvage` -> `NUMBER_PREFIX = "ASCR"` (format: `ASCR-YYYYMM-XXXX`)
+  - Operational Scope & Feature Mapping:
+    - `AssetDisposalRequest` [ADSP-]:
+      - Domain Purpose: Central governance and multi-tier authorization spine for asset retirements (NavERP.md Bullet 1: Disposal Request & Approval).
+      - Identity & Asset Links: `fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.CASCADE, related_name="disposal_requests"), `operational_asset` (FK `"scm.Asset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="disposal_requests"), `category` (FK `"assets.AssetCategory"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="disposal_requests"), `cost_center` (FK `"core.OrgUnit"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_disposal_requests"), `requested_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="requested_asset_disposals"), `appraised_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="appraised_asset_disposals"), `approved_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_asset_disposals"), `accounting_disposal` (FK `"accounting.AssetDisposal"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_disposal_requests").
+      - Scope & Justification: `title` (CharField max_length=255), `disposal_method` (CharField max_length=24, choices: `resale`, `trade_in`, `scrap_salvage`, `donation`, `write_off_loss`, default `resale`), `retirement_reason` (CharField max_length=32, choices: `end_of_life`, `uneconomical_repair`, `technological_obsolescence`, `damaged_accident`, `lease_expired`, `redundant_surplus`, `regulatory_compliance`, `other`, default `end_of_life`), `justification_notes` (TextField).
+      - Financial Evaluation: `acquisition_cost` (DecimalField max_digits=16, decimal_places=2, default=0.00), `accumulated_depreciation` (DecimalField max_digits=16, decimal_places=2, default=0.00), `net_book_value` (DecimalField max_digits=16, decimal_places=2, default=0.00), `estimated_residual_value` (DecimalField max_digits=16, decimal_places=2, default=0.00), `estimated_removal_cost` (DecimalField max_digits=16, decimal_places=2, default=0.00), `actual_gross_proceeds` (DecimalField max_digits=16, decimal_places=2, default=0.00), `actual_removal_cost` (DecimalField max_digits=16, decimal_places=2, default=0.00), `realized_gain_loss` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Status & Lifecycle: `status` (CharField max_length=24, choices: `draft`, `submitted`, `appraised`, `approved`, `in_progress`, `completed`, `rejected`, `cancelled`, default `draft`), `submitted_at` (DateTimeField null=True, blank=True), `approved_at` (DateTimeField null=True, blank=True), `completed_at` (DateTimeField null=True, blank=True), `rejection_reason` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `submitted -> badge-amber`, `appraised -> badge-info`, `approved -> badge-green`, `in_progress -> badge-info`, `completed -> badge-green`, `rejected -> badge-red`, `cancelled -> badge-muted`.
+      - Disposal Method / Badge CSS: `resale -> badge-info`, `trade_in -> badge-green`, `scrap_salvage -> badge-amber`, `donation -> badge-slate`, `write_off_loss -> badge-red`.
+      - Retirement Reason / Badge CSS: `end_of_life -> badge-slate`, `uneconomical_repair -> badge-amber`, `technological_obsolescence -> badge-info`, `damaged_accident -> badge-red`, `lease_expired -> badge-slate`, `redundant_surplus -> badge-muted`, `regulatory_compliance -> badge-amber`, `other -> badge-slate`.
+      - Business Logic & Actions:
+        - `asset_disposal_request_submit`: transitions `draft -> submitted`, sets `submitted_at = timezone.now()`.
+        - `asset_disposal_request_appraise`: records appraiser appraisal, updates `estimated_residual_value`, transitions `submitted -> appraised`.
+        - `asset_disposal_request_approve`: executive authorization, transitions `appraised -> approved`, sets `approved_at = timezone.now()`.
+        - `asset_disposal_request_reject`: transitions to `rejected`, records `rejection_reason`.
+        - `asset_disposal_request_complete`: completes retirement, sets `completed_at = timezone.now()`, updates `accounting.FixedAsset.status = 'disposed'`, advances `scm.Asset.status = 'disposed'`, recalculates `realized_gain_loss = actual_gross_proceeds - actual_removal_cost - net_book_value`, and transitions to `completed`.
+      - Form exclusions: `tenant`, `number`, `status`, `accounting_disposal`, `actual_gross_proceeds`, `actual_removal_cost`, `realized_gain_loss`, `submitted_at`, `approved_at`, `completed_at`, `rejection_reason`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `disposal_requests`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `method_choices`, `reason_choices`, `category_list`, `total_requests`, `pending_approval_count`, `in_progress_count`, `completed_count`, `total_gain_loss`.
+        - Detail: `disposal_request`, `resale_listings`, `trade_ins`, `scrap_salvages`.
+    - `AssetResaleListing` [ARSL-]:
+      - Domain Purpose: Governs secondary market remarketing, auction lots, bidding negotiations, and sales proceeds (NavERP.md Bullet 2: Asset Resale & Auction).
+      - Identity & Asset Links: `disposal_request` (FK `"assets.AssetDisposalRequest"`, on_delete=models.CASCADE, related_name="resale_listings"), `fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.CASCADE, related_name="resale_listings"), `buyer` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="purchased_asset_listings"), `broker_auctioneer` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="brokered_asset_listings"), `managed_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="managed_resale_listings"), `bill_of_sale_document` (FK `"core.Document"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="resale_bills_of_sale").
+      - Market Listing Data: `listing_channel` (CharField max_length=24, choices: `public_auction`, `private_treaty`, `online_marketplace`, `employee_sale`, `dealer_wholesale`, default `public_auction`), `listing_reference` (CharField max_length=100 blank=True), `listing_date` (DateField default=timezone.now), `closing_date` (DateField null=True, blank=True), `reserve_price` (DecimalField max_digits=16, decimal_places=2, default=0.00), `asking_price` (DecimalField max_digits=16, decimal_places=2, default=0.00), `highest_bid_amount` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Buyer Contact Info: `buyer_contact_name` (CharField max_length=150 blank=True), `buyer_contact_email` (CharField max_length=254 blank=True), `buyer_contact_phone` (CharField max_length=50 blank=True).
+      - Financial Settlement: `gross_sale_proceeds` (DecimalField max_digits=16, decimal_places=2, default=0.00), `commission_rate_percent` (DecimalField max_digits=5, decimal_places=2, default=0.00), `commission_amount` (DecimalField max_digits=16, decimal_places=2, default=0.00), `tax_amount` (DecimalField max_digits=16, decimal_places=2, default=0.00), `net_sale_proceeds` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Execution & Status: `status` (CharField max_length=24, choices: `draft`, `listed`, `bid_received`, `negotiation`, `sold`, `payment_received`, `delivered`, `unsold_withdrawn`, `cancelled`, default `draft`), `payment_status` (CharField max_length=20, choices: `pending`, `partial`, `paid`, `waived`, default `pending`), `payment_date` (DateField null=True, blank=True), `pickup_delivery_date` (DateField null=True, blank=True), `terms_and_conditions` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `listed -> badge-info`, `bid_received -> badge-amber`, `negotiation -> badge-amber`, `sold -> badge-green`, `payment_received -> badge-green`, `delivered -> badge-green`, `unsold_withdrawn -> badge-muted`, `cancelled -> badge-red`.
+      - Listing Channel / Badge CSS: `public_auction -> badge-info`, `private_treaty -> badge-slate`, `online_marketplace -> badge-info`, `employee_sale -> badge-green`, `dealer_wholesale -> badge-slate`.
+      - Payment Status / Badge CSS: `pending -> badge-amber`, `partial -> badge-amber`, `paid -> badge-green`, `waived -> badge-muted`.
+      - Business Logic & Actions:
+        - `asset_resale_listing_record_bid`: records highest received bid and prospective bidder party, advances `draft/listed -> bid_received`.
+        - `asset_resale_listing_accept_sale`: locks winning sale offer, computes `commission_amount = gross_sale_proceeds * (commission_rate_percent / 100)` and `net_sale_proceeds = gross_sale_proceeds - commission_amount`, transitions to `sold`.
+        - `asset_resale_listing_mark_paid`: records payment confirmation, sets `payment_status = 'paid'`, `payment_date = timezone.now().date()`, and synchronizes proceeds to parent `AssetDisposalRequest.actual_gross_proceeds`.
+        - `asset_resale_listing_mark_delivered`: marks equipment picked up / freight dispatched, sets `pickup_delivery_date = timezone.now().date()`, transitions to `delivered`.
+      - Form exclusions: `tenant`, `number`, `status`, `payment_status`, `payment_date`, `pickup_delivery_date`, `commission_amount`, `net_sale_proceeds`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `resale_listings`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `channel_choices`, `payment_status_choices`, `total_listings`, `active_listings_count`, `sold_count`, `total_realized_proceeds`.
+        - Detail: `resale_listing`.
+    - `AssetTradeIn` [ATRD-]:
+      - Domain Purpose: Governs dealer trade-in valuations, allowance credits, replacement requisition offsets, and exchange contracts (NavERP.md Bullet 3: Trade-in & Exchange Programs).
+      - Identity & Asset Links: `disposal_request` (FK `"assets.AssetDisposalRequest"`, on_delete=models.CASCADE, related_name="trade_ins"), `retired_fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.CASCADE, related_name="trade_ins_retired"), `vendor` (FK `"core.Party"`, on_delete=models.PROTECT, related_name="asset_trade_in_vendors"), `replacement_requisition` (FK `"assets.AssetRequisition"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="trade_ins"), `replacement_fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="trade_ins_replacement"), `authorized_by` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="authorized_asset_trade_ins"), `agreement_document` (FK `"core.Document"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="trade_in_agreements").
+      - Agreement & Timing: `agreement_number` (CharField max_length=100 blank=True), `agreement_date` (DateField default=timezone.now), `handover_due_date` (DateField null=True, blank=True).
+      - Valuation & Pricing: `dealer_appraised_value` (DecimalField max_digits=16, decimal_places=2, default=0.00), `trade_in_allowance` (DecimalField max_digits=16, decimal_places=2, default=0.00), `over_allowance_amount` (DecimalField max_digits=16, decimal_places=2, default=0.00), `net_credit_applied` (DecimalField max_digits=16, decimal_places=2, default=0.00), `replacement_asset_cost` (DecimalField max_digits=16, decimal_places=2, default=0.00), `net_cash_outflow` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Tax & Accounting: `like_kind_exchange` (BooleanField default=False), `gain_loss_deferred` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Status & Surrender: `status` (CharField max_length=24, choices: `draft`, `proposed`, `negotiated`, `accepted`, `equipment_surrendered`, `credit_settled`, `rejected`, `cancelled`, default `draft`), `surrendered_at` (DateTimeField null=True, blank=True), `settled_at` (DateTimeField null=True, blank=True), `notes` (TextField blank=True).
+      - Status / Badge CSS: `draft -> badge-slate`, `proposed -> badge-amber`, `negotiated -> badge-info`, `accepted -> badge-info`, `equipment_surrendered -> badge-amber`, `credit_settled -> badge-green`, `rejected -> badge-red`, `cancelled -> badge-muted`.
+      - Like-Kind Exchange / Badge CSS: `True -> badge-info`, `False -> badge-slate`.
+      - Business Logic & Actions:
+        - Auto-computes `net_credit_applied = trade_in_allowance + over_allowance_amount` and `net_cash_outflow = max(Decimal('0.00'), replacement_asset_cost - net_credit_applied)`.
+        - `asset_trade_in_surrender`: logs equipment surrender timestamp, transitions status to `equipment_surrendered`.
+        - `asset_trade_in_settle`: confirms credit applied, transitions status to `credit_settled`, sets `settled_at = timezone.now()`, and updates parent `AssetDisposalRequest.actual_gross_proceeds` with the net trade credit.
+      - Form exclusions: `tenant`, `number`, `status`, `net_credit_applied`, `net_cash_outflow`, `surrendered_at`, `settled_at`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `trade_ins`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `vendor_list`, `total_trade_ins`, `pending_handover_count`, `settled_count`, `total_trade_credit`.
+        - Detail: `trade_in`.
+    - `AssetScrapSalvage` [ASCR-]:
+      - Domain Purpose: Governs physical machinery teardown, recyclable scrap metal weight recovery, hazardous waste abatement, salvage proceeds, and Certificate of Destruction (CoD) compliance (NavERP.md Bullets 4 & 5: Scrap & Salvage Management & Disposal Documentation & Compliance).
+      - Identity & Asset Links: `disposal_request` (FK `"assets.AssetDisposalRequest"`, on_delete=models.CASCADE, related_name="scrap_salvages"), `fixed_asset` (FK `"accounting.FixedAsset"`, on_delete=models.CASCADE, related_name="scrap_salvages"), `operational_asset` (FK `"scm.Asset"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="scrap_salvages"), `recycler_partner` (FK `"core.Party"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_scrap_recyclers"), `supervisor` (FK `settings.AUTH_USER_MODEL`, on_delete=models.SET_NULL, null=True, blank=True, related_name="supervised_asset_scraps"), `certificate_of_destruction` (FK `"core.Document"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="scrap_destruction_certificates"), `hazardous_manifest_doc` (FK `"core.Document"`, on_delete=models.SET_NULL, null=True, blank=True, related_name="scrap_hazardous_manifests").
+      - Decommissioning Method & Timing: `scrap_method` (CharField max_length=32, choices: `physical_destruction`, `dismantling_parts_recovery`, `shredding_recycling`, `e_waste_itad`, `hazardous_waste_abatement`, default `dismantling_parts_recovery`), `decommissioning_date` (DateField default=timezone.now), `completion_date` (DateField null=True, blank=True).
+      - Material Weights & Salvage Proceeds: `total_scrap_weight_kg` (DecimalField max_digits=12, decimal_places=2, default=0.00), `ferrous_weight_kg` (DecimalField max_digits=12, decimal_places=2, default=0.00), `non_ferrous_weight_kg` (DecimalField max_digits=12, decimal_places=2, default=0.00), `e_waste_weight_kg` (DecimalField max_digits=12, decimal_places=2, default=0.00), `salvage_proceeds` (DecimalField max_digits=16, decimal_places=2, default=0.00), `dismantling_cost` (DecimalField max_digits=16, decimal_places=2, default=0.00), `net_salvage_recovery` (DecimalField max_digits=16, decimal_places=2, default=0.00).
+      - Hazardous Waste & Environmental: `has_hazardous_materials` (BooleanField default=False), `hazardous_waste_class` (CharField max_length=50 blank=True), `epa_manifest_number` (CharField max_length=100 blank=True), `abatement_certified` (BooleanField default=False), `abatement_date` (DateField null=True, blank=True).
+      - ITAD & Data Sanitization: `data_sanitized` (BooleanField default=False), `sanitization_method` (CharField max_length=30, choices: `none`, `nist_clear`, `nist_purge`, `dod_5220_wipe`, `physical_shredding`, `crypto_erase`, default `none`), `sanitization_verified_by` (CharField max_length=150 blank=True).
+      - Certificate of Destruction: `cod_number` (CharField max_length=100 blank=True), `cod_issue_date` (DateField null=True, blank=True), `cod_issuing_agency` (CharField max_length=150 blank=True).
+      - Chain of Custody & Logistics: `carrier_name` (CharField max_length=150 blank=True), `bill_of_lading_number` (CharField max_length=100 blank=True), `notes` (TextField blank=True).
+      - Status & Lifecycle: `status` (CharField max_length=24, choices: `draft`, `dismantling`, `abatement_in_progress`, `scrap_transferred`, `certified_destroyed`, `settled`, `cancelled`, default `draft`).
+      - Status / Badge CSS: `draft -> badge-slate`, `dismantling -> badge-amber`, `abatement_in_progress -> badge-amber`, `scrap_transferred -> badge-info`, `certified_destroyed -> badge-green`, `settled -> badge-green`, `cancelled -> badge-red`.
+      - Scrap Method / Badge CSS: `physical_destruction -> badge-red`, `dismantling_parts_recovery -> badge-info`, `shredding_recycling -> badge-slate`, `e_waste_itad -> badge-info`, `hazardous_waste_abatement -> badge-amber`.
+      - Hazardous Materials / Badge CSS: `True -> badge-red`, `False -> badge-green`.
+      - Abatement Certified / Badge CSS: `True -> badge-green`, `False -> badge-amber`.
+      - Data Sanitized / Badge CSS: `True -> badge-green`, `False -> badge-slate`.
+      - Sanitization Method / Badge CSS: `none -> badge-slate`, `nist_clear -> badge-info`, `nist_purge -> badge-green`, `dod_5220_wipe -> badge-green`, `physical_shredding -> badge-red`, `crypto_erase -> badge-info`.
+      - Business Logic & Actions:
+        - Auto-computes `net_salvage_recovery = salvage_proceeds - dismantling_cost`.
+        - `asset_scrap_salvage_certify_abatement`: sets `abatement_certified = True`, `abatement_date = timezone.now().date()`, transitions to `scrap_transferred`.
+        - `asset_scrap_salvage_record_cod`: records CoD number and issuing agency, transitions to `certified_destroyed`.
+        - `asset_scrap_salvage_settle`: computes net salvage recovery, sets `completion_date = timezone.now().date()`, transitions to `settled`, and updates parent `AssetDisposalRequest.actual_gross_proceeds` with `salvage_proceeds` and `actual_removal_cost` with `dismantling_cost`.
+      - Form exclusions: `tenant`, `number`, `status`, `net_salvage_recovery`, `abatement_date`, `completion_date`, `created_at`, `updated_at`.
+      - View context keys:
+        - List: `scrap_salvages`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `scrap_method_choices`, `recycler_list`, `total_scraps`, `in_progress_count`, `certified_destroyed_count`, `total_salvage_proceeds`, `total_weight_recovered`.
+        - Detail: `scrap_salvage`.
+  - Audit logging: All creates, updates, status transitions, and actions write to `core.AuditLog` via `write_audit_log(request.user, instance, "create"|"update"|"delete", tenant=request.tenant)` (L66 compliance).
+- **Prefix Collision Sweep**: `ADSP` (AssetDisposalRequest), `ARSL` (AssetResaleListing), `ATRD` (AssetTradeIn), `ASCR` (AssetScrapSalvage) verified 100% collision-free repository-wide.
+- **Index Constraints & Length (L65)**: All index names <= 30 chars (`idx_adsp_ten_stat`, `idx_adsp_ten_meth`, `idx_adsp_ten_subm`, `idx_adsp_ten_fa`, `idx_arsl_ten_stat`, `idx_arsl_ten_chan`, `idx_arsl_ten_ldate`, `idx_atrd_ten_stat`, `idx_atrd_ten_adate`, `idx_atrd_ten_vend`, `idx_ascr_ten_stat`, `idx_ascr_ten_meth`, `idx_ascr_ten_dcdate`, `idx_ascr_ten_haz`).
+- **Choice Field Lengths (L65)**: All `CharField` `max_length` strictly >= longest choice value (e.g., `technological_obsolescence` = 26 <= 32; `dismantling_parts_recovery` = 26 <= 32; `hazardous_waste_abatement` = 25 <= 32; `equipment_surrendered` = 21 <= 24; `certified_destroyed` = 19 <= 24).
+
+---
+
+## 11.9-0 - Non-goals, pinned so later passes cannot "helpfully" add them
+- [ ] **NO real-time commodity scrap metal pricing API daemons** — Scrap metal rates (ferrous, non-ferrous, e-waste) are recorded per agreed transaction/weigh ticket; live API sync to London Metal Exchange (LME) or American Metal Market (AMM) is not required for core ERP disposition.
+- [ ] **NO automated online auction bid sniping / real-time auction websocket bots** — Secondary market sales are conducted via commercial auctioneers (Ritchie Bros, IronPlanet) or recorded as negotiated private treaty sales. NavERP acts as the authoritative enterprise system of record.
+- [ ] **NO direct EPA RCRAInfo e-Manifest national clearinghouse XML transmission** — NavERP records EPA manifest tracking numbers, transporter IDs, and document attachments; external cryptographic federal clearinghouse API integration is customer/jurisdiction-specific.
+- [ ] **NO client-side PXE boot disk sanitization hardware engines** — Data sanitization compliance records NIST SP 800-88 / DoD 5220.22-M methods, technician verification, and destruction certificates; bare-metal erasure is executed by external ITAD utilities (Blancco, DBAN).
+- [ ] **NO duplicate GL journal entry calculation engine** — Financial disposal gain/loss and general ledger posting reuse `accounting.AssetDisposal` [DISP-] in `apps/accounting`.
+
+---
+
+## Sub-module 11.9 Implementation Checklist
+
+### Phase 3.1: Spec & Contract
+- [ ] Freeze contract in `.claude/tasks/contract-assets-11.9.md` with exact model fields, forms, url names, context keys, choices, badges, and permissions
+
+### Phase 3.2: Scaffold (SKIPPED — App Already Exists)
+- [ ] App `apps/assets` already scaffolded in 11.1
+
+### Phase 3.3: Entity by Entity Build (Strictly Serial)
+- [ ] **Entity 1: AssetDisposalRequest (`ADSP`)**
+  - [ ] `apps/assets/models/AssetDisposal/AssetDisposalRequests.py`
+  - [ ] `apps/assets/forms/AssetDisposal/AssetDisposalRequests.py`
+  - [ ] `apps/assets/views/AssetDisposal/AssetDisposalRequests.py` (CRUD + submit + appraise + approve + reject + complete)
+  - [ ] `apps/assets/urls/AssetDisposal/AssetDisposalRequests.py`
+  - [ ] `templates/assets/assetdisposal/asset_disposal_request/list.html`
+  - [ ] `templates/assets/assetdisposal/asset_disposal_request/detail.html`
+  - [ ] `templates/assets/assetdisposal/asset_disposal_request/form.html`
+- [ ] **Entity 2: AssetResaleListing (`ARSL`)**
+  - [ ] `apps/assets/models/AssetDisposal/AssetResaleListings.py`
+  - [ ] `apps/assets/forms/AssetDisposal/AssetResaleListings.py`
+  - [ ] `apps/assets/views/AssetDisposal/AssetResaleListings.py` (CRUD + record_bid + accept_sale + mark_paid + mark_delivered)
+  - [ ] `apps/assets/urls/AssetDisposal/AssetResaleListings.py`
+  - [ ] `templates/assets/assetdisposal/asset_resale_listing/list.html`
+  - [ ] `templates/assets/assetdisposal/asset_resale_listing/detail.html`
+  - [ ] `templates/assets/assetdisposal/asset_resale_listing/form.html`
+- [ ] **Entity 3: AssetTradeIn (`ATRD`)**
+  - [ ] `apps/assets/models/AssetDisposal/AssetTradeIns.py`
+  - [ ] `apps/assets/forms/AssetDisposal/AssetTradeIns.py`
+  - [ ] `apps/assets/views/AssetDisposal/AssetTradeIns.py` (CRUD + surrender + settle)
+  - [ ] `apps/assets/urls/AssetDisposal/AssetTradeIns.py`
+  - [ ] `templates/assets/assetdisposal/asset_trade_in/list.html`
+  - [ ] `templates/assets/assetdisposal/asset_trade_in/detail.html`
+  - [ ] `templates/assets/assetdisposal/asset_trade_in/form.html`
+- [ ] **Entity 4: AssetScrapSalvage (`ASCR`)**
+  - [ ] `apps/assets/models/AssetDisposal/AssetScrapSalvages.py`
+  - [ ] `apps/assets/forms/AssetDisposal/AssetScrapSalvages.py`
+  - [ ] `apps/assets/views/AssetDisposal/AssetScrapSalvages.py` (CRUD + certify_abatement + record_cod + settle)
+  - [ ] `apps/assets/urls/AssetDisposal/AssetScrapSalvages.py`
+  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/list.html`
+  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/detail.html`
+  - [ ] `templates/assets/assetdisposal/asset_scrap_salvage/form.html`
+
+### Phase 3.4: Integrate (Single Writer)
+- [ ] Re-export all 4 models in `apps/assets/models/AssetDisposal/__init__.py` and `apps/assets/models/__init__.py`
+- [ ] Re-export all 4 forms in `apps/assets/forms/AssetDisposal/__init__.py` and `apps/assets/forms/__init__.py`
+- [ ] Re-export all views in `apps/assets/views/AssetDisposal/__init__.py` and `apps/assets/views/__init__.py`
+- [ ] Re-export all urls in `apps/assets/urls/AssetDisposal/__init__.py` and `apps/assets/urls/__init__.py`
+- [ ] Register 4 models in `apps/assets/admin.py`
+- [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent demo data for 11.9 models (`_seed_tenant_11_9`)
+- [ ] Add `LIVE_LINKS["11.9"]` in `apps/core/navigation.py`:
+  - `"Disposal Request & Approval"`: `assets:asset_disposal_request_list`
+  - `"Asset Resale & Auction"`: `assets:asset_resale_listing_list`
+  - `"Trade-in & Exchange Programs"`: `assets:asset_trade_in_list`
+  - `"Scrap & Salvage Management"`: `assets:asset_scrap_salvage_list`
+  - `"Disposal Documentation & Compliance"`: `assets:asset_scrap_salvage_list`
+  - Plural & convenience aliases:
+    - `"Disposal Requests"`: `assets:asset_disposal_request_list`
+    - `"Asset Disposal Requests"`: `assets:asset_disposal_request_list`
+    - `"Asset Resale"`: `assets:asset_resale_listing_list`
+    - `"Resale & Auctions"`: `assets:asset_resale_listing_list`
+    - `"Resale Listings"`: `assets:asset_resale_listing_list`
+    - `"Trade-Ins"`: `assets:asset_trade_in_list`
+    - `"Asset Trade-Ins"`: `assets:asset_trade_in_list`
+    - `"Trade-in Programs"`: `assets:asset_trade_in_list`
+    - `"Scrap & Salvage"`: `assets:asset_scrap_salvage_list`
+    - `"Asset Scrap & Salvage"`: `assets:asset_scrap_salvage_list`
+    - `"Certificates of Destruction"`: `assets:asset_scrap_salvage_list`
+    - `"Disposal Compliance"`: `assets:asset_scrap_salvage_list`
+    - `"Asset Disposal & Retirement"`: `assets:asset_disposal_request_list`
+- [ ] Run `makemigrations assets` (claiming `0012_...`) & `migrate`
+- [ ] Run `seed_assets` twice to verify idempotency
+- [ ] Run `manage.py check`
+
+### Phase 3.5: Smoke Test
+- [ ] Create `temp/smoke_11_9.py` and run thorough smoke checks (status 200/302, content assertions, IDOR 404, filters, actions)
+
+### Phase 4: Six Reviewers (Strictly Serial)
+- [ ] 1. Code Reviewer
+- [ ] 2. Explorer (Contract Compliance)
+- [ ] 3. Frontend Reviewer
+- [ ] 4. Performance Reviewer
+- [ ] 5. QA Smoke Tester
+- [ ] 6. Security Reviewer
+- [ ] Consolidate and deduplicate findings in `.claude/tasks/review-assets-11.9.md`
+
+### Phase 5: Code Fixer
+- [ ] Fix all Critical, Important, and Minor findings in ID order, committing one file per commit
+
+### Phase 6: Tests (Strictly Serial)
+- [ ] Extend fixtures in `apps/assets/tests/conftest.py`
+- [ ] `test_asset_disposal_models.py`
+- [ ] `test_asset_disposal_forms.py`
+- [ ] `test_asset_disposal_views.py`
+- [ ] `test_asset_disposal_security.py`
+- [ ] Run full unfiltered test suite: `pytest apps/assets/tests/`
+
+### Phase 7: Skill & Close-Out
+- [ ] Update dedicated skill `.claude/skills/assets/SKILL.md`
+- [ ] Update `README.md` marking 11.9 complete
+- [ ] Document review and close-out in `.claude/tasks/todo.md`
+- [ ] Document any incomplete scope or gaps in `.agents/tasks/gaps-assets-11.9.md`
+
+## Later passes / deferred (Parked from research)
+- Live scrap metal commodity index API sync (London Metal Exchange / AMM)
+- Real-time automated online auction bid sniping / proxy bidding websockets
+- Federal EPA e-Manifest RCRAInfo XML clearinghouse direct electronic submission
+- Bare-metal PXE boot drive wiping appliance operating system
+
+---
 # Sub-module 11.7: Asset Reliability & Condition Monitoring (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.7.md` (2026-11-09)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1, 11.2, 11.3, 11.4, 11.5, and 11.6.
