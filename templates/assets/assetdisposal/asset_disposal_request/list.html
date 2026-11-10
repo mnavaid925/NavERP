@@ -56,7 +56,7 @@
 <!-- Filters Card -->
 <div class="card mb-6">
     <div class="card-body">
-        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-7 gap-3">
             <div class="md:col-span-2">
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, title, asset tag..." class="form-input">
             </div>
@@ -73,6 +73,14 @@
                     <option value="">All Methods</option>
                     {% for val, label in method_choices %}
                     <option value="{{ val }}" {% if request.GET.disposal_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="retirement_reason" class="form-select">
+                    <option value="">All Reasons</option>
+                    {% for val, label in reason_choices %}
+                    <option value="{{ val }}" {% if request.GET.retirement_reason == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -184,11 +192,11 @@
                 </div>
                 <div class="flex gap-1">
                     {% if page_obj.has_previous %}
-                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.retirement_reason %}&retirement_reason={{ request.GET.retirement_reason }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
                     {% endif %}
                     <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
                     {% if page_obj.has_next %}
-                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.disposal_method %}&disposal_method={{ request.GET.disposal_method }}{% endif %}{% if request.GET.retirement_reason %}&retirement_reason={{ request.GET.retirement_reason }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
                     {% endif %}
                 </div>
             </div>
