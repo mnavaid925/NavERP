@@ -1810,13 +1810,13 @@ def insurance_claim_b(db, tenant_b, insurance_policy_b, fixed_asset_b, operation
 # ==========================================
 
 @pytest.fixture
-def disposal_request_a(db, tenant_a, fixed_asset_a, operational_asset_a, category_a, admin_user):
+def disposal_request_a(db, tenant_a, fixed_asset_a, operational_asset_a, category_root_a, admin_user):
     return AssetDisposalRequest.objects.create(
         tenant=tenant_a,
         title="CNC Milling Center Secondary Market Resale Initiative",
         fixed_asset=fixed_asset_a,
         operational_asset=operational_asset_a,
-        category=category_a,
+        category=category_root_a,
         requested_by=admin_user,
         disposal_method="resale",
         retirement_reason="technological_obsolescence",
@@ -1831,13 +1831,13 @@ def disposal_request_a(db, tenant_a, fixed_asset_a, operational_asset_a, categor
 
 
 @pytest.fixture
-def disposal_request_b(db, tenant_b, fixed_asset_b, operational_asset_b, category_b, admin_b):
+def disposal_request_b(db, tenant_b, fixed_asset_b, operational_asset_b, category_root_b, admin_b):
     return AssetDisposalRequest.objects.create(
         tenant=tenant_b,
         title="Globex Hydraulic Press Scrapping and Salvage Order",
         fixed_asset=fixed_asset_b,
         operational_asset=operational_asset_b,
-        category=category_b,
+        category=category_root_b,
         requested_by=admin_b,
         disposal_method="scrap_salvage",
         retirement_reason="uneconomical_repair",
