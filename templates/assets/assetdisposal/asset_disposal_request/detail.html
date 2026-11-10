@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+
+{% block title %}{{ disposal_request.number }} — Asset Disposal Request — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_disposal_request_list' %}">Disposal Requests</a>
+            <span>/</span>
+            <span>{{ disposal_request.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ disposal_request.title }}</h1>
+            <span class="badge {{ disposal_request.status_css }}">{{ disposal_request.get_status_display }}</span>
+            <span class="badge {{ disposal_request.disposal_method_css }}">{{ disposal_request.get_disposal_method_display }}</span>
+        </div>
+        <div class="text-sm text-slate-500 mt-1 font-mono">
+            Request: {{ disposal_request.number }} • Created {{ disposal_request.created_at|date:"M d, Y H:i" }}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if disposal_request.status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_disposal_request_submit' disposal_request.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Submit for Review
+            </button>
+        </form>
+        {% endif %}
+
+        {% if disposal_request.status == 'submitted' or disposal_request.status == 'appraised' %}
+        <button type="button" onclick="document.getElementById('appraisal-modal').classList.remove('hidden')" class="btn btn-outline">
+            <i data-lucide="calculator" class="w-4 h-4 me-1"></i> {% if disposal_request.status == 'appraised' %}Update Appraisal{% else %}Record Appraisal{% endif %}
+        </button>
+        <form method="post" action="{% url 'assets:asset_disposal_request_approve' disposal_request.pk %}" class="inline" onsubmit="return confirm('Authorize asset retirement and disposal execution?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-green-600 hover:bg-green-700 text-white border-green-600">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve Disposal
+            </button>
+        </form>
+        <button type="button" onclick="document.getElementById('reject-modal').classList.remove('hidden')" class="btn btn-danger">
+            <i data-lucide="x-circle" class="w-4 h-4 me-1"></i> Reject
+        </button>
+        {% endif %}
+
+        {% if disposal_request.status == 'approved' or disposal_request.status == 'in_progress' %}
+        <form method="post" action="{% url 'assets:asset_disposal_request_complete' disposal_request.pk %}" class="inline" onsubmit="return confirm('Complete retirement and post final gain/loss reconciliations?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">
+                <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Complete Disposal
+            </button>
+        </form>
+        {% endif %}
+
+        {% if disposal_request.status != 'completed' and disposal_request.status != 'cancelled' %}
+        <a href="{% url 'assets:asset_disposal_request_edit' disposal_request.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_disposal_request_delete' disposal_request.pk %}" class="inline" onsubmit="return confirm('Delete this disposal request?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left 2 Cols: Main Info -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Asset Details Card -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="font-semibold text-slate-800">Fixed Asset Information</h2>
+                <span class="badge {{ disposal_request.retirement_reason_css }}">{{ disposal_request.get_retirement_reason_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Financial Fixed Asset</div>
+                        <div class="text-sm font-semibold text-slate-800 mt-1">
+                            {{ disposal_request.fixed_asset.asset_number }} — {{ disposal_request.fixed_asset.name }}
+                        </div>
+                        <div class="text-xs text-slate-500 mt-0.5">
+                            Status: {{ disposal_request.fixed_asset.status|default:"In Service"|title }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Operational Plant Asset</div>
+                        <div class="text-sm font-semibold text-slate-800 mt-1">
+                            {% if disposal_request.operational_asset %}
+                            {{ disposal_request.operational_asset.tag_code }} — {{ disposal_request.operational_asset.name }}
+                            {% else %}
+                            <span class="text-slate-400 italic">Not Linked</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Asset Category</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {{ disposal_request.category.name|default:"Unassigned" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Department / Cost Center</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {{ disposal_request.cost_center.name|default:"Unassigned" }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 mt-4 pt-4">
+                    <div class="text-xs text-slate-400 font-medium uppercase mb-1">Decommissioning Justification</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ disposal_request.justification_notes }}</p>
+                </div>
+
+                {% if disposal_request.rejection_reason %}
+                <div class="border-t border-red-100 bg-red-50 p-3 rounded mt-4">
+                    <div class="text-xs text-red-600 font-semibold uppercase">Rejection Reason</div>
+                    <p class="text-sm text-red-800 mt-1">{{ disposal_request.rejection_reason }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Financial Valuation Card -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Financial Valuation & Recovery Analysis</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Acquisition Cost</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ disposal_request.acquisition_cost|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Accum. Depreciation</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ disposal_request.accumulated_depreciation|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-blue-50 rounded border border-blue-100">
+                        <div class="text-xs text-blue-700 font-medium">Net Book Value</div>
+                        <div class="text-base font-bold text-blue-900 mt-1 font-mono">${{ disposal_request.net_book_value|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Estimated Residual</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ disposal_request.estimated_residual_value|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                        <div class="text-xs text-slate-500">Actual Gross Proceeds</div>
+                        <div class="text-base font-semibold text-emerald-700 mt-1 font-mono">${{ disposal_request.actual_gross_proceeds|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">From sale, trade, or scrap</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Actual Removal / Dismantling</div>
+                        <div class="text-base font-semibold text-red-600 mt-1 font-mono">${{ disposal_request.actual_removal_cost|floatformat:2 }}</div>
+                        <div class="text-xs text-slate-400 mt-0.5">Teardown & transport fees</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Realized Gain / Loss</div>
+                        <div class="text-lg font-bold mt-1 font-mono {% if disposal_request.realized_gain_loss >= 0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                            ${{ disposal_request.realized_gain_loss|floatformat:2 }}
+                        </div>
+                        <div class="text-xs text-slate-400 mt-0.5">Proceeds - Costs - Book Value</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disposal Channels Sub-models -->
+        <!-- Resale Listings -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Commercial Resale & Auctions ({{ resale_listings.count }})</h3>
+                <a href="{% url 'assets:asset_resale_listing_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Listing
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if resale_listings %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Listing No</th>
+                                <th>Channel</th>
+                                <th>Buyer / Auctioneer</th>
+                                <th>Gross Proceeds</th>
+                                <th>Net Proceeds</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for l in resale_listings %}
+                            <tr>
+                                <td class="font-mono text-sm font-semibold">
+                                    <a href="{% url 'assets:asset_resale_listing_detail' l.pk %}" class="text-blue-600 hover:underline">{{ l.number }}</a>
+                                </td>
+                                <td><span class="badge {{ l.listing_channel_css }}">{{ l.get_listing_channel_display }}</span></td>
+                                <td class="text-sm text-slate-700">{{ l.buyer.name|default:l.buyer_contact_name|default:l.broker_auctioneer.name|default:"—" }}</td>
+                                <td class="font-mono text-sm">${{ l.gross_sale_proceeds|floatformat:2 }}</td>
+                                <td class="font-mono text-sm font-semibold text-emerald-700">${{ l.net_sale_proceeds|floatformat:2 }}</td>
+                                <td><span class="badge {{ l.status_css }}">{{ l.get_status_display }}</span></td>
+                                <td>
+                                    <a href="{% url 'assets:asset_resale_listing_detail' l.pk %}" class="btn btn-icon"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">No secondary market resale or auction listings registered for this asset.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Trade-in Agreements -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Trade-in & Exchange Programs ({{ trade_ins.count }})</h3>
+                <a href="{% url 'assets:asset_trade_in_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Trade-in
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if trade_ins %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Agreement No</th>
+                                <th>Vendor</th>
+                                <th>Trade Allowance</th>
+                                <th>Net Credit</th>
+                                <th>Net Outflow</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in trade_ins %}
+                            <tr>
+                                <td class="font-mono text-sm font-semibold">
+                                    <a href="{% url 'assets:asset_trade_in_detail' t.pk %}" class="text-blue-600 hover:underline">{{ t.number }}</a>
+                                </td>
+                                <td class="text-sm font-medium">{{ t.vendor.name }}</td>
+                                <td class="font-mono text-sm">${{ t.trade_in_allowance|floatformat:2 }}</td>
+                                <td class="font-mono text-sm font-semibold text-emerald-700">${{ t.net_credit_applied|floatformat:2 }}</td>
+                                <td class="font-mono text-sm">${{ t.net_cash_outflow|floatformat:2 }}</td>
+                                <td><span class="badge {{ t.status_css }}">{{ t.get_status_display }}</span></td>
+                                <td>
+                                    <a href="{% url 'assets:asset_trade_in_detail' t.pk %}" class="btn btn-icon"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">No vendor trade-in or exchange agreements recorded for this request.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Scrap & Salvage -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h3 class="font-semibold text-slate-800">Scrap & Salvage Operations ({{ scrap_salvages.count }})</h3>
+                <a href="{% url 'assets:asset_scrap_salvage_create' %}?disposal_request={{ disposal_request.pk }}" class="btn btn-sm btn-outline">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Add Scrap Record
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if scrap_salvages %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Job No</th>
+                                <th>Method</th>
+                                <th>Recycler</th>
+                                <th>Total Weight</th>
+                                <th>Salvage Revenue</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in scrap_salvages %}
+                            <tr>
+                                <td class="font-mono text-sm font-semibold">
+                                    <a href="{% url 'assets:asset_scrap_salvage_detail' s.pk %}" class="text-blue-600 hover:underline">{{ s.number }}</a>
+                                </td>
+                                <td><span class="badge {{ s.scrap_method_css }}">{{ s.get_scrap_method_display }}</span></td>
+                                <td class="text-sm">{{ s.recycler_partner.name|default:"Internal Teardown" }}</td>
+                                <td class="font-mono text-sm">{{ s.total_scrap_weight_kg|floatformat:2 }} kg</td>
+                                <td class="font-mono text-sm font-semibold text-emerald-700">${{ s.salvage_proceeds|floatformat:2 }}</td>
+                                <td><span class="badge {{ s.status_css }}">{{ s.get_status_display }}</span></td>
+                                <td>
+                                    <a href="{% url 'assets:asset_scrap_salvage_detail' s.pk %}" class="btn btn-icon"><i data-lucide="eye" class="w-4 h-4"></i></a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-6 text-center text-sm text-slate-500">No physical teardown, metal scrap, or recycling jobs logged.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Stakeholders & Audit Details -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Governance & Authorization</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Initiated By</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ disposal_request.requested_by.get_full_name|default:disposal_request.requested_by.username|default:"—" }}
+                    </div>
+                    {% if disposal_request.submitted_at %}
+                    <div class="text-xs text-slate-500">Submitted: {{ disposal_request.submitted_at|date:"M d, Y H:i" }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Appraised By</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ disposal_request.appraised_by.get_full_name|default:disposal_request.appraised_by.username|default:"Pending Appraisal" }}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Approved By</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ disposal_request.approved_by.get_full_name|default:disposal_request.approved_by.username|default:"Pending Executive Authorization" }}
+                    </div>
+                    {% if disposal_request.approved_at %}
+                    <div class="text-xs text-slate-500">Approved: {{ disposal_request.approved_at|date:"M d, Y H:i" }}</div>
+                    {% endif %}
+                </div>
+
+                {% if disposal_request.completed_at %}
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Completion Timestamp</div>
+                    <div class="text-sm font-medium text-emerald-700 mt-0.5">
+                        {{ disposal_request.completed_at|date:"M d, Y H:i" }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Record Appraisal -->
+<div id="appraisal-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-slate-900">Record Technical Appraisal</h3>
+            <button type="button" onclick="document.getElementById('appraisal-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_disposal_request_appraise' disposal_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Technical Appraiser</label>
+                    {{ appraisal_form.appraised_by }}
+                </div>
+                <div>
+                    <label class="form-label">Estimated Residual / Salvage Value ($)</label>
+                    {{ appraisal_form.estimated_residual_value }}
+                </div>
+                <div>
+                    <label class="form-label">Estimated Removal / Freight Cost ($)</label>
+                    {{ appraisal_form.estimated_removal_cost }}
+                </div>
+                <div>
+                    <label class="form-label">Appraisal Notes</label>
+                    {{ appraisal_form.appraisal_notes }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('appraisal-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save Appraisal</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal: Reject Request -->
+<div id="reject-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+        <div class="flex justify-between items-center mb-4 border-b pb-3">
+            <h3 class="text-lg font-semibold text-red-600">Decline Asset Disposal Request</h3>
+            <button type="button" onclick="document.getElementById('reject-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+        <form method="post" action="{% url 'assets:asset_disposal_request_reject' disposal_request.pk %}">
+            {% csrf_token %}
+            <div class="space-y-4">
+                <div>
+                    <label class="form-label">Reason for Rejection</label>
+                    {{ reject_form.rejection_reason }}
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+                <button type="button" onclick="document.getElementById('reject-modal').classList.add('hidden')" class="btn btn-outline">Cancel</button>
+                <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
