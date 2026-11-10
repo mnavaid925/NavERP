@@ -60,7 +60,7 @@ class AssetLeaseContractForm(TenantUniqueMixin, TenantModelForm):
             "expiration_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "first_payment_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
             "early_termination_notice_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
-            "lease_term_months": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
+            "lease_term_months": forms.NumberInput(attrs={"class": "form-input", "min": "1", "max": "600"}),
             "economic_life_months": forms.NumberInput(attrs={"class": "form-input", "min": "1"}),
             "payment_amount": forms.NumberInput(attrs={"class": "form-input", "step": "0.01", "min": "0"}),
             "payment_frequency": forms.Select(attrs={"class": "form-select"}),
@@ -97,5 +97,9 @@ class AssetLeaseContractForm(TenantUniqueMixin, TenantModelForm):
         expiration = cleaned.get("expiration_date")
         if commencement and expiration and expiration < commencement:
             self.add_error("expiration_date", "Expiration date cannot precede commencement date.")
+
+        term = cleaned.get("lease_term_months")
+        if term is not None and (term < 1 or term > 600):
+            self.add_error("lease_term_months", "Lease term must be between 1 and 600 months (50 years max).")
 
         return cleaned
