@@ -110,7 +110,8 @@
   - **Description:** Loading `create/` view with `?warranty=<id>` or `?policy=<id>` performs lazy queries to populate asset and currency fields.
   - **Fix:** Add `.select_related("fixed_asset", "operational_asset", "currency")` to the parent fetch.
 
-- [ ] **M7: Action Icon Buttons in List Templates Lack `aria-label`**
+- [x] **M7: Action Icon Buttons in List Templates Lack `aria-label`**
+  - **Status:** [x] fixed — add aria-label on icon links/buttons across 4 list templates (1e2fb841, c94d94df, 65e502bd, a5a8e6fa)
   - **Location:** `templates/assets/assetwarrantyinsurance/{assetwarranty,assetwarrantyclaim,assetinsurancepolicy,assetinsuranceclaim}/list.html`
   - **Description:** Icon-only action links and buttons specify `title` but lack `aria-label` for assistive technology.
   - **Fix:** Add `aria-label` matching `title` on icon-only interactive elements.
