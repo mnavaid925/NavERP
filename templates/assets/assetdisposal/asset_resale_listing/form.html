@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ resale_listing.number }}{% else %}New Resale Listing{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_resale_listing_list' %}">Resale & Auctions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ resale_listing.number }}{% else %}New Listing{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Resale Listing: {{ resale_listing.number }}{% else %}New Asset Resale / Auction Listing{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Disposal Link & Channel -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">1. Asset & Remarketing Channel</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.disposal_request.id_for_label }}">Disposal Request *</label>
+                        {{ form.disposal_request }}
+                        {% if form.disposal_request.errors %}<div class="form-error">{{ form.disposal_request.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset *</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.listing_channel.id_for_label }}">Listing Channel *</label>
+                        {{ form.listing_channel }}
+                        {% if form.listing_channel.errors %}<div class="form-error">{{ form.listing_channel.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.listing_reference.id_for_label }}">Lot / Catalog Reference</label>
+                        {{ form.listing_reference }}
+                        {% if form.listing_reference.errors %}<div class="form-error">{{ form.listing_reference.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Pricing & Schedule -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">2. Remarketing Schedule & Pricing</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.listing_date.id_for_label }}">Listing Date *</label>
+                        {{ form.listing_date }}
+                        {% if form.listing_date.errors %}<div class="form-error">{{ form.listing_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.closing_date.id_for_label }}">Closing / Auction End Date</label>
+                        {{ form.closing_date }}
+                        {% if form.closing_date.errors %}<div class="form-error">{{ form.closing_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.asking_price.id_for_label }}">Target Asking Price ($)</label>
+                        {{ form.asking_price }}
+                        {% if form.asking_price.errors %}<div class="form-error">{{ form.asking_price.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.reserve_price.id_for_label }}">Minimum Reserve Price ($)</label>
+                        {{ form.reserve_price }}
+                        {% if form.reserve_price.errors %}<div class="form-error">{{ form.reserve_price.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Intermediary & Documentation -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">3. Broker & Document Bindings</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.broker_auctioneer.id_for_label }}">Auctioneer / Broker Party</label>
+                        {{ form.broker_auctioneer }}
+                        {% if form.broker_auctioneer.errors %}<div class="form-error">{{ form.broker_auctioneer.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.managed_by.id_for_label }}">Internal Remarketing Lead</label>
+                        {{ form.managed_by }}
+                        {% if form.managed_by.errors %}<div class="form-error">{{ form.managed_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2 form-group">
+                        <label class="form-label" for="{{ form.bill_of_sale_document.id_for_label }}">Bill of Sale / Document Attachment</label>
+                        {{ form.bill_of_sale_document }}
+                        {% if form.bill_of_sale_document.errors %}<div class="form-error">{{ form.bill_of_sale_document.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Settlement & Buyer -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">4. Buyer & Settlement Terms (If Awarded)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.buyer.id_for_label }}">Buyer Party</label>
+                        {{ form.buyer }}
+                        {% if form.buyer.errors %}<div class="form-error">{{ form.buyer.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.buyer_contact_name.id_for_label }}">Buyer Contact Name</label>
+                        {{ form.buyer_contact_name }}
+                        {% if form.buyer_contact_name.errors %}<div class="form-error">{{ form.buyer_contact_name.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.buyer_contact_email.id_for_label }}">Buyer Email</label>
+                        {{ form.buyer_contact_email }}
+                        {% if form.buyer_contact_email.errors %}<div class="form-error">{{ form.buyer_contact_email.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.gross_sale_proceeds.id_for_label }}">Gross Sale Price ($)</label>
+                        {{ form.gross_sale_proceeds }}
+                        {% if form.gross_sale_proceeds.errors %}<div class="form-error">{{ form.gross_sale_proceeds.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.commission_rate_percent.id_for_label }}">Commission Rate (%)</label>
+                        {{ form.commission_rate_percent }}
+                        {% if form.commission_rate_percent.errors %}<div class="form-error">{{ form.commission_rate_percent.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.tax_amount.id_for_label }}">Sales Tax ($)</label>
+                        {{ form.tax_amount }}
+                        {% if form.tax_amount.errors %}<div class="form-error">{{ form.tax_amount.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-3 form-group">
+                        <label class="form-label" for="{{ form.terms_and_conditions.id_for_label }}">Sale Terms & Conditions</label>
+                        {{ form.terms_and_conditions }}
+                        {% if form.terms_and_conditions.errors %}<div class="form-error">{{ form.terms_and_conditions.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'assets:asset_resale_listing_detail' resale_listing.pk %}{% else %}{% url 'assets:asset_resale_listing_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Resale Listing{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
