@@ -31,7 +31,7 @@
 
 ### Important
 
-- [ ] **I1: Missing Filter `<select>` Elements in List Templates**
+- [x] **I1: Missing Filter `<select>` Elements in List Templates**
   - **Files**:
     - `templates/assets/assetcompliance/asset_compliance_framework/list.html:52-82` (missing `<select name="category">`)
     - `templates/assets/assetcompliance/asset_compliance_audit/list.html:59-97` (missing `<select name="framework">`)
