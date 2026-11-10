@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ trade_in.number }}{% else %}New Trade-in Agreement{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_trade_in_list' %}">Trade-ins</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ trade_in.number }}{% else %}New Trade-in{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Trade-in Agreement: {{ trade_in.number }}{% else %}New Equipment Trade-in / Exchange{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 bg-red-50 border border-red-200 rounded text-sm text-red-700">
+                {% for err in form.non_field_errors %}
+                <p>{{ err }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Equipment Exchange Links -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">1. Asset Exchange & Parties</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.disposal_request.id_for_label }}">Disposal Request *</label>
+                        {{ form.disposal_request }}
+                        {% if form.disposal_request.errors %}<div class="form-error">{{ form.disposal_request.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.retired_fixed_asset.id_for_label }}">Retiring Fixed Asset *</label>
+                        {{ form.retired_fixed_asset }}
+                        {% if form.retired_fixed_asset.errors %}<div class="form-error">{{ form.retired_fixed_asset.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.vendor.id_for_label }}">OEM Dealer / Vendor *</label>
+                        {{ form.vendor }}
+                        {% if form.vendor.errors %}<div class="form-error">{{ form.vendor.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.authorized_by.id_for_label }}">Authorizing Manager</label>
+                        {{ form.authorized_by }}
+                        {% if form.authorized_by.errors %}<div class="form-error">{{ form.authorized_by.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.replacement_requisition.id_for_label }}">Replacement Purchase Requisition</label>
+                        {{ form.replacement_requisition }}
+                        {% if form.replacement_requisition.errors %}<div class="form-error">{{ form.replacement_requisition.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.replacement_fixed_asset.id_for_label }}">Replacement Capital Asset Record</label>
+                        {{ form.replacement_fixed_asset }}
+                        {% if form.replacement_fixed_asset.errors %}<div class="form-error">{{ form.replacement_fixed_asset.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Agreement & Handover -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">2. Agreement Details & Logistics</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.agreement_number.id_for_label }}">Agreement / Contract Number</label>
+                        {{ form.agreement_number }}
+                        {% if form.agreement_number.errors %}<div class="form-error">{{ form.agreement_number.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.agreement_date.id_for_label }}">Agreement Date *</label>
+                        {{ form.agreement_date }}
+                        {% if form.agreement_date.errors %}<div class="form-error">{{ form.agreement_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.handover_due_date.id_for_label }}">Target Equipment Handover Date</label>
+                        {{ form.handover_due_date }}
+                        {% if form.handover_due_date.errors %}<div class="form-error">{{ form.handover_due_date.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.agreement_document.id_for_label }}">Contract Document Attachment</label>
+                        {{ form.agreement_document }}
+                        {% if form.agreement_document.errors %}<div class="form-error">{{ form.agreement_document.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Valuation & Pricing -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">3. Valuation & Allowance Offset</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.dealer_appraised_value.id_for_label }}">Dealer Appraised Value ($)</label>
+                        {{ form.dealer_appraised_value }}
+                        {% if form.dealer_appraised_value.errors %}<div class="form-error">{{ form.dealer_appraised_value.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.trade_in_allowance.id_for_label }}">Contract Trade-in Allowance ($)</label>
+                        {{ form.trade_in_allowance }}
+                        {% if form.trade_in_allowance.errors %}<div class="form-error">{{ form.trade_in_allowance.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.over_allowance_amount.id_for_label }}">Over-Allowance / Incentive ($)</label>
+                        {{ form.over_allowance_amount }}
+                        {% if form.over_allowance_amount.errors %}<div class="form-error">{{ form.over_allowance_amount.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.replacement_asset_cost.id_for_label }}">New Replacement Asset Cost ($)</label>
+                        {{ form.replacement_asset_cost }}
+                        {% if form.replacement_asset_cost.errors %}<div class="form-error">{{ form.replacement_asset_cost.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Tax Deferral & Notes -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b pb-2 mb-4">4. Tax Deferral & Terms</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-center gap-2 form-group pt-4">
+                        {{ form.like_kind_exchange }}
+                        <label class="form-label mb-0" for="{{ form.like_kind_exchange.id_for_label }}">IRC Sec 1031 Like-Kind Exchange Qualification</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.gain_loss_deferred.id_for_label }}">Deferred Tax Gain / Loss ($)</label>
+                        {{ form.gain_loss_deferred }}
+                        {% if form.gain_loss_deferred.errors %}<div class="form-error">{{ form.gain_loss_deferred.errors.0 }}</div>{% endif %}
+                    </div>
+
+                    <div class="md:col-span-2 form-group">
+                        <label class="form-label" for="{{ form.notes.id_for_label }}">Exchange Contract Notes</label>
+                        {{ form.notes }}
+                        {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors.0 }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end gap-3 border-t pt-4">
+                <a href="{% if is_edit %}{% url 'assets:asset_trade_in_detail' trade_in.pk %}{% else %}{% url 'assets:asset_trade_in_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Trade-in Agreement{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
