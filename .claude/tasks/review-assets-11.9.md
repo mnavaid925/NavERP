@@ -89,7 +89,7 @@
   - **Issue:** Each list view runs 4–5 individual queries against `base_tenant_qs` (`.count()` and `.aggregate()`), executing 17 queries across lists instead of 4.
   - **Fix:** Consolidate KPI metrics into a single `.aggregate()` call using conditional `Count("id", filter=Q(...))` and `Sum(...)`.
 
-- [ ] **I10: Redundant QuerySet `.count` in Detail Template**
+- [x] **I10: Redundant QuerySet `.count` in Detail Template** — fixed (commit 9bcfd064)
   - **Location:** `templates/assets/assetdisposal/asset_disposal_request/detail.html:181, 229, 277`
   - **Issue:** Invoking `.count` on `resale_listings`, `trade_ins`, and `scrap_salvages` executes 3 distinct `SELECT COUNT(*)` queries immediately prior to iterating them in `{% for %}` loops.
   - **Fix:** Replace `.count` with `|length` in `detail.html`.
