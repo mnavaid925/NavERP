@@ -1,5 +1,6 @@
+import calendar
+import datetime
 from decimal import Decimal
-from dateutil.relativedelta import relativedelta
 
 from django.conf import settings
 from django.db import models
@@ -454,7 +455,12 @@ class AssetLeaseContract(TenantNumbered):
 
             liability = ending_liability
             rou_balance = ending_rou
-            current_date = current_date + relativedelta(months=months_per_period)
+            # Add months safely using calendar
+            _m = current_date.month - 1 + months_per_period
+            _y = current_date.year + _m // 12
+            _m = _m % 12 + 1
+            _d = min(current_date.day, calendar.monthrange(_y, _m)[1])
+            current_date = datetime.date(_y, _m, _d)
 
         AssetLeaseSchedule.objects.bulk_create(schedules)
         return len(schedules)
