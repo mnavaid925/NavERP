@@ -159,6 +159,9 @@ def asset_warranty_claim_create(request):
 @login_required
 def asset_warranty_claim_edit(request, pk):
     claim = get_object_or_404(AssetWarrantyClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status in ["settled_closed", "rejected"]:
+        messages.warning(request, f"Warranty claim {claim.number} is finalized ({claim.get_claim_status_display()}) and cannot be edited.")
+        return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
     if request.method == "POST":
         form = AssetWarrantyClaimForm(request.POST, instance=claim, tenant=request.tenant)
         if form.is_valid():
@@ -252,6 +255,9 @@ def asset_warranty_claim_review(request, pk):
 @require_POST
 def asset_warranty_claim_settle(request, pk):
     claim = get_object_or_404(AssetWarrantyClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status not in ["submitted", "under_review"]:
+        messages.warning(request, f"Claim {claim.number} cannot be settled in its current state ({claim.get_claim_status_display()}).")
+        return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
     raw_amount = request.POST.get("approved_amount")
     try:
         if raw_amount is None or str(raw_amount).strip() == "":
@@ -302,6 +308,9 @@ def asset_warranty_claim_settle(request, pk):
 @require_POST
 def asset_warranty_claim_reject(request, pk):
     claim = get_object_or_404(AssetWarrantyClaim, pk=pk, tenant=request.tenant)
+    if claim.claim_status not in ["submitted", "under_review"]:
+        messages.warning(request, f"Claim {claim.number} cannot be rejected in its current state ({claim.get_claim_status_display()}).")
+        return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
     notes = request.POST.get("settlement_notes", "").strip()
 
     with transaction.atomic():
