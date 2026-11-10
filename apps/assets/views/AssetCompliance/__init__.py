@@ -1,0 +1,61 @@
+from apps.assets.views.AssetCompliance.AssetComplianceAudits import (
+    asset_compliance_audit_complete,
+    asset_compliance_audit_create,
+    asset_compliance_audit_delete,
+    asset_compliance_audit_detail,
+    asset_compliance_audit_edit,
+    asset_compliance_audit_list,
+    asset_compliance_audit_start,
+)
+from apps.assets.views.AssetCompliance.AssetComplianceFrameworks import (
+    asset_compliance_framework_create,
+    asset_compliance_framework_delete,
+    asset_compliance_framework_detail,
+    asset_compliance_framework_edit,
+    asset_compliance_framework_list,
+)
+from apps.assets.views.AssetCompliance.AssetComplianceIncidents import (
+    asset_compliance_incident_close,
+    asset_compliance_incident_create,
+    asset_compliance_incident_delete,
+    asset_compliance_incident_detail,
+    asset_compliance_incident_edit,
+    asset_compliance_incident_list,
+    asset_compliance_incident_resolve,
+)
+from apps.assets.views.AssetCompliance.AssetPermitLicenses import (
+    asset_permit_license_create,
+    asset_permit_license_delete,
+    asset_permit_license_detail,
+    asset_permit_license_edit,
+    asset_permit_license_list,
+    asset_permit_license_renew,
+)
+
+__all__ = [
+    "asset_compliance_framework_list",
+    "asset_compliance_framework_create",
+    "asset_compliance_framework_detail",
+    "asset_compliance_framework_edit",
+    "asset_compliance_framework_delete",
+    "asset_compliance_audit_list",
+    "asset_compliance_audit_create",
+    "asset_compliance_audit_detail",
+    "asset_compliance_audit_edit",
+    "asset_compliance_audit_delete",
+    "asset_compliance_audit_start",
+    "asset_compliance_audit_complete",
+    "asset_permit_license_list",
+    "asset_permit_license_create",
+    "asset_permit_license_detail",
+    "asset_permit_license_edit",
+    "asset_permit_license_delete",
+    "asset_permit_license_renew",
+    "asset_compliance_incident_list",
+    "asset_compliance_incident_create",
+    "asset_compliance_incident_detail",
+    "asset_compliance_incident_edit",
+    "asset_compliance_incident_delete",
+    "asset_compliance_incident_resolve",
+    "asset_compliance_incident_close",
+]
