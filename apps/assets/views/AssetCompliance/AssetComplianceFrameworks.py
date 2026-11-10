@@ -159,6 +159,7 @@ def asset_compliance_framework_edit(request, pk):
 
 @login_required
 @require_POST
+@tenant_admin_required
 def asset_compliance_framework_delete(request, pk):
     framework = assets_object(request, AssetComplianceFramework, pk)
     num = framework.number
