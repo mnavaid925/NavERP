@@ -62,6 +62,11 @@ class AssetResaleListingForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        for f in ["highest_bid_amount", "gross_sale_proceeds", "commission_rate_percent", "tax_amount"]:
+            if f in self.fields:
+                self.fields[f].required = False
+                if self.fields[f].initial is None:
+                    self.fields[f].initial = Decimal("0.00")
         if self.tenant:
             self.fields["disposal_request"].queryset = AssetDisposalRequest.objects.filter(tenant=self.tenant)
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(tenant=self.tenant)
@@ -73,6 +78,9 @@ class AssetResaleListingForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        for f in ["highest_bid_amount", "gross_sale_proceeds", "commission_rate_percent", "tax_amount"]:
+            if cleaned.get(f) is None:
+                cleaned[f] = Decimal("0.00")
         reject_foreign(
             self,
             cleaned,
