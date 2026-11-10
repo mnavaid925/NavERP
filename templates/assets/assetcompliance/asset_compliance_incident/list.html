@@ -57,8 +57,16 @@
 <div class="card mb-6">
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div class="md:col-span-2">
+            <div>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search title, citation #, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="agency" class="form-select">
+                    <option value="">All Enforcement Agencies</option>
+                    {% for ag in agency_list %}
+                    <option value="{{ ag.pk }}" {% if request.GET.agency == ag.pk|stringformat:"d" %}selected{% endif %}>{{ ag.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div>
                 <select name="incident_type" class="form-select">
