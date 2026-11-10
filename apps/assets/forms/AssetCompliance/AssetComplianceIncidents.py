@@ -65,6 +65,16 @@ class AssetComplianceIncidentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["audit"].queryset = AssetComplianceAudit.objects.filter(tenant=self.tenant)
             self.fields["enforcement_agency"].queryset = Party.objects.filter(tenant=self.tenant)
             self.fields["assigned_investigator"].queryset = User.objects.filter(tenant=self.tenant)
+        if "status" in self.fields:
+            self.fields["status"].choices = [
+                (k, v) for k, v in AssetComplianceIncident.STATUS_CHOICES if k not in ["resolved", "closed"]
+            ]
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        if status in ["resolved", "closed"]:
+            raise forms.ValidationError("Status cannot be set to Resolved or Closed directly. Use the resolution and closure workflows.")
+        return status
 
     def clean(self):
         cleaned = super().clean()
