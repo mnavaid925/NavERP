@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Warranty {{ warranty.number }}{% else %}Register Asset Warranty{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_warranty_list' %}">Warranties</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ warranty.number }}{% else %}New Warranty{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Warranty {{ warranty.number }}{% else %}Register Equipment Warranty{% endif %}</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% if is_edit %}{% url 'assets:asset_warranty_detail' warranty.pk %}{% else %}{% url 'assets:asset_warranty_list' %}{% endif %}" class="btn btn-outline">
+            Cancel
+        </a>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">{% if is_edit %}Update Warranty Details{% else %}Warranty Registration Form{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <!-- Section 1: Agreement Identity & Asset -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Agreement Identification & Covered Asset
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.title.id_for_label }}" class="form-label">Warranty Title *</label>
+                        {{ form.title }}
+                        {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.warranty_certificate_number.id_for_label }}" class="form-label">Certificate / Registration ID</label>
+                        {{ form.warranty_certificate_number }}
+                        {% if form.warranty_certificate_number.errors %}<div class="form-error">{{ form.warranty_certificate_number.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.warrantor_party.id_for_label }}" class="form-label">Warrantor / Vendor</label>
+                        {{ form.warrantor_party }}
+                        {% if form.warrantor_party.errors %}<div class="form-error">{{ form.warrantor_party.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.fixed_asset.id_for_label }}" class="form-label">Financial Fixed Asset</label>
+                        {{ form.fixed_asset }}
+                        {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.operational_asset.id_for_label }}" class="form-label">Operational Machinery</label>
+                        {{ form.operational_asset }}
+                        {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.asset_category.id_for_label }}" class="form-label">Asset Category</label>
+                        {{ form.asset_category }}
+                        {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.currency.id_for_label }}" class="form-label">Currency</label>
+                        {{ form.currency }}
+                        {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Coverage Type & Period -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Coverage Scope & Inception Period
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.warranty_type.id_for_label }}" class="form-label">Warranty Type</label>
+                        {{ form.warranty_type }}
+                        {% if form.warranty_type.errors %}<div class="form-error">{{ form.warranty_type.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.coverage_scope.id_for_label }}" class="form-label">Coverage Scope</label>
+                        {{ form.coverage_scope }}
+                        {% if form.coverage_scope.errors %}<div class="form-error">{{ form.coverage_scope.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.start_date.id_for_label }}" class="form-label">Start Date *</label>
+                        {{ form.start_date }}
+                        {% if form.start_date.errors %}<div class="form-error">{{ form.start_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.end_date.id_for_label }}" class="form-label">End Date *</label>
+                        {{ form.end_date }}
+                        {% if form.end_date.errors %}<div class="form-error">{{ form.end_date.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.meter_type.id_for_label }}" class="form-label">Meter Type</label>
+                        {{ form.meter_type }}
+                        {% if form.meter_type.errors %}<div class="form-error">{{ form.meter_type.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.meter_limit.id_for_label }}" class="form-label">Meter Threshold Limit</label>
+                        {{ form.meter_limit }}
+                        {% if form.meter_limit.errors %}<div class="form-error">{{ form.meter_limit.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Indemnity % and Financials -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Indemnity Percentages & Financial Terms
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.parts_coverage_percent.id_for_label }}" class="form-label">Parts Coverage (%)</label>
+                        {{ form.parts_coverage_percent }}
+                        {% if form.parts_coverage_percent.errors %}<div class="form-error">{{ form.parts_coverage_percent.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.labor_coverage_percent.id_for_label }}" class="form-label">Labor Coverage (%)</label>
+                        {{ form.labor_coverage_percent }}
+                        {% if form.labor_coverage_percent.errors %}<div class="form-error">{{ form.labor_coverage_percent.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.deductible_amount.id_for_label }}" class="form-label">Per-Incident Deductible</label>
+                        {{ form.deductible_amount }}
+                        {% if form.deductible_amount.errors %}<div class="form-error">{{ form.deductible_amount.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.contract_purchase_price.id_for_label }}" class="form-label">Contract Purchase Price</label>
+                        {{ form.contract_purchase_price }}
+                        {% if form.contract_purchase_price.errors %}<div class="form-error">{{ form.contract_purchase_price.errors }}</div>{% endif %}
+                    </div>
+                    <div class="md:col-span-2 flex items-center gap-2 pt-2">
+                        {{ form.travel_dispatch_covered }}
+                        <label for="{{ form.travel_dispatch_covered.id_for_label }}" class="text-sm font-medium text-slate-700">
+                            Technician travel and on-site dispatch fees are covered by warrantor
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Terms & Documents -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider pb-1 border-b border-slate-200">
+                    Terms & Document Linkage
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label for="{{ form.terms_and_conditions.id_for_label }}" class="form-label">Terms, Exclusions & PM Mandates</label>
+                        {{ form.terms_and_conditions }}
+                        {% if form.terms_and_conditions.errors %}<div class="form-error">{{ form.terms_and_conditions.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.contract_document.id_for_label }}" class="form-label">Warranty Certificate Document</label>
+                        {{ form.contract_document }}
+                        {% if form.contract_document.errors %}<div class="form-error">{{ form.contract_document.errors }}</div>{% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.service_contract.id_for_label }}" class="form-label">Linked 11.5 Service Contract</label>
+                        {{ form.service_contract }}
+                        {% if form.service_contract.errors %}<div class="form-error">{{ form.service_contract.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% if is_edit %}{% url 'assets:asset_warranty_detail' warranty.pk %}{% else %}{% url 'assets:asset_warranty_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Register Warranty{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
