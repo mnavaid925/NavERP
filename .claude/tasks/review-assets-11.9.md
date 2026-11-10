@@ -80,7 +80,7 @@
   - **Issue:** Views supply `reason_choices`, `payment_status_choices`, and `recycler_list` in context and filter on `request.GET`, but list templates omit the corresponding `<select>` elements and pagination query parameter preservation.
   - **Fix:** Add the missing dropdown `<select>` controls and preserve their query parameters in pagination links.
 
-- [ ] **I9: Multiple Unbundled KPI Queries in All 4 List Views**
+- [x] **I9: Multiple Unbundled KPI Queries in All 4 List Views** — fixed (commits 770a6cfc, 370c21d1, abfe356e, 8660befa)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:66-72`
     - `apps/assets/views/AssetDisposal/AssetResaleListings.py:60-65`
