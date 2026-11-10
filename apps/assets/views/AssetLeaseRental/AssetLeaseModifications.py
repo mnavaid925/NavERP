@@ -25,7 +25,7 @@ def asset_lease_modification_list(request):
             "lease_contract__lessor",
             "requested_by",
             "approved_by",
-        ),
+        ).defer("notes", "justification"),
         request,
     )
 
