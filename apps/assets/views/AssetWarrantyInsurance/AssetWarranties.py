@@ -225,6 +225,9 @@ def asset_warranty_activate(request, pk):
 @require_POST
 def asset_warranty_renew(request, pk):
     warranty = get_object_or_404(AssetWarranty, pk=pk, tenant=request.tenant)
+    if warranty.status not in ["active", "expiring_soon", "expired"]:
+        messages.warning(request, f"Warranty {warranty.number} cannot be renewed in its current state ({warranty.get_status_display()}).")
+        return redirect("assets:asset_warranty_detail", pk=warranty.pk)
     with transaction.atomic():
         # Extend end_date by 1 year from current end_date or today, whichever is later
         base_date = max(warranty.end_date, timezone.now().date())
