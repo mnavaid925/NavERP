@@ -104,7 +104,7 @@
   - **File**: `apps/assets/models/AssetCompliance/AssetComplianceFrameworks.py`
   - **Fix**: Add `@property def is_active(self): return self.status == "active"` and `is_audit_due` property.
 
-- [ ] **M3: Missing `incidents` in Framework Detail View Context**
+- [x] **M3: Missing `incidents` in Framework Detail View Context**
   - **File**: `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:80-96`
   - **Fix**: Include linked incidents via `AssetComplianceIncident.objects.filter(tenant=request.tenant, audit__framework=framework)[:10]` in detail context.
 
