@@ -43,6 +43,10 @@ from apps.assets.models import (
     AssetResaleListing,
     AssetTradeIn,
     AssetScrapSalvage,
+    AssetComplianceFramework,
+    AssetComplianceAudit,
+    AssetPermitLicense,
+    AssetComplianceIncident,
 )
 
 
@@ -1966,6 +1970,187 @@ def scrap_salvage_b(db, tenant_b, disposal_request_b, fixed_asset_b, operational
         net_salvage_recovery=Decimal("1000.00"),
         status="scrap_transferred",
     )
+
+
+# -------------------------------------------------------------------------
+# Sub-module 11.11: Compliance & Regulatory Management fixtures
+# -------------------------------------------------------------------------
+@pytest.fixture
+def compliance_framework_a(db, tenant_a, category_a, vendor_party_a):
+    today = timezone.now().date()
+    return AssetComplianceFramework.objects.create(
+        tenant=tenant_a,
+        name="OSHA 1910.119 Process Safety Management",
+        code="OSHA-1910-PSM",
+        framework_type="regulatory",
+        regulatory_agency=vendor_party_a,
+        applicable_category=category_a,
+        effective_date=today - timezone.timedelta(days=365),
+        revision="2024 Edition",
+        mandatory_audit_cycle_months=12,
+        readiness_score=94,
+        description="Mandatory standard for highly hazardous chemicals.",
+        status="active",
+    )
+
+
+@pytest.fixture
+def compliance_framework_b(db, tenant_b, category_b, vendor_party_b):
+    today = timezone.now().date()
+    return AssetComplianceFramework.objects.create(
+        tenant=tenant_b,
+        name="ISO 55001 Asset Management Systems",
+        code="ISO-55001",
+        framework_type="voluntary_standard",
+        regulatory_agency=vendor_party_b,
+        applicable_category=category_b,
+        effective_date=today - timezone.timedelta(days=180),
+        revision="2024 Edition",
+        mandatory_audit_cycle_months=24,
+        readiness_score=85,
+        description="Asset management systems requirements.",
+        status="active",
+    )
+
+
+@pytest.fixture
+def compliance_audit_a(db, tenant_a, compliance_framework_a, operational_asset_a, admin_user, vendor_party_a):
+    today = timezone.now().date()
+    return AssetComplianceAudit.objects.create(
+        tenant=tenant_a,
+        title="Annual Plant Machine Guarding Verification",
+        framework=compliance_framework_a,
+        asset=operational_asset_a,
+        audit_type="internal",
+        lead_auditor_user=admin_user,
+        auditor_party=vendor_party_a,
+        audit_date=today - timezone.timedelta(days=30),
+        scope_description="Verification of physical barrier interlocks and e-stops.",
+        total_checkpoints=40,
+        passed_checkpoints=40,
+        minor_findings_count=0,
+        major_findings_count=0,
+        critical_findings_count=0,
+        compliance_rating="fully_compliant",
+        summary_findings="All machine guards secure.",
+        status="completed",
+        completed_at=timezone.now() - timezone.timedelta(days=29),
+    )
+
+
+@pytest.fixture
+def compliance_audit_b(db, tenant_b, compliance_framework_b, operational_asset_b, admin_b, vendor_party_b):
+    today = timezone.now().date()
+    return AssetComplianceAudit.objects.create(
+        tenant=tenant_b,
+        title="Globex ISO Surveillance Audit",
+        framework=compliance_framework_b,
+        asset=operational_asset_b,
+        audit_type="external_regulatory",
+        lead_auditor_user=admin_b,
+        auditor_party=vendor_party_b,
+        audit_date=today - timezone.timedelta(days=15),
+        scope_description="Life cycle surveillance.",
+        total_checkpoints=30,
+        passed_checkpoints=28,
+        minor_findings_count=2,
+        major_findings_count=0,
+        critical_findings_count=0,
+        compliance_rating="minor_deficiencies",
+        status="scheduled",
+    )
+
+
+@pytest.fixture
+def permit_license_a(db, tenant_a, operational_asset_a, vendor_party_a):
+    today = timezone.now().date()
+    return AssetPermitLicense.objects.create(
+        tenant=tenant_a,
+        permit_name="High-Pressure Steam Boiler Operating Certificate",
+        permit_number="BOILER-CERT-1001",
+        permit_type="pressure_vessel",
+        asset=operational_asset_a,
+        issuing_authority=vendor_party_a,
+        issue_date=today - timezone.timedelta(days=90),
+        effective_date=today - timezone.timedelta(days=90),
+        expiration_date=today + timezone.timedelta(days=275),
+        renewal_lead_days=60,
+        renewal_fee=Decimal("750.00"),
+        operating_conditions="Max pressure 250 PSIG.",
+        status="active",
+    )
+
+
+@pytest.fixture
+def permit_license_b(db, tenant_b, operational_asset_b, vendor_party_b):
+    today = timezone.now().date()
+    return AssetPermitLicense.objects.create(
+        tenant=tenant_b,
+        permit_name="Air Quality Emission Operating Permit",
+        permit_number="EPA-AIR-2002",
+        permit_type="environmental_emissions",
+        asset=operational_asset_b,
+        issuing_authority=vendor_party_b,
+        issue_date=today - timezone.timedelta(days=300),
+        effective_date=today - timezone.timedelta(days=300),
+        expiration_date=today + timezone.timedelta(days=65),
+        renewal_lead_days=60,
+        renewal_fee=Decimal("2500.00"),
+        operating_conditions="NOX capped at 25 PPM.",
+        status="active",
+    )
+
+
+@pytest.fixture
+def compliance_incident_a(db, tenant_a, operational_asset_a, permit_license_a, compliance_audit_a, vendor_party_a, admin_user):
+    today = timezone.now().date()
+    return AssetComplianceIncident.objects.create(
+        tenant=tenant_a,
+        title="Hourly NOX Emission Exceedance Spike",
+        incident_date=today - timezone.timedelta(days=10),
+        discovery_date=today - timezone.timedelta(days=9),
+        incident_type="emissions_exceedance",
+        severity="serious",
+        asset=operational_asset_a,
+        permit=permit_license_a,
+        audit=compliance_audit_a,
+        enforcement_agency=vendor_party_a,
+        citation_reference="EPA-NOV-2026-081",
+        fine_assessed=Decimal("5000.00"),
+        fine_paid=Decimal("5000.00"),
+        fine_payment_date=today - timezone.timedelta(days=2),
+        root_cause="mechanical_failure",
+        root_cause_analysis="Damper stuck open.",
+        corrective_action_plan="Replaced pneumatic damper actuator.",
+        assigned_investigator=admin_user,
+        target_resolution_date=today + timezone.timedelta(days=15),
+        actual_resolution_date=today - timezone.timedelta(days=2),
+        status="resolved",
+    )
+
+
+@pytest.fixture
+def compliance_incident_b(db, tenant_b, operational_asset_b, vendor_party_b, admin_b):
+    today = timezone.now().date()
+    return AssetComplianceIncident.objects.create(
+        tenant=tenant_b,
+        title="Unpermitted Coolant Overflow",
+        incident_date=today - timezone.timedelta(days=3),
+        discovery_date=today - timezone.timedelta(days=3),
+        incident_type="unpermitted_discharge",
+        severity="other_than_serious",
+        asset=operational_asset_b,
+        enforcement_agency=vendor_party_b,
+        fine_assessed=Decimal("0.00"),
+        fine_paid=Decimal("0.00"),
+        root_cause="human_error",
+        root_cause_analysis="Valve left open.",
+        corrective_action_plan="Installed float cutoff switch.",
+        assigned_investigator=admin_b,
+        target_resolution_date=today + timezone.timedelta(days=7),
+        status="open",
+    )
+
 
 
 
