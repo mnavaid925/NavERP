@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Lease Modification {{ modification.number }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_modification_list' %}">Modifications</a>
+            <span>/</span>
+            <span>{{ modification.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ modification.number }}</h1>
+            <span class="badge {{ modification.type_css }}">{{ modification.get_modification_type_display }}</span>
+            <span class="badge {{ modification.status_css }}">{{ modification.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex gap-2">
+        {% if modification.status != 'executed' %}
+        <form method="post" action="{% url 'assets:asset_lease_modification_approve' modification.pk %}" class="inline" onsubmit="return confirm('Approve and execute modification {{ modification.number }}? This will remeasure contract balances.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" title="Execute remeasurement and update contract balances">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve & Remeasure
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_lease_modification_edit' modification.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_lease_modification_delete' modification.pk %}" class="inline" onsubmit="return confirm('Delete modification {{ modification.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Effective Date</div>
+            <div class="stat-value text-lg">{{ modification.effective_date|date:"Y-m-d" }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Revised Liability</div>
+            <div class="stat-value">${{ modification.revised_lease_liability|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Liability Adjustment</div>
+            <div class="stat-value font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                ${{ modification.liability_adjustment|floatformat:2 }}
+            </div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="box"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Revised ROU Asset</div>
+            <div class="stat-value">${{ modification.revised_rou_asset_value|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <!-- Card 1: Modification Scope & Governance -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Modification Scope & Approval</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                    <dt class="text-muted">Parent Lease Contract</dt>
+                    <dd class="font-medium text-slate-900">
+                        <a href="{% url 'assets:asset_lease_contract_detail' modification.lease_contract.pk %}" class="text-primary hover:underline">
+                            {{ modification.lease_contract.number }} — {{ modification.lease_contract.title }}
+                        </a>
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Modification Type</dt>
+                    <dd><span class="badge {{ modification.type_css }}">{{ modification.get_modification_type_display }}</span></dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Request Date</dt>
+                    <dd class="font-medium text-slate-900">{{ modification.request_date|date:"Y-m-d" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Effective Date</dt>
+                    <dd class="font-medium text-slate-900">{{ modification.effective_date|date:"Y-m-d" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Requested By</dt>
+                    <dd class="font-medium text-slate-900">{{ modification.requested_by.get_full_name|default:modification.requested_by.username|default:"Not specified" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Approved By</dt>
+                    <dd class="font-medium text-slate-900">{{ modification.approved_by.get_full_name|default:modification.approved_by.username|default:"Pending Approval" }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Status</dt>
+                    <dd><span class="badge {{ modification.status_css }}">{{ modification.get_status_display }}</span></dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Card 2: Financial Balance Comparison -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">Balance Comparison & Accounting Impact</h2>
+        </div>
+        <div class="card-body">
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 text-sm">
+                <div>
+                    <dt class="text-muted">Prior Lease Liability</dt>
+                    <dd class="font-mono text-slate-900">${{ modification.prior_lease_liability|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Revised Lease Liability</dt>
+                    <dd class="font-mono font-bold text-slate-900">${{ modification.revised_lease_liability|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Liability Adjustment</dt>
+                    <dd class="font-mono font-semibold {% if modification.liability_adjustment >= 0 %}text-danger{% else %}text-success{% endif %}">
+                        ${{ modification.liability_adjustment|floatformat:2 }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted">ROU Asset Adjustment</dt>
+                    <dd class="font-mono text-slate-900">${{ modification.rou_asset_adjustment|floatformat:2 }}</dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Gain / Loss on Modification</dt>
+                    <dd class="font-mono font-medium {% if modification.gain_loss_on_modification >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        ${{ modification.gain_loss_on_modification|floatformat:2 }}
+                    </dd>
+                </div>
+                <div>
+                    <dt class="text-muted">Impairment Loss</dt>
+                    <dd class="font-mono text-danger">${{ modification.impairment_loss_recognized|floatformat:2 }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Card 3: Revised Terms & Justification -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold">Revised Terms & Business Justification</h2>
+    </div>
+    <div class="card-body space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm p-3 bg-slate-50 rounded border border-slate-200">
+            <div>
+                <span class="text-muted">Revised Term:</span>
+                <span class="font-medium text-slate-900 ml-1">{{ modification.revised_term_months|default:"Unchanged" }} Months</span>
+            </div>
+            <div>
+                <span class="text-muted">Revised Payment:</span>
+                <span class="font-medium text-slate-900 ml-1">{% if modification.revised_payment_amount %}${{ modification.revised_payment_amount|floatformat:2 }}{% else %}Unchanged{% endif %}</span>
+            </div>
+            <div>
+                <span class="text-muted">Revised Discount Rate:</span>
+                <span class="font-medium text-slate-900 ml-1">{% if modification.revised_discount_rate_pct %}{{ modification.revised_discount_rate_pct }}%{% else %}Unchanged{% endif %}</span>
+            </div>
+        </div>
+
+        {% if modification.justification %}
+        <div class="text-sm">
+            <div class="font-semibold text-slate-900 mb-1">Commercial Justification:</div>
+            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ modification.justification }}</div>
+        </div>
+        {% endif %}
+
+        {% if modification.notes %}
+        <div class="text-sm">
+            <div class="font-semibold text-slate-900 mb-1">Audit Notes:</div>
+            <div class="text-slate-700 bg-white p-3 rounded border border-slate-200">{{ modification.notes }}</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
