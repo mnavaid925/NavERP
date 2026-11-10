@@ -21,6 +21,9 @@ from apps.assets.urls.AssetProcurement import (
 from apps.assets.urls.AssetDisposal import (
     urlpatterns as asset_disposal_urlpatterns,
 )
+from apps.assets.urls.AssetLeaseRental import (
+    urlpatterns as asset_lease_rental_urlpatterns,
+)
 from apps.assets.urls.AssetReliability import (
     urlpatterns as asset_reliability_urlpatterns,
 )
@@ -47,5 +50,6 @@ urlpatterns = (
     + asset_reliability_urlpatterns
     + asset_warranty_insurance_urlpatterns
     + asset_disposal_urlpatterns
+    + asset_lease_rental_urlpatterns
     + asset_compliance_urlpatterns
 )
