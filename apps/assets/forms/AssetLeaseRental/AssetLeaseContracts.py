@@ -102,4 +102,21 @@ class AssetLeaseContractForm(TenantUniqueMixin, TenantModelForm):
         if term is not None and (term < 1 or term > 600):
             self.add_error("lease_term_months", "Lease term must be between 1 and 600 months (50 years max).")
 
+        rate = cleaned.get("discount_rate_pct")
+        if rate is not None and (rate < 0 or rate > 100):
+            self.add_error("discount_rate_pct", "Discount rate must be between 0% and 100%.")
+
+        non_negative_fields = [
+            "payment_amount",
+            "fair_market_value",
+            "initial_direct_costs",
+            "lease_incentives",
+            "residual_value_guarantee",
+            "purchase_option_price",
+        ]
+        for f in non_negative_fields:
+            val = cleaned.get(f)
+            if val is not None and val < 0:
+                self.add_error(f, "Amount cannot be negative.")
+
         return cleaned
