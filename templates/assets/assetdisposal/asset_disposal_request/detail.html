@@ -333,7 +333,7 @@
                 <div>
                     <div class="text-xs text-slate-400 font-medium uppercase">Initiated By</div>
                     <div class="text-sm font-medium text-slate-800 mt-0.5">
-                        {{ disposal_request.requested_by.get_full_name|default:disposal_request.requested_by.username|default:"—" }}
+                        {% if disposal_request.requested_by %}{{ disposal_request.requested_by.get_full_name|default:disposal_request.requested_by.username }}{% else %}—{% endif %}
                     </div>
                     {% if disposal_request.submitted_at %}
                     <div class="text-xs text-slate-500">Submitted: {{ disposal_request.submitted_at|date:"M d, Y H:i" }}</div>
@@ -343,14 +343,14 @@
                 <div class="border-t border-slate-100 pt-3">
                     <div class="text-xs text-slate-400 font-medium uppercase">Appraised By</div>
                     <div class="text-sm font-medium text-slate-800 mt-0.5">
-                        {{ disposal_request.appraised_by.get_full_name|default:disposal_request.appraised_by.username|default:"Pending Appraisal" }}
+                        {% if disposal_request.appraised_by %}{{ disposal_request.appraised_by.get_full_name|default:disposal_request.appraised_by.username }}{% else %}Pending Appraisal{% endif %}
                     </div>
                 </div>
 
                 <div class="border-t border-slate-100 pt-3">
                     <div class="text-xs text-slate-400 font-medium uppercase">Approved By</div>
                     <div class="text-sm font-medium text-slate-800 mt-0.5">
-                        {{ disposal_request.approved_by.get_full_name|default:disposal_request.approved_by.username|default:"Pending Executive Authorization" }}
+                        {% if disposal_request.approved_by %}{{ disposal_request.approved_by.get_full_name|default:disposal_request.approved_by.username }}{% else %}Pending Executive Authorization{% endif %}
                     </div>
                     {% if disposal_request.approved_at %}
                     <div class="text-xs text-slate-500">Approved: {{ disposal_request.approved_at|date:"M d, Y H:i" }}</div>
