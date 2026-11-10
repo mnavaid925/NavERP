@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, and metrology calibration records with tolerance verification). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, and insurance claims with adjuster tracking, proof of loss, and indemnity settlements). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -23,6 +23,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.5 Asset Maintenance & Repair**: Breakdown tickets, triage, work orders, preventive maintenance calendars, runtime meter triggers, vendor AMC/SLA agreements, and work history logs with wrench time, ISO failure codes, and GL cost accounting.
 - **11.6 Asset Performance & Utilization**: Operational downtime logging with hourly financial loss, Overall Equipment Effectiveness (OEE) tracking with TPM Six Big Losses, smart sub-meter energy readings with GHG Scope 1/2/3 carbon footprint metrics, and multi-dimensional performance scorecards with MTBF/MTTR benchmarking.
 - **11.7 Asset Reliability & Condition Monitoring**: Multi-technique non-destructive testing (NDT) condition assessments, continuous IoT & SCADA telemetry streaming with threshold anomaly alerts, FMEA failure mode cataloging with RPN risk matrix & RCM strategies, and metrology calibration records with automated drift/error calculation and corrective maintenance work order generation.
+- **11.8 Warranty & Insurance Management**: Manufacturer OEM and extended warranty policies with meter/calendar limits and deductible tracking, warranty claim submissions with OEM defect resolution and net financial recovery, industrial property & machinery breakdown insurance policies with premium/limit tracking, and casualty insurance claims with adjuster assignments, proof-of-loss filings, salvage recovery, and direct indemnity settlements.
 
 ---
 
@@ -69,6 +70,11 @@ apps/assets/
       AssetTelemetryReadings.py               <- AssetTelemetryReading [ATEL-]
       AssetFailureModes.py                    <- AssetFailureMode [AFMA-]
       AssetCalibrationRecords.py              <- AssetCalibrationRecord [ACAL-]
+    AssetWarrantyInsurance/                   <- Sub-module 11.8 models
+      AssetWarranties.py                      <- AssetWarranty [AWAR-]
+      AssetWarrantyClaims.py                  <- AssetWarrantyClaim [AWCL-]
+      AssetInsurancePolicies.py               <- AssetInsurancePolicy [AINS-]
+      AssetInsuranceClaims.py                 <- AssetInsuranceClaim [AICL-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -107,6 +113,11 @@ apps/assets/
       AssetTelemetryReadings.py               <- AssetTelemetryReadingForm
       AssetFailureModes.py                    <- AssetFailureModeForm
       AssetCalibrationRecords.py              <- AssetCalibrationRecordForm
+    AssetWarrantyInsurance/                   <- Sub-module 11.8 forms
+      AssetWarranties.py                      <- AssetWarrantyForm
+      AssetWarrantyClaims.py                  <- AssetWarrantyClaimForm
+      AssetInsurancePolicies.py               <- AssetInsurancePolicyForm
+      AssetInsuranceClaims.py                 <- AssetInsuranceClaimForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -146,6 +157,11 @@ apps/assets/
       AssetTelemetryReadings.py               <- Telemetry CRUD + flag_anomaly, trigger_request
       AssetFailureModes.py                    <- FMEA CRUD + activate, archive
       AssetCalibrationRecords.py              <- Calibration CRUD + quarantine
+    AssetWarrantyInsurance/                   <- Sub-module 11.8 views
+      AssetWarranties.py                      <- Warranty CRUD + activate, renew, void
+      AssetWarrantyClaims.py                  <- Warranty Claim CRUD + submit, review, settle, reject
+      AssetInsurancePolicies.py               <- Insurance Policy CRUD + activate, renew, cancel
+      AssetInsuranceClaims.py                 <- Insurance Claim CRUD + assign_adjuster, file_proof, settle, deny
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -183,11 +199,16 @@ apps/assets/
       AssetTelemetryReadings.py
       AssetFailureModes.py
       AssetCalibrationRecords.py
+    AssetWarrantyInsurance/                   <- Sub-module 11.8 URL route definitions
+      AssetWarranties.py
+      AssetWarrantyClaims.py
+      AssetInsurancePolicies.py
+      AssetInsuranceClaims.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6 & 11.7)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7 & 11.8)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -216,6 +237,10 @@ apps/assets/
     test_asset_reliability_forms.py           <- 11.7 Form validation, user/vendor scoping, reject_foreign
     test_asset_reliability_views.py           <- 11.7 View context contracts, filters, aggregates, maintenance triggers
     test_asset_reliability_security.py        <- 11.7 IDOR (404), RBAC admin gates (403), audit logging, FK injection
+    test_assetwarrantyinsurance_models.py     <- 11.8 Model invariants, date helpers, net recovery, CSS badge mappings
+    test_assetwarrantyinsurance_forms.py      <- 11.8 Form validation, date order checks, reject_foreign, mass assignment
+    test_assetwarrantyinsurance_views.py      <- 11.8 View contracts, filters, settlement math, status guards, actions
+    test_assetwarrantyinsurance_security.py   <- 11.8 IDOR (404), RBAC gates, numeric hardening (L35), state tampering
 ```
 
 ---
@@ -297,6 +322,20 @@ apps/assets/
 4. **`AssetPerformanceScorecard`** (`APSC-`):
    - **Fields:** `number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `period_type` (`daily`, `weekly`, `monthly`, `quarterly`, `annual`), `period_start`, `period_end`, `total_calendar_hours`, `planned_operating_hours`, `actual_operating_hours`, `unplanned_downtime_hours`, `planned_downtime_hours`, `idle_capacity_hours`, `failure_event_count`, `capacity_utilization_rate`, `availability_rate`, `mtbf_hours`, `mttr_hours`, `average_oee_percentage`, `total_energy_consumption_kwh`, `total_carbon_emissions_kg`, `total_downtime_cost`, `performance_index_score`, `benchmark_grade` (`grade_a`, `grade_b`, `grade_c`, `grade_d`), `status` (`draft`, `published`, `archived`), `department` (FK `core.OrgUnit`), `evaluated_by` (FK `User`), `executive_summary`.
    - **Invariants:** Roll-up synthesis (35% Utilization + 35% Availability + 30% OEE), MTBF/MTTR calculation, publish lifecycle.
+
+### 11.8 Asset Warranty & Insurance Management
+1. **`AssetWarranty`** (`AWAR-`):
+   - **Fields:** `number`, `title`, `warranty_certificate_number`, `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `asset_category` (FK `AssetCategory`), `warrantor_party` (FK `core.Party`), `currency` (FK `accounting.Currency`), `warranty_type` (`oem_standard`, `oem_extended`, `third_party_extended`, `dealer_certified`, `refurbished_component`), `coverage_scope` (`comprehensive`, `parts_and_labor`, `parts_only`, `powertrain_major_components`), `start_date`, `end_date`, `meter_type` (`hours`, `kilometers`, `miles`, `production_cycles`, `none_calendar_only`), `meter_limit`, `parts_coverage_percent`, `labor_coverage_percent`, `travel_dispatch_covered`, `deductible_amount`, `contract_purchase_price`, `terms_and_conditions`, `contract_document` (FK `core.Document`), `service_contract` (FK `AssetServiceContract`), `status` (`draft`, `active`, `expiring_soon`, `expired`, `voided`, `claimed`), `registered_by` (FK `User`).
+   - **Invariants:** Date validity checks (`end_date >= start_date`), active window derivation (`is_currently_valid`), status guards rejecting renewal of voided warranties, automatic reactivation vs expiration on claim closure.
+2. **`AssetWarrantyClaim`** (`AWCL-`):
+   - **Fields:** `number`, `title`, `warranty` (FK `AssetWarranty`), `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `incident_date`, `operating_meter_at_failure`, `defect_description`, `warrantor_claim_reference`, `maintenance_request` (FK `AssetMaintenanceRequest`), `supporting_document` (FK `core.Document`), `currency` (FK `accounting.Currency`), `claimed_amount`, `approved_amount`, `rejected_amount`, `deductible_applied`, `net_recovery_amount`, `resolution_type` (`pending_evaluation`, `parts_replacement_oem`, `labor_reimbursement`, `full_unit_replacement`, `cash_reimbursement`, `rejected_uncovered`), `part_return_required`, `part_return_tracking_number`, `part_return_status` (`not_required`, `pending_shipment`, `in_transit_to_oem`, `delivered_accepted`), `claim_status` (`draft`, `submitted`, `under_review`, `approved_pending_settlement`, `settled_closed`, `rejected`), `filed_by` (FK `User`), `approved_by` (FK `User`), `settlement_date`, `settlement_notes`.
+   - **Invariants:** Hand-parsed numeric inputs protected by `is_finite()` and magnitude limits (L35), net recovery calculation (`approved_amount - deductible_applied`), status transition guards preventing re-settling finalized claims.
+3. **`AssetInsurancePolicy`** (`AINS-`):
+   - **Fields:** `number`, `policy_number`, `title`, `policy_type` (`machinery_breakdown`, `property_all_risk`, `boiler_pressure_vessel`, `electronic_equipment`, `business_interruption`, `transit_cargo`, `comprehensive_all_risk`), `underwriter_party` (FK `core.Party`), `broker_party` (FK `core.Party`), `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `asset_category` (FK `AssetCategory`), `effective_date`, `expiration_date`, `annual_premium`, `premium_frequency` (`annual`, `semi_annual`, `quarterly`, `monthly`), `total_insured_value`, `policy_limit`, `deductible_retention`, `coinsurance_percentage`, `valuation_basis` (`replacement_cost_value`, `actual_cash_value`, `agreed_value`, `functional_replacement_cost`), `currency` (FK `accounting.Currency`), `coverage_terms`, `policy_document` (FK `core.Document`), `status` (`draft`, `active`, `expiring_soon`, `expired`, `cancelled`), `risk_manager` (FK `User`), `notes`.
+   - **Invariants:** In-force evaluation (`is_currently_in_force`), renewal guards rejecting cancelled/voided policies, color-named badge mappings.
+4. **`AssetInsuranceClaim`** (`AICL-`):
+   - **Fields:** `number`, `title`, `policy` (FK `AssetInsurancePolicy`), `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `incident_report` (FK `AssetIncidentReport`), `incident_date`, `incident_location`, `peril_type` (`fire_explosion`, `mechanical_breakdown`, `electrical_arcing_surge`, `water_liquid_damage`, `natural_catastrophe`, `operator_error_impact`, `theft_burglary`, `business_interruption_loss`), `incident_description`, `carrier_claim_number`, `adjuster_party` (FK `core.Party`), `adjuster_name_fallback`, `adjuster_phone`, `adjuster_email`, `date_reported_to_carrier`, `proof_of_loss_filed`, `proof_of_loss_date`, `proof_of_loss_document` (FK `core.Document`), `claimed_loss_amount`, `deductible_applied`, `settlement_payout_amount`, `salvage_recovery_amount`, `net_carrier_indemnity`, `currency` (FK `accounting.Currency`), `settlement_method` (`direct_indemnity_check`, `vendor_direct_repair`, `replacement_asset_procurement`, `none_denied`), `settlement_date`, `settlement_notes`, `claim_status` (`incident_reported`, `adjuster_assigned`, `proof_of_loss_filed`, `under_carrier_review`, `approved_pending_payout`, `settled_paid`, `denied_disputed`, `closed`), `claims_officer` (FK `User`).
+   - **Invariants:** Double numeric validation on settlement/salvage payouts (L35), net recovery calculation (`settlement_payout_amount + salvage_recovery_amount`), adjuster assignment workflow, proof-of-loss tracking, view-level status guards.
 
 ---
 
@@ -518,6 +557,47 @@ Namespace: `assets:`
   - `assets:asset_calibration_record_delete`: `/assets/reliability/calibrations/<pk>/delete/` [POST, Admin]
   - `assets:asset_calibration_record_quarantine`: `/assets/reliability/calibrations/<pk>/quarantine/` [POST, Admin]
 
+### 11.8 Asset Warranty & Insurance Management
+Namespace: `assets:`
+- **Asset Warranties:**
+  - `assets:asset_warranty_list`: `/assets/warranty-insurance/warranties/`
+  - `assets:asset_warranty_create`: `/assets/warranty-insurance/warranties/create/`
+  - `assets:asset_warranty_detail`: `/assets/warranty-insurance/warranties/<pk>/`
+  - `assets:asset_warranty_edit`: `/assets/warranty-insurance/warranties/<pk>/edit/`
+  - `assets:asset_warranty_delete`: `/assets/warranty-insurance/warranties/<pk>/delete/` [POST, Admin]
+  - `assets:asset_warranty_activate`: `/assets/warranty-insurance/warranties/<pk>/activate/` [POST]
+  - `assets:asset_warranty_renew`: `/assets/warranty-insurance/warranties/<pk>/renew/` [POST]
+  - `assets:asset_warranty_void`: `/assets/warranty-insurance/warranties/<pk>/void/` [POST, Admin]
+- **Warranty Claims:**
+  - `assets:asset_warranty_claim_list`: `/assets/warranty-insurance/warranty-claims/`
+  - `assets:asset_warranty_claim_create`: `/assets/warranty-insurance/warranty-claims/create/`
+  - `assets:asset_warranty_claim_detail`: `/assets/warranty-insurance/warranty-claims/<pk>/`
+  - `assets:asset_warranty_claim_edit`: `/assets/warranty-insurance/warranty-claims/<pk>/edit/`
+  - `assets:asset_warranty_claim_delete`: `/assets/warranty-insurance/warranty-claims/<pk>/delete/` [POST, Admin]
+  - `assets:asset_warranty_claim_submit`: `/assets/warranty-insurance/warranty-claims/<pk>/submit/` [POST]
+  - `assets:asset_warranty_claim_review`: `/assets/warranty-insurance/warranty-claims/<pk>/review/` [POST]
+  - `assets:asset_warranty_claim_settle`: `/assets/warranty-insurance/warranty-claims/<pk>/settle/` [POST]
+  - `assets:asset_warranty_claim_reject`: `/assets/warranty-insurance/warranty-claims/<pk>/reject/` [POST]
+- **Insurance Policies:**
+  - `assets:asset_insurance_policy_list`: `/assets/warranty-insurance/policies/`
+  - `assets:asset_insurance_policy_create`: `/assets/warranty-insurance/policies/create/`
+  - `assets:asset_insurance_policy_detail`: `/assets/warranty-insurance/policies/<pk>/`
+  - `assets:asset_insurance_policy_edit`: `/assets/warranty-insurance/policies/<pk>/edit/`
+  - `assets:asset_insurance_policy_delete`: `/assets/warranty-insurance/policies/<pk>/delete/` [POST, Admin]
+  - `assets:asset_insurance_policy_activate`: `/assets/warranty-insurance/policies/<pk>/activate/` [POST]
+  - `assets:asset_insurance_policy_renew`: `/assets/warranty-insurance/policies/<pk>/renew/` [POST]
+  - `assets:asset_insurance_policy_cancel`: `/assets/warranty-insurance/policies/<pk>/cancel/` [POST, Admin]
+- **Insurance Claims:**
+  - `assets:asset_insurance_claim_list`: `/assets/warranty-insurance/insurance-claims/`
+  - `assets:asset_insurance_claim_create`: `/assets/warranty-insurance/insurance-claims/create/`
+  - `assets:asset_insurance_claim_detail`: `/assets/warranty-insurance/insurance-claims/<pk>/`
+  - `assets:asset_insurance_claim_edit`: `/assets/warranty-insurance/insurance-claims/<pk>/edit/`
+  - `assets:asset_insurance_claim_delete`: `/assets/warranty-insurance/insurance-claims/<pk>/delete/` [POST, Admin]
+  - `assets:asset_insurance_claim_assign_adjuster`: `/assets/warranty-insurance/insurance-claims/<pk>/assign-adjuster/` [POST]
+  - `assets:asset_insurance_claim_file_proof`: `/assets/warranty-insurance/insurance-claims/<pk>/file-proof/` [POST]
+  - `assets:asset_insurance_claim_settle`: `/assets/warranty-insurance/insurance-claims/<pk>/settle/` [POST]
+  - `assets:asset_insurance_claim_deny`: `/assets/warranty-insurance/insurance-claims/<pk>/deny/` [POST]
+
 ---
 
 ## Conventions & Gotchas
@@ -564,4 +644,5 @@ Unfiltered run on SQLite in-memory test database (821 passing tests across 11.1,
 - `11.5`: Maintenance & Repair (`assets:asset_maintenance_request_list`)
 - `11.6`: Performance & Utilization (`assets:asset_downtime_log_list`)
 - `11.7`: Reliability & Condition Monitoring (`assets:asset_condition_assessment_list`)
+- `11.8`: Warranty & Insurance Management (`assets:asset_warranty_list`)
 
