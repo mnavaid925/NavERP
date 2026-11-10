@@ -228,13 +228,13 @@ Namespace: `assets` (in `apps/assets/urls/AssetLeaseRental/`)
 - Terminate: `assets:asset_lease_contract_terminate` -> `leases/<int:pk>/terminate/` (POST-only)
 
 ### 2.2 `AssetLeaseSchedule`
-- List: `assets:asset_lease_schedule_list` -> `schedules/`
-- Detail: `assets:asset_lease_schedule_detail` -> `schedules/<int:pk>/`
-- Create: `assets:asset_lease_schedule_create` -> `schedules/create/`
-- Edit: `assets:asset_lease_schedule_edit` -> `schedules/<int:pk>/edit/`
-- Delete: `assets:asset_lease_schedule_delete` -> `schedules/<int:pk>/delete/` (POST-only)
-- Mark Paid: `assets:asset_lease_schedule_mark_paid` -> `schedules/<int:pk>/mark-paid/` (POST-only)
-- Accrue: `assets:asset_lease_schedule_accrue` -> `schedules/<int:pk>/accrue/` (POST-only)
+- List: `assets:asset_lease_schedule_list` -> `lease-schedules/`
+- Detail: `assets:asset_lease_schedule_detail` -> `lease-schedules/<int:pk>/`
+- Create: `assets:asset_lease_schedule_create` -> `lease-schedules/create/`
+- Edit: `assets:asset_lease_schedule_edit` -> `lease-schedules/<int:pk>/edit/`
+- Delete: `assets:asset_lease_schedule_delete` -> `lease-schedules/<int:pk>/delete/` (POST-only)
+- Mark Paid: `assets:asset_lease_schedule_mark_paid` -> `lease-schedules/<int:pk>/mark-paid/` (POST-only)
+- Accrue: `assets:asset_lease_schedule_accrue` -> `lease-schedules/<int:pk>/accrue/` (POST-only)
 
 ### 2.3 `AssetLeaseModification`
 - List: `assets:asset_lease_modification_list` -> `modifications/`
