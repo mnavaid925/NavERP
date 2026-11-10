@@ -49,6 +49,18 @@ from apps.assets.forms.AssetReliability import (
     AssetFailureModeForm,
     AssetTelemetryReadingForm,
 )
+from apps.assets.forms.AssetDisposal import (
+    AssetDisposalAppraisalForm,
+    AssetDisposalRejectForm,
+    AssetDisposalRequestForm,
+    AssetResaleAcceptForm,
+    AssetResaleBidForm,
+    AssetResaleListingForm,
+    AssetScrapAbatementForm,
+    AssetScrapCertificateForm,
+    AssetScrapSalvageForm,
+    AssetTradeInForm,
+)
 from apps.assets.forms.AssetWarrantyInsurance import (
     AssetInsuranceClaimForm,
     AssetInsurancePolicyForm,
@@ -98,4 +110,14 @@ __all__ = [
     "AssetWarrantyClaimForm",
     "AssetInsurancePolicyForm",
     "AssetInsuranceClaimForm",
+    "AssetDisposalRequestForm",
+    "AssetDisposalAppraisalForm",
+    "AssetDisposalRejectForm",
+    "AssetResaleListingForm",
+    "AssetResaleBidForm",
+    "AssetResaleAcceptForm",
+    "AssetTradeInForm",
+    "AssetScrapSalvageForm",
+    "AssetScrapAbatementForm",
+    "AssetScrapCertificateForm",
 ]
