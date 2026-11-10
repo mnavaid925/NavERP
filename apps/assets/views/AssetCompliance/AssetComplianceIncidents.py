@@ -57,21 +57,24 @@ def asset_compliance_incident_list(request):
         qs = qs.filter(enforcement_agency_id=int(agency_id))
 
     # Aggregate KPI counts and fine exposure
-    base_all = AssetComplianceIncident.objects.filter(tenant=request.tenant)
-    total_incidents = base_all.count()
-    open_count = base_all.filter(
-        status__in=["open", "under_investigation", "capa_in_progress"]
-    ).count()
-    critical_severity_count = base_all.filter(
-        severity__in=["serious", "repeat", "willful", "imminent_danger"]
-    ).count()
-
-    fines_data = base_all.aggregate(
+    metrics = AssetComplianceIncident.objects.filter(tenant=request.tenant).aggregate(
+        total=Count("id"),
+        open=Count(
+            "id",
+            filter=Q(status__in=["open", "under_investigation", "capa_in_progress"]),
+        ),
+        critical=Count(
+            "id",
+            filter=Q(severity__in=["serious", "repeat", "willful", "imminent_danger"]),
+        ),
         total_assessed=Sum("fine_assessed"),
         total_paid=Sum("fine_paid"),
     )
-    total_fines_assessed = fines_data["total_assessed"] or Decimal("0.00")
-    total_fines_paid = fines_data["total_paid"] or Decimal("0.00")
+    total_incidents = metrics["total"]
+    open_count = metrics["open"]
+    critical_severity_count = metrics["critical"]
+    total_fines_assessed = metrics["total_assessed"] or Decimal("0.00")
+    total_fines_paid = metrics["total_paid"] or Decimal("0.00")
 
     agency_list = Party.objects.filter(tenant=request.tenant).order_by("name")
 
