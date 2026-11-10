@@ -8,7 +8,8 @@
 
 ## Critical
 
-- [ ] **C1: `write_audit_log()` Signature Mismatch Crashes All 26 Mutations with HTTP 500 (`TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`)**
+- [x] **C1: `write_audit_log()` Signature Mismatch Crashes All 26 Mutations with HTTP 500 (`TypeError: write_audit_log() got an unexpected keyword argument 'model_name'`)**
+  - **Status:** [x] fixed — align write_audit_log signature across warranty and insurance views (27ab531e, 2957c74e, 009ff353, 0d482f24)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarranties.py:135, 164, 192, 216, 238, 257`
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:139, 168, 196, 225, 244, 287, 321`
