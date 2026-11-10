@@ -22,6 +22,8 @@ def asset_insurance_claim_list(request):
     qs = assets_scope(
         AssetInsuranceClaim.objects.select_related(
             "policy",
+            "policy__underwriter_party",
+            "policy__currency",
             "fixed_asset",
             "operational_asset",
             "currency",
@@ -99,6 +101,8 @@ def asset_insurance_claim_detail(request, pk):
     claim = get_object_or_404(
         AssetInsuranceClaim.objects.select_related(
             "policy",
+            "policy__underwriter_party",
+            "policy__currency",
             "fixed_asset",
             "operational_asset",
             "incident_report",
