@@ -137,12 +137,11 @@ def asset_warranty_claim_create(request):
                 claim.filed_by = request.user
                 claim.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_warranty_claim.create",
-                    model_name="AssetWarrantyClaim",
-                    object_id=claim.pk,
-                    details=f"Created warranty claim {claim.number} for warranty {claim.warranty.number}",
+                    obj=claim,
+                    action="create",
+                    changes={"details": f"Created warranty claim {claim.number} for warranty {claim.warranty.number}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Warranty claim {claim.number} created.")
                 return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
@@ -166,12 +165,11 @@ def asset_warranty_claim_edit(request, pk):
             with transaction.atomic():
                 claim = form.save()
                 write_audit_log(
-                    tenant=request.tenant,
                     user=request.user,
-                    action="asset_warranty_claim.edit",
-                    model_name="AssetWarrantyClaim",
-                    object_id=claim.pk,
-                    details=f"Updated warranty claim {claim.number}",
+                    obj=claim,
+                    action="update",
+                    changes={"details": f"Updated warranty claim {claim.number}"},
+                    tenant=request.tenant,
                 )
                 messages.success(request, f"Warranty claim {claim.number} updated.")
                 return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
@@ -194,12 +192,11 @@ def asset_warranty_claim_delete(request, pk):
     number = claim.number
     with transaction.atomic():
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty_claim.delete",
-            model_name="AssetWarrantyClaim",
-            object_id=claim.pk,
-            details=f"Deleted warranty claim {number}",
+            obj=claim,
+            action="delete",
+            changes={"details": f"Deleted warranty claim {number}"},
+            tenant=request.tenant,
         )
         claim.delete()
         messages.success(request, f"Warranty claim {number} deleted.")
@@ -223,12 +220,11 @@ def asset_warranty_claim_submit(request, pk):
             claim.warranty.save(update_fields=["status", "updated_at"])
         claim.save(update_fields=["claim_status", "submission_date", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty_claim.submit",
-            model_name="AssetWarrantyClaim",
-            object_id=claim.pk,
-            details=f"Submitted warranty claim {claim.number} to warrantor",
+            obj=claim,
+            action="submit",
+            changes={"details": f"Submitted warranty claim {claim.number} to warrantor"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Warranty claim {claim.number} submitted to warrantor.")
     return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
@@ -242,12 +238,11 @@ def asset_warranty_claim_review(request, pk):
         claim.claim_status = "under_review"
         claim.save(update_fields=["claim_status", "updated_at"])
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty_claim.review",
-            model_name="AssetWarrantyClaim",
-            object_id=claim.pk,
-            details=f"Claim {claim.number} marked under technical review",
+            obj=claim,
+            action="review",
+            changes={"details": f"Claim {claim.number} marked under technical review"},
+            tenant=request.tenant,
         )
         messages.info(request, f"Claim {claim.number} is now under review.")
     return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
@@ -285,12 +280,11 @@ def asset_warranty_claim_settle(request, pk):
             claim.warranty.save(update_fields=["status", "updated_at"])
 
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty_claim.settle",
-            model_name="AssetWarrantyClaim",
-            object_id=claim.pk,
-            details=f"Settled warranty claim {claim.number} for net recovery {claim.net_recovery_amount}",
+            obj=claim,
+            action="settle",
+            changes={"details": f"Settled warranty claim {claim.number} for net recovery {claim.net_recovery_amount}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Warranty claim {claim.number} settled successfully.")
     return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
@@ -319,12 +313,11 @@ def asset_warranty_claim_reject(request, pk):
             claim.warranty.save(update_fields=["status", "updated_at"])
 
         write_audit_log(
-            tenant=request.tenant,
             user=request.user,
-            action="asset_warranty_claim.reject",
-            model_name="AssetWarrantyClaim",
-            object_id=claim.pk,
-            details=f"Warranty claim {claim.number} rejected by OEM",
+            obj=claim,
+            action="reject",
+            changes={"details": f"Warranty claim {claim.number} rejected by OEM"},
+            tenant=request.tenant,
         )
         messages.warning(request, f"Warranty claim {claim.number} recorded as rejected.")
     return redirect("assets:asset_warranty_claim_detail", pk=claim.pk)
