@@ -150,3 +150,11 @@ class AssetPermitLicense(TenantNumbered):
         if days is not None and self.status == "active":
             return 0 <= days <= self.renewal_lead_days
         return False
+
+    @property
+    def is_expired(self):
+        if self.status == "expired":
+            return True
+        days = self.days_to_expiration
+        return days is not None and days < 0
+
