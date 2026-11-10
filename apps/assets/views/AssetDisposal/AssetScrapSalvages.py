@@ -277,6 +277,10 @@ def asset_scrap_salvage_record_cod(request, pk):
 @require_POST
 def asset_scrap_salvage_settle(request, pk):
     instance = assets_object(request, AssetScrapSalvage, pk)
+    if instance.status == "settled":
+        messages.info(request, f"Scrap job {instance.number} has already been settled.")
+        return redirect("assets:asset_scrap_salvage_detail", pk=instance.pk)
+
     with transaction.atomic():
         instance.completion_date = timezone.now().date()
         instance.status = "settled"
