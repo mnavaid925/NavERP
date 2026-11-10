@@ -122,7 +122,7 @@
                     <td class="font-mono text-xs">${{ a.monthly_lease_payment|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ a.npv_purchase_option|floatformat:2 }}</td>
                     <td class="font-mono text-xs">${{ a.npv_lease_option|floatformat:2 }}</td>
-                    <td class="font-mono text-xs font-semibold {% if a.net_advantage_to_leasing >= 0 %}text-purple{% else %}text-success{% endif %}">
+                    <td class="font-mono text-xs font-semibold {% if a.net_advantage_to_leasing >= 0 %}text-brand{% else %}text-ok{% endif %}">
                         ${{ a.net_advantage_to_leasing|floatformat:2 }}
                     </td>
                     <td>
