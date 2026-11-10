@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth import get_user_model
 
@@ -79,4 +81,16 @@ class AssetComplianceIncidentForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["asset", "permit", "audit", "enforcement_agency", "assigned_investigator"])
+        fine_assessed = cleaned.get("fine_assessed")
+        if fine_assessed is None:
+            cleaned["fine_assessed"] = Decimal("0.00")
+            fine_assessed = cleaned["fine_assessed"]
+
+        fine_paid = cleaned.get("fine_paid")
+        if fine_paid is None:
+            cleaned["fine_paid"] = Decimal("0.00")
+            fine_paid = cleaned["fine_paid"]
+
+        if fine_paid is not None and fine_assessed is not None and fine_paid > fine_assessed:
+            self.add_error("fine_paid", "Fine paid cannot exceed fine assessed.")
         return cleaned
