@@ -1763,7 +1763,7 @@ class Command(BaseCommand):
         oa_primary = Asset.objects.filter(tenant=tenant).first()
         cat = AssetCategory.objects.filter(tenant=tenant).first()
         vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
-        currency = Currency.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(is_active=True).first()
         maint_req = AssetMaintenanceRequest.objects.filter(tenant=tenant).first()
         incident_rep = AssetIncidentReport.objects.filter(tenant=tenant).first()
         service_contract = AssetServiceContract.objects.filter(tenant=tenant).first()
