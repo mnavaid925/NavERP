@@ -62,3 +62,19 @@
 3. `templates/assets/assetdisposal/asset_disposal_request/form.html:110-126` — Financial inputs lack optional indicators/helper notes regarding automatic derivation.
 
 ---
+
+## Pass 4: Performance Reviewer Findings
+
+### Critical
+*None.*
+
+### Important
+1. `apps/assets/views/AssetDisposal/` list views — Multiple unbundled KPI queries across all 4 list views execute 17 independent queries against `base_tenant_qs`. Bundle into a single `.aggregate()` with conditional `Count("id", filter=Q(...))` and `Sum(...)`.
+2. `templates/assets/assetdisposal/asset_disposal_request/detail.html:181, 229, 277` — Invoking `.count` on unevaluated child QuerySets triggers 3 distinct `SELECT COUNT(*)` queries immediately before iterating them. Replace with `|length`.
+3. `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:114-116` — Missing `fixed_asset` / `retired_fixed_asset` in child `select_related` calls triggers lazy evaluation during `__str__` execution in templates.
+
+### Minor
+1. `apps/assets/views/AssetDisposal/AssetTradeIns.py:69`, `AssetScrapSalvages.py:87`, `AssetDisposalRequests.py:86` — Party and Category queries for dropdown filter contexts should use `.only("id", "name")`.
+2. `apps/assets/views/AssetDisposal/` create views — Replace `dr.fixed_asset.pk` and `dr.operational_asset.pk` with `dr.fixed_asset_id` and `dr.operational_asset_id` to avoid lazy foreign key lookups.
+
+---
