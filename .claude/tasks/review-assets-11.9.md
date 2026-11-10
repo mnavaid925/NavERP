@@ -40,7 +40,7 @@
   - **Issue:** Derecognizing capitalized balance sheet assets carries financial governance implications. `asset_disposal_request_approve` is currently decorated only with `@login_required` and `@require_POST`, allowing any non-admin tenant employee to approve asset retirements.
   - **Fix:** Add `@tenant_admin_required` to `asset_disposal_request_approve`.
 
-- [ ] **I4: Missing State Transition Guards on Workflow Actions (Out-of-Order Lifecycle Transitions)**
+- [x] **I4: Missing State Transition Guards on Workflow Actions (Out-of-Order Lifecycle Transitions)** — fixed (commits c9585974, ba972ad9, 578415b0, 0d41ab91)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:221-245` (`asset_disposal_request_appraise`)
     - `apps/assets/views/AssetDisposal/AssetDisposalRequests.py:268-280` (`asset_disposal_request_reject`)
