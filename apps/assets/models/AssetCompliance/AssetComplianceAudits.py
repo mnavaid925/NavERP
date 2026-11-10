@@ -63,7 +63,7 @@ class AssetComplianceAudit(TenantNumbered):
     tenant = models.ForeignKey(
         "core.Tenant",
         on_delete=models.CASCADE,
-        related_name="compliance_audits",
+        related_name="asset_compliance_audits",
     )
     title = models.CharField(
         max_length=255,
