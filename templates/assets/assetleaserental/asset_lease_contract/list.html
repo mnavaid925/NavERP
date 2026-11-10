@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Lease & Rental Contracts — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <span>Contracts</span>
+        </div>
+        <h1 class="page-title">Lease & Rental Contracts</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_lease_contract_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Lease Contract
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="file-text"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Leases</div>
+            <div class="stat-value">{{ total_leases }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Leases</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Liability</div>
+            <div class="stat-value">${{ total_liability|floatformat:2 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="box"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">ROU Asset Carrying</div>
+            <div class="stat-value">${{ total_rou_value|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search by number, title, lessor, asset..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="classification" class="form-select">
+                    <option value="">All Classifications</option>
+                    {% for code, label in classification_choices %}
+                    <option value="{{ code }}" {% if classification == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lessor" class="form-select">
+                    <option value="">All Lessors</option>
+                    {% for l in lessor_list %}
+                    <option value="{{ l.pk }}" {% if lessor == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_lease_contract_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Contract #</th>
+                    <th>Title & MLA</th>
+                    <th>Lessor</th>
+                    <th>Classification</th>
+                    <th>Payment</th>
+                    <th>Liability Bal.</th>
+                    <th>ROU Asset</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lease in leases %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_lease_contract_detail' lease.pk %}" class="text-primary hover:underline">
+                            {{ lease.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ lease.title }}</div>
+                        {% if lease.master_lease_agreement_ref %}
+                        <div class="text-xs text-muted">{{ lease.master_lease_agreement_ref }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ lease.lessor.name }}</div>
+                        {% if lease.asset %}
+                        <div class="text-xs text-muted">{{ lease.asset.name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ lease.classification_css }}">
+                            {{ lease.get_classification_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <div>${{ lease.payment_amount|floatformat:2 }}</div>
+                        <div class="text-xs text-muted">{{ lease.get_payment_frequency_display }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-sm">${{ lease.current_lease_liability|floatformat:2 }}</div>
+                    </td>
+                    <td>
+                        <div class="font-mono text-sm">${{ lease.current_rou_asset_carrying_value|floatformat:2 }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ lease.status_css }}">
+                            {{ lease.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_lease_contract_detail' lease.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_lease_contract_edit' lease.pk %}" class="btn btn-icon" title="Edit Contract">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_lease_contract_delete' lease.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete lease contract {{ lease.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state py-8">
+                            <i data-lucide="file-text" class="w-12 h-12 text-muted mb-2"></i>
+                            <div class="text-base font-medium">No lease contracts found</div>
+                            <p class="text-sm text-muted mt-1">Get started by creating a new lease agreement or adjusting your search filters.</p>
+                            <a href="{% url 'assets:asset_lease_contract_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Lease Contract
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if lessor %}&lessor={{ lessor }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if classification %}&classification={{ classification }}{% endif %}{% if lessor %}&lessor={{ lessor }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
