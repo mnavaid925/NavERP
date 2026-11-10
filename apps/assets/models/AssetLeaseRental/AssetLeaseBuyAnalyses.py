@@ -38,7 +38,7 @@ class AssetLeaseBuyAnalysis(TenantNumbered):
 
     RECOMMENDATION_CSS = {
         "buy": "badge-green",
-        "lease": "badge-purple",
+        "lease": "badge-info",
         "neutral": "badge-slate",
     }
 
