@@ -54,7 +54,8 @@
   - **Description:** Template attempts to render `warranty.service_contract.provider_name`, but `AssetServiceContract` has no `provider_name` attribute (it defines `vendor = models.ForeignKey("core.Party", ...)`).
   - **Fix:** Replace with `{{ warranty.service_contract.vendor.name }}` (with fallback to `{{ warranty.service_contract.title }}`).
 
-- [ ] **I5: Seeder Structure Pollution and Broken Idempotency in `seed_assets.py`**
+- [x] **I5: Seeder Structure Pollution and Broken Idempotency in `seed_assets.py`**
+  - **Status:** [x] fixed — isolate _seed_tenant_11_9 with dedicated idempotency check (eef48645)
   - **Location:** `apps/assets/management/commands/seed_assets.py:1752, 2006`
   - **Description:** In commit `6659c982`, 11.9 demo seeding was appended inside `_seed_tenant_11_8` after an early return guard. If 11.8 records already exist, `_seed_tenant_11_8` returns early, inadvertently skipping 11.9 seeding.
   - **Fix:** Isolate 11.9 seeding into its own `_seed_tenant_11_9(self, tenant)` method with its own idempotency check, wire `self._seed_tenant_11_9(tenant)` in `handle()`, and keep `_seed_tenant_11_8` strictly scoped to 11.8.
