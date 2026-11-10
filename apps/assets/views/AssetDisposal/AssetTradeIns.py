@@ -71,7 +71,7 @@ def asset_trade_in_list(request):
         "paginator": paginator,
         "is_paginated": page_obj.has_other_pages(),
         "status_choices": AssetTradeIn.STATUS_CHOICES,
-        "vendor_list": Party.objects.filter(tenant=request.tenant),
+        "vendor_list": Party.objects.filter(tenant=request.tenant).only("id", "name"),
         "total_trade_ins": total_trade_ins,
         "pending_handover_count": pending_handover_count,
         "settled_count": settled_count,
