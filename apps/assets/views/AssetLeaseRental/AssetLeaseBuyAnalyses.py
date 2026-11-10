@@ -59,7 +59,7 @@ def asset_lease_buy_analysis_list(request):
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
-    category_list = AssetCategory.objects.filter(tenant=request.tenant).order_by("name")
+    category_list = AssetCategory.objects.filter(tenant=request.tenant).only("id", "name").order_by("name")
 
     context = {
         "analyses": page_obj.object_list,
