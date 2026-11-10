@@ -170,6 +170,7 @@ def asset_trade_in_edit(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_trade_in_delete(request, pk):
     instance = assets_object(request, AssetTradeIn, pk)
