@@ -3,6 +3,7 @@ import datetime
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
 
@@ -133,7 +134,8 @@ class AssetLeaseContract(TenantNumbered):
     # Term & Horizon
     lease_term_months = models.PositiveIntegerField(
         default=36,
-        help_text="Base non-cancellable lease duration in months",
+        validators=[MinValueValidator(1), MaxValueValidator(600)],
+        help_text="Base non-cancellable lease duration in months (max 600 months / 50 years)",
     )
     economic_life_months = models.PositiveIntegerField(
         default=60,
