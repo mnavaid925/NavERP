@@ -175,3 +175,22 @@ class AssetComplianceAudit(TenantNumbered):
     @property
     def audit_type_badge_class(self):
         return self.AUDIT_TYPE_CSS.get(self.audit_type, "badge-slate")
+
+    @property
+    def is_breached(self):
+        return (
+            self.compliance_rating in ["major_non_conformance", "critical_breach"]
+            or self.critical_findings_count > 0
+        )
+
+    def mark_in_progress(self):
+        if self.status == "scheduled":
+            self.status = "in_progress"
+            self.save(update_fields=["status", "updated_at"])
+
+    def complete_audit(self):
+        if self.status in ["scheduled", "in_progress", "under_review"]:
+            self.status = "completed"
+            self.completed_at = timezone.now()
+            self.save(update_fields=["status", "completed_at", "updated_at"])
+
