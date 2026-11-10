@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Lease vs. Buy Analyses — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <span>Lease vs. Buy</span>
+        </div>
+        <h1 class="page-title">Lease vs. Buy Scenario Analyses</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_lease_buy_analysis_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Analysis
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="pie-chart"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Analyses</div>
+            <div class="stat-value">{{ total_analyses }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shopping-bag"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Buy / Borrow Recommended</div>
+            <div class="stat-value">{{ buy_recommended_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="repeat"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Lease Recommended</div>
+            <div class="stat-value">{{ lease_recommended_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search analysis #, title, asset name..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for code, label in status_choices %}
+                    <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="recommendation" class="form-select">
+                    <option value="">All Recommendations</option>
+                    {% for code, label in recommendation_choices %}
+                    <option value="{{ code }}" {% if recommendation == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for c in category_list %}
+                    <option value="{{ c.pk }}" {% if category == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="md:col-span-5 flex justify-end gap-2">
+                <a href="{% url 'assets:asset_lease_buy_analysis_list' %}" class="btn btn-outline">Reset</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Analysis #</th>
+                    <th>Title & Target Asset</th>
+                    <th>Category</th>
+                    <th>Purchase Price</th>
+                    <th>Monthly Rent</th>
+                    <th>NPV (Buy)</th>
+                    <th>NPV (Lease)</th>
+                    <th>NAL Advantage</th>
+                    <th>Recommendation</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in analyses %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_lease_buy_analysis_detail' a.pk %}" class="text-primary hover:underline">
+                            {{ a.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ a.title }}</div>
+                        <div class="text-xs text-muted">{{ a.target_asset_name }}</div>
+                    </td>
+                    <td>{{ a.category.name|default:"General" }}</td>
+                    <td class="font-mono text-xs">${{ a.purchase_price|floatformat:2 }}</td>
+                    <td class="font-mono text-xs">${{ a.monthly_lease_payment|floatformat:2 }}</td>
+                    <td class="font-mono text-xs">${{ a.npv_purchase_option|floatformat:2 }}</td>
+                    <td class="font-mono text-xs">${{ a.npv_lease_option|floatformat:2 }}</td>
+                    <td class="font-mono text-xs font-semibold {% if a.net_advantage_to_leasing >= 0 %}text-purple{% else %}text-success{% endif %}">
+                        ${{ a.net_advantage_to_leasing|floatformat:2 }}
+                    </td>
+                    <td>
+                        <span class="badge {{ a.recommendation_css }}">
+                            {{ a.get_recommendation_display }}
+                        </span>
+                    </td>
+                    <td class="text-right table-actions">
+                        <a href="{% url 'assets:asset_lease_buy_analysis_detail' a.pk %}" class="btn btn-icon" title="View Detail">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </a>
+                        <a href="{% url 'assets:asset_lease_buy_analysis_edit' a.pk %}" class="btn btn-icon" title="Edit Analysis">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </a>
+                        <form method="post" action="{% url 'assets:asset_lease_buy_analysis_delete' a.pk %}" class="inline" onsubmit="return confirm('Delete analysis {{ a.number }}?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10">
+                        <div class="empty-state py-8">
+                            <i data-lucide="pie-chart" class="w-12 h-12 text-muted mb-2"></i>
+                            <div class="text-base font-medium">No lease vs. buy analyses found</div>
+                            <p class="text-sm text-muted mt-1">Evaluate capital expenditure decisions by comparing loan purchasing against leasing options.</p>
+                            <a href="{% url 'assets:asset_lease_buy_analysis_create' %}" class="btn btn-primary mt-4">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Analysis
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if is_paginated %}
+    <div class="pagination flex items-center justify-between p-4 border-t border-slate-200">
+        <div class="text-sm text-muted">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }}
+        </div>
+        <div class="flex gap-2">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if recommendation %}&recommendation={{ recommendation }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% endif %}
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if recommendation %}&recommendation={{ recommendation }}{% endif %}{% if category %}&category={{ category }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
