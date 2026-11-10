@@ -7,25 +7,6 @@
 
 ---
 
-## Pass 2: Explorer (Architecture & Contract) Findings
-
-### Critical
-*None.*
-
-### Important
-1. `templates/assets/assetdisposal/asset_disposal_request/list.html:59-96` — View passes `reason_choices` and filters `retirement_reason`, but template lacks `<select name="retirement_reason">` dropdown.
-2. `templates/assets/assetdisposal/asset_resale_listing/list.html:59-89` — View passes `payment_status_choices` and filters `payment_status`, but template omits `payment_status` dropdown and pagination query preservation.
-3. `templates/assets/assetdisposal/asset_scrap_salvage/list.html:59-91` — View passes `recycler_list` and filters `recycler`, but template filter form omits `<select name="recycler">` dropdown.
-4. `apps/assets/views/AssetDisposal/` delete views — Confirm missing `@tenant_admin_required` on all 4 delete views (`AssetDisposalRequests.py:188`, `AssetResaleListings.py:192`, `AssetTradeIns.py:173`, `AssetScrapSalvages.py:205`).
-5. `apps/assets/views/AssetDisposal/` settlement views — Confirm double-counting proceeds risk on `mark_paid` (`ResaleListings:273`), `trade_in_settle` (`TradeIns:202`), and `scrap_salvage_settle` (`ScrapSalvages:277`).
-
-### Minor
-1. `templates/assets/assetdisposal/asset_disposal_request/form.html:35-80` — `approved_by` is in Form Meta.fields but omitted in template rendering (state transition handles approval).
-2. `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161` — `highest_bid_amount` and `buyer_contact_phone` are in `AssetResaleListingForm.Meta.fields` but omitted in template rendering.
-3. Form clean auto-population and cross-validation consistency (matches Pass 1 items 1 & 2).
-
----
-
 ## Pass 1: Code Reviewer Findings
 
 ### Critical
@@ -61,5 +42,23 @@
 1. `templates/assets/assetdisposal/asset_disposal_request/form.html:35-80` — `approved_by` is in Form Meta.fields but omitted in template rendering (state transition handles approval).
 2. `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161` — `highest_bid_amount` and `buyer_contact_phone` are in `AssetResaleListingForm.Meta.fields` but omitted in template rendering.
 3. Form clean auto-population and cross-validation consistency (matches Pass 1 items 1 & 2).
+
+---
+
+## Pass 3: Frontend Reviewer Findings
+
+### Critical
+*None.*
+
+### Important
+1. `templates/assets/assetdisposal/asset_disposal_request/list.html:59-96, 187, 191` — Missing `retirement_reason` filter dropdown and query parameter preservation across pagination.
+2. `templates/assets/assetdisposal/asset_resale_listing/list.html:59-89, 180, 184` — Missing `payment_status` filter dropdown and query parameter preservation across pagination.
+3. `templates/assets/assetdisposal/asset_scrap_salvage/list.html:59-91, 188, 192` — Missing `recycler` filter dropdown and query parameter preservation across pagination.
+4. `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161` & `AssetResaleListings.py:27` — Omitted required field `highest_bid_amount` causes silent form validation failure when not supplied in POST payload.
+
+### Minor
+1. `templates/assets/assetdisposal/asset_resale_listing/form.html:120-161` — `buyer_contact_phone` omitted from Section 4 in form template alongside contact name and email.
+2. `templates/assets/assetdisposal/asset_disposal_request/form.html:35-80` — `approved_by` included in form Meta.fields but omitted in template (approval handled via modal transition).
+3. `templates/assets/assetdisposal/asset_disposal_request/form.html:110-126` — Financial inputs lack optional indicators/helper notes regarding automatic derivation.
 
 ---
