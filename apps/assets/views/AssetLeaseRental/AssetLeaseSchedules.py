@@ -184,6 +184,10 @@ def asset_lease_schedule_delete(request, pk):
 @login_required
 def asset_lease_schedule_mark_paid(request, pk):
     schedule = assets_object(request, AssetLeaseSchedule, pk, select_related=["lease_contract"])
+    if schedule.status == "paid":
+        messages.warning(request, f"Schedule period {schedule.period_number} is already marked as Paid.")
+        return redirect("assets:asset_lease_schedule_detail", pk=schedule.pk)
+
     payment_ref = request.POST.get("payment_reference", "").strip()
 
     with transaction.atomic():
