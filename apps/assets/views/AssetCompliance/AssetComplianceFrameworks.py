@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Avg, Count, Q
+from django.db import transaction
+from django.db.models import Avg, Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -162,13 +163,21 @@ def asset_compliance_framework_delete(request, pk):
     framework = assets_object(request, AssetComplianceFramework, pk)
     num = framework.number
     code = framework.code
-    write_audit_log(
-        request.user,
-        framework,
-        "delete",
-        changes={"details": f"Deleted compliance framework {num} ({code})"},
-        tenant=request.tenant,
-    )
-    framework.delete()
+    try:
+        with transaction.atomic():
+            write_audit_log(
+                request.user,
+                framework,
+                "delete",
+                changes={"details": f"Deleted compliance framework {num} ({code})"},
+                tenant=request.tenant,
+            )
+            framework.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f"Cannot delete compliance framework {code} because related audit records exist. Reassign or delete related audits first.",
+        )
+        return redirect("assets:asset_compliance_framework_detail", pk=pk)
     messages.success(request, f"Compliance framework {num} ({code}) was deleted.")
     return redirect("assets:asset_compliance_framework_list")
