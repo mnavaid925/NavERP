@@ -128,9 +128,9 @@
                         <td>
                             <div class="font-medium text-slate-900">{{ req.title }}</div>
                             <div class="text-xs text-slate-500">
-                                {{ req.fixed_asset.asset_number }} — {{ req.fixed_asset.name }}
+                                {{ req.fixed_asset.number }} — {{ req.fixed_asset.name }}
                                 {% if req.operational_asset %}
-                                <span class="text-slate-400">| {{ req.operational_asset.tag_code }}</span>
+                                <span class="text-slate-400">| {{ req.operational_asset.code }}</span>
                                 {% endif %}
                             </div>
                         </td>
