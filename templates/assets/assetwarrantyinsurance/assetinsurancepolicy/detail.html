@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}{{ policy.number }} — {{ policy.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_insurance_policy_list' %}">Insurance Policies</a>
+            <span>/</span>
+            <span>{{ policy.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ policy.number }} — {{ policy.title }}</h1>
+            <span class="badge {{ policy.status_css }}">{{ policy.get_status_display }}</span>
+            <span class="badge {{ policy.policy_type_css }}">{{ policy.get_policy_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if policy.status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_insurance_policy_activate' policy.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate Policy
+            </button>
+        </form>
+        {% endif %}
+        {% if policy.status == 'active' or policy.status == 'pending_renewal' %}
+        <form method="post" action="{% url 'assets:asset_insurance_policy_renew' policy.pk %}" class="inline" onsubmit="return confirm('Renew this policy for 12 months?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Renew (+1 Year)
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_insurance_claim_create' %}?policy={{ policy.pk }}" class="btn btn-outline text-amber-700">
+            <i data-lucide="alert-triangle" class="w-4 h-4 me-1"></i> Report Casualty Loss
+        </a>
+        <form method="post" action="{% url 'assets:asset_insurance_policy_cancel' policy.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to CANCEL this policy?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-800">
+                <i data-lucide="slash" class="w-4 h-4 me-1"></i> Cancel Policy
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_insurance_policy_edit' policy.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <form method="post" action="{% url 'assets:asset_insurance_policy_delete' policy.pk %}" class="inline" onsubmit="return confirm('Delete policy {{ policy.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Primary Specifications -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Policy Wording & Underwriting Terms</h2>
+                <span class="badge {{ policy.valuation_basis_css }}">{{ policy.get_valuation_basis_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Underwriter Policy Number</div>
+                        <div class="text-sm font-semibold text-slate-900 font-mono">{{ policy.policy_number }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Underwriting Insurance Carrier</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.underwriter_party.name|default:"—" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Insurance Broker Intermediary</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.broker_party.name|default:"Direct Underwriter Relationship" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Assigned Risk Manager</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.risk_manager.username|default:"System" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Effective Inception Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.effective_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Policy Expiration Cutoff</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.expiration_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Annualized Premium</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {{ policy.currency.code|default:"USD" }} {{ policy.annual_premium }} ({{ policy.get_premium_frequency_display }})
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Coinsurance Percentage</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.coinsurance_percentage }}%</div>
+                    </div>
+                </div>
+
+                {% if policy.coverage_terms %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Endorsements, Named Perils & Territorial Limits</h3>
+                    <div class="p-3 bg-slate-50 rounded text-sm text-slate-700 whitespace-pre-line">{{ policy.coverage_terms }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Claims Filed Under This Policy -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Insurance Claims History ({{ claims|length }})</h2>
+                <a href="{% url 'assets:asset_insurance_claim_create' %}?policy={{ policy.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> Report Casualty Claim
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Claim #</th>
+                                <th>Incident Date</th>
+                                <th>Peril / Cause</th>
+                                <th>Loss Claimed</th>
+                                <th>Payout Settled</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in claims %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'assets:asset_insurance_claim_detail' c.pk %}" class="font-semibold text-primary-600 hover:underline">
+                                        {{ c.number }}
+                                    </a>
+                                </td>
+                                <td>{{ c.incident_date|date:"M d, Y" }}</td>
+                                <td><span class="badge {{ c.peril_type_css }}">{{ c.get_peril_type_display }}</span></td>
+                                <td>{{ c.currency.code|default:"USD" }} {{ c.claimed_loss_amount }}</td>
+                                <td>{{ c.currency.code|default:"USD" }} {{ c.settlement_payout_amount }}</td>
+                                <td><span class="badge {{ c.claim_status_css }}">{{ c.get_claim_status_display }}</span></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-6 text-slate-500">
+                                    No casualty or property damage claims have been filed under this policy.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: SOV & Covered Assets -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Statement of Values (SOV)</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div class="p-4 bg-purple-50 rounded text-center">
+                    <div class="text-xs text-purple-700 font-medium">Total Insured Limit (SOV)</div>
+                    <div class="text-2xl font-bold text-purple-900">{{ policy.currency.code|default:"USD" }} {{ policy.total_insured_value }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Self-Insured Retention (Deductible)</div>
+                    <div class="text-lg font-semibold text-slate-800">{{ policy.currency.code|default:"USD" }} {{ policy.deductible_retention }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Policy Wording / Binder Document</div>
+                    {% if policy.policy_document %}
+                        <div class="text-sm font-semibold text-slate-900">{{ policy.policy_document.title }}</div>
+                    {% else %}
+                        <div class="text-sm text-slate-400">None attached</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Target Covered Asset</h2>
+            </div>
+            <div class="card-body space-y-3">
+                {% if policy.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Financial Fixed Asset</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ policy.fixed_asset.number }} — {{ policy.fixed_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if policy.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Operational Equipment</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ policy.operational_asset.tag_code }} — {{ policy.operational_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if policy.asset_category %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Target Category</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ policy.asset_category.name }}</div>
+                </div>
+                {% endif %}
+                {% if not policy.fixed_asset and not policy.operational_asset and not policy.asset_category %}
+                <div class="text-sm text-slate-500 italic">Entire plant / facility blanket schedule coverage.</div>
+                {% endif %}
+                <div class="pt-3 border-t border-slate-200 text-xs text-slate-500 space-y-1">
+                    <div>Created: {{ policy.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Last Updated: {{ policy.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
