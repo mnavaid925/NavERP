@@ -64,12 +64,18 @@ def asset_disposal_request_list(request):
 
     # KPI aggregation
     base_tenant_qs = assets_scope(AssetDisposalRequest.objects.all(), request)
-    total_requests = base_tenant_qs.count()
-    pending_approval_count = base_tenant_qs.filter(status__in=["submitted", "appraised"]).count()
-    in_progress_count = base_tenant_qs.filter(status="in_progress").count()
-    completed_count = base_tenant_qs.filter(status="completed").count()
-    gain_loss_agg = base_tenant_qs.aggregate(total=Sum("realized_gain_loss"))
-    total_gain_loss = gain_loss_agg["total"] or Decimal("0.00")
+    kpi_agg = base_tenant_qs.aggregate(
+        total_requests=Count("id"),
+        pending_approval=Count("id", filter=Q(status__in=["submitted", "appraised"])),
+        in_progress=Count("id", filter=Q(status="in_progress")),
+        completed=Count("id", filter=Q(status="completed")),
+        total_gain_loss=Sum("realized_gain_loss"),
+    )
+    total_requests = kpi_agg["total_requests"] or 0
+    pending_approval_count = kpi_agg["pending_approval"] or 0
+    in_progress_count = kpi_agg["in_progress"] or 0
+    completed_count = kpi_agg["completed"] or 0
+    total_gain_loss = kpi_agg["total_gain_loss"] or Decimal("0.00")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
