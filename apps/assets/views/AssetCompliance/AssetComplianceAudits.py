@@ -116,12 +116,11 @@ def asset_compliance_audit_create(request):
             audit.tenant = request.tenant
             audit.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                audit,
                 "create",
-                "AssetComplianceAudit",
-                audit.pk,
-                f"Scheduled compliance audit {audit.number} ({audit.title})",
+                changes={"details": f"Scheduled compliance audit {audit.number} ({audit.title})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance audit {audit.number} created successfully.")
             return redirect("assets:asset_compliance_audit_detail", pk=audit.pk)
@@ -151,12 +150,11 @@ def asset_compliance_audit_edit(request, pk):
         if form.is_valid():
             audit = form.save()
             write_audit_log(
-                request.tenant,
                 request.user,
+                audit,
                 "update",
-                "AssetComplianceAudit",
-                audit.pk,
-                f"Updated compliance audit {audit.number} ({audit.title})",
+                changes={"details": f"Updated compliance audit {audit.number} ({audit.title})"},
+                tenant=request.tenant,
             )
             messages.success(request, f"Compliance audit {audit.number} updated successfully.")
             return redirect("assets:asset_compliance_audit_detail", pk=audit.pk)
@@ -179,15 +177,14 @@ def asset_compliance_audit_edit(request, pk):
 def asset_compliance_audit_delete(request, pk):
     audit = assets_object(request, AssetComplianceAudit, pk)
     num = audit.number
-    audit.delete()
     write_audit_log(
-        request.tenant,
         request.user,
+        audit,
         "delete",
-        "AssetComplianceAudit",
-        pk,
-        f"Deleted compliance audit {num}",
+        changes={"details": f"Deleted compliance audit {num}"},
+        tenant=request.tenant,
     )
+    audit.delete()
     messages.success(request, f"Compliance audit {num} was deleted.")
     return redirect("assets:asset_compliance_audit_list")
 
@@ -200,12 +197,11 @@ def asset_compliance_audit_start(request, pk):
         audit.status = "in_progress"
         audit.save(update_fields=["status", "updated_at"])
         write_audit_log(
-            request.tenant,
             request.user,
+            audit,
             "update",
-            "AssetComplianceAudit",
-            audit.pk,
-            f"Started fieldwork for audit {audit.number}",
+            changes={"details": f"Started fieldwork for audit {audit.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Audit {audit.number} fieldwork has been started.")
     else:
@@ -222,12 +218,11 @@ def asset_compliance_audit_complete(request, pk):
         audit.completed_at = timezone.now()
         audit.save(update_fields=["status", "completed_at", "updated_at"])
         write_audit_log(
-            request.tenant,
             request.user,
+            audit,
             "update",
-            "AssetComplianceAudit",
-            audit.pk,
-            f"Completed and signed off compliance audit {audit.number}",
+            changes={"details": f"Completed and signed off compliance audit {audit.number}"},
+            tenant=request.tenant,
         )
         messages.success(request, f"Compliance audit {audit.number} is now marked as Completed.")
     else:
