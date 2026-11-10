@@ -10,10 +10,10 @@ from apps.assets.forms.AssetDisposal import (
     AssetScrapSalvageForm,
     AssetDisposalAppraisalForm,
     AssetDisposalRejectForm,
-    AssetResaleListingBidForm,
-    AssetResaleListingSaleForm,
+    AssetResaleBidForm,
+    AssetResaleAcceptForm,
     AssetScrapAbatementForm,
-    AssetScrapCodForm,
+    AssetScrapCertificateForm,
 )
 from apps.assets.models import (
     AssetDisposalRequest,
@@ -337,36 +337,34 @@ def test_assetdisposal_reject_form_requires_reason():
 @pytest.mark.django_db
 def test_assetdisposal_resale_bid_form_valid():
     data = {
-        "highest_bid_amount": "39500.00",
-        "buyer_contact_name": "Midwest Heavy Tools Ltd",
-        "buyer_contact_email": "procurement@midwest.com",
-        "buyer_contact_phone": "+1-555-987-6543",
+        "bid_amount": "39500.00",
+        "bidder_name": "Midwest Heavy Tools Ltd",
+        "bidder_email": "procurement@midwest.com",
+        "bidder_phone": "+1-555-987-6543",
     }
-    form = AssetResaleListingBidForm(data=data)
+    form = AssetResaleBidForm(data=data)
     assert form.is_valid(), form.errors
-    assert form.cleaned_data["highest_bid_amount"] == Decimal("39500.00")
+    assert form.cleaned_data["bid_amount"] == Decimal("39500.00")
 
 
 @pytest.mark.django_db
-def test_assetdisposal_resale_sale_form_valid():
+def test_assetdisposal_resale_accept_form_valid():
     data = {
-        "gross_sale_proceeds": "40000.00",
+        "final_sale_amount": "40000.00",
         "commission_rate_percent": "7.50",
-        "tax_amount": "1200.00",
+        "buyer_contact_name": "Apex Precision Ltd",
     }
-    form = AssetResaleListingSaleForm(data=data)
+    form = AssetResaleAcceptForm(data=data)
     assert form.is_valid(), form.errors
-    assert form.cleaned_data["gross_sale_proceeds"] == Decimal("40000.00")
+    assert form.cleaned_data["final_sale_amount"] == Decimal("40000.00")
     assert form.cleaned_data["commission_rate_percent"] == Decimal("7.50")
 
 
 @pytest.mark.django_db
 def test_assetdisposal_scrap_abatement_form_valid():
-    today = timezone.now().date()
     data = {
         "epa_manifest_number": "EPA-ABATEMENT-2026",
-        "decontamination_date": today.isoformat(),
-        "notes": "Certified decontamination completed.",
+        "abatement_notes": "Certified decontamination completed.",
     }
     form = AssetScrapAbatementForm(data=data)
     assert form.is_valid(), form.errors
@@ -374,14 +372,13 @@ def test_assetdisposal_scrap_abatement_form_valid():
 
 
 @pytest.mark.django_db
-def test_assetdisposal_scrap_cod_form_valid():
+def test_assetdisposal_scrap_certificate_form_valid():
     today = timezone.now().date()
     data = {
         "cod_number": "COD-FINAL-2026",
-        "destruction_certified_date": today.isoformat(),
-        "scrap_weight_kg": "1400.00",
+        "cod_issue_date": today.isoformat(),
+        "cod_issuing_agency": "State Environmental Recycling Board",
     }
-    form = AssetScrapCodForm(data=data)
+    form = AssetScrapCertificateForm(data=data)
     assert form.is_valid(), form.errors
     assert form.cleaned_data["cod_number"] == "COD-FINAL-2026"
-    assert form.cleaned_data["scrap_weight_kg"] == Decimal("1400.00")
