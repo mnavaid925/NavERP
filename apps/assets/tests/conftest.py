@@ -2118,7 +2118,7 @@ def compliance_incident_a(db, tenant_a, operational_asset_a, permit_license_a, c
     return AssetComplianceIncident.objects.create(
         tenant=tenant_a,
         title="Hourly NOX Emission Exceedance Spike",
-        incident_date=today - timezone.timedelta(days=10),
+        incident_date=timezone.now() - timezone.timedelta(days=10),
         discovery_date=today - timezone.timedelta(days=9),
         incident_type="emissions_exceedance",
         severity="serious",
@@ -2146,7 +2146,7 @@ def compliance_incident_b(db, tenant_b, operational_asset_b, vendor_party_b, adm
     return AssetComplianceIncident.objects.create(
         tenant=tenant_b,
         title="Unpermitted Coolant Overflow",
-        incident_date=today - timezone.timedelta(days=3),
+        incident_date=timezone.now() - timezone.timedelta(days=3),
         discovery_date=today - timezone.timedelta(days=3),
         incident_type="unpermitted_discharge",
         severity="other_than_serious",
