@@ -130,3 +130,20 @@
   - *Fix:* Project only required fields for dropdown choices (`Party.objects.filter(...).only("id", "name")`).
 
 ---
+
+## Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+
+### Critical
+- **C1: All 17 POST Mutation Endpoints Crash with `TypeError` in `write_audit_log`** (Confirmed via 54 live tests)
+  - All 17 create, edit, delete, and workflow POST action routes crash with `TypeError: write_audit_log() takes from 3 to 5 positional arguments but 6 were given`.
+  - Verified: 16 GET views return 200 OK, zero comment leaks, 8 cross-tenant IDOR checks return 404, but all 17 POST actions 500.
+
+### Important
+- **I7: `TenantNumbered.save()` Masks Non-Null DB Integrity Errors as Sequence Collisions**
+  - In `apps/assets/models/_base.py`, `save()` catches all `IntegrityError` exceptions, assuming duplicate `number`, retries 5 times, and raises misleading sequence collision error, masking genuine DB column nullability errors.
+
+### Minor
+- **M8: `AssetComplianceIncidentForm` Requires Fine Amounts Instead of Defaulting to 0.00**
+  - Make `fine_assessed` and `fine_paid` default to `Decimal("0.00")` if left blank.
+
+---
