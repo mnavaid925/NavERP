@@ -58,10 +58,10 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div class="md:col-span-2">
-                <input type="text" name="q" value="{{ q }}" placeholder="Search schedule #, payment ref, contract..." class="form-input">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search schedule #, payment ref, contract..." class="form-input" aria-label="Search payment schedules">
             </div>
             <div>
-                <select name="status" class="form-select">
+                <select name="status" class="form-select" aria-label="Filter by status">
                     <option value="">All Statuses</option>
                     {% for code, label in status_choices %}
                     <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
@@ -69,7 +69,7 @@
                 </select>
             </div>
             <div>
-                <select name="lease" class="form-select">
+                <select name="lease" class="form-select" aria-label="Filter by lease contract">
                     <option value="">All Lease Contracts</option>
                     {% for l in lease_list %}
                     <option value="{{ l.pk }}" {% if lease == l.pk|stringformat:"d" %}selected{% endif %}>{{ l.number }} — {{ l.title|truncatechars:30 }}</option>
@@ -92,16 +92,16 @@
         <table class="table">
             <thead>
                 <tr>
-                    <th>Schedule #</th>
-                    <th>Contract</th>
-                    <th>Prd</th>
-                    <th>Due Date</th>
-                    <th>Payment</th>
-                    <th>Interest</th>
-                    <th>Principal</th>
-                    <th>Ending Liability</th>
-                    <th>Status</th>
-                    <th class="text-right">Actions</th>
+                    <th scope="col">Schedule #</th>
+                    <th scope="col">Contract</th>
+                    <th scope="col">Prd</th>
+                    <th scope="col">Due Date</th>
+                    <th scope="col">Payment</th>
+                    <th scope="col">Interest</th>
+                    <th scope="col">Principal</th>
+                    <th scope="col">Ending Liability</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="text-right">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -130,16 +130,16 @@
                         </span>
                     </td>
                     <td class="text-right table-actions">
-                        <a href="{% url 'assets:asset_lease_schedule_detail' sch.pk %}" class="btn btn-icon" title="View Detail">
+                        <a href="{% url 'assets:asset_lease_schedule_detail' sch.pk %}" class="btn btn-icon" title="View Detail" aria-label="View schedule line {{ sch.number }}">
                             <i data-lucide="eye" class="w-4 h-4"></i>
                         </a>
-                        <a href="{% url 'assets:asset_lease_schedule_edit' sch.pk %}" class="btn btn-icon" title="Edit Schedule Line">
+                        <a href="{% url 'assets:asset_lease_schedule_edit' sch.pk %}" class="btn btn-icon" title="Edit Schedule Line" aria-label="Edit schedule line {{ sch.number }}">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </a>
                         <form method="post" action="{% url 'assets:asset_lease_schedule_delete' sch.pk %}" class="inline" onsubmit="return confirm('Delete schedule line {{ sch.number }}?');">
                             {% csrf_token %}
                             <input type="hidden" name="next" value="{% url 'assets:asset_lease_schedule_list' %}">
-                            <button type="submit" class="btn btn-icon text-danger" title="Delete">
+                            <button type="submit" class="btn btn-icon text-danger" title="Delete" aria-label="Delete schedule line {{ sch.number }}">
                                 <i data-lucide="trash-2" class="w-4 h-4"></i>
                             </button>
                         </form>
