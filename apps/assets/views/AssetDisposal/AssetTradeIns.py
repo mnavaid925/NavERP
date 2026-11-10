@@ -50,11 +50,16 @@ def asset_trade_in_list(request):
         qs = qs.filter(vendor_id=int(vendor_filter))
 
     base_tenant_qs = assets_scope(AssetTradeIn.objects.all(), request)
-    total_trade_ins = base_tenant_qs.count()
-    pending_handover_count = base_tenant_qs.filter(status__in=["proposed", "negotiated", "accepted"]).count()
-    settled_count = base_tenant_qs.filter(status="credit_settled").count()
-    credit_agg = base_tenant_qs.aggregate(total=Sum("net_credit_applied"))
-    total_trade_credit = credit_agg["total"] or Decimal("0.00")
+    kpi_agg = base_tenant_qs.aggregate(
+        total_trade_ins=Count("id"),
+        pending_handover=Count("id", filter=Q(status__in=["proposed", "negotiated", "accepted"])),
+        settled_count=Count("id", filter=Q(status="credit_settled")),
+        total_trade_credit=Sum("net_credit_applied"),
+    )
+    total_trade_ins = kpi_agg["total_trade_ins"] or 0
+    pending_handover_count = kpi_agg["pending_handover"] or 0
+    settled_count = kpi_agg["settled_count"] or 0
+    total_trade_credit = kpi_agg["total_trade_credit"] or Decimal("0.00")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
