@@ -30,7 +30,8 @@
   - **Description:** `Decimal(request.POST.get(...))` parses user input without checking `.is_finite()`, bounds, or negative values. Inputting `"NaN"` or `"Infinity"` does not raise on instantiation but causes MySQL errors or data corruption downstream. Large numbers exceeding `max_digits` cause unhandled MySQL 1264 `DataError`.
   - **Fix:** Wrap parsing in `try/except (InvalidOperation, TypeError, ValueError)`, verify `val.is_finite()`, enforce non-negativity (`val >= 0`), and clamp within model bounds (`Decimal("9999999999.99")` or `Decimal("999999999999.99")`). Return user-friendly error message and redirect if invalid.
 
-- [ ] **I2: Missing View-Level Status Guards on Claim Settlement, Rejection, and Editing**
+- [x] **I2: Missing View-Level Status Guards on Claim Settlement, Rejection, and Editing**
+  - **Status:** [x] fixed — add status transition checks on edit, settle, and reject/deny (cd0232d3, 45664fc6)
   - **Location:**
     - `apps/assets/views/AssetWarrantyInsurance/AssetWarrantyClaims.py:160, 258, 299`
     - `apps/assets/views/AssetWarrantyInsurance/AssetInsuranceClaims.py:163, 261, 298`
