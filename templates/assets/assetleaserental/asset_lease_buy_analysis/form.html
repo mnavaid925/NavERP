@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Lease & Rental</span>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lease_buy_analysis_list' %}">Lease vs. Buy</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ analysis.number }}{% else %}New Analysis{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<form method="post" class="space-y-6">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="p-4 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <!-- Card 1: Initiative Identity & Scope -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">1. Initiative Identity & Equipment Scope</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.title.id_for_label }}">Analysis Title *</label>
+                {{ form.title }}
+                {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.target_asset_name.id_for_label }}">Target Asset Make / Model *</label>
+                {{ form.target_asset_name }}
+                {% if form.target_asset_name.errors %}<div class="form-error">{{ form.target_asset_name.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.category.id_for_label }}">Asset Category</label>
+                {{ form.category }}
+                {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.expected_useful_life_years.id_for_label }}">Expected Useful Life (Years) *</label>
+                {{ form.expected_useful_life_years }}
+                {% if form.expected_useful_life_years.errors %}<div class="form-error">{{ form.expected_useful_life_years.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Analysis Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="{{ form.description.id_for_label }}">Scenario Background & Objective</label>
+                {{ form.description }}
+                {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Purchase & Debt Option -->
+    <div class="card border-t-4 border-green-500">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-green-800">2. Scenario A: Outright Purchase & Loan Financing</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.purchase_price.id_for_label }}">Capitalized Quote Price ($) *</label>
+                {{ form.purchase_price }}
+                {% if form.purchase_price.errors %}<div class="form-error">{{ form.purchase_price.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.down_payment_pct.id_for_label }}">Down Payment (%) *</label>
+                {{ form.down_payment_pct }}
+                {% if form.down_payment_pct.errors %}<div class="form-error">{{ form.down_payment_pct.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.loan_interest_rate_pct.id_for_label }}">Loan Interest Rate (%) *</label>
+                {{ form.loan_interest_rate_pct }}
+                {% if form.loan_interest_rate_pct.errors %}<div class="form-error">{{ form.loan_interest_rate_pct.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.loan_term_years.id_for_label }}">Loan Term (Years) *</label>
+                {{ form.loan_term_years }}
+                {% if form.loan_term_years.errors %}<div class="form-error">{{ form.loan_term_years.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.estimated_salvage_value.id_for_label }}">Estimated Salvage ($)</label>
+                {{ form.estimated_salvage_value }}
+                {% if form.estimated_salvage_value.errors %}<div class="form-error">{{ form.estimated_salvage_value.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.annual_maintenance_cost_buy.id_for_label }}">Annual Maint. Cost ($)</label>
+                {{ form.annual_maintenance_cost_buy }}
+                {% if form.annual_maintenance_cost_buy.errors %}<div class="form-error">{{ form.annual_maintenance_cost_buy.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-2">
+                <label class="form-label" for="{{ form.annual_insurance_tax_buy.id_for_label }}">Annual Property Tax & Ins. ($)</label>
+                {{ form.annual_insurance_tax_buy }}
+                {% if form.annual_insurance_tax_buy.errors %}<div class="form-error">{{ form.annual_insurance_tax_buy.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Lease Option -->
+    <div class="card border-t-4 border-purple-500">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-purple-800">3. Scenario B: Lease Agreement Financing</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.lease_term_months.id_for_label }}">Lease Term (Months) *</label>
+                {{ form.lease_term_months }}
+                {% if form.lease_term_months.errors %}<div class="form-error">{{ form.lease_term_months.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.monthly_lease_payment.id_for_label }}">Monthly Rental Installment ($) *</label>
+                {{ form.monthly_lease_payment }}
+                {% if form.monthly_lease_payment.errors %}<div class="form-error">{{ form.monthly_lease_payment.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.upfront_lease_fees.id_for_label }}">Upfront Fees / Origination ($)</label>
+                {{ form.upfront_lease_fees }}
+                {% if form.upfront_lease_fees.errors %}<div class="form-error">{{ form.upfront_lease_fees.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.end_of_lease_purchase_option.id_for_label }}">Buyout Option at Expiration ($)</label>
+                {{ form.end_of_lease_purchase_option }}
+                {% if form.end_of_lease_purchase_option.errors %}<div class="form-error">{{ form.end_of_lease_purchase_option.errors }}</div>{% endif %}
+            </div>
+            <div class="flex items-center gap-2 pt-6">
+                {{ form.lessor_covers_maintenance }}
+                <label class="text-sm font-medium" for="{{ form.lessor_covers_maintenance.id_for_label }}">
+                    Maintenance included in rental fee
+                </label>
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.annual_maintenance_cost_lease.id_for_label }}">Lessee Supplemental Maint. ($)</label>
+                {{ form.annual_maintenance_cost_lease }}
+                {% if form.annual_maintenance_cost_lease.errors %}<div class="form-error">{{ form.annual_maintenance_cost_lease.errors }}</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Corporate Parameters & Narrative -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold">4. Hurdle Rates & Analyst Narrative</h2>
+        </div>
+        <div class="card-body grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="form-group">
+                <label class="form-label" for="{{ form.discount_rate_wacc_pct.id_for_label }}">Corporate WACC Hurdle Rate (%) *</label>
+                {{ form.discount_rate_wacc_pct }}
+                {% if form.discount_rate_wacc_pct.errors %}<div class="form-error">{{ form.discount_rate_wacc_pct.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.corporate_tax_rate_pct.id_for_label }}">Marginal Corporate Tax Rate (%) *</label>
+                {{ form.corporate_tax_rate_pct }}
+                {% if form.corporate_tax_rate_pct.errors %}<div class="form-error">{{ form.corporate_tax_rate_pct.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="{{ form.evaluated_by.id_for_label }}">Financial Analyst Evaluator</label>
+                {{ form.evaluated_by }}
+                {% if form.evaluated_by.errors %}<div class="form-error">{{ form.evaluated_by.errors }}</div>{% endif %}
+            </div>
+            <div class="form-group md:col-span-3">
+                <label class="form-label" for="{{ form.evaluation_notes.id_for_label }}">Executive Summary & Qualitative Remarks</label>
+                {{ form.evaluation_notes }}
+                {% if form.evaluation_notes.errors %}<div class="form-error">{{ form.evaluation_notes.errors }}</div>{% endif %}
+            </div>
+            <div class="md:col-span-3 flex justify-end gap-3 pt-4 border-t border-slate-200">
+                <a href="{% url 'assets:asset_lease_buy_analysis_list' %}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="calculator" class="w-4 h-4 me-1"></i> Save & Compute Decision
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
