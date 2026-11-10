@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Resale & Auction Listings — Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Disposal & Retirement</span>
+            <span>/</span>
+            <span>Resale & Auctions</span>
+        </div>
+        <h1 class="page-title">Asset Resale & Auction Listings</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_resale_listing_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Listing
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="tag"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Listings</div>
+            <div class="stat-value">{{ total_listings }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="gavel"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active on Market</div>
+            <div class="stat-value">{{ active_listings_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Assets Sold</div>
+            <div class="stat-value">{{ sold_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Realized Net Proceeds</div>
+            <div class="stat-value">${{ total_realized_proceeds|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div class="md:col-span-2">
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search by number, reference, asset, or buyer..." class="form-input">
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="listing_channel" class="form-select">
+                    <option value="">All Channels</option>
+                    {% for val, label in channel_choices %}
+                    <option value="{{ val }}" {% if request.GET.listing_channel == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.listing_channel or request.GET.payment_status %}
+                <a href="{% url 'assets:asset_resale_listing_list' %}" class="btn btn-outline px-3" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="card-body p-0">
+        {% if resale_listings %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Listing No</th>
+                        <th>Fixed Asset / Request</th>
+                        <th>Channel</th>
+                        <th>Lot / Ref</th>
+                        <th>Asking Price</th>
+                        <th>High Bid</th>
+                        <th>Net Sale Proceeds</th>
+                        <th>Payment</th>
+                        <th>Status</th>
+                        <th class="text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in resale_listings %}
+                    <tr>
+                        <td class="font-mono text-sm font-semibold text-slate-800">
+                            <a href="{% url 'assets:asset_resale_listing_detail' l.pk %}" class="text-blue-600 hover:underline">
+                                {{ l.number }}
+                            </a>
+                        </td>
+                        <td>
+                            <div class="font-medium text-slate-900">{{ l.fixed_asset.name }}</div>
+                            <div class="text-xs text-slate-500">
+                                Tag: {{ l.fixed_asset.asset_number }} • Req: {{ l.disposal_request.number }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge {{ l.listing_channel_css }}">{{ l.get_listing_channel_display }}</span>
+                        </td>
+                        <td class="text-sm font-mono text-slate-600">
+                            {{ l.listing_reference|default:"—" }}
+                        </td>
+                        <td class="font-mono text-sm">
+                            ${{ l.asking_price|floatformat:2 }}
+                        </td>
+                        <td class="font-mono text-sm font-semibold text-blue-700">
+                            {% if l.highest_bid_amount %}${{ l.highest_bid_amount|floatformat:2 }}{% else %}—{% endif %}
+                        </td>
+                        <td class="font-mono text-sm font-bold text-emerald-700">
+                            {% if l.net_sale_proceeds %}${{ l.net_sale_proceeds|floatformat:2 }}{% else %}—{% endif %}
+                        </td>
+                        <td>
+                            <span class="badge {{ l.payment_status_css }}">{{ l.get_payment_status_display }}</span>
+                        </td>
+                        <td>
+                            <span class="badge {{ l.status_css }}">{{ l.get_status_display }}</span>
+                        </td>
+                        <td class="text-right">
+                            <div class="table-actions">
+                                <a href="{% url 'assets:asset_resale_listing_detail' l.pk %}" class="btn btn-icon" title="View Details">
+                                    <i data-lucide="eye" class="w-4 h-4"></i>
+                                </a>
+                                {% if l.status != 'delivered' and l.status != 'cancelled' %}
+                                <a href="{% url 'assets:asset_resale_listing_edit' l.pk %}" class="btn btn-icon" title="Edit Listing">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </a>
+                                <form method="post" action="{% url 'assets:asset_resale_listing_delete' l.pk %}" class="inline" onsubmit="return confirm('Delete resale listing {{ l.number }}?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if is_paginated %}
+        <div class="p-4 border-t border-slate-200">
+            <div class="pagination flex items-center justify-between">
+                <div class="text-sm text-slate-500">
+                    Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} listings
+                </div>
+                <div class="flex gap-1">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+                    {% endif %}
+                    <span class="px-3 py-1 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.listing_channel %}&listing_channel={{ request.GET.listing_channel }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="empty-state p-12 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 text-slate-300">
+                <i data-lucide="tag" class="w-full h-full"></i>
+            </div>
+            <h3 class="text-lg font-semibold text-slate-800 mb-1">No Resale Listings</h3>
+            <p class="text-slate-500 text-sm mb-4">No active auction lots or secondary market equipment listings.</p>
+            <a href="{% url 'assets:asset_resale_listing_create' %}" class="btn btn-primary">
+                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Resale Listing
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
