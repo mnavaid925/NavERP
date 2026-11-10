@@ -76,7 +76,7 @@
   - **Issue**: Delete actions handle statutory regulatory records but do not require tenant admin role.
   - **Fix**: Apply `@tenant_admin_required` decorator to all four delete views.
 
-- [ ] **I7: Form `status` Mass Assignment Bypassing Workflow State Machines**
+- [x] **I7: Form `status` Mass Assignment Bypassing Workflow State Machines**
   - **Files**:
     - `apps/assets/forms/AssetCompliance/AssetComplianceAudits.py:32`
     - `apps/assets/forms/AssetCompliance/AssetComplianceIncidents.py:36`
