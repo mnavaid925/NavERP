@@ -54,6 +54,12 @@ from apps.assets.models.AssetWarrantyInsurance import (
     AssetWarranty,
     AssetWarrantyClaim,
 )
+from apps.assets.models.AssetLeaseRental import (
+    AssetLeaseBuyAnalysis,
+    AssetLeaseContract,
+    AssetLeaseModification,
+    AssetLeaseSchedule,
+)
 
 __all__ = [
     "TenantOwned",
@@ -94,4 +100,8 @@ __all__ = [
     "AssetResaleListing",
     "AssetTradeIn",
     "AssetScrapSalvage",
+    "AssetLeaseContract",
+    "AssetLeaseSchedule",
+    "AssetLeaseModification",
+    "AssetLeaseBuyAnalysis",
 ]
