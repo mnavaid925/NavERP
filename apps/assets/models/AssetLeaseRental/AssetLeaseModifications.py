@@ -48,7 +48,7 @@ class AssetLeaseModification(TenantNumbered):
         "partial_termination": "badge-amber",
         "full_termination": "badge-red",
         "impairment": "badge-red",
-        "discount_rate_change": "badge-purple",
+        "discount_rate_change": "badge-slate",
     }
 
     lease_contract = models.ForeignKey(
