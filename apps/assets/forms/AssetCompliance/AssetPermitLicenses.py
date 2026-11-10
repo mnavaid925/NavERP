@@ -47,4 +47,8 @@ class AssetPermitLicenseForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["asset", "issuing_authority"])
+        effective_date = cleaned.get("effective_date")
+        expiration_date = cleaned.get("expiration_date")
+        if effective_date and expiration_date and expiration_date < effective_date:
+            self.add_error("expiration_date", "Expiration date cannot be earlier than effective date.")
         return cleaned
