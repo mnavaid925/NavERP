@@ -123,7 +123,7 @@
   - **Issue:** Included in `AssetResaleListingForm.Meta.fields:34`, but omitted from the contact details section in `form.html`.
   - **Fix:** Add `buyer_contact_phone` input block to Section 4 in `form.html`.
 
-- [ ] **M4: Party and Category Query Optimization in List Views**
+- [x] **M4: Party and Category Query Optimization in List Views** — fixed (commits aff7a43a, 5994d1df, fc5462f3)
   - **Location:**
     - `apps/assets/views/AssetDisposal/AssetTradeIns.py:69`
     - `apps/assets/views/AssetDisposal/AssetScrapSalvages.py:87`
