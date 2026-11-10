@@ -83,7 +83,7 @@
                     <div>
                         <div class="text-xs text-slate-400 font-medium uppercase">Financial Fixed Asset</div>
                         <div class="text-sm font-semibold text-slate-800 mt-1">
-                            {{ disposal_request.fixed_asset.asset_number }} — {{ disposal_request.fixed_asset.name }}
+                            {{ disposal_request.fixed_asset.number }} — {{ disposal_request.fixed_asset.name }}
                         </div>
                         <div class="text-xs text-slate-500 mt-0.5">
                             Status: {{ disposal_request.fixed_asset.status|default:"In Service"|title }}
@@ -93,7 +93,7 @@
                         <div class="text-xs text-slate-400 font-medium uppercase">Operational Plant Asset</div>
                         <div class="text-sm font-semibold text-slate-800 mt-1">
                             {% if disposal_request.operational_asset %}
-                            {{ disposal_request.operational_asset.tag_code }} — {{ disposal_request.operational_asset.name }}
+                            {{ disposal_request.operational_asset.code }} — {{ disposal_request.operational_asset.name }}
                             {% else %}
                             <span class="text-slate-400 italic">Not Linked</span>
                             {% endif %}
