@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit Permit — {{ permit.permit_number }}{% else %}Register Operating Permit{% endif %} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_permit_license_list' %}">Operating Permits</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ permit.permit_number }}{% else %}Register Permit{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Operating Permit / License{% else %}Register Operating Permit / License{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Permit Terms & Conditions</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.permit_name.id_for_label }}">Permit / License Title *</label>
+                    {{ form.permit_name }}
+                    <span class="text-xs text-muted">{{ form.permit_name.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.permit_number.id_for_label }}">Regulatory License / Permit Number *</label>
+                    {{ form.permit_number }}
+                    <span class="text-xs text-muted">{{ form.permit_number.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.permit_type.id_for_label }}">Permit Type *</label>
+                    {{ form.permit_type }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Permitted Asset *</label>
+                    {{ form.asset }}
+                    <span class="text-xs text-muted">{{ form.asset.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.issuing_authority.id_for_label }}">Issuing Permitting Authority</label>
+                    {{ form.issuing_authority }}
+                    <span class="text-xs text-muted">{{ form.issuing_authority.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.issue_date.id_for_label }}">Issue Date *</label>
+                    {{ form.issue_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effective_date.id_for_label }}">Effective Date *</label>
+                    {{ form.effective_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.expiration_date.id_for_label }}">Statutory Expiration Date *</label>
+                    {{ form.expiration_date }}
+                    <span class="text-xs text-muted">{{ form.expiration_date.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_lead_days.id_for_label }}">Renewal Alert Lead Window (Days) *</label>
+                    {{ form.renewal_lead_days }}
+                    <span class="text-xs text-muted">{{ form.renewal_lead_days.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.renewal_fee.id_for_label }}">Renewal Filing Fee ($)</label>
+                    {{ form.renewal_fee }}
+                    <span class="text-xs text-muted">{{ form.renewal_fee.help_text }}</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Permit Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.operating_conditions.id_for_label }}">Mandated Operating Conditions & Monitoring Limits</label>
+                    {{ form.operating_conditions }}
+                    <span class="text-xs text-muted">{{ form.operating_conditions.help_text }}</span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% url 'assets:asset_permit_license_list' %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="check" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Register Permit{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
