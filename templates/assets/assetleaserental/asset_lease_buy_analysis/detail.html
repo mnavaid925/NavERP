@@ -52,7 +52,7 @@
         <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
         <div class="stat-body">
             <div class="stat-label">Net Advantage (NAL)</div>
-            <div class="stat-value font-semibold {% if analysis.net_advantage_to_leasing >= 0 %}text-purple{% else %}text-success{% endif %}">
+            <div class="stat-value font-semibold {% if analysis.net_advantage_to_leasing >= 0 %}text-brand{% else %}text-ok{% endif %}">
                 ${{ analysis.net_advantage_to_leasing|floatformat:2 }}
             </div>
         </div>
@@ -79,7 +79,7 @@
     <div class="card border-t-4 border-green-500">
         <div class="card-header flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <i data-lucide="shopping-bag" class="w-5 h-5 text-success"></i>
+                <i data-lucide="shopping-bag" class="w-5 h-5 text-ok"></i>
                 <h2 class="text-base font-semibold">Scenario A: Outright Purchase / Loan</h2>
             </div>
             <span class="font-mono text-sm font-bold text-slate-800">NPV: ${{ analysis.npv_purchase_option|floatformat:2 }}</span>
@@ -130,7 +130,7 @@
     <div class="card border-t-4 border-purple-500">
         <div class="card-header flex items-center justify-between">
             <div class="flex items-center gap-2">
-                <i data-lucide="repeat" class="w-5 h-5 text-purple"></i>
+                <i data-lucide="repeat" class="w-5 h-5 text-brand"></i>
                 <h2 class="text-base font-semibold">Scenario B: Lease Agreement</h2>
             </div>
             <span class="font-mono text-sm font-bold text-slate-800">NPV: ${{ analysis.npv_lease_option|floatformat:2 }}</span>
