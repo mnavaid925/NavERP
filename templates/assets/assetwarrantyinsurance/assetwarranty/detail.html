@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}{{ warranty.number }} — {{ warranty.title }} — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_warranty_list' %}">Warranties</a>
+            <span>/</span>
+            <span>{{ warranty.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ warranty.number }} — {{ warranty.title }}</h1>
+            <span class="badge {{ warranty.status_css }}">{{ warranty.get_status_display }}</span>
+            <span class="badge {{ warranty.warranty_type_css }}">{{ warranty.get_warranty_type_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if warranty.status == 'draft' %}
+        <form method="post" action="{% url 'assets:asset_warranty_activate' warranty.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Activate Warranty
+            </button>
+        </form>
+        {% endif %}
+        {% if warranty.status == 'active' or warranty.status == 'expiring_soon' %}
+        <form method="post" action="{% url 'assets:asset_warranty_renew' warranty.pk %}" class="inline" onsubmit="return confirm('Renew this warranty for an additional 12 months?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Renew (+1 Year)
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_warranty_claim_create' %}?warranty={{ warranty.pk }}" class="btn btn-outline text-amber-700">
+            <i data-lucide="alert-circle" class="w-4 h-4 me-1"></i> File Claim
+        </a>
+        <form method="post" action="{% url 'assets:asset_warranty_void' warranty.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to VOID this warranty?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-800">
+                <i data-lucide="slash" class="w-4 h-4 me-1"></i> Void Warranty
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_warranty_edit' warranty.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if request.user.is_staff or request.user.is_superuser %}
+        <form method="post" action="{% url 'assets:asset_warranty_delete' warranty.pk %}" class="inline" onsubmit="return confirm('Delete warranty {{ warranty.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Left Column: Primary Specifications -->
+    <div class="lg:col-span-2 space-y-6">
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Coverage Specifications & Limits</h2>
+                <span class="badge {{ warranty.coverage_scope_css }}">{{ warranty.get_coverage_scope_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Warranty Certificate Number</div>
+                        <div class="text-sm font-semibold text-slate-900 font-mono">{{ warranty.warranty_certificate_number|default:"—" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Warrantor / Provider</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.warrantor_party.name|default:"—" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Effective Inception Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.start_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Calendar Expiration Date</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.end_date|date:"F d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Meter Limit</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {% if warranty.meter_limit %}
+                                {{ warranty.meter_limit }} {{ warranty.get_meter_type_display }}
+                            {% else %}
+                                None (Calendar Time Only)
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Parts & Labor Indemnity</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            Parts: {{ warranty.parts_coverage_percent }}% • Labor: {{ warranty.labor_coverage_percent }}%
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Technician Travel & Dispatch</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {% if warranty.travel_dispatch_covered %}
+                                <span class="badge badge-green">Included (Covered)</span>
+                            {% else %}
+                                <span class="badge badge-amber">Excluded (Billed Separately)</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Per-Incident Deductible</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {{ warranty.currency.code|default:"USD" }} {{ warranty.deductible_amount }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Contract Purchase Price</div>
+                        <div class="text-sm font-semibold text-slate-900">
+                            {{ warranty.currency.code|default:"USD" }} {{ warranty.contract_purchase_price }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500 font-medium">Registered By</div>
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.registered_by.username|default:"System" }}</div>
+                    </div>
+                </div>
+
+                {% if warranty.terms_and_conditions %}
+                <div class="mt-6 pt-4 border-t border-slate-200">
+                    <h3 class="text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Terms, Exclusions & PM Mandates</h3>
+                    <div class="p-3 bg-slate-50 rounded text-sm text-slate-700 whitespace-pre-line">{{ warranty.terms_and_conditions }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Claims Filed Under This Warranty -->
+        <div class="card">
+            <div class="card-header flex justify-between items-center">
+                <h2 class="card-title">Warranty Claims History ({{ claims|length }})</h2>
+                <a href="{% url 'assets:asset_warranty_claim_create' %}?warranty={{ warranty.pk }}" class="btn btn-outline btn-sm">
+                    <i data-lucide="plus" class="w-3.5 h-3.5 me-1"></i> File New Claim
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Claim #</th>
+                                <th>Incident Date</th>
+                                <th>Defect Description</th>
+                                <th>Claimed</th>
+                                <th>Approved</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for c in claims %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'assets:asset_warranty_claim_detail' c.pk %}" class="font-semibold text-primary-600 hover:underline">
+                                        {{ c.number }}
+                                    </a>
+                                </td>
+                                <td>{{ c.incident_date|date:"M d, Y" }}</td>
+                                <td class="max-w-xs truncate">{{ c.title }}</td>
+                                <td>{{ c.currency.code|default:"USD" }} {{ c.claimed_amount }}</td>
+                                <td>{{ c.currency.code|default:"USD" }} {{ c.approved_amount }}</td>
+                                <td><span class="badge {{ c.claim_status_css }}">{{ c.get_claim_status_display }}</span></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center py-6 text-slate-500">
+                                    No warranty claims have been filed under this contract.
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Asset Links & Documents -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Covered Equipment</h2>
+            </div>
+            <div class="card-body space-y-4">
+                {% if warranty.fixed_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Financial Fixed Asset</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ warranty.fixed_asset.number }} — {{ warranty.fixed_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if warranty.operational_asset %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Operational Machinery</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ warranty.operational_asset.tag_code }} — {{ warranty.operational_asset.name }}</div>
+                </div>
+                {% endif %}
+                {% if warranty.asset_category %}
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Asset Category</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ warranty.asset_category.name }}</div>
+                </div>
+                {% endif %}
+                {% if not warranty.fixed_asset and not warranty.operational_asset and not warranty.asset_category %}
+                <div class="text-sm text-slate-500 italic">No specific asset mapped (Facility / Schedule-wide coverage).</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Associated Contracts & Proof</h2>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Warranty Certificate / Legal Document</div>
+                    {% if warranty.contract_document %}
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.contract_document.title }}</div>
+                    {% else %}
+                        <div class="text-sm text-slate-400">None uploaded</div>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 font-medium">Linked 11.5 Service Contract (SLA)</div>
+                    {% if warranty.service_contract %}
+                        <div class="text-sm font-semibold text-slate-900">{{ warranty.service_contract.contract_number }} — {{ warranty.service_contract.provider_name }}</div>
+                    {% else %}
+                        <div class="text-sm text-slate-400">Independent warranty agreement</div>
+                    {% endif %}
+                </div>
+                <div class="pt-4 border-t border-slate-200 text-xs text-slate-500">
+                    <div>Created: {{ warranty.created_at|date:"M d, Y H:i" }}</div>
+                    <div>Last Updated: {{ warranty.updated_at|date:"M d, Y H:i" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
