@@ -50,7 +50,7 @@
 <div class="card mb-6">
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div class="md:col-span-2">
+            <div>
                 <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search code, name, agency..." class="form-input" />
             </div>
             <div>
@@ -58,6 +58,14 @@
                     <option value="">All Framework Types</option>
                     {% for val, label in type_choices %}
                     <option value="{{ val }}" {% if request.GET.framework_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in category_list %}
+                    <option value="{{ cat.pk }}" {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
