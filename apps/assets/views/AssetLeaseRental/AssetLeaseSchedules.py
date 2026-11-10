@@ -164,6 +164,10 @@ def asset_lease_schedule_delete(request, pk):
     schedule = assets_object(request, AssetLeaseSchedule, pk)
     num = schedule.number
     contract_pk = schedule.lease_contract_id
+    if schedule.status == "paid":
+        messages.warning(request, f"Cannot delete schedule line {num} because it has already been paid and settled.")
+        return redirect("assets:asset_lease_contract_detail", pk=contract_pk)
+
     write_audit_log(
         request.user,
         schedule,
