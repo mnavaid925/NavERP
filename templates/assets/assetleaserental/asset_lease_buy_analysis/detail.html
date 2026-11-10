@@ -187,11 +187,11 @@
             </div>
             <div>
                 <span class="text-muted">Evaluated By:</span>
-                <span class="font-medium text-slate-900 ml-1">{{ analysis.evaluated_by.get_full_name|default:analysis.evaluated_by.username|default:"Not specified" }}</span>
+                <span class="font-medium text-slate-900 ml-1">{% if analysis.evaluated_by %}{{ analysis.evaluated_by.get_full_name|default:analysis.evaluated_by.username }}{% else %}Not specified{% endif %}</span>
             </div>
             <div>
                 <span class="text-muted">Approved By:</span>
-                <span class="font-medium text-slate-900 ml-1">{{ analysis.approved_by.get_full_name|default:analysis.approved_by.username|default:"Pending" }}</span>
+                <span class="font-medium text-slate-900 ml-1">{% if analysis.approved_by %}{{ analysis.approved_by.get_full_name|default:analysis.approved_by.username }}{% else %}Pending{% endif %}</span>
             </div>
         </div>
 
