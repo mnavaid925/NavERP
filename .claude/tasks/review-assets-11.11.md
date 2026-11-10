@@ -61,4 +61,29 @@
   - `apps/assets/views/AssetCompliance/AssetComplianceFrameworks.py:80-96`
   - *Fix:* Add `is_active` and `is_audit_due` properties on `AssetComplianceFramework`, and include `incidents` in detail context.
 
+---
 
+## Pass 2: Contract Explorer (`explorer`)
+
+### Critical
+- **C1 / C2: Broken `write_audit_log` Call Signature Across All 17 View Call Sites** (Confirmed)
+  - 6 positional arguments `(request.tenant, request.user, action, ModelName, pk, message)` passed instead of `(user, obj, action, changes=None, tenant=None)`. Raises `TypeError` on every POST action.
+
+### Important
+- **I1: Missing Filter `<select>` Elements in List Templates** (Confirmed)
+  - `category_list`, `framework_list`, and `agency_list` context variables passed but `<select>` widgets omitted from list templates.
+- **I2: User IDOR Validation Gap in Forms** (Confirmed)
+  - `lead_auditor_user` and `assigned_investigator` need explicit tenant validation.
+- **I3: Unhandled `ProtectedError` on Framework Deletion** (Confirmed)
+  - Linked audits cause unhandled `ProtectedError` (HTTP 500) when deleting a framework.
+- **I4: Seeder `--flush` Omission** (Confirmed)
+  - `--flush` does not delete 11.11 records.
+
+### Minor
+- **M1: Missing Helper Properties on `AssetComplianceFramework` (`is_active`, `is_audit_due`)** (Confirmed)
+- **M2: Missing `incidents` Context Key in Framework Detail View** (Confirmed)
+- **M3: Pagination Links Drop Active FK Filters** (Confirmed)
+- **M4: Average Readiness Score Falsy 0 Fallback Bug** (Confirmed)
+- **M5: Unused `tenant_admin_required` Imports in Views** (Confirmed)
+
+---
