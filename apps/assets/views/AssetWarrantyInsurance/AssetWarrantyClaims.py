@@ -22,6 +22,7 @@ def asset_warranty_claim_list(request):
     qs = assets_scope(
         AssetWarrantyClaim.objects.select_related(
             "warranty",
+            "warranty__warrantor_party",
             "fixed_asset",
             "operational_asset",
             "currency",
@@ -98,6 +99,7 @@ def asset_warranty_claim_detail(request, pk):
     claim = get_object_or_404(
         AssetWarrantyClaim.objects.select_related(
             "warranty",
+            "warranty__warrantor_party",
             "fixed_asset",
             "operational_asset",
             "maintenance_request",
