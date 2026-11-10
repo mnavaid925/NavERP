@@ -44,3 +44,25 @@
 - **Core Spine Reuse:** PASS (`core.Party` for providers, `accounting.Currency` global, links to `accounting.FixedAsset`).
 - **Admin & Navigation:** PASS (registered in admin, `LIVE_LINKS["11.8"]` wired).
 - **Migrations:** PASS (migration `0012` applied cleanly, `manage.py check` passes 100%).
+
+## 3. Frontend Reviewer
+**Verdict:** PASS — All 12 templates exhibit high adherence to NavERP frontend guidelines, `theme.css` standards, accessibility conventions, and the established design system.
+
+### Critical
+None.
+
+### Important
+None.
+
+### Minor
+- `templates/assets/assetwarrantyinsurance/{assetwarranty,assetwarrantyclaim,assetinsurancepolicy,assetinsuranceclaim}/list.html` — Action icon buttons specify `title` but lack `aria-label`. Fix: add `aria-label` matching `title` on icon-only links/buttons.
+- `templates/assets/assetwarrantyinsurance/{assetwarrantyclaim,assetinsuranceclaim}/detail.html` — Modal panels use `bg-white rounded-lg` without dark mode classes (`dark:bg-slate-800 dark:text-slate-100`). Fix: add dark utility classes to modal card bodies.
+- `templates/assets/assetwarrantyinsurance/{assetwarrantyclaim,assetinsurancepolicy,assetinsuranceclaim}/list.html` — KPI summary stat values hardcode literal `$` instead of dynamic currency. Fix: format with currency or tenant default.
+
+### Done Well
+- Zero comment leaks (L2 guard verified across all 12 templates).
+- Strict adherence to `theme.css` badges and icons (L33 guard): all badge properties use valid color-named classes (`badge-green/red/amber/info/muted/slate`), stat icons use valid modifiers.
+- Robust pagination guards (L9 guard): all prev/next pagination links guarded by `has_previous` / `has_next`.
+- PK filter comparisons strictly use `|stringformat:"d"`.
+- None-safe display fallbacks with safe defaults (L10 guard).
+- RTL-compliant logical spacing utilities (`me-1`, `text-end`).
