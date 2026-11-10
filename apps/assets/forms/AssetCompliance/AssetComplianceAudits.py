@@ -71,4 +71,8 @@ class AssetComplianceAuditForm(TenantUniqueMixin, TenantModelForm):
     def clean(self):
         cleaned = super().clean()
         reject_foreign(self, cleaned, ["framework", "asset", "auditor_party", "lead_auditor_user"])
+        total = cleaned.get("total_checkpoints")
+        passed = cleaned.get("passed_checkpoints")
+        if total is not None and passed is not None and passed > total:
+            self.add_error("passed_checkpoints", "Passed checkpoints cannot exceed total checkpoints.")
         return cleaned
