@@ -49,6 +49,12 @@ from apps.assets.forms.AssetReliability import (
     AssetFailureModeForm,
     AssetTelemetryReadingForm,
 )
+from apps.assets.forms.AssetWarrantyInsurance import (
+    AssetInsuranceClaimForm,
+    AssetInsurancePolicyForm,
+    AssetWarrantyClaimForm,
+    AssetWarrantyForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -88,4 +94,8 @@ __all__ = [
     "AssetTelemetryReadingForm",
     "AssetFailureModeForm",
     "AssetCalibrationRecordForm",
+    "AssetWarrantyForm",
+    "AssetWarrantyClaimForm",
+    "AssetInsurancePolicyForm",
+    "AssetInsuranceClaimForm",
 ]
