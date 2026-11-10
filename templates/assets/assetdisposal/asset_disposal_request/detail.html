@@ -55,10 +55,13 @@
         </form>
         {% endif %}
 
-        {% if disposal_request.status != 'completed' and disposal_request.status != 'cancelled' %}
+        {% if disposal_request.status in 'draft,submitted' %}
         <a href="{% url 'assets:asset_disposal_request_edit' disposal_request.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
+        {% endif %}
+
+        {% if disposal_request.status != 'completed' %}
         <form method="post" action="{% url 'assets:asset_disposal_request_delete' disposal_request.pk %}" class="inline" onsubmit="return confirm('Delete this disposal request?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
