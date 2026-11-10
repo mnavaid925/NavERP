@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}{{ trade_in.number }} — Trade-in Agreement — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_trade_in_list' %}">Trade-ins</a>
+            <span>/</span>
+            <span>{{ trade_in.number }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <h1 class="page-title">{{ trade_in.retired_fixed_asset.name }} ↔ {{ trade_in.vendor.name }}</h1>
+            <span class="badge {{ trade_in.status_css }}">{{ trade_in.get_status_display }}</span>
+            {% if trade_in.like_kind_exchange %}
+            <span class="badge badge-info">Sec 1031 Like-Kind Exchange</span>
+            {% endif %}
+        </div>
+        <div class="text-sm text-slate-500 mt-1 font-mono">
+            Agreement: {{ trade_in.number }} • Created {{ trade_in.created_at|date:"M d, Y H:i" }}
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        {% if trade_in.status in 'draft,proposed,negotiated,accepted' %}
+        <form method="post" action="{% url 'assets:asset_trade_in_surrender' trade_in.pk %}" class="inline" onsubmit="return confirm('Confirm physical handover of machinery to dealer?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="truck" class="w-4 h-4 me-1"></i> Log Equipment Surrender
+            </button>
+        </form>
+        {% endif %}
+
+        {% if trade_in.status in 'accepted,equipment_surrendered' %}
+        <form method="post" action="{% url 'assets:asset_trade_in_settle' trade_in.pk %}" class="inline" onsubmit="return confirm('Settle trade-in allowance and synchronize proceeds to disposal request?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600">
+                <i data-lucide="check-check" class="w-4 h-4 me-1"></i> Settle Allowance on Invoice
+            </button>
+        </form>
+        {% endif %}
+
+        {% if trade_in.status != 'credit_settled' and trade_in.status != 'cancelled' %}
+        <a href="{% url 'assets:asset_trade_in_edit' trade_in.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_trade_in_delete' trade_in.pk %}" class="inline" onsubmit="return confirm('Delete trade-in agreement {{ trade_in.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-red-600 hover:text-red-700">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Equipment Exchange Overview -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Equipment Exchange Specifications</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Retiring Fixed Asset</div>
+                        <div class="text-sm font-semibold text-slate-800 mt-1">
+                            {{ trade_in.retired_fixed_asset.asset_number }} — {{ trade_in.retired_fixed_asset.name }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Parent Disposal Request</div>
+                        <div class="text-sm font-mono text-slate-800 mt-1">
+                            <a href="{% url 'assets:asset_disposal_request_detail' trade_in.disposal_request.pk %}" class="text-blue-600 hover:underline">
+                                {{ trade_in.disposal_request.number }}
+                            </a>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">OEM Dealer / Vendor</div>
+                        <div class="text-sm font-medium text-slate-800 mt-1">
+                            {{ trade_in.vendor.name }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Dealer Agreement Ref</div>
+                        <div class="text-sm font-mono text-slate-700 mt-1">
+                            {{ trade_in.agreement_number|default:"—" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Replacement Requisition</div>
+                        <div class="text-sm text-slate-800 mt-1 font-mono">
+                            {{ trade_in.replacement_requisition.number|default:"Not linked to formal requisition" }}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Replacement Fixed Asset</div>
+                        <div class="text-sm text-slate-800 mt-1">
+                            {% if trade_in.replacement_fixed_asset %}
+                            {{ trade_in.replacement_fixed_asset.asset_number }} — {{ trade_in.replacement_fixed_asset.name }}
+                            {% else %}
+                            <span class="text-slate-400 italic">Pending Capitalization</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Agreement Signing Date</div>
+                        <div class="text-sm text-slate-700 mt-1">{{ trade_in.agreement_date|date:"M d, Y" }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-400 font-medium uppercase">Target Equipment Handover Date</div>
+                        <div class="text-sm text-slate-700 mt-1">{{ trade_in.handover_due_date|date:"M d, Y"|default:"Not specified" }}</div>
+                    </div>
+                </div>
+
+                {% if trade_in.notes %}
+                <div class="border-t border-slate-100 mt-4 pt-4">
+                    <div class="text-xs text-slate-400 font-medium uppercase mb-1">Exchange Terms & Contract Notes</div>
+                    <p class="text-sm text-slate-700 whitespace-pre-line">{{ trade_in.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Valuation & Offset Analysis -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="font-semibold text-slate-800">Trade-in Valuation & Cost Offset Analysis</h2>
+            </div>
+            <div class="card-body">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Dealer Appraised Value</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ trade_in.dealer_appraised_value|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Contractual Allowance</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ trade_in.trade_in_allowance|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded border border-slate-100">
+                        <div class="text-xs text-slate-500">Over-Allowance Incentive</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ trade_in.over_allowance_amount|floatformat:2 }}</div>
+                    </div>
+                    <div class="p-3 bg-emerald-50 rounded border border-emerald-100">
+                        <div class="text-xs text-emerald-700 font-medium">Net Credit Applied</div>
+                        <div class="text-base font-bold text-emerald-900 mt-1 font-mono">${{ trade_in.net_credit_applied|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                        <div class="text-xs text-slate-500">New Replacement Asset Cost</div>
+                        <div class="text-base font-semibold text-slate-900 mt-1 font-mono">${{ trade_in.replacement_asset_cost|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Total Trade Allowance Offset</div>
+                        <div class="text-base font-semibold text-emerald-700 mt-1 font-mono">-${{ trade_in.net_credit_applied|floatformat:2 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">Remaining Net Cash Outflow</div>
+                        <div class="text-lg font-bold text-slate-900 mt-1 font-mono">${{ trade_in.net_cash_outflow|floatformat:2 }}</div>
+                    </div>
+                </div>
+
+                {% if trade_in.like_kind_exchange %}
+                <div class="p-3 bg-blue-50 rounded border border-blue-100 mt-4 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold uppercase text-blue-700">IRC Sec 1031 Like-Kind Exchange Qualification</span>
+                        <div class="text-xs text-blue-600 mt-0.5">Qualifies for corporate capital gains deferral into new machine tax basis.</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-blue-500">Deferred Gain/Loss</div>
+                        <div class="text-sm font-bold text-blue-900 font-mono">${{ trade_in.gain_loss_deferred|floatformat:2 }}</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Col: Governance & Agreement Document -->
+    <div class="space-y-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Governance & Handover</h3>
+            </div>
+            <div class="card-body space-y-4">
+                <div>
+                    <div class="text-xs text-slate-400 font-medium uppercase">Authorized By</div>
+                    <div class="text-sm font-medium text-slate-800 mt-0.5">
+                        {{ trade_in.authorized_by.get_full_name|default:trade_in.authorized_by.username|default:"—" }}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Physical Surrender Log</div>
+                    <div class="text-sm text-slate-800 mt-0.5">
+                        {% if trade_in.surrendered_at %}
+                        <span class="text-emerald-700 font-medium">Handover confirmed on {{ trade_in.surrendered_at|date:"M d, Y H:i" }}</span>
+                        {% else %}
+                        <span class="text-slate-500 italic">Equipment still on-site</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-100 pt-3">
+                    <div class="text-xs text-slate-400 font-medium uppercase">Invoice Credit Settlement</div>
+                    <div class="text-sm text-slate-800 mt-0.5">
+                        {% if trade_in.settled_at %}
+                        <span class="text-emerald-700 font-medium">Settled on {{ trade_in.settled_at|date:"M d, Y H:i" }}</span>
+                        {% else %}
+                        <span class="text-slate-500 italic">Pending vendor invoice reconciliation</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="font-semibold text-slate-800">Exchange Agreement Document</h3>
+            </div>
+            <div class="card-body">
+                {% if trade_in.agreement_document %}
+                <div class="flex items-center gap-3 p-3 bg-slate-50 rounded border border-slate-200">
+                    <i data-lucide="file-text" class="w-6 h-6 text-blue-600"></i>
+                    <div>
+                        <div class="text-sm font-medium text-slate-900">{{ trade_in.agreement_document.title }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ trade_in.agreement_document.file_number }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-sm text-slate-500 italic">No executed exchange contract or dealer trade-in memo attached.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
