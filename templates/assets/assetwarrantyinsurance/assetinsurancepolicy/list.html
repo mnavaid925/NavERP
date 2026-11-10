@@ -173,7 +173,7 @@
                             <a href="{% url 'assets:asset_insurance_policy_edit' p.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            {% if request.user.is_staff or request.user.is_superuser %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <form method="post" action="{% url 'assets:asset_insurance_policy_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete policy {{ p.number }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-icon text-red-600 hover:text-red-800" title="Delete">
