@@ -88,7 +88,7 @@ def asset_lease_buy_analysis_detail(request, pk):
         request,
         AssetLeaseBuyAnalysis,
         pk,
-        select_related=["category", "evaluated_by", "approved_by"],
+        select_related=["evaluated_by", "approved_by"],
     )
     return render(
         request,
