@@ -58,11 +58,16 @@ def asset_resale_listing_list(request):
         qs = qs.filter(payment_status=payment_status_filter)
 
     base_tenant_qs = assets_scope(AssetResaleListing.objects.all(), request)
-    total_listings = base_tenant_qs.count()
-    active_listings_count = base_tenant_qs.filter(status__in=["listed", "bid_received", "negotiation"]).count()
-    sold_count = base_tenant_qs.filter(status__in=["sold", "payment_received", "delivered"]).count()
-    proceeds_agg = base_tenant_qs.aggregate(total=Sum("net_sale_proceeds"))
-    total_realized_proceeds = proceeds_agg["total"] or Decimal("0.00")
+    kpi_agg = base_tenant_qs.aggregate(
+        total_listings=Count("id"),
+        active_listings=Count("id", filter=Q(status__in=["listed", "bid_received", "negotiation"])),
+        sold_count=Count("id", filter=Q(status__in=["sold", "payment_received", "delivered"])),
+        total_realized_proceeds=Sum("net_sale_proceeds"),
+    )
+    total_listings = kpi_agg["total_listings"] or 0
+    active_listings_count = kpi_agg["active_listings"] or 0
+    sold_count = kpi_agg["sold_count"] or 0
+    total_realized_proceeds = kpi_agg["total_realized_proceeds"] or Decimal("0.00")
 
     paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
