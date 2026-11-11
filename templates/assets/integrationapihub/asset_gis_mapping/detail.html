@@ -77,7 +77,7 @@
             </div>
             <div class="detail-item">
                 <dt>SCM Location</dt>
-                <dd>{{ mapping.location|default:"—" }}</dd>
+                <dd>{% if mapping.location %}<a href="{% url 'scm:location_detail' mapping.location.pk %}" class="text-brand hover:underline">{{ mapping.location }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Org Unit</dt>
