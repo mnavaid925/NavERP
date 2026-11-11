@@ -195,6 +195,12 @@ def asset_replacement_plan_create(request):
 @tenant_admin_required
 def asset_replacement_plan_edit(request, pk):
     plan = assets_object(request, AssetReplacementPlan, pk)
+    if plan.is_locked:
+        messages.error(
+            request,
+            f"Replacement plan '{plan.number}' is locked ({plan.get_status_display()}) and cannot be edited.",
+        )
+        return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
     if request.method == "POST":
         form = AssetReplacementPlanForm(request.POST, instance=plan, tenant=request.tenant)
         if form.is_valid():
@@ -218,6 +224,12 @@ def asset_replacement_plan_edit(request, pk):
 @require_POST
 def asset_replacement_plan_delete(request, pk):
     plan = assets_object(request, AssetReplacementPlan, pk)
+    if plan.is_locked:
+        messages.error(
+            request,
+            f"Replacement plan '{plan.number}' is locked ({plan.get_status_display()}) and cannot be deleted.",
+        )
+        return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, plan, "delete", tenant=request.tenant)
@@ -233,6 +245,12 @@ def asset_replacement_plan_delete(request, pk):
 @require_POST
 def asset_replacement_plan_recalculate(request, pk):
     plan = assets_object(request, AssetReplacementPlan, pk)
+    if plan.is_locked:
+        messages.error(
+            request,
+            f"Replacement plan '{plan.number}' is locked ({plan.get_status_display()}) and cannot be recalculated.",
+        )
+        return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
     with transaction.atomic():
         plan.recalculate_metrics()
         plan.save()
@@ -250,12 +268,19 @@ def asset_replacement_plan_recalculate(request, pk):
 def asset_replacement_plan_transition(request, pk):
     plan = assets_object(request, AssetReplacementPlan, pk)
     target_status = request.POST.get("target_status", "").strip()
-    allowed_targets = {"proposed", "approved", "scheduled", "executed", "deferred", "cancelled"}
-    if target_status not in allowed_targets:
+    status_labels = dict(AssetReplacementPlan.STATUS_CHOICES)
+    if target_status not in status_labels:
         messages.error(request, "Invalid target replacement plan status.")
         return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
     if plan.status == target_status:
         messages.info(request, f"Plan '{plan.number}' is already '{plan.get_status_display()}'.")
+        return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
+    allowed_next = AssetReplacementPlan.ALLOWED_TRANSITIONS.get(plan.status, set())
+    if target_status not in allowed_next:
+        messages.error(
+            request,
+            f"Cannot transition replacement plan '{plan.number}' from '{plan.get_status_display()}' to '{status_labels[target_status]}'.",
+        )
         return redirect("assets:asset_replacement_plan_detail", pk=plan.pk)
     with transaction.atomic():
         plan.status = target_status
