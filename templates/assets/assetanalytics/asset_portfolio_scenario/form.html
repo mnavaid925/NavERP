@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ scenario.number }}{% else %}New What-If Scenario{% endif %} — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_portfolio_scenario_list' %}">What-If Scenarios</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ scenario.number }}{% else %}New Scenario{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit What-If Scenario: {{ scenario.number }}{% else %}New What-If Portfolio Scenario{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Scenario Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scenario_type.id_for_label }}">Scenario Driver Type *</label>
+                    {{ form.scenario_type }}
+                    {% if form.scenario_type.errors %}<div class="form-error">{{ form.scenario_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.base_fiscal_year.id_for_label }}">Base Fiscal Year *</label>
+                    {{ form.base_fiscal_year }}
+                    {% if form.base_fiscal_year.errors %}<div class="form-error">{{ form.base_fiscal_year.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.horizon_years.id_for_label }}">Horizon (Years) *</label>
+                    {{ form.horizon_years }}
+                    {% if form.horizon_years.errors %}<div class="form-error">{{ form.horizon_years.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scope_org_unit.id_for_label }}">Scope Org Unit</label>
+                    {{ form.scope_org_unit }}
+                    {% if form.scope_org_unit.errors %}<div class="form-error">{{ form.scope_org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scope_category.id_for_label }}">Scope Asset Category</label>
+                    {{ form.scope_category }}
+                    {% if form.scope_category.errors %}<div class="form-error">{{ form.scope_category.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.baseline_scenario.id_for_label }}">Reference Baseline Scenario</label>
+                    {{ form.baseline_scenario }}
+                    {% if form.baseline_scenario.errors %}<div class="form-error">{{ form.baseline_scenario.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Scenario Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group flex items-center pt-6 gap-2">
+                    {{ form.is_baseline }}
+                    <label class="form-label mb-0" for="{{ form.is_baseline.id_for_label }}">Designate as Official BAU Baseline</label>
+                </div>
+            </div>
+
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Financial &amp; Operational Simulation Levers</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.annual_capex_budget_limit.id_for_label }}">Annual CapEx Budget Cap</label>
+                        {{ form.annual_capex_budget_limit }}
+                        {% if form.annual_capex_budget_limit.errors %}<div class="form-error">{{ form.annual_capex_budget_limit.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.discount_rate_pct.id_for_label }}">Discount Rate (%)</label>
+                        {{ form.discount_rate_pct }}
+                        {% if form.discount_rate_pct.errors %}<div class="form-error">{{ form.discount_rate_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.inflation_rate_pct.id_for_label }}">CapEx Inflation Rate (%)</label>
+                        {{ form.inflation_rate_pct }}
+                        {% if form.inflation_rate_pct.errors %}<div class="form-error">{{ form.inflation_rate_pct.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.acceleration_months.id_for_label }}">Schedule Shift (Months; negative = defer)</label>
+                        {{ form.acceleration_months }}
+                        {% if form.acceleration_months.errors %}<div class="form-error">{{ form.acceleration_months.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.fleet_growth_pct.id_for_label }}">Fleet Expansion Growth (%)</label>
+                        {{ form.fleet_growth_pct }}
+                        {% if form.fleet_growth_pct.errors %}<div class="form-error">{{ form.fleet_growth_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.consolidation_reduction_pct.id_for_label }}">Consolidation Footprint Cut (%)</label>
+                        {{ form.consolidation_reduction_pct }}
+                        {% if form.consolidation_reduction_pct.errors %}<div class="form-error">{{ form.consolidation_reduction_pct.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.maintenance_efficiency_gain_pct.id_for_label }}">Maintenance Efficiency Gain (%)</label>
+                        {{ form.maintenance_efficiency_gain_pct }}
+                        {% if form.maintenance_efficiency_gain_pct.errors %}<div class="form-error">{{ form.maintenance_efficiency_gain_pct.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.assumptions_summary.id_for_label }}">Assumptions &amp; Modeling Summary</label>
+                {{ form.assumptions_summary }}
+                {% if form.assumptions_summary.errors %}<div class="form-error">{{ form.assumptions_summary.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Scenario{% endif %}
+                </button>
+                {% if is_edit %}
+                <a href="{% url 'assets:asset_portfolio_scenario_detail' scenario.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
