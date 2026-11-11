@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from django.utils import timezone
 
-from apps.accounting.models import Currency, GLAccount, FixedAsset
+from apps.accounting.models import Currency, FiscalPeriod, GLAccount, FixedAsset
 from apps.core.models import OrgUnit, Party, PartyRole
 from apps.scm.models import Asset, Location, PurchaseOrder
 from apps.assets.models import (
@@ -59,6 +59,10 @@ from apps.assets.models import (
     AssetBusinessContinuityPlan,
     AssetCyberSecurityProfile,
     AssetRiskMitigationAction,
+    AssetIntegrationConnector,
+    AssetTelemetryStream,
+    AssetGlSyncBatch,
+    AssetGisMapping,
 )
 
 
@@ -2719,10 +2723,352 @@ def asset_mitigation_action_b(db, tenant_b, asset_risk_register_b, admin_b):
     )
 
 
+# ===== 11.15 Integration & API Hub =====
 
 
+@pytest.fixture
+def integration_open_fiscal_period_a(db, tenant_a):
+    today = timezone.localdate()
+    start_date = today.replace(day=1)
+    end_date = (today.replace(day=28) + timezone.timedelta(days=4)).replace(
+        day=1
+    ) - timezone.timedelta(days=1)
+    period = FiscalPeriod(
+        tenant=tenant_a,
+        name=f"{start_date:%b %Y} (Open)",
+        period_type="month",
+        start_date=start_date,
+        end_date=end_date,
+        status="open",
+    )
+    period.full_clean()
+    period.save()
+    return period
 
 
+@pytest.fixture
+def integration_closed_fiscal_period_a(db, tenant_a):
+    today = timezone.localdate()
+    prev_end = today.replace(day=1) - timezone.timedelta(days=1)
+    prev_start = prev_end.replace(day=1)
+    period = FiscalPeriod(
+        tenant=tenant_a,
+        name=f"{prev_start:%b %Y} (Closed)",
+        period_type="month",
+        start_date=prev_start,
+        end_date=prev_end,
+        status="closed",
+    )
+    period.full_clean()
+    period.save()
+    return period
 
 
+@pytest.fixture
+def integration_open_fiscal_period_b(db, tenant_b):
+    today = timezone.localdate()
+    start_date = today.replace(day=1)
+    end_date = (today.replace(day=28) + timezone.timedelta(days=4)).replace(
+        day=1
+    ) - timezone.timedelta(days=1)
+    period = FiscalPeriod(
+        tenant=tenant_b,
+        name=f"{start_date:%b %Y} Globex (Open)",
+        period_type="month",
+        start_date=start_date,
+        end_date=end_date,
+        status="open",
+    )
+    period.full_clean()
+    period.save()
+    return period
+
+
+@pytest.fixture
+def integration_connector_a(
+    db, tenant_a, vendor_party_a, org_unit_a, currency_usd, admin_user
+):
+    connector = AssetIntegrationConnector(
+        tenant=tenant_a,
+        name="Acme SAP S/4HANA Integration Hub",
+        connector_category="erp_procurement",
+        provider="sap_s4hana",
+        protocol="odata_v4",
+        sync_direction="bidirectional",
+        environment="production",
+        endpoint_url="https://api-acme.example.com/sap/opu/odata4/assets",
+        auth_method="api_key",
+        rate_limit_rpm=240,
+        timeout_seconds=30,
+        retry_policy_max=3,
+        polling_interval_minutes=15,
+        status="active",
+        vendor_partner=vendor_party_a,
+        default_org_unit=org_unit_a,
+        default_currency=currency_usd,
+        owner=admin_user,
+        webhook_verify_tls=True,
+        notes="Primary Acme ERP asset integration connector.",
+    )
+    connector.issue_new_secret()
+    connector.full_clean()
+    connector.save()
+    return connector
+
+
+@pytest.fixture
+def integration_connector_b(
+    db, tenant_b, vendor_party_b, org_unit_b, currency_usd, admin_b
+):
+    connector = AssetIntegrationConnector(
+        tenant=tenant_b,
+        name="Globex Oracle Fusion GL Bridge",
+        connector_category="financial_gl",
+        provider="oracle_fusion",
+        protocol="rest_json",
+        sync_direction="outbound",
+        environment="staging",
+        endpoint_url="https://api-globex.example.com/fscmRestApi/assets",
+        auth_method="oauth2_client",
+        rate_limit_rpm=120,
+        timeout_seconds=30,
+        retry_policy_max=3,
+        polling_interval_minutes=15,
+        status="active",
+        vendor_partner=vendor_party_b,
+        default_org_unit=org_unit_b,
+        default_currency=currency_usd,
+        owner=admin_b,
+        webhook_verify_tls=True,
+        notes="Primary Globex GL integration connector.",
+    )
+    connector.issue_new_secret()
+    connector.full_clean()
+    connector.save()
+    return connector
+
+
+@pytest.fixture
+def integration_stream_a(
+    db,
+    tenant_a,
+    integration_connector_a,
+    operational_asset_a,
+    fixed_asset_a,
+    admin_user,
+):
+    stream = AssetTelemetryStream(
+        tenant=tenant_a,
+        connector=integration_connector_a,
+        operational_asset=operational_asset_a,
+        fixed_asset=fixed_asset_a,
+        tag_address="ns=2;s=Line1.CNC01.BearingTempC",
+        stream_name="CNC Mill Spindle Bearing Temperature",
+        stream_protocol="opc_ua_node",
+        metric_type="bearing_temperature",
+        metric_unit="celsius",
+        ingestion_mode="polling",
+        polling_interval_seconds=60,
+        deadband_delta=Decimal("0.5000"),
+        scale_factor=Decimal("1.000000"),
+        offset_value=Decimal("0.0000"),
+        baseline_value=Decimal("50.0000"),
+        warning_threshold=Decimal("75.0000"),
+        critical_threshold=Decimal("90.0000"),
+        auto_trigger_maintenance=True,
+        stream_status="active",
+        steward=admin_user,
+        notes="Acme CNC spindle bearing telemetry feed.",
+    )
+    stream.full_clean()
+    stream.save()
+    return stream
+
+
+@pytest.fixture
+def integration_stream_b(
+    db,
+    tenant_b,
+    integration_connector_b,
+    operational_asset_b,
+    fixed_asset_b,
+    admin_b,
+):
+    stream = AssetTelemetryStream(
+        tenant=tenant_b,
+        connector=integration_connector_b,
+        operational_asset=operational_asset_b,
+        fixed_asset=fixed_asset_b,
+        tag_address="globex/yard1/forklift01/vibration_rms",
+        stream_name="Globex Forklift Vibration RMS",
+        stream_protocol="mqtt_topic",
+        metric_type="vibration_velocity_rms",
+        metric_unit="mm_per_s",
+        ingestion_mode="streaming_pubsub",
+        polling_interval_seconds=30,
+        deadband_delta=Decimal("0.1000"),
+        scale_factor=Decimal("1.000000"),
+        offset_value=Decimal("0.0000"),
+        baseline_value=Decimal("2.0000"),
+        warning_threshold=Decimal("5.0000"),
+        critical_threshold=Decimal("8.0000"),
+        auto_trigger_maintenance=True,
+        stream_status="active",
+        steward=admin_b,
+        notes="Globex yard fleet vibration telemetry feed.",
+    )
+    stream.full_clean()
+    stream.save()
+    return stream
+
+
+@pytest.fixture
+def integration_gl_batch_a(
+    db,
+    tenant_a,
+    integration_connector_a,
+    integration_open_fiscal_period_a,
+    asset_account_a,
+    expense_account_a,
+    fixed_asset_a,
+    org_unit_a,
+    currency_usd,
+):
+    batch = AssetGlSyncBatch(
+        tenant=tenant_a,
+        connector=integration_connector_a,
+        sync_domain="depreciation_posting",
+        sync_direction="outbound",
+        external_batch_ref="SAP-BELNR-2026-A01",
+        fiscal_period=integration_open_fiscal_period_a,
+        gl_account=expense_account_a,
+        offset_gl_account=asset_account_a,
+        fixed_asset=fixed_asset_a,
+        cost_center=org_unit_a,
+        currency=currency_usd,
+        batch_date=timezone.localdate(),
+        source_amount=Decimal("1800.00"),
+        target_gl_amount=Decimal("1800.00"),
+        reconciliation_status="pending",
+        status="ready",
+        field_mapping_json='{"asset_book": "CORP_US", "depreciation_acct": "6100-A"}',
+        payload_summary="Acme monthly depreciation batch ready for GL posting.",
+    )
+    batch.full_clean()
+    batch.save()
+    return batch
+
+
+@pytest.fixture
+def integration_gl_batch_b(
+    db,
+    tenant_b,
+    integration_connector_b,
+    integration_open_fiscal_period_b,
+    expense_account_b,
+    accum_account_b,
+    fixed_asset_b,
+    org_unit_b,
+    currency_usd,
+):
+    batch = AssetGlSyncBatch(
+        tenant=tenant_b,
+        connector=integration_connector_b,
+        sync_domain="depreciation_posting",
+        sync_direction="outbound",
+        external_batch_ref="ORCL-DEP-2026-B01",
+        fiscal_period=integration_open_fiscal_period_b,
+        gl_account=expense_account_b,
+        offset_gl_account=accum_account_b,
+        fixed_asset=fixed_asset_b,
+        cost_center=org_unit_b,
+        currency=currency_usd,
+        batch_date=timezone.localdate(),
+        source_amount=Decimal("833.33"),
+        target_gl_amount=Decimal("833.33"),
+        reconciliation_status="pending",
+        status="ready",
+        field_mapping_json='{"asset_book": "GLOBEX_US", "depreciation_acct": "6100-B"}',
+        payload_summary="Globex monthly depreciation batch ready for GL posting.",
+    )
+    batch.full_clean()
+    batch.save()
+    return batch
+
+
+@pytest.fixture
+def integration_gis_mapping_a(
+    db,
+    tenant_a,
+    integration_connector_a,
+    operational_asset_a,
+    location_a,
+    org_unit_a,
+    admin_user,
+):
+    mapping = AssetGisMapping(
+        tenant=tenant_a,
+        connector=integration_connector_a,
+        operational_asset=operational_asset_a,
+        location=location_a,
+        org_unit=org_unit_a,
+        external_feature_id="ARCGIS-CNC-001",
+        layer_name="plant_machinery_pt",
+        geometry_type="point",
+        coordinate_system_srid=4326,
+        latitude=Decimal("40.748400"),
+        longitude=Decimal("-73.985700"),
+        elevation_meters=Decimal("12.50"),
+        is_linear_asset=False,
+        geojson_payload='{"type": "Point", "coordinates": [-73.9857, 40.7484]}',
+        system_of_record="erp_authoritative",
+        sync_direction="bidirectional",
+        drift_status="unverified",
+        status="active",
+        gis_custodian=admin_user,
+        notes="Acme CNC machine shop GIS point mapping.",
+    )
+    mapping.full_clean()
+    mapping.save()
+    return mapping
+
+
+@pytest.fixture
+def integration_gis_mapping_b(
+    db,
+    tenant_b,
+    integration_connector_b,
+    operational_asset_b,
+    location_b,
+    org_unit_b,
+    admin_b,
+):
+    mapping = AssetGisMapping(
+        tenant=tenant_b,
+        connector=integration_connector_b,
+        operational_asset=operational_asset_b,
+        location=location_b,
+        org_unit=org_unit_b,
+        external_feature_id="QGIS-FORKLIFT-002",
+        layer_name="yard_fleet_corridor",
+        geometry_type="linestring",
+        coordinate_system_srid=4326,
+        latitude=Decimal("34.052235"),
+        longitude=Decimal("-118.243683"),
+        is_linear_asset=True,
+        lrs_route_id="YARD-ROUTE-01",
+        lrs_from_measure=Decimal("0.000"),
+        lrs_to_measure=Decimal("1.250"),
+        lrs_measure_unit="km",
+        geojson_payload='{"type": "LineString", "coordinates": [[-118.243683, 34.052235], [-118.240000, 34.055000]]}',
+        system_of_record="gis_authoritative",
+        sync_direction="inbound",
+        drift_status="unverified",
+        status="active",
+        gis_custodian=admin_b,
+        notes="Globex yard LRS corridor mapping.",
+    )
+    mapping.full_clean()
+    mapping.save()
+    return mapping
 
