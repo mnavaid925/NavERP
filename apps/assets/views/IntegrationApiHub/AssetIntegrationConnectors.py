@@ -87,7 +87,7 @@ def connector_list(request):
     )
 
 
-@login_required
+@tenant_admin_required
 def connector_create(request):
     """Create a new Asset Integration Connector."""
     if request.tenant is None:
@@ -179,7 +179,7 @@ def connector_detail(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 def connector_edit(request, pk):
     """Edit an existing Asset Integration Connector."""
     connector = assets_object(request, AssetIntegrationConnector, pk)
@@ -220,7 +220,7 @@ def connector_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def connector_delete(request, pk):
     """Delete an Asset Integration Connector unless protected children exist."""
