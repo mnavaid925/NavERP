@@ -24,13 +24,15 @@
         <button type="button" onclick="window.print()" class="btn btn-outline">
             <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print
         </button>
+        {% if not analysis.is_locked %}
         <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_populate' analysis.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
                 <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Sync Upstream Spend
             </button>
         </form>
-        {% if analysis.status in "draft,calculated" %}
+        {% endif %}
+        {% if analysis.status == "draft" or analysis.status == "calculated" %}
         <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="reviewed" />
@@ -39,8 +41,8 @@
             </button>
         </form>
         {% endif %}
-        {% if analysis.status in "calculated,reviewed" %}
-        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline">
+        {% if analysis.status == "calculated" or analysis.status == "reviewed" %}
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline" onsubmit="return confirm('Approve LCC analysis {{ analysis.number|escapejs }}? Approved studies are locked against edits.');">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="approved" />
             <button type="submit" class="btn btn-outline">
@@ -48,15 +50,26 @@
             </button>
         </form>
         {% endif %}
+        {% if analysis.status != "archived" %}
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline" onsubmit="return confirm('Archive LCC analysis {{ analysis.number|escapejs }}? Archived studies are permanently locked.');">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="archived" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+        {% if not analysis.is_locked %}
         <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' analysis.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
-        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' analysis.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ analysis.number }}?');">
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' analysis.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ analysis.number|escapejs }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
         </a>
