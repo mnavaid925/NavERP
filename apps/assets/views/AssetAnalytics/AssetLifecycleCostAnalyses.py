@@ -144,6 +144,9 @@ def asset_lifecycle_cost_analysis_detail(request, pk):
 @login_required
 @tenant_admin_required
 def asset_lifecycle_cost_analysis_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a lifecycle cost analysis.")
+        return redirect("assets:portfolio_dashboard")
     if request.method == "POST":
         form = AssetLifecycleCostAnalysisForm(request.POST, tenant=request.tenant)
         if form.is_valid():
