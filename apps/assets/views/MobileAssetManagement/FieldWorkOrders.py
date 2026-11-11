@@ -3,7 +3,8 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q, Sum
+from django.db import transaction
+from django.db.models import Count, ProtectedError, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -146,7 +147,11 @@ def field_work_order_edit(request, pk):
 def field_work_order_delete(request, pk):
     work_order = assets_object(request, FieldWorkOrder, pk)
     number = work_order.number
-    write_audit_log(request.user, work_order, "delete", tenant=request.tenant)
-    work_order.delete()
-    messages.success(request, f"Field work order {number} deleted successfully.")
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, work_order, "delete", tenant=request.tenant)
+            work_order.delete()
+        messages.success(request, f"Field work order {number} deleted successfully.")
+    except ProtectedError:
+        messages.error(request, f"Cannot delete field work order {number}: dependent records exist.")
     return redirect("assets:field_work_order_list")
