@@ -81,9 +81,12 @@
                     {{ form.owner }}
                     {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors }}</div>{% endif %}
                 </div>
-                <div class="form-group flex items-center pt-6 gap-2">
-                    {{ form.is_baseline }}
-                    <label class="form-label mb-0" for="{{ form.is_baseline.id_for_label }}">Designate as Official BAU Baseline</label>
+                <div class="form-group pt-6">
+                    <div class="flex flex-row items-center gap-2">
+                        {{ form.is_baseline }}
+                        <label class="form-label mb-0" for="{{ form.is_baseline.id_for_label }}">Designate as Official BAU Baseline</label>
+                    </div>
+                    {% if form.is_baseline.errors %}<div class="form-error">{{ form.is_baseline.errors }}</div>{% endif %}
                 </div>
             </div>
 
