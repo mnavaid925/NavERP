@@ -9,6 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from ._common import parse_pos_int, verified_connector_initial
+
 from apps.assets.forms.IntegrationApiHub.AssetTelemetryStreams import (
     AssetTelemetryStreamForm,
 )
@@ -54,8 +56,8 @@ def stream_list(request):
 
     qs = base_qs
     q = (request.GET.get("q") or "").strip()
-    connector_id = (request.GET.get("connector") or "").strip()
-    asset_id = (request.GET.get("operational_asset") or "").strip()
+    connector_id = parse_pos_int(request.GET.get("connector"))
+    asset_id = parse_pos_int(request.GET.get("operational_asset"))
     stream_protocol = (request.GET.get("stream_protocol") or "").strip()
     stream_status = (request.GET.get("stream_status") or "").strip()
 
@@ -67,10 +69,10 @@ def stream_list(request):
             | Q(connector__number__icontains=q)
             | Q(connector__name__icontains=q)
         )
-    if connector_id.isdigit():
-        qs = qs.filter(connector_id=int(connector_id))
-    if asset_id.isdigit():
-        qs = qs.filter(operational_asset_id=int(asset_id))
+    if connector_id is not None:
+        qs = qs.filter(connector_id=connector_id)
+    if asset_id is not None:
+        qs = qs.filter(operational_asset_id=asset_id)
     if stream_protocol in dict(AssetTelemetryStream.STREAM_PROTOCOL_CHOICES):
         qs = qs.filter(stream_protocol=stream_protocol)
     if stream_status in dict(AssetTelemetryStream.STREAM_STATUS_CHOICES):
@@ -138,10 +140,7 @@ def stream_create(request):
             )
             return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
     else:
-        initial = {}
-        connector_id = (request.GET.get("connector") or "").strip()
-        if connector_id.isdigit():
-            initial["connector"] = int(connector_id)
+        initial = verified_connector_initial(request)
         form = AssetTelemetryStreamForm(tenant=request.tenant, initial=initial)
 
     return render(
