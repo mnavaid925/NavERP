@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ plan.number }}{% else %}New Continuity Plan{% endif %} — Business Continuity — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_business_continuity_plan_list' %}">Continuity Plans</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ plan.number }}{% else %}New Plan{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Continuity Plan: {{ plan.number }}{% else %}New Business Continuity & Redundancy Plan{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Plan Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.primary_asset.id_for_label }}">Primary Operational Asset</label>
+                    {{ form.primary_asset }}
+                    {% if form.primary_asset.errors %}<div class="form-error">{{ form.primary_asset.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.backup_redundant_asset.id_for_label }}">Designated Backup / Redundant Asset</label>
+                    {{ form.backup_redundant_asset }}
+                    {% if form.backup_redundant_asset.errors %}<div class="form-error">{{ form.backup_redundant_asset.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.redundancy_type.id_for_label }}">Redundancy Strategy *</label>
+                    {{ form.redundancy_type }}
+                    {% if form.redundancy_type.errors %}<div class="form-error">{{ form.redundancy_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.disaster_scenario.id_for_label }}">Disaster Scenario *</label>
+                    {{ form.disaster_scenario }}
+                    {% if form.disaster_scenario.errors %}<div class="form-error">{{ form.disaster_scenario.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.alternate_facility_site.id_for_label }}">Alternate Facility Site</label>
+                    {{ form.alternate_facility_site }}
+                    {% if form.alternate_facility_site.errors %}<div class="form-error">{{ form.alternate_facility_site.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.emergency_lead.id_for_label }}">Emergency Lead / Commander</label>
+                    {{ form.emergency_lead }}
+                    {% if form.emergency_lead.errors %}<div class="form-error">{{ form.emergency_lead.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Resilience Target Metrics Section -->
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Resilience Target Metrics (Hours)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.recovery_time_objective_hours.id_for_label }}">Recovery Time Objective (RTO in hrs) *</label>
+                        {{ form.recovery_time_objective_hours }}
+                        {% if form.recovery_time_objective_hours.errors %}<div class="form-error">{{ form.recovery_time_objective_hours.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.recovery_point_objective_hours.id_for_label }}">Recovery Point Objective (RPO in hrs) *</label>
+                        {{ form.recovery_point_objective_hours }}
+                        {% if form.recovery_point_objective_hours.errors %}<div class="form-error">{{ form.recovery_point_objective_hours.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.maximum_tolerable_downtime_hours.id_for_label }}">Max Tolerable Downtime (MTD in hrs) *</label>
+                        {{ form.maximum_tolerable_downtime_hours }}
+                        {% if form.maximum_tolerable_downtime_hours.errors %}<div class="form-error">{{ form.maximum_tolerable_downtime_hours.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failover_procedure.id_for_label }}">Failover Procedure Steps</label>
+                    {{ form.failover_procedure }}
+                    {% if form.failover_procedure.errors %}<div class="form-error">{{ form.failover_procedure.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.failback_procedure.id_for_label }}">Failback Restoration Procedure</label>
+                    {{ form.failback_procedure }}
+                    {% if form.failback_procedure.errors %}<div class="form-error">{{ form.failback_procedure.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.critical_spares_required.id_for_label }}">Critical Spares & Supplier Commitments</label>
+                    {{ form.critical_spares_required }}
+                    {% if form.critical_spares_required.errors %}<div class="form-error">{{ form.critical_spares_required.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Drill Management Section -->
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Disaster Simulation Drill Schedule</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.drill_frequency.id_for_label }}">Drill Frequency *</label>
+                        {{ form.drill_frequency }}
+                        {% if form.drill_frequency.errors %}<div class="form-error">{{ form.drill_frequency.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.last_drill_date.id_for_label }}">Last Drill Date</label>
+                        {{ form.last_drill_date }}
+                        {% if form.last_drill_date.errors %}<div class="form-error">{{ form.last_drill_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.next_drill_date.id_for_label }}">Next Scheduled Drill</label>
+                        {{ form.next_drill_date }}
+                        {% if form.next_drill_date.errors %}<div class="form-error">{{ form.next_drill_date.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.drill_result.id_for_label }}">Latest Drill Result</label>
+                        {{ form.drill_result }}
+                        {% if form.drill_result.errors %}<div class="form-error">{{ form.drill_result.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-6 max-w-xs">
+                <label class="form-label" for="{{ form.status.id_for_label }}">Plan Status *</label>
+                {{ form.status }}
+                {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Continuity Plan
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_business_continuity_plan_detail' plan.pk %}{% else %}{% url 'assets:asset_business_continuity_plan_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
