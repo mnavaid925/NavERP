@@ -105,13 +105,13 @@ def mapping_list(request):
 @login_required
 def mapping_create(request):
     """Create a new GIS Asset Spatial Mapping."""
+    if request.tenant is None:
+        messages.error(
+            request,
+            "An active tenant workspace is required to create a GIS mapping.",
+        )
+        return redirect("assets:asset_gis_mapping_list")
     if request.method == "POST":
-        if request.tenant is None:
-            messages.error(
-                request,
-                "An active tenant workspace is required to create a GIS mapping.",
-            )
-            return redirect("assets:asset_gis_mapping_list")
         form = AssetGisMappingForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
