@@ -3337,6 +3337,14 @@ LIVE_LINKS = {
         "GPS Geofencing": "assets:asset_geofence_event_list",
         "Mobile Asset Management": "assets:mobile_asset_inspection_list",
     },
+    "11.14": {
+        "Asset Lifecycle Cost Analysis (LCC)": "assets:asset_lifecycle_cost_analysis_list",
+        "Replacement Planning & Forecasting": "assets:asset_replacement_plan_list",
+        "Portfolio Performance Dashboards": "assets:portfolio_dashboard",
+        "What-if Scenario Modeling": "assets:asset_portfolio_scenario_list",
+        "Executive Reporting & KPIs": "assets:asset_executive_scorecard_list",
+        "Scenario Comparison": "assets:scenario_compare",
+    },
     "11.15": {
         "ERP Integration": "assets:asset_integration_connector_list?connector_category=erp_procurement",
         "IoT & SCADA Systems": "assets:asset_telemetry_stream_list",
