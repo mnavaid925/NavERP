@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Lifecycle Cost Analyses (LCC) — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <span>Lifecycle Cost Analysis (LCC)</span>
+        </div>
+        <h1 class="page-title">Asset Lifecycle Cost Analysis (LCC)</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:portfolio_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard" class="w-4 h-4 me-1"></i> Portfolio Dashboard
+        </a>
+        <a href="{% url 'assets:asset_lifecycle_cost_analysis_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}&recommendation={{ request.GET.recommendation|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_lifecycle_cost_analysis_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New LCC Analysis
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total LCC Studies</div>
+            <div class="stat-value">{{ total_analyses }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="wallet"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Portfolio TCO</div>
+            <div class="stat-value">${{ total_tco_value|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Average Asset TCO</div>
+            <div class="stat-value">${{ avg_tco|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="refresh-cw"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Replace / Retire Candidates</div>
+            <div class="stat-value">{{ replace_candidates_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="lifecycle_stage" class="form-select">
+                    <option value="">All Lifecycle Stages</option>
+                    {% for val, label in stage_choices %}
+                    <option value="{{ val }}" {% if request.GET.lifecycle_stage == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="recommendation" class="form-select">
+                    <option value="">All Recommendations</option>
+                    {% for val, label in recommendation_choices %}
+                    <option value="{{ val }}" {% if request.GET.recommendation == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="asset_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline" title="Apply Filters" aria-label="Apply Filters">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.lifecycle_stage or request.GET.recommendation or request.GET.asset_category or request.GET.org_unit %}
+                <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Study # &amp; Title</th>
+                    <th>Asset / Scope</th>
+                    <th>Stage</th>
+                    <th class="text-right">Net TCO</th>
+                    <th class="text-right">EAC / Yr</th>
+                    <th class="text-right">Maint / RAV %</th>
+                    <th>Recommendation</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in analyses %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ item.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ item.title|truncatechars:42 }}</div>
+                    </td>
+                    <td>
+                        {% if item.operational_asset %}
+                        <div class="text-sm font-medium">{{ item.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ item.operational_asset.code }}</div>
+                        {% elif item.fixed_asset %}
+                        <div class="text-sm font-medium">{{ item.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ item.fixed_asset.number }}</div>
+                        {% elif item.asset_category %}
+                        <div class="text-sm font-medium">{{ item.asset_category.name }}</div>
+                        <div class="text-xs text-slate-500">Category Scope</div>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.lifecycle_stage_badge_class }}">{{ item.get_lifecycle_stage_display }}</span>
+                    </td>
+                    <td class="text-right font-mono font-semibold text-slate-900">${{ item.total_lifecycle_cost|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono text-slate-700">${{ item.equivalent_annual_cost|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono">{{ item.maintenance_to_rav_pct|floatformat:1 }}%</td>
+                    <td>
+                        <span class="badge {{ item.recommendation_badge_class }}">{{ item.get_recommendation_display }}</span>
+                        {% if item.economic_eol_year %}
+                        <div class="text-xs text-slate-500">EOL: {{ item.economic_eol_year }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">{{ item.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="calculator" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Lifecycle Cost Analyses Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Create an LCC analysis to evaluate asset TCO, annualized cost (EAC), and repair-vs-replace economics.</p>
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New LCC Analysis
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} analyses
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
