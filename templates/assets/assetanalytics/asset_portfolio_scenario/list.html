@@ -21,9 +21,11 @@
         <a href="{% url 'assets:asset_portfolio_scenario_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&scenario_type={{ request.GET.scenario_type|urlencode }}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}&scope_category={{ request.GET.scope_category|urlencode }}" class="btn btn-outline">
             <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'assets:asset_portfolio_scenario_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 me-1"></i> New What-If Scenario
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -170,6 +172,7 @@
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not s.is_locked %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_portfolio_scenario_edit' s.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
@@ -179,6 +182,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>
@@ -190,9 +194,11 @@
                             <i data-lucide="git-branch" class="w-12 h-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-800">No What-If Portfolio Scenarios Found</h3>
                             <p class="text-sm text-slate-500 mb-4">Model expansion, consolidation, accelerated replacement, or budget cap scenarios across your portfolio.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_portfolio_scenario_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New What-If Scenario
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
