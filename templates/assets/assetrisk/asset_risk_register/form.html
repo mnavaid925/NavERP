@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ risk.number }}{% else %}New Risk Register{% endif %} — Asset Risk — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_risk_register_list' %}">Risk Registers</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ risk.number }}{% else %}New Risk{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Risk Register: {{ risk.number }}{% else %}New Asset Risk Register{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Risk Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk_category.id_for_label }}">Risk Category *</label>
+                    {{ form.risk_category }}
+                    {% if form.risk_category.errors %}<div class="form-error">{{ form.risk_category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.threat_source.id_for_label }}">Threat Source *</label>
+                    {{ form.threat_source }}
+                    {% if form.threat_source.errors %}<div class="form-error">{{ form.threat_source.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset</label>
+                    {{ form.asset }}
+                    {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Target machine or equipment (optional if category-wide)</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.category.id_for_label }}">Asset Category</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}<div class="form-error">{{ form.category.errors }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Fleet category for general profiles</span>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.failure_mode.id_for_label }}">FMEA Failure Mode</label>
+                    {{ form.failure_mode }}
+                    {% if form.failure_mode.errors %}<div class="form-error">{{ form.failure_mode.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Technical Description & Trigger Scenario</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- 5x5 Matrix Evaluation Section -->
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">5x5 Risk Matrix Scoring (1=Lowest, 5=Highest)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.inherent_likelihood.id_for_label }}">Inherent Likelihood (1-5)</label>
+                        {{ form.inherent_likelihood }}
+                        {% if form.inherent_likelihood.errors %}<div class="form-error">{{ form.inherent_likelihood.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.inherent_impact.id_for_label }}">Inherent Impact (1-5)</label>
+                        {{ form.inherent_impact }}
+                        {% if form.inherent_impact.errors %}<div class="form-error">{{ form.inherent_impact.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.residual_likelihood.id_for_label }}">Residual Likelihood (1-5)</label>
+                        {{ form.residual_likelihood }}
+                        {% if form.residual_likelihood.errors %}<div class="form-error">{{ form.residual_likelihood.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.residual_impact.id_for_label }}">Residual Impact (1-5)</label>
+                        {{ form.residual_impact }}
+                        {% if form.residual_impact.errors %}<div class="form-error">{{ form.residual_impact.errors }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="text-xs text-slate-500 mt-2">
+                    Scores & risk levels (Low, Medium, High, Critical) are computed automatically on save.
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.treatment_strategy.id_for_label }}">Treatment Strategy *</label>
+                    {{ form.treatment_strategy }}
+                    {% if form.treatment_strategy.errors %}<div class="form-error">{{ form.treatment_strategy.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.financial_exposure_amount.id_for_label }}">Financial Exposure ($)</label>
+                    {{ form.financial_exposure_amount }}
+                    {% if form.financial_exposure_amount.errors %}<div class="form-error">{{ form.financial_exposure_amount.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk_owner.id_for_label }}">Risk Owner</label>
+                    {{ form.risk_owner }}
+                    {% if form.risk_owner.errors %}<div class="form-error">{{ form.risk_owner.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.review_frequency.id_for_label }}">Review Frequency *</label>
+                    {{ form.review_frequency }}
+                    {% if form.review_frequency.errors %}<div class="form-error">{{ form.review_frequency.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.next_review_date.id_for_label }}">Next Review Date</label>
+                    {{ form.next_review_date }}
+                    {% if form.next_review_date.errors %}<div class="form-error">{{ form.next_review_date.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Risk Register
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_risk_register_detail' risk.pk %}{% else %}{% url 'assets:asset_risk_register_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
