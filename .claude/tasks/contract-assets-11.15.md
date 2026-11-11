@@ -512,10 +512,10 @@ Paths: `templates/assets/integrationapihub/{asset_integration_connector,asset_te
 
 ## 5. Navigation Wiring Contract (`apps/core/navigation.py`)
 
-Exact key in `LIVE_LINKS`: `"11.15"` mapping every `NavERP.md` bullet byte-for-byte plus aliases to distinct routes/filters:
+Exact key in `LIVE_LINKS`: `"11.15"` mapping every `NavERP.md` bullet byte-for-byte plus the unfiltered `"Integration Connectors"` hub leaf so every entry has a strictly unique URL+query:
 - `"ERP Integration": "assets:asset_integration_connector_list?connector_category=erp_procurement"`
 - `"IoT & SCADA Systems": "assets:asset_telemetry_stream_list"`
 - `"CMMS/EAM Connectivity": "assets:asset_integration_connector_list?connector_category=cmms_eam"`
 - `"Financial Systems & General Ledger": "assets:asset_gl_sync_batch_list"`
 - `"GIS & Mapping Tools": "assets:asset_gis_mapping_list"`
-- Convenience aliases: `"Integration Connectors"`, `"API Hub"`, `"Telemetry Streams"`, `"IoT & SCADA"`, `"GL Sync Batches"`, `"GL Reconciliation"`, `"GIS Mappings"`, `"Integration & API Hub"`.
+- Extra live leaf: `"Integration Connectors": "assets:asset_integration_connector_list"`.
