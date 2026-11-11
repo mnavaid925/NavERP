@@ -122,12 +122,6 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.health_status.id_for_label }}">Health Status *</label>
-                    {{ form.health_status }}
-                    {% if form.health_status.errors %}<div class="form-error">{{ form.health_status.errors|first }}</div>{% endif %}
-                </div>
-
-                <div class="form-group">
                     <label class="form-label" for="{{ form.vendor_partner.id_for_label }}">Vendor / Partner</label>
                     {{ form.vendor_partner }}
                     {% if form.vendor_partner.errors %}<div class="form-error">{{ form.vendor_partner.errors|first }}</div>{% endif %}
