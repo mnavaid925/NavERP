@@ -3339,7 +3339,7 @@ class Command(BaseCommand):
         today = timezone.now().date()
         now = timezone.now()
         user = User.objects.filter(tenant=tenant).first()
-        currency = Currency.objects.filter(is_active=True).first()
+        currency = Currency.objects.filter(is_active=True).order_by("code").first()
         org_unit = OrgUnit.objects.filter(tenant=tenant).first()
         location = Location.objects.filter(tenant=tenant).first()
         vendor = (
