@@ -79,6 +79,12 @@ from apps.assets.forms.AssetCompliance import (
     AssetComplianceIncidentForm,
     AssetPermitLicenseForm,
 )
+from apps.assets.forms.MobileAssetManagement import (
+    AssetGeofenceEventForm,
+    AssetScanLogForm,
+    FieldWorkOrderForm,
+    MobileAssetInspectionForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -140,4 +146,8 @@ __all__ = [
     "AssetComplianceAuditForm",
     "AssetPermitLicenseForm",
     "AssetComplianceIncidentForm",
+    "MobileAssetInspectionForm",
+    "FieldWorkOrderForm",
+    "AssetScanLogForm",
+    "AssetGeofenceEventForm",
 ]
