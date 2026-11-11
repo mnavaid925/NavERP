@@ -62,6 +62,10 @@ from apps.assets.models import (
     AssetCyberSecurityProfile,
     AssetRiskMitigationAction,
     AssetRiskRegister,
+    AssetIntegrationConnector,
+    AssetTelemetryStream,
+    AssetGlSyncBatch,
+    AssetGisMapping,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -82,6 +86,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetGisMapping.objects.all().delete()
+            AssetGlSyncBatch.objects.all().delete()
+            AssetTelemetryStream.objects.all().delete()
+            AssetIntegrationConnector.objects.all().delete()
             AssetGeofenceEvent.objects.all().delete()
             AssetScanLog.objects.all().delete()
             FieldWorkOrder.objects.all().delete()
@@ -148,6 +156,7 @@ class Command(BaseCommand):
             if hasattr(self, '_seed_tenant_11_12'):
                 self._seed_tenant_11_12(tenant)
             self._seed_tenant_11_13(tenant)
+            self._seed_tenant_11_15(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -3320,4 +3329,393 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.12 Seeding complete (4 risk registers, 3 continuity plans, 3 cyber profiles, 4 mitigation actions).")
+
+    def _seed_tenant_11_15(self, tenant):
+        if AssetIntegrationConnector.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.15 Integration & API Hub data already seeded, skipping.")
+            return
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.15 Integration & API Hub...")
+        today = timezone.now().date()
+        now = timezone.now()
+        user = User.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(is_active=True).first()
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        location = Location.objects.filter(tenant=tenant).first()
+        vendor = (
+            Party.objects.filter(tenant=tenant, roles__role__in=["vendor", "supplier"]).first()
+            or Party.objects.filter(tenant=tenant).first()
+        )
+        fixed_asset = FixedAsset.objects.filter(tenant=tenant).first()
+        op_assets = list(Asset.objects.filter(tenant=tenant).order_by("code")[:3])
+        op1 = op_assets[0] if len(op_assets) > 0 else None
+        op2 = op_assets[1] if len(op_assets) > 1 else op1
+        op3 = op_assets[2] if len(op_assets) > 2 else op1
+        gl_accounts = list(GLAccount.objects.filter(tenant=tenant, is_active=True).order_by("code")[:2])
+        gl_dr = gl_accounts[0] if len(gl_accounts) >= 1 else None
+        gl_cr = gl_accounts[1] if len(gl_accounts) >= 2 else None
+        fiscal_period = FiscalPeriod.objects.filter(tenant=tenant, status="open").first()
+        po = PurchaseOrder.objects.filter(tenant=tenant).first()
+        cap = AssetCapitalization.objects.filter(tenant=tenant).first()
+        dep = AssetDepreciationSchedule.objects.filter(tenant=tenant).first()
+        maint = AssetMaintenanceRequest.objects.filter(tenant=tenant).first()
+
+        with transaction.atomic():
+            c_erp = AssetIntegrationConnector(
+                tenant=tenant,
+                name="SAP S/4HANA Asset & Procurement Sync",
+                connector_category="erp_procurement",
+                provider="sap_s4hana",
+                protocol="odata_v4",
+                sync_direction="bidirectional",
+                environment="production",
+                endpoint_url="https://sap-s4-api.example.com/sap/opu/odata4/sap/api_fixedasset",
+                auth_method="oauth2_client",
+                rate_limit_rpm=300,
+                timeout_seconds=30,
+                retry_policy_max=3,
+                polling_interval_minutes=15,
+                status="active",
+                health_status="healthy",
+                vendor_partner=vendor,
+                default_org_unit=org_unit,
+                default_currency=currency,
+                owner=user,
+                last_heartbeat_at=now - timezone.timedelta(minutes=5),
+                webhook_verify_tls=True,
+                notes="Primary ERP subledger and PO asset clearing gateway.",
+            )
+            c_erp.issue_new_secret()
+            c_erp.save()
+
+            c_iot = AssetIntegrationConnector(
+                tenant=tenant,
+                name="Kepware OPC-UA Plant SCADA Concentrator",
+                connector_category="iot_scada",
+                provider="kepware_opcua",
+                protocol="opc_ua",
+                sync_direction="inbound",
+                environment="production",
+                endpoint_url="opc.tcp://scada-gw.example.com:4840/naverp/plant1",
+                auth_method="mtls_cert",
+                rate_limit_rpm=1200,
+                timeout_seconds=15,
+                retry_policy_max=5,
+                polling_interval_minutes=1,
+                status="active",
+                health_status="healthy",
+                vendor_partner=vendor,
+                default_org_unit=org_unit,
+                default_currency=currency,
+                owner=user,
+                last_heartbeat_at=now - timezone.timedelta(minutes=2),
+                webhook_verify_tls=True,
+                notes="High-frequency rotating equipment telemetry feed.",
+            )
+            c_iot.issue_new_secret()
+            c_iot.save()
+
+            c_cmms = AssetIntegrationConnector(
+                tenant=tenant,
+                name="IBM Maximo Field Work Order Bridge",
+                connector_category="cmms_eam",
+                provider="maximo_eam",
+                protocol="rest_json",
+                sync_direction="bidirectional",
+                environment="staging",
+                endpoint_url="https://maximo.example.com/maximo/api/os/mxwo",
+                auth_method="api_key",
+                rate_limit_rpm=180,
+                timeout_seconds=30,
+                retry_policy_max=3,
+                polling_interval_minutes=10,
+                status="active",
+                health_status="degraded",
+                vendor_partner=vendor,
+                default_org_unit=org_unit,
+                default_currency=currency,
+                owner=user,
+                last_heartbeat_at=now - timezone.timedelta(hours=1),
+                webhook_verify_tls=True,
+                notes="Synchronizes dispatch status and failure codes with regional EAM crews.",
+            )
+            c_cmms.issue_new_secret()
+            c_cmms.save()
+
+            c_gl = AssetIntegrationConnector(
+                tenant=tenant,
+                name="Oracle Fusion General Ledger Posting Hub",
+                connector_category="financial_gl",
+                provider="oracle_fusion",
+                protocol="rest_json",
+                sync_direction="outbound",
+                environment="production",
+                endpoint_url="https://oracle-erp.example.com/fscmRestApi/resources/latest/journalBatches",
+                auth_method="hmac_sha256",
+                rate_limit_rpm=120,
+                timeout_seconds=45,
+                retry_policy_max=3,
+                polling_interval_minutes=60,
+                status="active",
+                health_status="healthy",
+                vendor_partner=vendor,
+                default_org_unit=org_unit,
+                default_currency=currency,
+                owner=user,
+                last_heartbeat_at=now - timezone.timedelta(minutes=20),
+                webhook_verify_tls=True,
+                notes="Month-end depreciation and capitalization GL batch settlement.",
+            )
+            c_gl.issue_new_secret()
+            c_gl.save()
+
+            c_gis = AssetIntegrationConnector(
+                tenant=tenant,
+                name="Esri ArcGIS Enterprise Feature Service",
+                connector_category="gis_spatial",
+                provider="esri_arcgis",
+                protocol="arcgis_feature_svc",
+                sync_direction="bidirectional",
+                environment="production",
+                endpoint_url="https://gis-portal.example.com/arcgis/rest/services/UtilitiesAssets/FeatureServer",
+                auth_method="oauth2_client",
+                rate_limit_rpm=240,
+                timeout_seconds=30,
+                retry_policy_max=2,
+                polling_interval_minutes=30,
+                status="active",
+                health_status="healthy",
+                vendor_partner=vendor,
+                default_org_unit=org_unit,
+                default_currency=currency,
+                owner=user,
+                last_heartbeat_at=now - timezone.timedelta(minutes=10),
+                webhook_verify_tls=True,
+                notes="Spatial polygon & LRS utility corridor layer sync.",
+            )
+            c_gis.issue_new_secret()
+            c_gis.save()
+
+            if op1 is not None or fixed_asset is not None:
+                AssetTelemetryStream.objects.create(
+                    tenant=tenant,
+                    connector=c_iot,
+                    operational_asset=op1,
+                    fixed_asset=fixed_asset,
+                    tag_address="ns=2;s=Line1.Spindle01.BearingTempC",
+                    stream_name="Primary Spindle Bearing Temperature",
+                    stream_protocol="opc_ua_node",
+                    metric_type="bearing_temperature",
+                    metric_unit="celsius",
+                    ingestion_mode="polling",
+                    polling_interval_seconds=30,
+                    deadband_delta=Decimal("0.5000"),
+                    scale_factor=Decimal("1.000000"),
+                    offset_value=Decimal("0.0000"),
+                    baseline_value=Decimal("52.0000"),
+                    warning_threshold=Decimal("78.0000"),
+                    critical_threshold=Decimal("92.0000"),
+                    auto_trigger_maintenance=True,
+                    stream_status="active",
+                    steward=user,
+                )
+                AssetTelemetryStream.objects.create(
+                    tenant=tenant,
+                    connector=c_iot,
+                    operational_asset=op2,
+                    fixed_asset=fixed_asset,
+                    tag_address="plant1/compressors/comp02/vibration_rms",
+                    stream_name="Compressor #2 Housing Vibration RMS",
+                    stream_protocol="mqtt_topic",
+                    metric_type="vibration_velocity_rms",
+                    metric_unit="mm_per_s",
+                    ingestion_mode="streaming_pubsub",
+                    polling_interval_seconds=10,
+                    deadband_delta=Decimal("0.1000"),
+                    scale_factor=Decimal("1.000000"),
+                    offset_value=Decimal("0.0000"),
+                    baseline_value=Decimal("2.1000"),
+                    warning_threshold=Decimal("4.5000"),
+                    critical_threshold=Decimal("7.1000"),
+                    auto_trigger_maintenance=True,
+                    stream_status="active",
+                    steward=user,
+                )
+                AssetTelemetryStream.objects.create(
+                    tenant=tenant,
+                    connector=c_iot,
+                    operational_asset=op3,
+                    fixed_asset=fixed_asset,
+                    tag_address="40012@PLC-GEN-04",
+                    stream_name="Standby Generator Load Amperage",
+                    stream_protocol="modbus_register",
+                    metric_type="motor_current_amperage",
+                    metric_unit="amperes",
+                    ingestion_mode="polling",
+                    polling_interval_seconds=60,
+                    deadband_delta=Decimal("1.0000"),
+                    scale_factor=Decimal("0.100000"),
+                    offset_value=Decimal("0.0000"),
+                    baseline_value=Decimal("110.0000"),
+                    warning_threshold=Decimal("165.0000"),
+                    critical_threshold=Decimal("195.0000"),
+                    auto_trigger_maintenance=False,
+                    stream_status="paused",
+                    steward=user,
+                )
+                AssetTelemetryStream.objects.create(
+                    tenant=tenant,
+                    connector=c_iot,
+                    operational_asset=op1,
+                    fixed_asset=fixed_asset,
+                    tag_address="PI:\\PLANT1\\TURBINE_01.RUN_HRS",
+                    stream_name="CNC Turbine Operating Hours Counter",
+                    stream_protocol="pi_tag",
+                    metric_type="runtime_hours",
+                    metric_unit="hours",
+                    ingestion_mode="edge_batch_store",
+                    polling_interval_seconds=300,
+                    deadband_delta=Decimal("0.0000"),
+                    scale_factor=Decimal("1.000000"),
+                    offset_value=Decimal("0.0000"),
+                    baseline_value=Decimal("1200.0000"),
+                    warning_threshold=Decimal("2000.0000"),
+                    critical_threshold=Decimal("2500.0000"),
+                    auto_trigger_maintenance=True,
+                    stream_status="active",
+                    steward=user,
+                )
+
+            AssetGlSyncBatch.objects.create(
+                tenant=tenant,
+                connector=c_gl,
+                sync_domain="depreciation_posting",
+                sync_direction="outbound",
+                external_batch_ref=f"ORCL-DEP-{today:%Y%m}-01",
+                fiscal_period=fiscal_period,
+                gl_account=gl_dr,
+                offset_gl_account=gl_cr,
+                fixed_asset=fixed_asset,
+                depreciation_schedule=dep,
+                cost_center=org_unit,
+                currency=currency,
+                batch_date=today,
+                source_amount=Decimal("4250.00"),
+                target_gl_amount=Decimal("4250.00"),
+                reconciliation_status="pending",
+                status="ready",
+                field_mapping_json='{"asset_book": "CORP_US", "depreciation_acct": "6100"}',
+                payload_summary="Monthly straight-line depreciation batch ready for GL posting.",
+            )
+            AssetGlSyncBatch.objects.create(
+                tenant=tenant,
+                connector=c_erp,
+                sync_domain="capitalization_sync",
+                sync_direction="bidirectional",
+                external_batch_ref=f"SAP-CAP-{today:%Y%m}-02",
+                fiscal_period=fiscal_period,
+                gl_account=gl_dr,
+                offset_gl_account=gl_cr,
+                fixed_asset=fixed_asset,
+                purchase_order=po,
+                capitalization=cap,
+                cost_center=org_unit,
+                currency=currency,
+                batch_date=today - timezone.timedelta(days=2),
+                source_amount=Decimal("15675.00"),
+                target_gl_amount=Decimal("15425.00"),
+                reconciliation_status="variance_flagged",
+                status="simulated",
+                field_mapping_json='{"wbs_element": "CAPEX-2026-01", "asset_class": "2000"}',
+                payload_summary="Capitalization settlement check detected $250 freight accrual variance.",
+            )
+            AssetGlSyncBatch.objects.create(
+                tenant=tenant,
+                connector=c_cmms,
+                sync_domain="work_order_cost_rollup",
+                sync_direction="inbound",
+                external_batch_ref=f"MX-WO-ROLLUP-{today:%Y%m}",
+                fiscal_period=fiscal_period,
+                gl_account=gl_dr,
+                offset_gl_account=gl_cr,
+                fixed_asset=fixed_asset,
+                maintenance_request=maint,
+                cost_center=org_unit,
+                currency=currency,
+                batch_date=today - timezone.timedelta(days=5),
+                source_amount=Decimal("1890.00"),
+                target_gl_amount=Decimal("1890.00"),
+                reconciliation_status="reconciled",
+                status="reconciled",
+                field_mapping_json='{"work_order": "WONUM", "cost_rollup": "ACTCOST"}',
+                payload_summary="External CMMS maintenance labor & spare cost rollup.",
+            )
+
+            AssetGisMapping.objects.create(
+                tenant=tenant,
+                connector=c_gis,
+                operational_asset=op1,
+                location=location,
+                org_unit=org_unit,
+                external_feature_id="ARCGIS-MFG-PLANT1-001",
+                layer_name="industrial_machinery_pt",
+                geometry_type="point",
+                coordinate_system_srid=4326,
+                latitude=Decimal("37.774929"),
+                longitude=Decimal("-122.419416"),
+                elevation_meters=Decimal("18.50"),
+                is_linear_asset=False,
+                geojson_payload='{"type": "Point", "coordinates": [-122.419416, 37.774929]}',
+                system_of_record="erp_authoritative",
+                sync_direction="bidirectional",
+                drift_status="in_sync",
+                status="active",
+                last_spatial_sync_at=now - timezone.timedelta(hours=3),
+                gis_custodian=user,
+            )
+            AssetGisMapping.objects.create(
+                tenant=tenant,
+                connector=c_gis,
+                operational_asset=op2,
+                location=location,
+                org_unit=org_unit,
+                external_feature_id="ARCGIS-PIPE-FEEDER-044",
+                layer_name="plant_utility_corridors_lrs",
+                geometry_type="linestring",
+                coordinate_system_srid=4326,
+                latitude=Decimal("37.775400"),
+                longitude=Decimal("-122.418200"),
+                elevation_meters=Decimal("19.00"),
+                is_linear_asset=True,
+                lrs_route_id="CORRIDOR-NORTH-STEAM-01",
+                lrs_from_measure=Decimal("0.000"),
+                lrs_to_measure=Decimal("1.450"),
+                lrs_measure_unit="km",
+                geojson_payload='{"type": "LineString", "coordinates": [[-122.4194, 37.7749], [-122.4182, 37.7754]]}',
+                system_of_record="gis_authoritative",
+                sync_direction="bidirectional",
+                drift_status="unverified",
+                status="active",
+                gis_custodian=user,
+            )
+            AssetGisMapping.objects.create(
+                tenant=tenant,
+                connector=c_gis,
+                operational_asset=op3,
+                location=location,
+                org_unit=org_unit,
+                external_feature_id="ARCGIS-YARD-SUBSTATION-07",
+                layer_name="power_substations_poly",
+                geometry_type="polygon",
+                coordinate_system_srid=4326,
+                is_linear_asset=False,
+                system_of_record="shared_field",
+                sync_direction="inbound",
+                drift_status="location_drift",
+                status="active",
+                gis_custodian=user,
+                notes="Awaiting updated survey coordinates after substation pad expansion.",
+            )
+
+        self.stdout.write(f"[{tenant.name}] 11.15 Seeding complete (5 connectors, telemetry streams, 3 GL batches, 3 GIS mappings).")
 
