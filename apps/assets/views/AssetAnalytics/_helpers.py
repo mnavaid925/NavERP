@@ -7,6 +7,7 @@ from itertools import islice
 from django.http import HttpResponse
 
 ZERO = Decimal("0.00")
+PAGE_SIZE = 15
 
 
 def parse_pos_int(raw_value):
@@ -49,13 +50,12 @@ def csv_safe(value):
 
 def csv_export_response(*, filename, headers, rows):
     """Stream up to 10,000 rows as a hardened attachment CSV download."""
-    bounded_rows = list(islice(rows, 10000))
     safe_name = "".join(c for c in filename if c.isalnum() or c in ("-", "_", ".")) or "export.csv"
     response = HttpResponse(content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="{safe_name}"'
     response["X-Content-Type-Options"] = "nosniff"
     writer = csv.writer(response)
     writer.writerow([csv_safe(h) for h in headers])
-    for row in bounded_rows:
+    for row in islice(rows, 10000):
         writer.writerow([csv_safe(c) for c in row])
     return response
