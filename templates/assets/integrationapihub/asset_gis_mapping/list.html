@@ -159,7 +159,7 @@
                         {{ mapping.latitude }}, {{ mapping.longitude }}
                         {% endif %}
                         {% if mapping.is_linear_asset and mapping.lrs_route_id %}
-                        <div class="text-muted">{{ mapping.lrs_route_id }} ({{ mapping.lrs_from_measure|default:"0" }}-{{ mapping.lrs_to_measure|default:"0" }} {{ mapping.get_lrs_measure_unit_display }})</div>
+                        <div class="text-muted">{{ mapping.lrs_route_id }} ({% if mapping.lrs_from_measure is not None %}{{ mapping.lrs_from_measure }}{% else %}0{% endif %}-{% if mapping.lrs_to_measure is not None %}{{ mapping.lrs_to_measure }}{% else %}0{% endif %} {{ mapping.get_lrs_measure_unit_display }})</div>
                         {% endif %}
                         {% if mapping.latitude is None and not mapping.is_linear_asset %}
                         <span class="text-muted">—</span>
