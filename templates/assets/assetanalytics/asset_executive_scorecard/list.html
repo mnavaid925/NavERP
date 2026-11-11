@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Executive Reporting & KPI Scorecards — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -155,7 +154,7 @@
                     <td class="text-right font-mono font-semibold">{{ k.asset_roi_pct|floatformat:2 }}%</td>
                     <td class="text-right font-mono">{{ k.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
                     <td class="text-right font-mono">{{ k.compliance_audit_pass_rate_pct|floatformat:1 }}%</td>
-                    <td class="text-right font-mono">${{ k.total_risk_exposure_amount|floatformat:2|intcomma }}</td>
+                    <td class="text-right font-mono">${{ k.total_risk_exposure_amount|floatformat:"2g" }}</td>
                     <td>
                         <span class="badge {{ k.status_badge_class }}">{{ k.get_status_display }}</span>
                     </td>
