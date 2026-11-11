@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -142,7 +143,11 @@ def asset_scan_log_edit(request, pk):
 def asset_scan_log_delete(request, pk):
     scan = assets_object(request, AssetScanLog, pk)
     number = scan.number
-    write_audit_log(request.user, scan, "delete", tenant=request.tenant)
-    scan.delete()
-    messages.success(request, f"Scan log {number} deleted successfully.")
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, scan, "delete", tenant=request.tenant)
+            scan.delete()
+        messages.success(request, f"Scan log {number} deleted successfully.")
+    except ProtectedError:
+        messages.error(request, f"Cannot delete scan log {number}: dependent records exist.")
     return redirect("assets:asset_scan_log_list")
