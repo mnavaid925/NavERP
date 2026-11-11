@@ -3029,15 +3029,16 @@ class Command(BaseCommand):
 
         today = timezone.now().date()
         user = User.objects.filter(tenant=tenant).first()
-        scm_asset1 = Asset.objects.filter(tenant=tenant).first()
-        scm_asset2 = Asset.objects.filter(tenant=tenant).order_by("pk")[1] if Asset.objects.filter(tenant=tenant).count() > 1 else scm_asset1
-        scm_asset3 = Asset.objects.filter(tenant=tenant).order_by("pk")[2] if Asset.objects.filter(tenant=tenant).count() > 2 else scm_asset1
-        cat = AssetCategory.objects.filter(tenant=tenant).first()
-        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
-
-        if not scm_asset1:
+        assets_pool = list(Asset.objects.filter(tenant=tenant).order_by("pk")[:3])
+        if not assets_pool:
             self.stdout.write(f"[{tenant.name}] Warning: No SCM assets found; skipping 11.12 risk seeding.")
             return
+
+        scm_asset1 = assets_pool[0]
+        scm_asset2 = assets_pool[1] if len(assets_pool) > 1 else scm_asset1
+        scm_asset3 = assets_pool[2] if len(assets_pool) > 2 else scm_asset1
+        cat = AssetCategory.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
 
         with transaction.atomic():
             # 1. Asset Risk Registers
