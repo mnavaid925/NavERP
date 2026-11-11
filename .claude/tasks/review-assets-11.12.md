@@ -103,6 +103,7 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Fetch assets via single sliced query `list(Asset.objects.filter(tenant=tenant).order_by("pk")[:3])`.
   - **Status:** [x] fixed — perf(assets): consolidate asset lookups via sliced query in seed_assets 11.12
 
-- [ ] **`M7`**: `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25` — Defer Large TextField in Continuity Plan List View
+- [x] **`M7`**: `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25` — Defer Large TextField in Continuity Plan List View
   - **Issue:** `critical_spares_required` is an unbounded `TextField` pulled unnecessarily in list queries.
   - **Fix:** Add `"critical_spares_required"` to `.defer(...)` alongside `failover_procedure` and `failback_procedure`.
+  - **Status:** [x] fixed — perf(assets): defer critical_spares_required text field in continuity plan list query
