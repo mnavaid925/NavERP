@@ -2410,14 +2410,14 @@ def mobile_inspection_a(db, tenant_a, operational_asset_a, fixed_asset_a, admin_
         asset=operational_asset_a,
         fixed_asset=fixed_asset_a,
         inspector=admin_user,
+        title="Pre-Trip Walkaround Inspection",
         inspection_type="pre_trip",
         inspection_date=timezone.now(),
         status="submitted",
         overall_result="pass",
         condition_rating=4,
         checklist_summary="Completed all check items successfully.",
-        checklist_data={"tires": "good", "brakes": "pass", "battery": "charged"},
-        location_notes="Yard Bay 14",
+        findings_summary="Yard Bay 14",
     )
 
 
@@ -2428,14 +2428,14 @@ def mobile_inspection_b(db, tenant_b, operational_asset_b, fixed_asset_b, admin_
         asset=operational_asset_b,
         fixed_asset=fixed_asset_b,
         inspector=admin_b,
+        title="Routine PM Walkaround Inspection",
         inspection_type="routine_pm",
         inspection_date=timezone.now(),
         status="draft",
         overall_result="conditional_pass",
         condition_rating=3,
         checklist_summary="Pending secondary hydraulic fluid test.",
-        checklist_data={"hydraulics": "slow", "belts": "normal"},
-        location_notes="Globex Depot B",
+        findings_summary="Globex Depot B",
     )
 
 
@@ -2448,12 +2448,12 @@ def field_work_order_a(db, tenant_a, operational_asset_a, fixed_asset_a, admin_u
         fixed_asset=fixed_asset_a,
         assigned_technician=admin_user,
         title="Field Inspection & Sensor Calibration",
-        work_order_type="preventive",
+        work_order_type="scheduled_pm",
         priority="high",
         status="in_progress",
         scheduled_start=now,
         scheduled_end=now + timezone.timedelta(hours=4),
-        scope_of_work="Inspect telemetry unit and calibrate strain gauge sensors.",
+        scope_of_work="Inspect telemetry unit and calibrate strain gauge sensors." if hasattr(FieldWorkOrder, "scope_of_work") else "",
         work_performed_notes="Field diagnosis verified proper sensor output.",
     )
 
@@ -2467,12 +2467,12 @@ def field_work_order_b(db, tenant_b, operational_asset_b, fixed_asset_b, admin_b
         fixed_asset=fixed_asset_b,
         assigned_technician=admin_b,
         title="Globex Generator Valve Replacement",
-        work_order_type="breakdown",
-        priority="critical",
-        status="assigned",
+        work_order_type="emergency_repair",
+        priority="urgent",
+        status="dispatched",
         scheduled_start=now,
         scheduled_end=now + timezone.timedelta(hours=8),
-        scope_of_work="Emergency replacement of high-pressure relief valve.",
+        work_performed_notes="Emergency replacement of high-pressure relief valve.",
     )
 
 
@@ -2483,12 +2483,12 @@ def asset_scan_log_a(db, tenant_a, operational_asset_a, admin_user):
         asset=operational_asset_a,
         scanned_by=admin_user,
         raw_payload="ACME-BARCODE-998811",
-        scan_method="barcode_qr",
-        scan_context="cycle_count",
+        scan_method="camera_qr",
+        scan_context="field_audit",
         match_status="matched",
-        latitude=Decimal("37.774900"),
-        longitude=Decimal("-122.419400"),
-        device_id="ZEBRA-TC57-FIELD-01",
+        gps_latitude=Decimal("37.774900"),
+        gps_longitude=Decimal("-122.419400"),
+        device_info="ZEBRA-TC57-FIELD-01",
     )
 
 
@@ -2502,9 +2502,9 @@ def asset_scan_log_b(db, tenant_b, operational_asset_b, admin_b):
         scan_method="bluetooth_rfid",
         scan_context="location_reconciliation",
         match_status="matched",
-        latitude=Decimal("40.712800"),
-        longitude=Decimal("-74.006000"),
-        device_id="HONEYWELL-EDA52-02",
+        gps_latitude=Decimal("40.712800"),
+        gps_longitude=Decimal("-74.006000"),
+        device_info="HONEYWELL-EDA52-02",
     )
 
 
@@ -2513,13 +2513,17 @@ def asset_geofence_event_a(db, tenant_a, operational_asset_a):
     return AssetGeofenceEvent.objects.create(
         tenant=tenant_a,
         asset=operational_asset_a,
-        event_type="boundary_breach",
-        status="open",
+        fence_name="Acme Northern Storage Yard",
+        center_latitude=Decimal("37.774000"),
+        center_longitude=Decimal("-122.419000"),
+        radius_meters=150,
+        recorded_latitude=Decimal("37.774900"),
+        recorded_longitude=Decimal("-122.419400"),
+        distance_from_center_m=120.0,
+        event_type="perimeter_exit",
         severity="high",
-        latitude=Decimal("37.774900"),
-        longitude=Decimal("-122.419400"),
-        geofence_name="Acme Northern Storage Yard",
-        notes="Asset telemetry triggered unexpected departure event.",
+        status="open_alert",
+        resolution_notes="Asset telemetry triggered unexpected departure event.",
     )
 
 
@@ -2528,13 +2532,17 @@ def asset_geofence_event_b(db, tenant_b, operational_asset_b):
     return AssetGeofenceEvent.objects.create(
         tenant=tenant_b,
         asset=operational_asset_b,
-        event_type="curfew_movement",
-        status="open",
+        fence_name="Globex Secure Hangar B",
+        center_latitude=Decimal("40.712000"),
+        center_longitude=Decimal("-74.005000"),
+        radius_meters=100,
+        recorded_latitude=Decimal("40.712800"),
+        recorded_longitude=Decimal("-74.006000"),
+        distance_from_center_m=110.0,
+        event_type="unauthorized_movement",
         severity="critical",
-        latitude=Decimal("40.712800"),
-        longitude=Decimal("-74.006000"),
-        geofence_name="Globex Secure Hangar B",
-        notes="Movement detected outside authorized operational hours.",
+        status="open_alert",
+        resolution_notes="Movement detected outside authorized operational hours.",
     )
 
 
