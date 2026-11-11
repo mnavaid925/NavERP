@@ -129,7 +129,7 @@
                         </a>
                     </td>
                     <td>
-                        <div class="font-medium text-slate-900">{{ connector.name }}</div>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ connector.name }}</div>
                         <div class="text-xs text-muted font-mono truncate max-w-xs">{{ connector.endpoint_url }}</div>
                     </td>
                     <td><span class="badge badge-slate">{{ connector.get_connector_category_display }}</span></td>
@@ -160,9 +160,9 @@
                 <tr>
                     <td colspan="9" class="text-center py-8">
                         <div class="empty-state">
-                            <i data-lucide="plug" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
-                            <div class="text-slate-600 font-medium">No asset integration connectors found</div>
-                            <div class="text-xs text-slate-400 mb-3">Register ERP, SCADA/IoT, CMMS, General Ledger, or GIS endpoints for Asset Management.</div>
+                            <i data-lucide="plug" class="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-2"></i>
+                            <div class="text-slate-600 dark:text-slate-300 font-medium">No asset integration connectors found</div>
+                            <div class="text-xs text-muted mb-3">Register ERP, SCADA/IoT, CMMS, General Ledger, or GIS endpoints for Asset Management.</div>
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_integration_connector_create' %}" class="btn btn-primary btn-sm">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register First Connector
@@ -177,8 +177,8 @@
     </div>
 
     {% if is_paginated %}
-    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
-        <div class="text-xs text-slate-500">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100 dark:border-slate-700">
+        <div class="text-xs text-muted">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
         <div class="flex gap-1">
