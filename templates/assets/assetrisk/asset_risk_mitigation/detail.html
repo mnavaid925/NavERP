@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}{{ action.number }} — {{ action.title }} — Mitigation Action — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_risk_mitigation_action_list' %}">Mitigation Actions</a>
+            <span>/</span>
+            <span>{{ action.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ action.number }} — {{ action.title }}</h1>
+            <span class="badge {{ action.status_badge_class }}">{{ action.get_status_display }}</span>
+            <span class="badge {{ action.priority_badge_class }}">{{ action.get_priority_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_risk_mitigation_action_edit' action.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if action.status == "planned" or action.status == "in_progress" %}
+        <form method="post" action="{% url 'assets:asset_risk_mitigation_action_complete' action.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600">
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Mark Completed
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'assets:asset_risk_mitigation_action_delete' action.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete action {{ action.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Action Details Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Action Deliverables & Operational Scope</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Parent Asset Risk</div>
+                    <div>
+                        <a href="{% url 'assets:asset_risk_register_detail' action.risk.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ action.risk.number }} — {{ action.risk.title }}
+                        </a>
+                        <div class="text-xs text-slate-500">Inherent Level: {{ action.risk.get_inherent_risk_level_display }}</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Action Type</div>
+                    <div>
+                        <span class="badge {{ action.action_type_badge_class }} text-sm">{{ action.get_action_type_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Assigned Remediation Lead</div>
+                    <div class="text-sm font-medium text-slate-900">
+                        {% if action.assigned_to %}
+                        {{ action.assigned_to.get_full_name|default:action.assigned_to.username }}
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Alternative Supplier (Dual-Sourcing)</div>
+                    <div class="text-sm font-medium text-slate-900">
+                        {% if action.alternative_supplier %}
+                        {{ action.alternative_supplier.name }}
+                        {% else %}
+                        <span class="text-slate-400">Not Applicable</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Target Completion Date</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ action.target_completion_date }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Actual Completion Date</div>
+                    <div class="text-sm font-semibold text-slate-900">{{ action.actual_completion_date|default:"In Progress / Pending" }}</div>
+                </div>
+            </div>
+
+            {% if action.description %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Detailed Technical Deliverables</div>
+                <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ action.description }}</div>
+            </div>
+            {% endif %}
+
+            {% if action.verification_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-100">
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Post-Implementation Engineering Observations</div>
+                <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    {{ action.verification_notes }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Financials & Verification Section -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Financials & Verification Status</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Budget Estimated Cost</div>
+                <div class="text-xl font-bold text-slate-900 font-mono">${{ action.estimated_cost|floatformat:2 }}</div>
+            </div>
+
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Actual Incurred Cost</div>
+                <div class="text-xl font-bold font-mono {% if action.actual_cost > action.estimated_cost %}text-red-600{% else %}text-emerald-600{% endif %}">
+                    ${{ action.actual_cost|floatformat:2 }}
+                </div>
+            </div>
+
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Effectiveness Evaluation</div>
+                <div class="mt-1">
+                    <span class="badge {{ action.effectiveness_badge_class }} text-sm">{{ action.get_effectiveness_rating_display }}</span>
+                </div>
+                <div class="text-xs text-slate-500 mt-1">Verification of residual risk reduction</div>
+            </div>
+
+            <!-- Verify Action Form -->
+            <div class="pt-4 border-t border-slate-100">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-2">Verify Residual Reduction</div>
+                <form method="post" action="{% url 'assets:asset_risk_mitigation_action_verify' action.pk %}" class="space-y-2">
+                    {% csrf_token %}
+                    <select name="effectiveness_rating" class="form-select text-xs py-1">
+                        <option value="highly_effective">Highly Effective (Residual Risk Reduced)</option>
+                        <option value="partially_effective">Partially Effective (Minor Residual Risk)</option>
+                        <option value="ineffective">Ineffective (Requires Further Action)</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline btn-sm w-full">
+                        Sign Off & Verify Action
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
