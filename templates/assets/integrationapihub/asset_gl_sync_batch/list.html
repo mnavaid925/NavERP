@@ -139,7 +139,7 @@
                         {% endif %}
                     </td>
                     <td>
-                        <div class="font-medium text-slate-900">{{ batch.get_sync_domain_display }}</div>
+                        <div class="font-medium text-slate-900 dark:text-slate-100">{{ batch.get_sync_domain_display }}</div>
                         <div class="text-xs text-muted">{{ batch.connector.number }} &middot; {{ batch.connector.name }}</div>
                     </td>
                     <td>{{ batch.batch_date|date:"Y-m-d" }}</td>
@@ -170,9 +170,9 @@
                 <tr>
                     <td colspan="10" class="text-center py-8">
                         <div class="empty-state">
-                            <i data-lucide="layers" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
-                            <div class="text-slate-600 font-medium">No asset GL sync batches recorded</div>
-                            <div class="text-xs text-slate-400 mb-3">Create and reconcile depreciation, capitalization, or work-order GL posting batches.</div>
+                            <i data-lucide="layers" class="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-2"></i>
+                            <div class="text-slate-600 dark:text-slate-300 font-medium">No asset GL sync batches recorded</div>
+                            <div class="text-xs text-muted mb-3">Create and reconcile depreciation, capitalization, or work-order GL posting batches.</div>
                             <a href="{% url 'assets:asset_gl_sync_batch_create' %}" class="btn btn-primary btn-sm">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First GL Batch
                             </a>
@@ -185,8 +185,8 @@
     </div>
 
     {% if is_paginated %}
-    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
-        <div class="text-xs text-slate-500">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100 dark:border-slate-700">
+        <div class="text-xs text-muted">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
         <div class="flex gap-1">
