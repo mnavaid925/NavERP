@@ -107,31 +107,55 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["connector"].queryset = (
-                AssetIntegrationConnector.objects.filter(
-                    tenant=self.tenant
-                ).order_by("number")
+                AssetIntegrationConnector.objects.filter(tenant=self.tenant)
+                .only("id", "number", "name")
+                .order_by("number")
             )
-            self.fields["fiscal_period"].queryset = FiscalPeriod.objects.filter(
-                tenant=self.tenant
-            ).order_by("-start_date")
+            self.fields["fiscal_period"].queryset = (
+                FiscalPeriod.objects.filter(tenant=self.tenant)
+                .only("id", "name", "start_date")
+                .order_by("-start_date")
+            )
 
-            gl_q = Q(is_active=True)
-            if self.instance and self.instance.gl_account_id:
-                gl_q = gl_q | Q(pk=self.instance.gl_account_id)
-            self.fields["gl_account"].queryset = GLAccount.objects.filter(
-                gl_q, tenant=self.tenant
-            ).order_by("code")
+            gl_id = getattr(self.instance, "gl_account_id", None)
+            off_id = getattr(self.instance, "offset_gl_account_id", None)
+            saved_gl_ids = {pk for pk in (gl_id, off_id) if pk}
+            all_gl_q = Q(is_active=True)
+            if saved_gl_ids:
+                all_gl_q = all_gl_q | Q(pk__in=saved_gl_ids)
+            all_gl_rows = list(
+                GLAccount.objects.filter(all_gl_q, tenant=self.tenant)
+                .only("id", "code", "name", "is_active")
+                .order_by("code")
+            )
+            gl_q = Q(is_active=True) | (Q(pk=gl_id) if gl_id else Q(pk__in=[]))
+            off_q = Q(is_active=True) | (Q(pk=off_id) if off_id else Q(pk__in=[]))
+            self.fields["gl_account"].queryset = (
+                GLAccount.objects.filter(gl_q, tenant=self.tenant)
+                .only("id", "code", "name")
+                .order_by("code")
+            )
+            self.fields["offset_gl_account"].queryset = (
+                GLAccount.objects.filter(off_q, tenant=self.tenant)
+                .only("id", "code", "name")
+                .order_by("code")
+            )
+            self.fields["gl_account"].choices = [("", "---------")] + [
+                (acc.pk, str(acc))
+                for acc in all_gl_rows
+                if acc.is_active or acc.pk == gl_id
+            ]
+            self.fields["offset_gl_account"].choices = [("", "---------")] + [
+                (acc.pk, str(acc))
+                for acc in all_gl_rows
+                if acc.is_active or acc.pk == off_id
+            ]
 
-            off_q = Q(is_active=True)
-            if self.instance and self.instance.offset_gl_account_id:
-                off_q = off_q | Q(pk=self.instance.offset_gl_account_id)
-            self.fields["offset_gl_account"].queryset = GLAccount.objects.filter(
-                off_q, tenant=self.tenant
-            ).order_by("code")
-
-            self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(
-                tenant=self.tenant
-            ).order_by("number")
+            self.fields["fixed_asset"].queryset = (
+                FixedAsset.objects.filter(tenant=self.tenant)
+                .only("id", "number", "name")
+                .order_by("number")
+            )
             self.fields["purchase_order"].queryset = (
                 PurchaseOrder.objects.filter(tenant=self.tenant)
                 .select_related("vendor")
@@ -145,9 +169,11 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
                 )
                 .order_by("-order_date", "-number")
             )
-            self.fields["capitalization"].queryset = AssetCapitalization.objects.filter(
-                tenant=self.tenant
-            ).order_by("-number")
+            self.fields["capitalization"].queryset = (
+                AssetCapitalization.objects.filter(tenant=self.tenant)
+                .only("id", "number", "asset_name")
+                .order_by("-number")
+            )
             self.fields["depreciation_schedule"].queryset = (
                 AssetDepreciationSchedule.objects.filter(tenant=self.tenant)
                 .select_related("fixed_asset")
@@ -164,13 +190,15 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
                 .order_by("-schedule_date", "-number")
             )
             self.fields["maintenance_request"].queryset = (
-                AssetMaintenanceRequest.objects.filter(
-                    tenant=self.tenant
-                ).order_by("-number")
+                AssetMaintenanceRequest.objects.filter(tenant=self.tenant)
+                .only("id", "number", "title")
+                .order_by("-number")
             )
-            self.fields["cost_center"].queryset = OrgUnit.objects.filter(
-                tenant=self.tenant
-            ).order_by("name")
+            self.fields["cost_center"].queryset = (
+                OrgUnit.objects.filter(tenant=self.tenant)
+                .only("id", "name")
+                .order_by("name")
+            )
         else:
             for fk_field in (
                 "connector",
@@ -187,13 +215,19 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
                 self.fields[fk_field].queryset = self.fields[fk_field].queryset.model.objects.none()
 
         if self.instance and self.instance.currency_id:
-            self.fields["currency"].queryset = Currency.objects.filter(
-                Q(is_active=True) | Q(pk=self.instance.currency_id)
-            ).order_by("code")
+            self.fields["currency"].queryset = (
+                Currency.objects.filter(
+                    Q(is_active=True) | Q(pk=self.instance.currency_id)
+                )
+                .only("id", "code")
+                .order_by("code")
+            )
         else:
-            self.fields["currency"].queryset = Currency.objects.filter(
-                is_active=True
-            ).order_by("code")
+            self.fields["currency"].queryset = (
+                Currency.objects.filter(is_active=True)
+                .only("id", "code")
+                .order_by("code")
+            )
 
         for optional_field in (
             "external_batch_ref",
