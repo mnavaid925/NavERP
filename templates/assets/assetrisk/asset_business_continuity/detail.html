@@ -64,7 +64,7 @@
                     <div>
                         {% if plan.primary_asset %}
                         <div class="font-medium text-slate-900">{{ plan.primary_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.asset_code }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.code }}</div>
                         {% else %}
                         <span class="text-slate-400">All Facility Assets</span>
                         {% endif %}
@@ -75,7 +75,7 @@
                     <div>
                         {% if plan.backup_redundant_asset %}
                         <div class="font-medium text-slate-900">{{ plan.backup_redundant_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.asset_code }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.code }}</div>
                         {% else %}
                         <span class="text-slate-400">No Dedicated Redundant Machine</span>
                         {% endif %}
