@@ -121,7 +121,7 @@
                     <td>
                         {% if plan.primary_asset %}
                         <div class="text-sm font-medium">{{ plan.primary_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.asset_code }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.code }}</div>
                         {% else %}
                         <span class="text-slate-400">General Facility</span>
                         {% endif %}
@@ -134,7 +134,7 @@
                     <td>
                         {% if plan.backup_redundant_asset %}
                         <div class="text-sm font-medium">{{ plan.backup_redundant_asset.name }}</div>
-                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.asset_code }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.code }}</div>
                         {% elif plan.alternate_facility_site %}
                         <div class="text-xs text-slate-700 font-medium">{{ plan.alternate_facility_site }}</div>
                         {% else %}
