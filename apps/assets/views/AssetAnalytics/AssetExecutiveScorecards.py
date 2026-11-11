@@ -255,6 +255,12 @@ def asset_executive_scorecard_approve(request, pk):
     if scorecard.status != "published":
         messages.error(request, f"Scorecard '{scorecard.number}' must be Published before Board Approval.")
         return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
+    if scorecard.prepared_by_id and scorecard.prepared_by_id == request.user.pk:
+        messages.error(
+            request,
+            "Segregation of duties: the preparer cannot board-approve their own executive scorecard.",
+        )
+        return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
     with transaction.atomic():
         scorecard.status = "board_approved"
         scorecard.approved_by = request.user
