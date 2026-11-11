@@ -85,13 +85,14 @@ def asset_business_continuity_plan_list(request):
 @login_required
 def asset_business_continuity_plan_detail(request, pk):
     plan = assets_object(
-        AssetBusinessContinuityPlan.objects.select_related(
+        request,
+        AssetBusinessContinuityPlan,
+        pk,
+        select_related=[
             "primary_asset",
             "backup_redundant_asset",
             "emergency_lead",
-        ),
-        pk,
-        request,
+        ],
     )
 
     return render(
@@ -133,7 +134,7 @@ def asset_business_continuity_plan_create(request):
 @login_required
 @tenant_admin_required
 def asset_business_continuity_plan_edit(request, pk):
-    plan = assets_object(AssetBusinessContinuityPlan, pk, request)
+    plan = assets_object(request, AssetBusinessContinuityPlan, pk)
     if request.method == "POST":
         form = AssetBusinessContinuityPlanForm(request.POST, instance=plan, tenant=request.tenant)
         if form.is_valid():
@@ -160,7 +161,7 @@ def asset_business_continuity_plan_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_business_continuity_plan_delete(request, pk):
-    plan = assets_object(AssetBusinessContinuityPlan, pk, request)
+    plan = assets_object(request, AssetBusinessContinuityPlan, pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, plan, "delete", tenant=request.tenant)
@@ -174,7 +175,7 @@ def asset_business_continuity_plan_delete(request, pk):
 @login_required
 @require_POST
 def asset_business_continuity_plan_activate(request, pk):
-    plan = assets_object(AssetBusinessContinuityPlan, pk, request)
+    plan = assets_object(request, AssetBusinessContinuityPlan, pk)
     with transaction.atomic():
         plan.status = "active"
         plan.save(update_fields=["status", "updated_at"])
@@ -186,7 +187,7 @@ def asset_business_continuity_plan_activate(request, pk):
 @login_required
 @require_POST
 def asset_business_continuity_plan_drill(request, pk):
-    plan = assets_object(AssetBusinessContinuityPlan, pk, request)
+    plan = assets_object(request, AssetBusinessContinuityPlan, pk)
     drill_result = request.POST.get("drill_result", "passed").strip()
     if drill_result not in dict(AssetBusinessContinuityPlan.DRILL_RESULT_CHOICES):
         drill_result = "passed"
@@ -194,6 +195,6 @@ def asset_business_continuity_plan_drill(request, pk):
         plan.last_drill_date = timezone.now().date()
         plan.drill_result = drill_result
         plan.save(update_fields=["last_drill_date", "drill_result", "updated_at"])
-        write_audit_log(request.user, plan, "record_drill", changes={"drill_result": drill_result}, tenant=request.tenant)
+        write_audit_log(request.user, plan, "drill", changes={"drill_result": drill_result}, tenant=request.tenant)
     messages.success(request, f"Disaster simulation drill recorded for '{plan.number}' with result '{drill_result}'.")
     return redirect("assets:asset_business_continuity_plan_detail", pk=plan.pk)
