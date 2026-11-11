@@ -48,17 +48,17 @@
 </div>
 
 {% if plaintext_once %}
-<div class="card mb-6 border-amber-300 bg-amber-50">
+<div class="card mb-6 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/50">
     <div class="card-header">
-        <h2 class="card-title text-amber-900">
+        <h2 class="card-title text-amber-900 dark:text-amber-200">
             <i data-lucide="alert-triangle" class="w-4 h-4 inline me-1"></i> One-Time Credential Reveal — Copy Now
         </h2>
     </div>
     <div class="card-body">
-        <p class="text-sm text-amber-900 mb-2">
+        <p class="text-sm text-amber-900 dark:text-amber-200 mb-2">
             Store this credential securely now. NavERP saves only the prefix and SHA-256 digest and will never show the plaintext value again.
         </p>
-        <code class="font-mono text-sm block p-3 bg-white border border-amber-200 rounded break-all">{{ plaintext_once }}</code>
+        <code class="font-mono text-sm block p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-amber-200 dark:border-amber-800 rounded break-all">{{ plaintext_once }}</code>
     </div>
 </div>
 {% endif %}
@@ -144,16 +144,16 @@
         </dl>
 
         {% if connector.last_error_message %}
-        <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Last Diagnostic Message</div>
-            <div class="text-sm text-red-700 bg-red-50 p-3 rounded font-mono">{{ connector.last_error_message }}</div>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div class="text-xs uppercase tracking-wider text-muted mb-1">Last Diagnostic Message</div>
+            <div class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/50 p-3 rounded font-mono">{{ connector.last_error_message }}</div>
         </div>
         {% endif %}
 
         {% if connector.notes %}
-        <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Implementation Notes</div>
-            <p class="text-sm text-slate-700 whitespace-pre-line">{{ connector.notes }}</p>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div class="text-xs uppercase tracking-wider text-muted mb-1">Implementation Notes</div>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ connector.notes }}</p>
         </div>
         {% endif %}
     </div>
@@ -169,7 +169,7 @@
             {% if streams %}
             <ul class="space-y-2 text-sm">
                 {% for s in streams %}
-                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                <li class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
                     <a href="{% url 'assets:asset_telemetry_stream_detail' s.pk %}" class="text-brand font-medium hover:underline">{{ s.number }} &middot; {{ s.stream_name }}</a>
                     <span class="badge {{ s.status_badge_class }}">{{ s.get_stream_status_display }}</span>
                 </li>
@@ -190,7 +190,7 @@
             {% if gl_batches %}
             <ul class="space-y-2 text-sm">
                 {% for b in gl_batches %}
-                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                <li class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
                     <a href="{% url 'assets:asset_gl_sync_batch_detail' b.pk %}" class="text-brand font-medium hover:underline">{{ b.number }} &middot; {{ b.get_sync_domain_display }}</a>
                     <span class="badge {{ b.status_badge_class }}">{{ b.get_status_display }}</span>
                 </li>
@@ -211,7 +211,7 @@
             {% if gis_mappings %}
             <ul class="space-y-2 text-sm">
                 {% for m in gis_mappings %}
-                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                <li class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
                     <a href="{% url 'assets:asset_gis_mapping_detail' m.pk %}" class="text-brand font-medium hover:underline">{{ m.number }} &middot; {{ m.layer_name }}</a>
                     <span class="badge {{ m.drift_badge_class }}">{{ m.get_drift_status_display }}</span>
                 </li>
