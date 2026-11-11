@@ -66,6 +66,10 @@ from apps.assets.models import (
     AssetTelemetryStream,
     AssetGlSyncBatch,
     AssetGisMapping,
+    AssetExecutiveScorecard,
+    AssetLifecycleCostAnalysis,
+    AssetPortfolioScenario,
+    AssetReplacementPlan,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -118,6 +122,10 @@ class Command(BaseCommand):
             AssetMaintenanceRequest.objects.all().delete()
             AssetMaintenanceSchedule.objects.all().delete()
             AssetServiceContract.objects.all().delete()
+            AssetExecutiveScorecard.objects.all().delete()
+            AssetPortfolioScenario.objects.all().delete()
+            AssetReplacementPlan.objects.all().delete()
+            AssetLifecycleCostAnalysis.objects.all().delete()
             AssetDepreciationSchedule.objects.all().delete()
             AssetRevaluation.objects.all().delete()
             AssetTransfer.objects.all().delete()
@@ -156,6 +164,7 @@ class Command(BaseCommand):
             if hasattr(self, '_seed_tenant_11_12'):
                 self._seed_tenant_11_12(tenant)
             self._seed_tenant_11_13(tenant)
+            self._seed_tenant_11_14(tenant)
             self._seed_tenant_11_15(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
@@ -3329,6 +3338,401 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(f"[{tenant.name}] 11.12 Seeding complete (4 risk registers, 3 continuity plans, 3 cyber profiles, 4 mitigation actions).")
+
+    def _seed_tenant_11_14(self, tenant):
+        if AssetLifecycleCostAnalysis.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.14 Asset Analytics & BI data already seeded, skipping.")
+            return
+
+        from apps.assets.models.AssetReliability.AssetConditionAssessments import (
+            AssetConditionAssessment,
+        )
+
+        self.stdout.write(f"[{tenant.name}] Seeding 11.14 Asset Analytics & BI...")
+        today = timezone.now().date()
+        user = User.objects.filter(tenant=tenant).first()
+        currency = Currency.objects.filter(is_active=True).order_by("code").first()
+        org_unit = OrgUnit.objects.filter(tenant=tenant).first()
+        location = Location.objects.filter(tenant=tenant).first()
+        categories = list(AssetCategory.objects.filter(tenant=tenant).order_by("id")[:3])
+        cat1 = categories[0] if len(categories) > 0 else None
+        cat2 = categories[1] if len(categories) > 1 else cat1
+        cat3 = categories[2] if len(categories) > 2 else cat1
+        asset_model = AssetModel.objects.filter(tenant=tenant).order_by("id").first()
+        fixed_assets = list(FixedAsset.objects.filter(tenant=tenant).order_by("id")[:3])
+        fa1 = fixed_assets[0] if len(fixed_assets) > 0 else None
+        fa2 = fixed_assets[1] if len(fixed_assets) > 1 else fa1
+        fa3 = fixed_assets[2] if len(fixed_assets) > 2 else fa1
+        op_assets = list(Asset.objects.filter(tenant=tenant).order_by("code")[:3])
+        op1 = op_assets[0] if len(op_assets) > 0 else None
+        op2 = op_assets[1] if len(op_assets) > 1 else op1
+        op3 = op_assets[2] if len(op_assets) > 2 else op1
+        cond = AssetConditionAssessment.objects.filter(tenant=tenant).order_by("id").first()
+        req = AssetRequisition.objects.filter(tenant=tenant).order_by("id").first()
+
+        with transaction.atomic():
+            lcca_1 = AssetLifecycleCostAnalysis(
+                tenant=tenant,
+                title="CNC Machining Center — 7-Yr Lifecycle TCO Study",
+                fixed_asset=fa1,
+                operational_asset=op1,
+                asset_category=cat1,
+                asset_model=asset_model,
+                org_unit=org_unit,
+                currency=currency,
+                analyzed_by=user,
+                analysis_date=today - timezone.timedelta(days=14),
+                analysis_horizon_years=7,
+                discount_rate_pct=Decimal("8.00"),
+                lifecycle_stage="mid_life",
+                status="approved",
+                acquisition_capital_cost=Decimal("185000.00"),
+                installation_commissioning_cost=Decimal("22500.00"),
+                preventive_maintenance_cost=Decimal("24500.00"),
+                corrective_maintenance_cost=Decimal("18900.00"),
+                service_contract_cost=Decimal("12000.00"),
+                energy_utility_cost=Decimal("16400.00"),
+                downtime_opportunity_cost=Decimal("11200.00"),
+                insurance_compliance_cost=Decimal("4800.00"),
+                accumulated_depreciation_cost=Decimal("82000.00"),
+                expected_salvage_value=Decimal("28000.00"),
+                warranty_insurance_recoveries=Decimal("3500.00"),
+                current_replacement_value=Decimal("235000.00"),
+                notes="Baseline spindle & servo maintenance within healthy MCR threshold (<25%).",
+            )
+            lcca_1.save()
+
+            lcca_2 = AssetLifecycleCostAnalysis(
+                tenant=tenant,
+                title="Plant Chiller & HVAC Cooling Train — Late-Life TCO Review",
+                fixed_asset=fa2,
+                operational_asset=op2,
+                asset_category=cat2,
+                asset_model=asset_model,
+                org_unit=org_unit,
+                currency=currency,
+                analyzed_by=user,
+                analysis_date=today - timezone.timedelta(days=10),
+                analysis_horizon_years=10,
+                discount_rate_pct=Decimal("8.50"),
+                lifecycle_stage="late_life",
+                status="reviewed",
+                acquisition_capital_cost=Decimal("140000.00"),
+                installation_commissioning_cost=Decimal("18000.00"),
+                preventive_maintenance_cost=Decimal("31000.00"),
+                corrective_maintenance_cost=Decimal("48500.00"),
+                service_contract_cost=Decimal("14500.00"),
+                energy_utility_cost=Decimal("29800.00"),
+                downtime_opportunity_cost=Decimal("24000.00"),
+                insurance_compliance_cost=Decimal("3900.00"),
+                accumulated_depreciation_cost=Decimal("118000.00"),
+                expected_salvage_value=Decimal("12000.00"),
+                warranty_insurance_recoveries=Decimal("0.00"),
+                current_replacement_value=Decimal("165000.00"),
+                notes="Maintenance-to-RAV exceeds 55% with rising compressor failures; schedule replacement.",
+            )
+            lcca_2.save()
+
+            lcca_3 = AssetLifecycleCostAnalysis(
+                tenant=tenant,
+                title="Warehouse Electric Forklift Fleet — Overhaul vs Replace",
+                fixed_asset=fa3,
+                operational_asset=op3,
+                asset_category=cat3,
+                org_unit=org_unit,
+                currency=currency,
+                analyzed_by=user,
+                analysis_date=today - timezone.timedelta(days=5),
+                analysis_horizon_years=5,
+                discount_rate_pct=Decimal("7.50"),
+                lifecycle_stage="in_service",
+                status="calculated",
+                acquisition_capital_cost=Decimal("96000.00"),
+                installation_commissioning_cost=Decimal("4500.00"),
+                preventive_maintenance_cost=Decimal("14200.00"),
+                corrective_maintenance_cost=Decimal("11800.00"),
+                service_contract_cost=Decimal("4200.00"),
+                energy_utility_cost=Decimal("6800.00"),
+                downtime_opportunity_cost=Decimal("5100.00"),
+                insurance_compliance_cost=Decimal("2400.00"),
+                accumulated_depreciation_cost=Decimal("38000.00"),
+                expected_salvage_value=Decimal("19500.00"),
+                warranty_insurance_recoveries=Decimal("2200.00"),
+                current_replacement_value=Decimal("112000.00"),
+                notes="Battery pack refurbishment extends useful life by 36 months.",
+            )
+            lcca_3.save()
+
+            lcca_4 = AssetLifecycleCostAnalysis(
+                tenant=tenant,
+                title="Legacy Diesel Standby Generator — End-of-Life Retirement",
+                fixed_asset=fa1,
+                operational_asset=op1,
+                asset_category=cat1,
+                org_unit=org_unit,
+                currency=currency,
+                analyzed_by=user,
+                analysis_date=today - timezone.timedelta(days=2),
+                analysis_horizon_years=5,
+                discount_rate_pct=Decimal("8.00"),
+                lifecycle_stage="end_of_life",
+                status="draft",
+                acquisition_capital_cost=Decimal("78000.00"),
+                installation_commissioning_cost=Decimal("9500.00"),
+                preventive_maintenance_cost=Decimal("18000.00"),
+                corrective_maintenance_cost=Decimal("41000.00"),
+                service_contract_cost=Decimal("8500.00"),
+                energy_utility_cost=Decimal("19400.00"),
+                downtime_opportunity_cost=Decimal("27500.00"),
+                insurance_compliance_cost=Decimal("3100.00"),
+                accumulated_depreciation_cost=Decimal("76000.00"),
+                expected_salvage_value=Decimal("6500.00"),
+                warranty_insurance_recoveries=Decimal("0.00"),
+                current_replacement_value=Decimal("95000.00"),
+                notes="Tier-2 emissions unit exceeding economic repair threshold.",
+            )
+            lcca_4.save()
+
+            rpl_1 = AssetReplacementPlan(
+                tenant=tenant,
+                title="Primary Plant Chiller Train Replacement (FY+1)",
+                fixed_asset=fa2,
+                operational_asset=op2,
+                asset_category=cat2,
+                asset_model=asset_model,
+                org_unit=org_unit,
+                location=location,
+                currency=currency,
+                condition_assessment=cond,
+                lifecycle_analysis=lcca_2,
+                linked_requisition=req,
+                planner=user,
+                predicted_eol_date=today + timezone.timedelta(days=210),
+                remaining_useful_life_months=7,
+                planned_replacement_year=today.year + 1,
+                planned_quarter="q1",
+                replacement_strategy="technology_upgrade",
+                funding_status="budget_allocated",
+                status="approved",
+                condition_score=Decimal("32.00"),
+                criticality_weight=9,
+                failure_risk_score=Decimal("84.00"),
+                current_replacement_value=Decimal("165000.00"),
+                deferred_maintenance_cost=Decimal("48500.00"),
+                estimated_replacement_cost=Decimal("172000.00"),
+                inflation_rate_pct=Decimal("4.50"),
+                estimated_salvage_recovery=Decimal("12000.00"),
+                deferral_penalty_cost=Decimal("26500.00"),
+                notes="Variable-speed magnetic-bearing chiller upgrade cutting HVAC kWh by 24%.",
+            )
+            rpl_1.recalculate_metrics()
+            rpl_1.save()
+
+            rpl_2 = AssetReplacementPlan(
+                tenant=tenant,
+                title="Legacy Diesel Standby Generator Tier-4 Swap",
+                fixed_asset=fa1,
+                operational_asset=op1,
+                asset_category=cat1,
+                org_unit=org_unit,
+                location=location,
+                currency=currency,
+                lifecycle_analysis=lcca_4,
+                planner=user,
+                predicted_eol_date=today + timezone.timedelta(days=150),
+                remaining_useful_life_months=5,
+                planned_replacement_year=today.year + 1,
+                planned_quarter="q2",
+                replacement_strategy="consolidate_retire",
+                funding_status="unfunded",
+                status="proposed",
+                condition_score=Decimal("24.00"),
+                criticality_weight=8,
+                failure_risk_score=Decimal("88.00"),
+                current_replacement_value=Decimal("95000.00"),
+                deferred_maintenance_cost=Decimal("41000.00"),
+                estimated_replacement_cost=Decimal("108000.00"),
+                inflation_rate_pct=Decimal("4.00"),
+                estimated_salvage_recovery=Decimal("6500.00"),
+                deferral_penalty_cost=Decimal("21000.00"),
+                notes="High unfunded backlog priority; environmental compliance deadline approaching.",
+            )
+            rpl_2.recalculate_metrics()
+            rpl_2.save()
+
+            rpl_3 = AssetReplacementPlan(
+                tenant=tenant,
+                title="Warehouse Electric Forklift Lithium Refresh Wave 2",
+                fixed_asset=fa3,
+                operational_asset=op3,
+                asset_category=cat3,
+                org_unit=org_unit,
+                location=location,
+                currency=currency,
+                lifecycle_analysis=lcca_3,
+                planner=user,
+                predicted_eol_date=today + timezone.timedelta(days=540),
+                remaining_useful_life_months=18,
+                planned_replacement_year=today.year + 2,
+                planned_quarter="q3",
+                replacement_strategy="technology_upgrade",
+                funding_status="requested",
+                status="forecasted",
+                condition_score=Decimal("58.00"),
+                criticality_weight=6,
+                failure_risk_score=Decimal("45.00"),
+                current_replacement_value=Decimal("112000.00"),
+                deferred_maintenance_cost=Decimal("18500.00"),
+                estimated_replacement_cost=Decimal("118000.00"),
+                inflation_rate_pct=Decimal("3.80"),
+                estimated_salvage_recovery=Decimal("19500.00"),
+                deferral_penalty_cost=Decimal("8400.00"),
+                notes="Phased lithium-ion battery transition eliminating lead-acid charging bay.",
+            )
+            rpl_3.recalculate_metrics()
+            rpl_3.save()
+
+            rpl_4 = AssetReplacementPlan(
+                tenant=tenant,
+                title="CNC Spindle & Servo Precision Rebuild Program",
+                fixed_asset=fa1,
+                operational_asset=op1,
+                asset_category=cat1,
+                org_unit=org_unit,
+                location=location,
+                currency=currency,
+                lifecycle_analysis=lcca_1,
+                planner=user,
+                predicted_eol_date=today + timezone.timedelta(days=900),
+                remaining_useful_life_months=30,
+                planned_replacement_year=today.year + 3,
+                planned_quarter="q4",
+                replacement_strategy="refurbish_extend",
+                funding_status="deferred",
+                status="deferred",
+                condition_score=Decimal("71.00"),
+                criticality_weight=7,
+                failure_risk_score=Decimal("34.00"),
+                current_replacement_value=Decimal("235000.00"),
+                deferred_maintenance_cost=Decimal("19200.00"),
+                estimated_replacement_cost=Decimal("64000.00"),
+                inflation_rate_pct=Decimal("3.50"),
+                estimated_salvage_recovery=Decimal("4000.00"),
+                deferral_penalty_cost=Decimal("6200.00"),
+                notes="Scheduled mid-life OEM spindle rebuild to defer full machine CapEx 5 years.",
+            )
+            rpl_4.recalculate_metrics()
+            rpl_4.save()
+
+            scen_base = AssetPortfolioScenario(
+                tenant=tenant,
+                name="5-Year Business-As-Usual Capital Baseline",
+                scenario_type="baseline_bau",
+                is_baseline=True,
+                base_fiscal_year=today.year,
+                horizon_years=5,
+                scope_org_unit=org_unit,
+                currency=currency,
+                owner=user,
+                status="draft",
+                annual_capex_budget_limit=Decimal("150000.00"),
+                discount_rate_pct=Decimal("8.00"),
+                inflation_rate_pct=Decimal("4.00"),
+                assumptions_summary="Follows current multi-year CIP cadence without acceleration or budget freeze.",
+            )
+            scen_base.save()
+            scen_base.run_simulation(save=False)
+            scen_base.status = "adopted"
+            scen_base.save()
+
+            scen_accel = AssetPortfolioScenario(
+                tenant=tenant,
+                name="Accelerated Reliability & Early EOL Replacement",
+                scenario_type="accelerated_replacement",
+                is_baseline=False,
+                baseline_scenario=scen_base,
+                base_fiscal_year=today.year,
+                horizon_years=5,
+                scope_org_unit=org_unit,
+                currency=currency,
+                owner=user,
+                status="draft",
+                annual_capex_budget_limit=Decimal("220000.00"),
+                discount_rate_pct=Decimal("8.00"),
+                inflation_rate_pct=Decimal("4.00"),
+                acceleration_months=12,
+                maintenance_efficiency_gain_pct=Decimal("18.00"),
+                assumptions_summary="Front-loads critical chiller and generator replacements by 12 months to capture 18% OpEx reduction.",
+            )
+            scen_accel.save()
+            scen_accel.run_simulation(save=False)
+            scen_accel.status = "recommended"
+            scen_accel.save()
+
+            scen_cap = AssetPortfolioScenario(
+                tenant=tenant,
+                name="Constrained CapEx Ceiling (-25% Capital Freeze)",
+                scenario_type="budget_constrained",
+                is_baseline=False,
+                baseline_scenario=scen_base,
+                base_fiscal_year=today.year,
+                horizon_years=5,
+                scope_org_unit=org_unit,
+                currency=currency,
+                owner=user,
+                status="draft",
+                annual_capex_budget_limit=Decimal("90000.00"),
+                discount_rate_pct=Decimal("8.00"),
+                inflation_rate_pct=Decimal("4.50"),
+                assumptions_summary="Models impact of capping annual replacement CapEx at 90k/yr on deferred backlog and FCI.",
+            )
+            scen_cap.save()
+            scen_cap.run_simulation(save=False)
+            scen_cap.status = "under_review"
+            scen_cap.save()
+
+            kpi_board = AssetExecutiveScorecard(
+                tenant=tenant,
+                title="Quarterly Board Asset Portfolio KPI Scorecard",
+                period_type="quarterly",
+                period_start=today - timezone.timedelta(days=90),
+                period_end=today,
+                org_unit=org_unit,
+                currency=currency,
+                prepared_by=user,
+                approved_by=user,
+                status="draft",
+                annual_asset_return_amount=Decimal("95000.00"),
+                target_asset_roi_pct=Decimal("12.00"),
+                target_mcr_pct=Decimal("3.50"),
+                target_compliance_rate_pct=Decimal("95.00"),
+                executive_summary="Frozen quarterly board brief benchmarking portfolio ROI, MCR %, FCI %, and open compliance risk.",
+            )
+            kpi_board.save()
+            kpi_board.compute_from_live_portfolio(save=False)
+            kpi_board.status = "board_approved"
+            kpi_board.save()
+
+            kpi_ytd = AssetExecutiveScorecard(
+                tenant=tenant,
+                title="YTD Executive Asset BI & Capital Backlog Brief",
+                period_type="ytd",
+                period_start=today.replace(month=1, day=1),
+                period_end=today,
+                org_unit=org_unit,
+                currency=currency,
+                prepared_by=user,
+                status="draft",
+                annual_asset_return_amount=Decimal("112000.00"),
+                target_asset_roi_pct=Decimal("12.50"),
+                target_mcr_pct=Decimal("3.20"),
+                target_compliance_rate_pct=Decimal("96.00"),
+                executive_summary="Working YTD KPI draft ready for live portfolio refresh and CFO publication.",
+            )
+            kpi_ytd.save()
+            kpi_ytd.compute_from_live_portfolio(save=True)
+
+        self.stdout.write(f"[{tenant.name}] 11.14 Seeding complete (4 LCC analyses, 4 replacement plans, 3 scenarios, 2 scorecards).")
 
     def _seed_tenant_11_15(self, tenant):
         if AssetIntegrationConnector.objects.filter(tenant=tenant).exists():
