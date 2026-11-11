@@ -78,9 +78,10 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Add Back to List button to `page-actions` across the 4 detail templates.
   - **Status:** [x] fixed — feat(assets): add back to list button across assetrisk detail templates
 
-- [ ] **`M2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:163` & `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py:51` — Server-Side Boundary Validation on CVSS Score
+- [x] **`M2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:163` & `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py:51` — Server-Side Boundary Validation on CVSS Score
   - **Issue:** `cve_risk_score` lacks server-side range validation `[0.0, 10.0]`.
   - **Fix:** Add `MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("10.0"))` to the model field and clean in form.
+  - **Status:** [x] fixed — fix(assets): add CVSS range validators to AssetCyberSecurityProfile model and form
 
 - [ ] **`M3`**: `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py:30,32` — Disable Direct Editing of Drill History in General Edit Form
   - **Issue:** `last_drill_date` and `drill_result` are directly editable in `AssetBusinessContinuityPlanForm`.
