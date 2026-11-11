@@ -200,7 +200,8 @@ class AssetCyberSecurityProfile(TenantNumbered):
         ]
 
     def __str__(self):
-        return f"{self.number} — {self.asset.name} ({self.get_device_type_display()})"
+        asset_name = self.asset.name if getattr(self, "asset_id", None) else "Unlinked"
+        return f"{self.number} — {asset_name} ({self.get_device_type_display()})"
 
     @property
     def posture_status_badge_class(self):
