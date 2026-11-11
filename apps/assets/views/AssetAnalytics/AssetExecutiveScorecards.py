@@ -18,6 +18,7 @@ from apps.assets.models.AssetAnalytics.AssetExecutiveScorecards import (
 from apps.assets.models.AssetClassification.AssetCategories import AssetCategory
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.AssetAnalytics._helpers import (
+    PAGE_SIZE,
     ZERO,
     apply_choice_filter,
     apply_fk_filter,
@@ -81,7 +82,7 @@ def asset_executive_scorecard_list(request):
         avg_roi=Avg("asset_roi_pct"),
     )
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     org_units = OrgUnit.objects.filter(tenant=request.tenant).order_by("name")
@@ -330,6 +331,6 @@ def asset_executive_scorecard_export_csv(request):
             f"{k.total_risk_exposure_amount:.2f}",
             f"{k.unfunded_replacement_backlog:.2f}",
         ]
-        for k in qs
+        for k in qs[:10000].iterator(chunk_size=500)
     )
     return csv_export_response(filename="akpi-scorecards.csv", headers=headers, rows=rows)
