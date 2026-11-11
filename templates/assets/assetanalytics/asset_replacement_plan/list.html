@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Replacement Plans & CapEx Forecasts — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <span>Replacement Planning &amp; Forecasting</span>
+        </div>
+        <h1 class="page-title">Asset Replacement Plans &amp; CapEx Forecasts</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:portfolio_dashboard' %}" class="btn btn-outline">
+            <i data-lucide="layout-dashboard" class="w-4 h-4 me-1"></i> Portfolio Dashboard
+        </a>
+        <a href="{% url 'assets:asset_replacement_plan_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&funding_status={{ request.GET.funding_status|urlencode }}&priority_band={{ request.GET.priority_band|urlencode }}&replacement_strategy={{ request.GET.replacement_strategy|urlencode }}&planned_replacement_year={{ request.GET.planned_replacement_year|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&location={{ request.GET.location|urlencode }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_replacement_plan_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Replacement Plan
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calendar-range"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Planned Replacements</div>
+            <div class="stat-value">{{ total_plans }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Priority Assets</div>
+            <div class="stat-value">{{ critical_plans_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Unfunded Backlog CapEx</div>
+            <div class="stat-value">${{ unfunded_plans_value|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="landmark"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Inflation-Adjusted Forecast</div>
+            <div class="stat-value">${{ total_capex_forecast|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search number, title, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="funding_status" class="form-select">
+                    <option value="">All Funding States</option>
+                    {% for val, label in funding_choices %}
+                    <option value="{{ val }}" {% if request.GET.funding_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="priority_band" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if request.GET.priority_band == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="replacement_strategy" class="form-select">
+                    <option value="">All Strategies</option>
+                    {% for val, label in strategy_choices %}
+                    <option value="{{ val }}" {% if request.GET.replacement_strategy == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="planned_replacement_year" class="form-select">
+                    <option value="">All Years</option>
+                    {% for yr in years %}
+                    <option value="{{ yr }}" {% if request.GET.planned_replacement_year == yr|stringformat:"d" %}selected{% endif %}>{{ yr }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="asset_category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2 md:col-span-2">
+                <select name="location" class="form-select">
+                    <option value="">All Locations</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline" title="Apply Filters" aria-label="Apply Filters">
+                    <i data-lucide="filter" class="w-4 h-4"></i>
+                </button>
+                {% if request.GET.q or request.GET.status or request.GET.funding_status or request.GET.priority_band or request.GET.replacement_strategy or request.GET.planned_replacement_year or request.GET.org_unit or request.GET.asset_category or request.GET.location %}
+                <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline" title="Clear Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Plan # &amp; Title</th>
+                    <th>Asset / Scope</th>
+                    <th>Horizon</th>
+                    <th>Priority</th>
+                    <th class="text-right">FCI %</th>
+                    <th class="text-right">Forecast CapEx</th>
+                    <th>Funding</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in plans %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ p.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ p.title|truncatechars:42 }}</div>
+                    </td>
+                    <td>
+                        {% if p.operational_asset %}
+                        <div class="text-sm font-medium">{{ p.operational_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ p.operational_asset.code }}</div>
+                        {% elif p.fixed_asset %}
+                        <div class="text-sm font-medium">{{ p.fixed_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ p.fixed_asset.number }}</div>
+                        {% elif p.asset_category %}
+                        <div class="text-sm font-medium">{{ p.asset_category.name }}</div>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium">{{ p.planned_replacement_year }} {{ p.get_planned_quarter_display|slice:":2" }}</div>
+                        <div class="text-xs text-slate-500">RUL: {{ p.remaining_useful_life_months }} mo</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ p.priority_band_badge_class }}">{{ p.get_priority_band_display }}</span>
+                        <div class="text-xs text-slate-500">Score: {{ p.priority_score|floatformat:1 }}</div>
+                    </td>
+                    <td class="text-right font-mono">{{ p.fci_ratio_pct|floatformat:1 }}%</td>
+                    <td class="text-right font-mono font-semibold text-slate-900">
+                        ${{ p.inflation_adjusted_cost|floatformat:2|intcomma }}
+                        <div class="text-xs font-normal text-slate-500">Base: ${{ p.estimated_replacement_cost|floatformat:0|intcomma }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ p.funding_status_badge_class }}">{{ p.get_funding_status_display }}</span>
+                    </td>
+                    <td>
+                        <span class="badge {{ p.status_badge_class }}">{{ p.get_status_display }}</span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_replacement_plan_edit' p.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_replacement_plan_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ p.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="calendar-range" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Asset Replacement Plans Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Plan capital replacements with risk-weighted priority scoring and multi-year inflation forecasting.</p>
+                            <a href="{% url 'assets:asset_replacement_plan_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Replacement Plan
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} plans
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.funding_status %}&funding_status={{ request.GET.funding_status|urlencode }}{% endif %}{% if request.GET.priority_band %}&priority_band={{ request.GET.priority_band|urlencode }}{% endif %}{% if request.GET.replacement_strategy %}&replacement_strategy={{ request.GET.replacement_strategy|urlencode }}{% endif %}{% if request.GET.planned_replacement_year %}&planned_replacement_year={{ request.GET.planned_replacement_year|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.location %}&location={{ request.GET.location|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.funding_status %}&funding_status={{ request.GET.funding_status|urlencode }}{% endif %}{% if request.GET.priority_band %}&priority_band={{ request.GET.priority_band|urlencode }}{% endif %}{% if request.GET.replacement_strategy %}&replacement_strategy={{ request.GET.replacement_strategy|urlencode }}{% endif %}{% if request.GET.planned_replacement_year %}&planned_replacement_year={{ request.GET.planned_replacement_year|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.location %}&location={{ request.GET.location|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
