@@ -62,12 +62,12 @@ def _build_portfolio_context(request):
 
     alcc_qs = assets_scope(
         AssetLifecycleCostAnalysis.objects.select_related(
-            "operational_asset", "fixed_asset", "asset_category", "org_unit"
+            "operational_asset", "fixed_asset", "asset_category", "asset_model", "org_unit", "currency"
         ),
         request,
     ).exclude(status="archived")
     arpl_qs = assets_scope(
-        AssetReplacementPlan.objects.select_related("asset_category", "org_unit", "location"),
+        AssetReplacementPlan.objects.select_related("asset_category", "org_unit", "location", "currency"),
         request,
     ).exclude(status__in=["executed", "cancelled"])
     cond_qs = AssetConditionAssessment.objects.filter(tenant=tenant).exclude(status="archived").select_related(
@@ -79,7 +79,9 @@ def _build_portfolio_context(request):
         status__in=["resolved", "closed"]
     )
     akpi_qs = assets_scope(
-        AssetExecutiveScorecard.objects.select_related("org_unit", "asset_category"),
+        AssetExecutiveScorecard.objects.select_related(
+            "org_unit", "asset_category", "currency", "prepared_by", "approved_by"
+        ),
         request,
     ).exclude(status="archived")
 
@@ -306,7 +308,7 @@ def scenario_compare(request):
     all_scenarios = list(
         assets_scope(
             AssetPortfolioScenario.objects.select_related(
-                "scope_org_unit", "scope_category", "currency", "baseline_scenario"
+                "scope_org_unit", "scope_category", "currency", "baseline_scenario", "owner"
             ),
             request,
         ).order_by("-is_baseline", "-base_fiscal_year", "-id")
