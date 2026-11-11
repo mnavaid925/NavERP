@@ -167,10 +167,16 @@ class AssetGlSyncBatch(TenantNumbered):
         max_digits=16, decimal_places=2, default=Decimal("0.00"), editable=False
     )
     reconciliation_status = models.CharField(
-        max_length=24, choices=RECONCILIATION_STATUS_CHOICES, default="pending"
+        max_length=24,
+        choices=RECONCILIATION_STATUS_CHOICES,
+        default="pending",
+        editable=False,
     )
     status = models.CharField(
-        max_length=24, choices=STATUS_CHOICES, default="draft"
+        max_length=24,
+        choices=STATUS_CHOICES,
+        default="draft",
+        editable=False,
     )
 
     records_processed = models.PositiveIntegerField(default=0, editable=False)
