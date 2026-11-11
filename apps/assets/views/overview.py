@@ -12,6 +12,10 @@ from apps.assets.models.AssetProcurement.AssetAcquisitionReceipts import AssetAc
 from apps.assets.models.AssetProcurement.AssetCapitalizations import AssetCapitalization
 from apps.assets.models.AssetProcurement.AssetRequisitions import AssetRequisition
 from apps.assets.models.AssetProcurement.AssetTags import AssetTag
+from apps.assets.models.IntegrationApiHub.AssetGisMappings import AssetGisMapping
+from apps.assets.models.IntegrationApiHub.AssetGlSyncBatches import AssetGlSyncBatch
+from apps.assets.models.IntegrationApiHub.AssetIntegrationConnectors import AssetIntegrationConnector
+from apps.assets.models.IntegrationApiHub.AssetTelemetryStreams import AssetTelemetryStream
 from apps.assets.views._common import assets_scope
 
 
@@ -63,6 +67,23 @@ def overview(request):
         open=Count("id", filter=Q(status__in=["reported", "under_investigation", "write_off_pending"])),
     )
 
+    conn_agg = assets_scope(AssetIntegrationConnector.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    stream_agg = assets_scope(AssetTelemetryStream.objects.all(), request).aggregate(
+        total=Count("id"),
+        active=Count("id", filter=Q(status="active")),
+    )
+    gl_batch_agg = assets_scope(AssetGlSyncBatch.objects.all(), request).aggregate(
+        total=Count("id"),
+        posted=Count("id", filter=Q(status="posted")),
+    )
+    gis_agg = assets_scope(AssetGisMapping.objects.all(), request).aggregate(
+        total=Count("id"),
+        drifted=Count("id", filter=Q(drift_status__in=["drifted", "missing"])),
+    )
+
     kpis = {
         "total_requisitions": req_agg["total"],
         "pending_approval_reqs": req_agg["pending_approval"],
@@ -81,6 +102,14 @@ def overview(request):
         "overdue_custody_loans": custody_agg["overdue"],
         "total_incidents": inc_agg["total"],
         "open_incidents": inc_agg["open"],
+        "total_connectors": conn_agg["total"],
+        "active_connectors": conn_agg["active"],
+        "total_streams": stream_agg["total"],
+        "active_streams": stream_agg["active"],
+        "total_gl_batches": gl_batch_agg["total"],
+        "posted_gl_batches": gl_batch_agg["posted"],
+        "total_gis_mappings": gis_agg["total"],
+        "drifted_gis_mappings": gis_agg["drifted"],
     }
 
     recent_requisitions = req_qs.select_related("currency", "proposed_vendor").order_by("-created_at")[:5]
