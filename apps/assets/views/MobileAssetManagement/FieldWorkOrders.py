@@ -59,7 +59,7 @@ def field_work_order_list(request):
     urgent_count = metrics["urgent"]
     total_wrench_hours = round((metrics["wrench_minutes"] or 0) / 60.0, 1)
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
