@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 
 from apps.assets.forms._common import TenantModelForm, TenantUniqueMixin, reject_foreign
@@ -67,6 +69,13 @@ class AssetCyberSecurityProfileForm(TenantUniqueMixin, TenantModelForm):
         super().__init__(*args, **kwargs)
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["asset"].queryset = Asset.objects.filter(tenant=self.tenant)
+
+    def clean_cve_risk_score(self):
+        score = self.cleaned_data.get("cve_risk_score")
+        if score is not None:
+            if score < Decimal("0.0") or score > Decimal("10.0"):
+                raise forms.ValidationError("CVSS CVE risk score must be between 0.0 and 10.0.")
+        return score
 
     def clean(self):
         cleaned = super().clean()
