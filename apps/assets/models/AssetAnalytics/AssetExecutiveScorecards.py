@@ -157,6 +157,8 @@ class AssetExecutiveScorecard(TenantNumbered):
             models.Index(fields=["tenant", "period_type"], name="idx_akpi_ten_per"),
             models.Index(fields=["tenant", "rag_status"], name="idx_akpi_ten_rag"),
             models.Index(fields=["tenant", "period_end"], name="idx_akpi_ten_end"),
+            models.Index(fields=["tenant", "org_unit"], name="idx_akpi_ten_org"),
+            models.Index(fields=["tenant", "asset_category"], name="idx_akpi_ten_cat"),
         ]
 
     def __str__(self):
