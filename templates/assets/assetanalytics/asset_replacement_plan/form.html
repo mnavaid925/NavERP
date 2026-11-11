@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ plan.number }}{% else %}New Replacement Plan{% endif %} — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_replacement_plan_list' %}">Replacement Plans</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ plan.number }}{% else %}New Replacement Plan{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Replacement Plan: {{ plan.number }}{% else %}New Asset Replacement Plan{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-5xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Plan Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.planner.id_for_label }}">Capital Planner</label>
+                    {{ form.planner }}
+                    {% if form.planner.errors %}<div class="form-error">{{ form.planner.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_category.id_for_label }}">Asset Category</label>
+                    {{ form.asset_category }}
+                    {% if form.asset_category.errors %}<div class="form-error">{{ form.asset_category.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset_model.id_for_label }}">Asset Model</label>
+                    {{ form.asset_model }}
+                    {% if form.asset_model.errors %}<div class="form-error">{{ form.asset_model.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.location.id_for_label }}">Location</label>
+                    {{ form.location }}
+                    {% if form.location.errors %}<div class="form-error">{{ form.location.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.condition_assessment.id_for_label }}">Condition Assessment</label>
+                    {{ form.condition_assessment }}
+                    {% if form.condition_assessment.errors %}<div class="form-error">{{ form.condition_assessment.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lifecycle_analysis.id_for_label }}">LCC Analysis Reference</label>
+                    {{ form.lifecycle_analysis }}
+                    {% if form.lifecycle_analysis.errors %}<div class="form-error">{{ form.lifecycle_analysis.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.capital_budget.id_for_label }}">Capital Budget</label>
+                    {{ form.capital_budget }}
+                    {% if form.capital_budget.errors %}<div class="form-error">{{ form.capital_budget.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.linked_requisition.id_for_label }}">Linked Requisition (AREQ)</label>
+                    {{ form.linked_requisition }}
+                    {% if form.linked_requisition.errors %}<div class="form-error">{{ form.linked_requisition.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.predicted_eol_date.id_for_label }}">Predicted EOL Date</label>
+                    {{ form.predicted_eol_date }}
+                    {% if form.predicted_eol_date.errors %}<div class="form-error">{{ form.predicted_eol_date.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.remaining_useful_life_months.id_for_label }}">Remaining Useful Life (Months) *</label>
+                    {{ form.remaining_useful_life_months }}
+                    {% if form.remaining_useful_life_months.errors %}<div class="form-error">{{ form.remaining_useful_life_months.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.planned_replacement_year.id_for_label }}">Planned Replacement Year *</label>
+                    {{ form.planned_replacement_year }}
+                    {% if form.planned_replacement_year.errors %}<div class="form-error">{{ form.planned_replacement_year.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.planned_quarter.id_for_label }}">Planned Quarter *</label>
+                    {{ form.planned_quarter }}
+                    {% if form.planned_quarter.errors %}<div class="form-error">{{ form.planned_quarter.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.replacement_strategy.id_for_label }}">Replacement Strategy *</label>
+                    {{ form.replacement_strategy }}
+                    {% if form.replacement_strategy.errors %}<div class="form-error">{{ form.replacement_strategy.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.funding_status.id_for_label }}">Funding Status *</label>
+                    {{ form.funding_status }}
+                    {% if form.funding_status.errors %}<div class="form-error">{{ form.funding_status.errors }}</div>{% endif %}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Plan Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Risk Priority &amp; Capital Economics</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.condition_score.id_for_label }}">Condition Score (0–100) *</label>
+                        {{ form.condition_score }}
+                        {% if form.condition_score.errors %}<div class="form-error">{{ form.condition_score.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.criticality_weight.id_for_label }}">Criticality Weight (1–10) *</label>
+                        {{ form.criticality_weight }}
+                        {% if form.criticality_weight.errors %}<div class="form-error">{{ form.criticality_weight.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.failure_risk_score.id_for_label }}">Failure Risk Score (0–100) *</label>
+                        {{ form.failure_risk_score }}
+                        {% if form.failure_risk_score.errors %}<div class="form-error">{{ form.failure_risk_score.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.current_replacement_value.id_for_label }}">Current Replacement Value (RAV)</label>
+                        {{ form.current_replacement_value }}
+                        {% if form.current_replacement_value.errors %}<div class="form-error">{{ form.current_replacement_value.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.deferred_maintenance_cost.id_for_label }}">Deferred Maintenance Cost</label>
+                        {{ form.deferred_maintenance_cost }}
+                        {% if form.deferred_maintenance_cost.errors %}<div class="form-error">{{ form.deferred_maintenance_cost.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.estimated_replacement_cost.id_for_label }}">Base Replacement Cost</label>
+                        {{ form.estimated_replacement_cost }}
+                        {% if form.estimated_replacement_cost.errors %}<div class="form-error">{{ form.estimated_replacement_cost.errors }}</div>{% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.inflation_rate_pct.id_for_label }}">Inflation Escalation (% p.a.)</label>
+                        {{ form.inflation_rate_pct }}
+                        {% if form.inflation_rate_pct.errors %}<div class="form-error">{{ form.inflation_rate_pct.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.estimated_salvage_recovery.id_for_label }}">Estimated Salvage Recovery</label>
+                        {{ form.estimated_salvage_recovery }}
+                        {% if form.estimated_salvage_recovery.errors %}<div class="form-error">{{ form.estimated_salvage_recovery.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.deferral_penalty_cost.id_for_label }}">1-Yr Deferral Penalty Cost</label>
+                        {{ form.deferral_penalty_cost }}
+                        {% if form.deferral_penalty_cost.errors %}<div class="form-error">{{ form.deferral_penalty_cost.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group mb-6">
+                <label class="form-label" for="{{ form.notes.id_for_label }}">Planning Notes</label>
+                {{ form.notes }}
+                {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors }}</div>{% endif %}
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> {% if is_edit %}Save Changes{% else %}Create Replacement Plan{% endif %}
+                </button>
+                {% if is_edit %}
+                <a href="{% url 'assets:asset_replacement_plan_detail' plan.pk %}" class="btn btn-outline">Cancel</a>
+                {% else %}
+                <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline">Cancel</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
