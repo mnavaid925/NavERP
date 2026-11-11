@@ -51,6 +51,10 @@ from apps.assets.models import (
     AssetLeaseContract,
     AssetLeaseModification,
     AssetLeaseSchedule,
+    MobileAssetInspection,
+    FieldWorkOrder,
+    AssetScanLog,
+    AssetGeofenceEvent,
 )
 
 
@@ -2393,6 +2397,146 @@ def lease_buy_analysis_b(db, tenant_b, category_root_b, admin_b):
     alba.evaluate_financial_models()
     alba.save()
     return alba
+
+
+# ============================================================================
+# Sub-module 11.13: Mobile Asset Management Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mobile_inspection_a(db, tenant_a, operational_asset_a, fixed_asset_a, admin_user):
+    return MobileAssetInspection.objects.create(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        fixed_asset=fixed_asset_a,
+        inspector=admin_user,
+        inspection_type="pre_trip",
+        inspection_date=timezone.now(),
+        status="submitted",
+        overall_result="pass",
+        condition_rating=4,
+        checklist_summary="Completed all check items successfully.",
+        checklist_data={"tires": "good", "brakes": "pass", "battery": "charged"},
+        location_notes="Yard Bay 14",
+    )
+
+
+@pytest.fixture
+def mobile_inspection_b(db, tenant_b, operational_asset_b, fixed_asset_b, admin_b):
+    return MobileAssetInspection.objects.create(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        fixed_asset=fixed_asset_b,
+        inspector=admin_b,
+        inspection_type="routine_pm",
+        inspection_date=timezone.now(),
+        status="draft",
+        overall_result="conditional_pass",
+        condition_rating=3,
+        checklist_summary="Pending secondary hydraulic fluid test.",
+        checklist_data={"hydraulics": "slow", "belts": "normal"},
+        location_notes="Globex Depot B",
+    )
+
+
+@pytest.fixture
+def field_work_order_a(db, tenant_a, operational_asset_a, fixed_asset_a, admin_user):
+    now = timezone.now()
+    return FieldWorkOrder.objects.create(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        fixed_asset=fixed_asset_a,
+        assigned_technician=admin_user,
+        title="Field Inspection & Sensor Calibration",
+        work_order_type="preventive",
+        priority="high",
+        status="in_progress",
+        scheduled_start=now,
+        scheduled_end=now + timezone.timedelta(hours=4),
+        scope_of_work="Inspect telemetry unit and calibrate strain gauge sensors.",
+        work_performed_notes="Field diagnosis verified proper sensor output.",
+    )
+
+
+@pytest.fixture
+def field_work_order_b(db, tenant_b, operational_asset_b, fixed_asset_b, admin_b):
+    now = timezone.now()
+    return FieldWorkOrder.objects.create(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        fixed_asset=fixed_asset_b,
+        assigned_technician=admin_b,
+        title="Globex Generator Valve Replacement",
+        work_order_type="breakdown",
+        priority="critical",
+        status="assigned",
+        scheduled_start=now,
+        scheduled_end=now + timezone.timedelta(hours=8),
+        scope_of_work="Emergency replacement of high-pressure relief valve.",
+    )
+
+
+@pytest.fixture
+def asset_scan_log_a(db, tenant_a, operational_asset_a, admin_user):
+    return AssetScanLog.objects.create(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        scanned_by=admin_user,
+        raw_payload="ACME-BARCODE-998811",
+        scan_method="barcode_qr",
+        scan_context="cycle_count",
+        match_status="matched",
+        latitude=Decimal("37.774900"),
+        longitude=Decimal("-122.419400"),
+        device_id="ZEBRA-TC57-FIELD-01",
+    )
+
+
+@pytest.fixture
+def asset_scan_log_b(db, tenant_b, operational_asset_b, admin_b):
+    return AssetScanLog.objects.create(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        scanned_by=admin_b,
+        raw_payload="GLOBEX-RFID-554433",
+        scan_method="bluetooth_rfid",
+        scan_context="location_reconciliation",
+        match_status="matched",
+        latitude=Decimal("40.712800"),
+        longitude=Decimal("-74.006000"),
+        device_id="HONEYWELL-EDA52-02",
+    )
+
+
+@pytest.fixture
+def asset_geofence_event_a(db, tenant_a, operational_asset_a):
+    return AssetGeofenceEvent.objects.create(
+        tenant=tenant_a,
+        asset=operational_asset_a,
+        event_type="boundary_breach",
+        status="open",
+        severity="high",
+        latitude=Decimal("37.774900"),
+        longitude=Decimal("-122.419400"),
+        geofence_name="Acme Northern Storage Yard",
+        notes="Asset telemetry triggered unexpected departure event.",
+    )
+
+
+@pytest.fixture
+def asset_geofence_event_b(db, tenant_b, operational_asset_b):
+    return AssetGeofenceEvent.objects.create(
+        tenant=tenant_b,
+        asset=operational_asset_b,
+        event_type="curfew_movement",
+        status="open",
+        severity="critical",
+        latitude=Decimal("40.712800"),
+        longitude=Decimal("-74.006000"),
+        geofence_name="Globex Secure Hangar B",
+        notes="Movement detected outside authorized operational hours.",
+    )
+
 
 
 
