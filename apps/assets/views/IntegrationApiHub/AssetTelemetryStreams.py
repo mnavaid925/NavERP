@@ -108,13 +108,13 @@ def stream_list(request):
 @login_required
 def stream_create(request):
     """Create a new Asset Telemetry Stream."""
+    if request.tenant is None:
+        messages.error(
+            request,
+            "An active tenant workspace is required to create a telemetry stream.",
+        )
+        return redirect("assets:asset_telemetry_stream_list")
     if request.method == "POST":
-        if request.tenant is None:
-            messages.error(
-                request,
-                "An active tenant workspace is required to create a telemetry stream.",
-            )
-            return redirect("assets:asset_telemetry_stream_list")
         form = AssetTelemetryStreamForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
