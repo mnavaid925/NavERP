@@ -6,6 +6,21 @@
 - **Date:** 2026-11-11
 - **Status:** In Progress (Serial Review Passes)
 
+### Pass 2: Codebase Explorer (`explorer`)
+- **Structure & Wiring Verification:**
+  - Package structure, re-exports in all `__init__.py` files, `LIVE_LINKS["11.12"]` in `navigation.py`, admin classes in `admin.py`, and URL pattern concatenation confirmed 100% complete.
+  - Zero duplicate models; proper reuse of `scm.Asset`, `assets.AssetCategory`, `core.Party`, `settings.AUTH_USER_MODEL`.
+- **Critical:**
+  - `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31`: Search crash on connected asset lookup (`asset__asset_code` -> `asset__code`).
+- **Important:**
+  - `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: Unhandled `RelatedObjectDoesNotExist` in `__str__`.
+  - `templates/assets/assetrisk/` (8 occurrences across 4 templates): Broken template field reference `asset.asset_code` -> should be `asset.code`.
+  - Missing view-level status transition guards on state action endpoints (`complete`, `verify`, `assess`, `close`, `activate`).
+- **Minor:**
+  - Missing "Back to List" button in `.page-actions` across the 4 detail templates.
+  - Action endpoint authorization disparity (`@tenant_admin_required`).
+  - Redundant manual calculation calls in `seed_assets.py`.
+
 ---
 
 ## Review Pass Log
@@ -23,6 +38,21 @@
   - `templates/assets/assetrisk/*/detail.html`: Missing "Back to List" link in detail header actions.
   - `apps/assets/views/AssetRisk/{AssetBusinessContinuityPlans.py,AssetRiskMitigationActions.py,AssetRiskRegisters.py}`: Action endpoint authorization disparity: `activate`, `verify`, `assess`, `close` require only `@login_required` while CRUD views require `@tenant_admin_required`.
   - `apps/assets/management/commands/seed_assets.py:3056`: Redundant model method calls `ark.calculate_scores()` and `ark.save()` after `create()`.
+
+### Pass 2: Codebase Explorer (`explorer`)
+- **Structure & Wiring Verification:**
+  - Package structure, re-exports in all `__init__.py` files, `LIVE_LINKS["11.12"]` in `navigation.py`, admin classes in `admin.py`, and URL pattern concatenation confirmed 100% complete.
+  - Zero duplicate models; proper reuse of `scm.Asset`, `assets.AssetCategory`, `core.Party`, `settings.AUTH_USER_MODEL`.
+- **Critical:**
+  - `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31`: Search crash on connected asset lookup (`asset__asset_code` -> `asset__code`).
+- **Important:**
+  - `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: Unhandled `RelatedObjectDoesNotExist` in `__str__`.
+  - `templates/assets/assetrisk/` (8 occurrences across 4 templates): Broken template field reference `asset.asset_code` -> should be `asset.code`.
+  - Missing view-level status transition guards on state action endpoints (`complete`, `verify`, `assess`, `close`, `activate`).
+- **Minor:**
+  - Missing "Back to List" button in `.page-actions` across the 4 detail templates.
+  - Action endpoint authorization disparity (`@tenant_admin_required`).
+  - Redundant manual calculation calls in `seed_assets.py`.
 
 ---
 
