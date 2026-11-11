@@ -26,20 +26,26 @@ from apps.core.utils import write_audit_log
 from apps.scm.models.InventoryManagement.Locations import Location
 
 
+_ARPL_SELECT_RELATED = (
+    "fixed_asset",
+    "operational_asset",
+    "asset_category",
+    "asset_model",
+    "org_unit",
+    "location",
+    "currency",
+    "condition_assessment",
+    "condition_assessment__operational_asset",
+    "lifecycle_analysis",
+    "capital_budget",
+    "linked_requisition",
+    "planner",
+)
+
+
 def _filter_arpl_queryset(request):
     qs = assets_scope(
-        AssetReplacementPlan.objects.select_related(
-            "fixed_asset",
-            "operational_asset",
-            "asset_category",
-            "asset_model",
-            "org_unit",
-            "location",
-            "currency",
-            "capital_budget",
-            "linked_requisition",
-            "planner",
-        ).defer("notes"),
+        AssetReplacementPlan.objects.select_related(*_ARPL_SELECT_RELATED).defer("notes"),
         request,
     )
     q = request.GET.get("q", "").strip()
@@ -141,20 +147,7 @@ def asset_replacement_plan_detail(request, pk):
         request,
         AssetReplacementPlan,
         pk,
-        select_related=[
-            "fixed_asset",
-            "operational_asset",
-            "asset_category",
-            "asset_model",
-            "org_unit",
-            "location",
-            "currency",
-            "condition_assessment",
-            "lifecycle_analysis",
-            "capital_budget",
-            "linked_requisition",
-            "planner",
-        ],
+        select_related=_ARPL_SELECT_RELATED,
     )
     return render(
         request,
@@ -244,7 +237,12 @@ def asset_replacement_plan_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_replacement_plan_recalculate(request, pk):
-    plan = assets_object(request, AssetReplacementPlan, pk)
+    plan = assets_object(
+        request,
+        AssetReplacementPlan,
+        pk,
+        select_related=("condition_assessment", "lifecycle_analysis"),
+    )
     if plan.is_locked:
         messages.error(
             request,
