@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from ._validators import validate_tenant_fks
 from django.db import models
 
 from apps.assets.models._base import TenantNumbered
@@ -229,5 +231,16 @@ class AssetGisMapping(TenantNumbered):
                     errors["geojson_payload"] = (
                         "GeoJSON payload must be a JSON object ({...})."
                     )
+        validate_tenant_fks(
+            self,
+            errors,
+            (
+                "connector",
+                "operational_asset",
+                "location",
+                "org_unit",
+                "gis_custodian",
+            ),
+        )
         if errors:
             raise ValidationError(errors)
