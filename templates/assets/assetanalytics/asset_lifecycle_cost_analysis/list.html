@@ -177,17 +177,17 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn-icon" title="View Details">
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' item.pk %}" class="btn btn-icon" title="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not item.is_locked %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn-icon" title="Edit">
+                            <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ item.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
@@ -218,28 +218,22 @@
 
     {% if is_paginated %}
     <div class="pagination">
-        <div class="pagination-info">
-            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} analyses
-        </div>
-        <div class="pagination-links">
-            {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
-                Previous
-            </a>
-            {% else %}
-            <button class="btn btn-outline btn-sm" disabled>Previous</button>
-            {% endif %}
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} analyses</span>
 
-            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
 
-            {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
-                Next
-            </a>
-            {% else %}
-            <button class="btn btn-outline btn-sm" disabled>Next</button>
-            {% endif %}
-        </div>
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.lifecycle_stage %}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}{% endif %}{% if request.GET.recommendation %}&recommendation={{ request.GET.recommendation|urlencode }}{% endif %}{% if request.GET.asset_category %}&asset_category={{ request.GET.asset_category|urlencode }}{% endif %}{% if request.GET.org_unit %}&org_unit={{ request.GET.org_unit|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
     </div>
     {% endif %}
 </div>
