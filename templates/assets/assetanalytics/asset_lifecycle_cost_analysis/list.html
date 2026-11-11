@@ -21,9 +21,11 @@
         <a href="{% url 'assets:asset_lifecycle_cost_analysis_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&lifecycle_stage={{ request.GET.lifecycle_stage|urlencode }}&recommendation={{ request.GET.recommendation|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}" class="btn btn-outline">
             <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'assets:asset_lifecycle_cost_analysis_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 me-1"></i> New LCC Analysis
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -179,6 +181,7 @@
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not item.is_locked %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' item.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
@@ -188,6 +191,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>
@@ -199,9 +203,11 @@
                             <i data-lucide="calculator" class="w-12 h-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-800">No Lifecycle Cost Analyses Found</h3>
                             <p class="text-sm text-slate-500 mb-4">Create an LCC analysis to evaluate asset TCO, annualized cost (EAC), and repair-vs-replace economics.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_lifecycle_cost_analysis_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New LCC Analysis
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
