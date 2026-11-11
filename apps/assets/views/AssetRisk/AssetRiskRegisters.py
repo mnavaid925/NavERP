@@ -197,6 +197,7 @@ def asset_risk_register_assess(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_risk_register_close(request, pk):
     risk = assets_object(request, AssetRiskRegister, pk)
