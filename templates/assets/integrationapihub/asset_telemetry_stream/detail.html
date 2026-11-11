@@ -25,12 +25,14 @@
         <a href="{% url 'assets:asset_telemetry_stream_edit' stream.pk %}" class="btn btn-outline btn-sm">
             <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_telemetry_stream_delete' stream.pk %}" class="inline" onsubmit="return confirm('Delete telemetry stream {{ stream.number }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger btn-sm">
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Back to List</a>
     </div>
 </div>
