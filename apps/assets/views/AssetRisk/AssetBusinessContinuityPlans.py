@@ -176,6 +176,9 @@ def asset_business_continuity_plan_delete(request, pk):
 @require_POST
 def asset_business_continuity_plan_activate(request, pk):
     plan = assets_object(request, AssetBusinessContinuityPlan, pk)
+    if plan.status not in ["draft", "under_review"]:
+        messages.warning(request, f"Business continuity plan '{plan.number}' cannot be activated from status '{plan.get_status_display()}'.")
+        return redirect("assets:asset_business_continuity_plan_detail", pk=plan.pk)
     with transaction.atomic():
         plan.status = "active"
         plan.save(update_fields=["status", "updated_at"])
