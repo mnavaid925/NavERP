@@ -46,7 +46,7 @@
             {% csrf_token %}
             <div class="w-64">
                 <label class="form-label text-xs" for="id_raw_value">Raw Sensor Value ({{ stream.get_metric_unit_display }})</label>
-                <input id="id_raw_value" type="number" step="0.0001" name="raw_value" placeholder="{{ stream.warning_threshold|default:'25.0000' }}" class="form-input">
+                <input id="id_raw_value" type="number" step="0.0001" name="raw_value" placeholder="{% if stream.warning_threshold is not None %}{{ stream.warning_threshold }}{% elif stream.baseline_value is not None %}{{ stream.baseline_value }}{% else %}25.0000{% endif %}" class="form-input">
             </div>
             <button type="submit" class="btn btn-primary">
                 <i data-lucide="zap" class="w-4 h-4 me-1"></i> Ingest Sample Reading
@@ -106,7 +106,7 @@
             </div>
             <div class="detail-item">
                 <dt>Thresholds (Base / Warn / Crit)</dt>
-                <dd class="font-mono">{{ stream.baseline_value|default:"—" }} / {{ stream.warning_threshold|default:"—" }} / {{ stream.critical_threshold|default:"—" }}</dd>
+                <dd class="font-mono">{% if stream.baseline_value is not None %}{{ stream.baseline_value }}{% else %}—{% endif %} / {% if stream.warning_threshold is not None %}{{ stream.warning_threshold }}{% else %}—{% endif %} / {% if stream.critical_threshold is not None %}{{ stream.critical_threshold }}{% else %}—{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Last Ingested Value</dt>
