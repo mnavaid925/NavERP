@@ -99,13 +99,14 @@ def asset_risk_mitigation_action_list(request):
 @login_required
 def asset_risk_mitigation_action_detail(request, pk):
     action = assets_object(
-        AssetRiskMitigationAction.objects.select_related(
+        request,
+        AssetRiskMitigationAction,
+        pk,
+        select_related=[
             "risk",
             "assigned_to",
             "alternative_supplier",
-        ),
-        pk,
-        request,
+        ],
     )
 
     return render(
@@ -154,7 +155,7 @@ def asset_risk_mitigation_action_create(request):
 @login_required
 @tenant_admin_required
 def asset_risk_mitigation_action_edit(request, pk):
-    action = assets_object(AssetRiskMitigationAction, pk, request)
+    action = assets_object(request, AssetRiskMitigationAction, pk)
     if request.method == "POST":
         form = AssetRiskMitigationActionForm(request.POST, instance=action, tenant=request.tenant)
         if form.is_valid():
@@ -181,7 +182,7 @@ def asset_risk_mitigation_action_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_risk_mitigation_action_delete(request, pk):
-    action = assets_object(AssetRiskMitigationAction, pk, request)
+    action = assets_object(request, AssetRiskMitigationAction, pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, action, "delete", tenant=request.tenant)
@@ -195,7 +196,7 @@ def asset_risk_mitigation_action_delete(request, pk):
 @login_required
 @require_POST
 def asset_risk_mitigation_action_complete(request, pk):
-    action = assets_object(AssetRiskMitigationAction, pk, request)
+    action = assets_object(request, AssetRiskMitigationAction, pk)
     with transaction.atomic():
         action.status = "completed"
         action.actual_completion_date = timezone.now().date()
@@ -208,7 +209,7 @@ def asset_risk_mitigation_action_complete(request, pk):
 @login_required
 @require_POST
 def asset_risk_mitigation_action_verify(request, pk):
-    action = assets_object(AssetRiskMitigationAction, pk, request)
+    action = assets_object(request, AssetRiskMitigationAction, pk)
     effectiveness = request.POST.get("effectiveness_rating", "highly_effective").strip()
     if effectiveness not in dict(AssetRiskMitigationAction.EFFECTIVENESS_CHOICES):
         effectiveness = "highly_effective"
