@@ -291,6 +291,8 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
             models.Index(fields=["tenant", "lifecycle_stage"], name="idx_alcc_ten_stg"),
             models.Index(fields=["tenant", "recommendation"], name="idx_alcc_ten_rec"),
             models.Index(fields=["tenant", "analysis_date"], name="idx_alcc_ten_date"),
+            models.Index(fields=["tenant", "asset_category"], name="idx_alcc_ten_cat"),
+            models.Index(fields=["tenant", "org_unit"], name="idx_alcc_ten_org"),
         ]
 
     def __str__(self):
