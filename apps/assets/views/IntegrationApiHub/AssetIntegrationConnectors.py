@@ -150,15 +150,21 @@ def connector_detail(request, pk):
     if isinstance(reveal, dict) and reveal.get("pk") == connector.pk:
         plaintext_once = reveal.get("secret")
 
-    streams = connector.telemetry_streams.only(
-        "id", "number", "stream_name", "stream_status"
-    ).order_by("number")[:10]
-    gl_batches = connector.gl_sync_batches.only(
-        "id", "number", "sync_domain", "status", "batch_date"
-    ).order_by("-batch_date", "-number")[:10]
-    gis_mappings = connector.gis_mappings.only(
-        "id", "number", "layer_name", "drift_status"
-    ).order_by("number")[:10]
+    streams = (
+        connector.telemetry_streams.filter(tenant=connector.tenant)
+        .only("id", "number", "stream_name", "stream_status")
+        .order_by("number")[:10]
+    )
+    gl_batches = (
+        connector.gl_sync_batches.filter(tenant=connector.tenant)
+        .only("id", "number", "sync_domain", "status", "batch_date")
+        .order_by("-batch_date", "-number")[:10]
+    )
+    gis_mappings = (
+        connector.gis_mappings.filter(tenant=connector.tenant)
+        .only("id", "number", "layer_name", "drift_status")
+        .order_by("number")[:10]
+    )
 
     return render(
         request,
