@@ -84,6 +84,12 @@ from apps.assets.models.IntegrationApiHub import (
     AssetIntegrationConnector,
     AssetTelemetryStream,
 )
+from apps.assets.models.AssetAnalytics import (
+    AssetExecutiveScorecard,
+    AssetLifecycleCostAnalysis,
+    AssetPortfolioScenario,
+    AssetReplacementPlan,
+)
 
 __all__ = [
     "TenantOwned",
@@ -144,4 +150,8 @@ __all__ = [
     "AssetTelemetryStream",
     "AssetGlSyncBatch",
     "AssetGisMapping",
+    "AssetLifecycleCostAnalysis",
+    "AssetReplacementPlan",
+    "AssetPortfolioScenario",
+    "AssetExecutiveScorecard",
 ]
