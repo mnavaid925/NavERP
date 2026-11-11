@@ -89,7 +89,7 @@ class AssetTelemetryStreamForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input", "step": "0.0001"}
             ),
             "auto_trigger_maintenance": forms.CheckboxInput(
-                attrs={"class": "form-checkbox"}
+                attrs={"class": "form-check"}
             ),
             "stream_status": forms.Select(attrs={"class": "form-select"}),
             "steward": forms.Select(attrs={"class": "form-select"}),
