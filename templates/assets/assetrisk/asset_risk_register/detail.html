@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+
+{% block title %}{{ risk.number }} — {{ risk.title }} — Asset Risk — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_risk_register_list' %}">Risk Registers</a>
+            <span>/</span>
+            <span>{{ risk.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ risk.number }} — {{ risk.title }}</h1>
+            <span class="badge {{ risk.status_badge_class }}">{{ risk.get_status_display }}</span>
+            <span class="badge {{ risk.inherent_risk_level_badge_class }}">{{ risk.get_inherent_risk_level_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_risk_register_edit' risk.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% if risk.status == "identified" %}
+        <form method="post" action="{% url 'assets:asset_risk_register_assess' risk.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600">
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Mark Assessed
+            </button>
+        </form>
+        {% endif %}
+        {% if risk.status != "closed" %}
+        <form method="post" action="{% url 'assets:asset_risk_register_close' risk.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-emerald-600">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Close Risk
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'assets:asset_risk_register_delete' risk.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete risk register entry {{ risk.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Risk Overview Card -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Risk Profile & Asset Scoping</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Risk Category</div>
+                    <div>
+                        <span class="badge {{ risk.risk_category_badge_class }}">{{ risk.get_risk_category_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Threat Source</div>
+                    <div class="font-medium text-slate-900">{{ risk.get_threat_source_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Subject Asset</div>
+                    <div>
+                        {% if risk.asset %}
+                        <div class="font-medium text-slate-900">{{ risk.asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ risk.asset.asset_code }}</div>
+                        {% else %}
+                        <span class="text-slate-400">Not tied to specific asset</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Asset Category</div>
+                    <div>
+                        {% if risk.category %}
+                        <div class="font-medium text-slate-900">{{ risk.category.name }}</div>
+                        <div class="text-xs text-slate-500">Fleet-Wide Standard</div>
+                        {% else %}
+                        <span class="text-slate-400">All Categories</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">FMEA Failure Mode</div>
+                    <div class="text-sm font-medium text-slate-800">{{ risk.failure_mode|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Financial Exposure</div>
+                    <div class="text-base font-semibold text-slate-900 font-mono">${{ risk.financial_exposure_amount|floatformat:2 }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Risk Owner</div>
+                    <div class="text-sm font-medium text-slate-900">
+                        {% if risk.risk_owner %}
+                        {{ risk.risk_owner.get_full_name|default:risk.risk_owner.username }}
+                        {% else %}
+                        <span class="text-slate-400">Unassigned</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Review Cadence & Next Due</div>
+                    <div class="text-sm font-medium text-slate-900">
+                        {{ risk.get_review_frequency_display }}
+                        {% if risk.next_review_date %}
+                        <span class="text-xs text-slate-500">({{ risk.next_review_date }})</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {% if risk.description %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Technical Description & Sequence</div>
+                <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{{ risk.description }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- 5x5 Matrix Scoring Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">5x5 Risk Matrix Evaluation</h2>
+        </div>
+        <div class="card-body space-y-6">
+            <!-- Inherent Risk -->
+            <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Inherent Risk (Pre-Control)</span>
+                    <span class="badge {{ risk.inherent_risk_level_badge_class }}">{{ risk.get_inherent_risk_level_display }}</span>
+                </div>
+                <div class="text-2xl font-bold text-slate-900 font-mono mb-2">Score: {{ risk.inherent_risk_score }} / 25</div>
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div>Likelihood: <strong class="text-slate-800">{{ risk.inherent_likelihood }} / 5</strong></div>
+                    <div>Impact: <strong class="text-slate-800">{{ risk.inherent_impact }} / 5</strong></div>
+                </div>
+            </div>
+
+            <!-- Residual Risk -->
+            <div class="p-4 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-600">Residual Risk (Post-Control)</span>
+                    <span class="badge {{ risk.residual_risk_level_badge_class }}">{{ risk.get_residual_risk_level_display }}</span>
+                </div>
+                <div class="text-2xl font-bold text-slate-900 font-mono mb-2">Score: {{ risk.residual_risk_score }} / 25</div>
+                <div class="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div>Likelihood: <strong class="text-slate-800">{{ risk.residual_likelihood }} / 5</strong></div>
+                    <div>Impact: <strong class="text-slate-800">{{ risk.residual_impact }} / 5</strong></div>
+                </div>
+            </div>
+
+            <!-- Treatment Strategy -->
+            <div>
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Adopted Strategy</div>
+                <span class="badge {{ risk.treatment_strategy_badge_class }} text-sm">{{ risk.get_treatment_strategy_display }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Related Mitigation Actions Card -->
+<div class="card mb-6">
+    <div class="card-header flex items-center justify-between">
+        <div>
+            <h2 class="text-base font-semibold text-slate-800">Risk Mitigation & Contingency Actions</h2>
+            <p class="text-xs text-slate-500">Treatments, engineering controls, spare buffers, and supplier contingencies</p>
+        </div>
+        <a href="{% url 'assets:asset_risk_mitigation_action_create' %}?risk={{ risk.pk }}" class="btn btn-primary btn-sm">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> Add Action
+        </a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action # & Title</th>
+                    <th>Action Type</th>
+                    <th>Priority</th>
+                    <th>Assigned To</th>
+                    <th>Target Date</th>
+                    <th>Status</th>
+                    <th>Effectiveness</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for act in mitigation_actions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_risk_mitigation_action_detail' act.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ act.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ act.title }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.action_type_badge_class }}">
+                            {{ act.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.priority_badge_class }}">
+                            {{ act.get_priority_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if act.assigned_to %}
+                        {{ act.assigned_to.get_full_name|default:act.assigned_to.username }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ act.target_completion_date }}</td>
+                    <td>
+                        <span class="badge {{ act.status_badge_class }}">
+                            {{ act.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.effectiveness_badge_class }}">
+                            {{ act.get_effectiveness_rating_display }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7">
+                        <div class="text-center py-6 text-sm text-slate-500">
+                            No mitigation actions registered for this risk yet.
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
