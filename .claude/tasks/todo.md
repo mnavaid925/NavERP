@@ -7,6 +7,156 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.13: Mobile Asset Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.13.md` (2026-11-11)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.11.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0014_assetcomplianceaudit_idx_aca_ten_fw_and_more.py` (from 11.11), so **11.13 claims `0015_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.13.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/MobileAssetManagement/<Entity>.py`
+> Template folder name: `templates/assets/mobileassetmanagement/{mobile_asset_inspection,field_work_order,asset_scan_log,asset_geofence_event}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Mobile Asset Management Multi-Tenant Base & Isolation (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links operational plant machinery, field equipment, fleet vehicles, and infrastructure in `apps/scm` via string FK (`"scm.Asset"`).
+  - Authoritative Financial Fixed Asset Register (`accounting.FixedAsset` [FA-]): Links capital fixed asset records in `apps/accounting` via string FK (`"accounting.FixedAsset"`).
+  - Maintenance Request Integration: Links intake maintenance tickets in `apps/assets/models/AssetMaintenance/AssetMaintenanceRequests.py` (`"assets.AssetMaintenanceRequest"`).
+  - Core Spine Bindings:
+    - Reuses `settings.AUTH_USER_MODEL` for inspectors, assigned technicians, scanners, and alert resolvers.
+  - Offline Synchronization Ready: All mobile records support `client_sync_id` (UUID from field client), `is_offline_captured` (BooleanField), and `synced_at` (DateTimeField) for bidirectional offline data capture without data loss.
+  - Collision-free 4-character uppercase prefixes starting with `M` / `A` (verified 100% collision-free repository-wide):
+    - `MobileAssetInspection` -> `NUMBER_PREFIX = "MINS"` (format: `MINS-YYYYMM-XXXX`)
+    - `FieldWorkOrder` -> `NUMBER_PREFIX = "MFWO"` (format: `MFWO-YYYYMM-XXXX`)
+    - `AssetScanLog` -> `NUMBER_PREFIX = "ASCN"` (format: `ASCN-YYYYMM-XXXX`)
+    - `AssetGeofenceEvent` -> `NUMBER_PREFIX = "AGEO"` (format: `AGEO-YYYYMM-XXXX`)
+
+- **Operational Scope & Feature Mapping**:
+  - `MobileAssetInspection` [MINS-]:
+    - Domain Purpose: Mobile field inspection checklists, condition assessment, photographic proof, voice notes transcription, meter readings, and severity grading (NavERP.md Bullet 1: Mobile Inspection & Data Capture).
+    - Status / Badge CSS: `draft -> badge-slate`, `submitted -> badge-info`, `under_review -> badge-amber`, `approved -> badge-green`, `rejected -> badge-red`.
+    - Overall Result / Badge CSS: `pass -> badge-green`, `conditional_pass -> badge-amber`, `fail -> badge-red`, `critical_hazard -> badge-red`.
+    - Inspection Type / Badge CSS: `safety_audit -> badge-amber`, `pre_trip -> badge-info`, `condition_assessment -> badge-slate`, `routine_pm -> badge-green`, `breakdown_triage -> badge-red`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `synced_at`.
+    - View context keys:
+      - List: `inspections`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `result_choices`, `type_choices`, `total_inspections`, `passed_count`, `failed_count`, `offline_captured_count`.
+      - Detail: `inspection`.
+  - `FieldWorkOrder` [MFWO-]:
+    - Domain Purpose: Mobile field technician job dispatch, en-route / on-site workflow states, labor wrench minutes, parts requisition notes, and digital customer/supervisor signature capture (NavERP.md Bullet 2: Field Technician Work Orders).
+    - Status / Badge CSS: `dispatched -> badge-slate`, `en_route -> badge-info`, `on_site -> badge-amber`, `in_progress -> badge-amber`, `paused -> badge-muted`, `completed -> badge-green`, `cancelled -> badge-red`.
+    - Priority / Badge CSS: `low -> badge-slate`, `medium -> badge-info`, `high -> badge-amber`, `urgent -> badge-red`.
+    - Work Order Type / Badge CSS: `emergency_repair -> badge-red`, `scheduled_pm -> badge-green`, `inspection_followup -> badge-info`, `calibration -> badge-slate`, `installation -> badge-purple`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `actual_arrival`, `completed_at`, `signed_at`, `synced_at`.
+    - View context keys:
+      - List: `work_orders`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `priority_choices`, `type_choices`, `total_work_orders`, `active_count`, `completed_count`, `urgent_count`, `total_wrench_hours`.
+      - Detail: `work_order`.
+  - `AssetScanLog` [ASCN-]:
+    - Domain Purpose: Mobile barcode, QR code, and RFID scanning audit trail, scan context (receiving, audit, work order init), reader hardware info, GPS stamping, and asset match verification (NavERP.md Bullet 3: Barcode/RFID Scanning).
+    - Match Status / Badge CSS: `matched -> badge-green`, `not_found -> badge-red`, `mismatched -> badge-amber`, `unassigned -> badge-slate`.
+    - Scan Method / Badge CSS: `camera_barcode -> badge-info`, `camera_qr -> badge-green`, `bluetooth_rfid -> badge-purple`, `handheld_laser -> badge-slate`, `manual_entry -> badge-muted`.
+    - Scan Context / Badge CSS: `field_audit -> badge-info`, `checkout_verification -> badge-slate`, `work_order_init -> badge-amber`, `receiving -> badge-green`, `location_reconciliation -> badge-purple`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `scanned_at`.
+    - View context keys:
+      - List: `scans`, `page_obj`, `paginator`, `is_paginated`, `match_choices`, `method_choices`, `context_choices`, `total_scans`, `matched_count`, `not_found_count`, `rfid_count`.
+      - Detail: `scan`.
+  - `AssetGeofenceEvent` [AGEO-]:
+    - Domain Purpose: Mobile GPS geolocation tracking, virtual perimeter geofencing, radius monitoring, unauthorized movement alerts, and incident resolution (NavERP.md Bullet 4: GPS & Geofencing).
+    - Event Type / Badge CSS: `inside_perimeter -> badge-green`, `boundary_warning -> badge-amber`, `perimeter_exit -> badge-red`, `perimeter_entry -> badge-info`, `unauthorized_movement -> badge-red`.
+    - Severity / Badge CSS: `info -> badge-slate`, `low -> badge-info`, `medium -> badge-amber`, `high -> badge-red`, `critical -> badge-red`.
+    - Status / Badge CSS: `open_alert -> badge-red`, `under_investigation -> badge-amber`, `resolved -> badge-green`, `false_alarm -> badge-muted`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`, `detected_at`, `acknowledged_at`.
+    - View context keys:
+      - List: `events`, `page_obj`, `paginator`, `is_paginated`, `event_type_choices`, `severity_choices`, `status_choices`, `total_events`, `open_alerts_count`, `critical_breaches_count`, `resolved_count`.
+      - Detail: `event`.
+
+## Sub-module 11.13 Implementation Checklist
+
+- [ ] **Phase 1: Research**
+  - [x] Competitive market research of 8 leading mobile EAM suites (`.claude/tasks/research-assets-11.13.md`)
+  - [x] Commit research catalog
+
+- [ ] **Phase 2: Planning & Specification**
+  - [x] Checkable implementation plan in `.claude/tasks/todo.md`
+  - [ ] Commit `todo.md`
+  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.13.md`
+  - [ ] Commit contract file
+
+- [ ] **Phase 3: Serial Build (Entity by Entity)**
+  - [ ] **Entity 1: `MobileAssetInspection`**
+    - [ ] `apps/assets/models/MobileAssetManagement/MobileAssetInspections.py`
+    - [ ] `apps/assets/forms/MobileAssetManagement/MobileAssetInspections.py`
+    - [ ] `apps/assets/views/MobileAssetManagement/MobileAssetInspections.py`
+    - [ ] `apps/assets/urls/MobileAssetManagement/MobileAssetInspections.py`
+    - [ ] `templates/assets/mobileassetmanagement/mobile_asset_inspection/list.html`
+    - [ ] `templates/assets/mobileassetmanagement/mobile_asset_inspection/detail.html`
+    - [ ] `templates/assets/mobileassetmanagement/mobile_asset_inspection/form.html`
+  - [ ] **Entity 2: `FieldWorkOrder`**
+    - [ ] `apps/assets/models/MobileAssetManagement/FieldWorkOrders.py`
+    - [ ] `apps/assets/forms/MobileAssetManagement/FieldWorkOrders.py`
+    - [ ] `apps/assets/views/MobileAssetManagement/FieldWorkOrders.py`
+    - [ ] `apps/assets/urls/MobileAssetManagement/FieldWorkOrders.py`
+    - [ ] `templates/assets/mobileassetmanagement/field_work_order/list.html`
+    - [ ] `templates/assets/mobileassetmanagement/field_work_order/detail.html`
+    - [ ] `templates/assets/mobileassetmanagement/field_work_order/form.html`
+  - [ ] **Entity 3: `AssetScanLog`**
+    - [ ] `apps/assets/models/MobileAssetManagement/AssetScanLogs.py`
+    - [ ] `apps/assets/forms/MobileAssetManagement/AssetScanLogs.py`
+    - [ ] `apps/assets/views/MobileAssetManagement/AssetScanLogs.py`
+    - [ ] `apps/assets/urls/MobileAssetManagement/AssetScanLogs.py`
+    - [ ] `templates/assets/mobileassetmanagement/asset_scan_log/list.html`
+    - [ ] `templates/assets/mobileassetmanagement/asset_scan_log/detail.html`
+    - [ ] `templates/assets/mobileassetmanagement/asset_scan_log/form.html`
+  - [ ] **Entity 4: `AssetGeofenceEvent`**
+    - [ ] `apps/assets/models/MobileAssetManagement/AssetGeofenceEvents.py`
+    - [ ] `apps/assets/forms/MobileAssetManagement/AssetGeofenceEvents.py`
+    - [ ] `apps/assets/views/MobileAssetManagement/AssetGeofenceEvents.py`
+    - [ ] `apps/assets/urls/MobileAssetManagement/AssetGeofenceEvents.py`
+    - [ ] `templates/assets/mobileassetmanagement/asset_geofence_event/list.html`
+    - [ ] `templates/assets/mobileassetmanagement/asset_geofence_event/detail.html`
+    - [ ] `templates/assets/mobileassetmanagement/asset_geofence_event/form.html`
+  - [ ] **Integrate**
+    - [ ] Re-export models in `apps/assets/models/__init__.py`
+    - [ ] Re-export forms in `apps/assets/forms/__init__.py`
+    - [ ] Re-export views in `apps/assets/views/__init__.py`
+    - [ ] Wire URL routes in `apps/assets/urls/__init__.py`
+    - [ ] Register all 4 models in `apps/assets/admin.py`
+    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.13 seed data
+    - [ ] Wire `LIVE_LINKS["11.13"]` in `apps/core/navigation.py`
+    - [ ] Run `makemigrations assets` (claims `0015_...`)
+    - [ ] Run `migrate`
+    - [ ] Run `seed_assets` twice (idempotency check)
+    - [ ] Run `manage.py check`
+  - [ ] **Smoke Test**
+    - [ ] Build & run `temp/smoke_assets_11_13.py` asserting status 200/302, content assertions, and IDOR 404
+
+- [ ] **Phase 4: Review Pass (6 Serial Reviewers)**
+  - [ ] `code-reviewer` agent
+  - [ ] `explorer` agent
+  - [ ] `frontend-reviewer` agent
+  - [ ] `performance-reviewer` agent
+  - [ ] `qa-smoke-tester` agent
+  - [ ] `security-reviewer` agent
+  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.13.md` and commit
+
+- [ ] **Phase 5: Code Fixer**
+  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+
+- [ ] **Phase 6: Automated Test Suite**
+  - [ ] Update shared `tests/conftest.py` if needed
+  - [ ] Author `tests/test_mobile_asset_models.py`
+  - [ ] Author `tests/test_mobile_asset_forms.py`
+  - [ ] Author `tests/test_mobile_asset_views.py`
+  - [ ] Author `tests/test_mobile_asset_security.py`
+  - [ ] Run full unfiltered test suite (`pytest apps/assets/tests/`) and confirm 100% green
+
+- [ ] **Phase 7: Close-Out & Skill Updates**
+  - [ ] Update `.claude/skills/assets/SKILL.md` with 11.13 entities, routes, and context
+  - [ ] Update `README.md` marking 11.13 complete
+  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.13.md`
+  - [ ] Update close-out in `todo.md`
+
+---
 # Sub-module 11.12: Asset Risk Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.12.md` (2026-11-11)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.11.
