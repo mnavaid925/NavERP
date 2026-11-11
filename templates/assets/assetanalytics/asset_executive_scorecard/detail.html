@@ -31,7 +31,7 @@
                 <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Compute Live KPIs
             </button>
         </form>
-        <form method="post" action="{% url 'assets:asset_executive_scorecard_publish' scorecard.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_publish' scorecard.pk %}" class="inline" onsubmit="return confirm('Publish scorecard {{ scorecard.number|escapejs }}? Published snapshots are locked from editing.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
                 <i data-lucide="send" class="w-4 h-4 me-1"></i> Publish Snapshot
@@ -42,7 +42,7 @@
         </a>
         {% endif %}
         {% if scorecard.status == "published" %}
-        <form method="post" action="{% url 'assets:asset_executive_scorecard_approve' scorecard.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_approve' scorecard.pk %}" class="inline" onsubmit="return confirm('Board approve scorecard {{ scorecard.number|escapejs }}? This records final executive sign-off.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
                 <i data-lucide="shield-check" class="w-4 h-4 me-1"></i> Board Approve
@@ -50,7 +50,7 @@
         </form>
         {% endif %}
         {% if scorecard.status != "archived" %}
-        <form method="post" action="{% url 'assets:asset_executive_scorecard_archive' scorecard.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_archive' scorecard.pk %}" class="inline" onsubmit="return confirm('Archive scorecard {{ scorecard.number|escapejs }}? Archived scorecards are permanently locked.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline">
                 <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
