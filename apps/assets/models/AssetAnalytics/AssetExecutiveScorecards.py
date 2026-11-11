@@ -291,18 +291,72 @@ class AssetExecutiveScorecard(TenantNumbered):
 
         # Recoveries & return basis (preserve explicit budget/return override if > 0)
         if (self.annual_asset_return_amount or ZERO) <= ZERO:
-            resale_net = AssetResaleListing.objects.filter(
+            resale_qs = AssetResaleListing.objects.filter(
                 tenant_id=tid, status__in=["sold", "payment_received", "delivered"]
-            ).aggregate(total=Sum("net_sale_proceeds"))["total"] or ZERO
-            scrap_net = AssetScrapSalvage.objects.filter(
+            )
+            scrap_qs = AssetScrapSalvage.objects.filter(
                 tenant_id=tid, status__in=["certified_destroyed", "settled"]
-            ).aggregate(total=Sum("net_salvage_recovery"))["total"] or ZERO
-            warr_net = AssetWarrantyClaim.objects.filter(
+            )
+            warr_qs = AssetWarrantyClaim.objects.filter(
                 tenant_id=tid, claim_status__in=["approved", "partially_approved", "settled_closed"]
-            ).aggregate(total=Sum("approved_amount"))["total"] or ZERO
-            ins_net = AssetInsuranceClaim.objects.filter(
+            )
+            ins_qs = AssetInsuranceClaim.objects.filter(
                 tenant_id=tid, claim_status__in=["approved_pending_payout", "settled_paid", "closed"]
-            ).aggregate(total=Sum("settlement_payout_amount"))["total"] or ZERO
+            )
+
+            if self.org_unit_id:
+                resale_qs = resale_qs.filter(
+                    Q(disposal_request__cost_center_id=self.org_unit_id)
+                    | Q(disposal_request__operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(fixed_asset__location_id=self.org_unit_id)
+                )
+                scrap_qs = scrap_qs.filter(
+                    Q(operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(disposal_request__cost_center_id=self.org_unit_id)
+                    | Q(disposal_request__operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(fixed_asset__location_id=self.org_unit_id)
+                )
+                warr_qs = warr_qs.filter(
+                    Q(operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(fixed_asset__location_id=self.org_unit_id)
+                    | Q(warranty__operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(warranty__fixed_asset__location_id=self.org_unit_id)
+                )
+                ins_qs = ins_qs.filter(
+                    Q(operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(fixed_asset__location_id=self.org_unit_id)
+                    | Q(policy__operational_asset__org_unit_id=self.org_unit_id)
+                    | Q(policy__fixed_asset__location_id=self.org_unit_id)
+                )
+
+            if self.asset_category_id:
+                resale_qs = resale_qs.filter(disposal_request__category_id=self.asset_category_id)
+                scrap_qs = scrap_qs.filter(disposal_request__category_id=self.asset_category_id)
+                warr_qs = warr_qs.filter(warranty__asset_category_id=self.asset_category_id)
+                ins_qs = ins_qs.filter(policy__asset_category_id=self.asset_category_id)
+
+            if self.period_start and self.period_end:
+                resale_qs = resale_qs.filter(
+                    Q(payment_date__range=(self.period_start, self.period_end))
+                    | Q(payment_date__isnull=True, listing_date__range=(self.period_start, self.period_end))
+                )
+                scrap_qs = scrap_qs.filter(
+                    Q(completion_date__range=(self.period_start, self.period_end))
+                    | Q(completion_date__isnull=True, decommissioning_date__range=(self.period_start, self.period_end))
+                )
+                warr_qs = warr_qs.filter(
+                    Q(settlement_date__range=(self.period_start, self.period_end))
+                    | Q(settlement_date__isnull=True, incident_date__range=(self.period_start, self.period_end))
+                )
+                ins_qs = ins_qs.filter(
+                    Q(settlement_date__range=(self.period_start, self.period_end))
+                    | Q(settlement_date__isnull=True, incident_date__range=(self.period_start, self.period_end))
+                )
+
+            resale_net = resale_qs.aggregate(total=Sum("net_sale_proceeds"))["total"] or ZERO
+            scrap_net = scrap_qs.aggregate(total=Sum("net_salvage_recovery"))["total"] or ZERO
+            warr_net = warr_qs.aggregate(total=Sum("approved_amount"))["total"] or ZERO
+            ins_net = ins_qs.aggregate(total=Sum("settlement_payout_amount"))["total"] or ZERO
             self.annual_asset_return_amount = q2(resale_net + scrap_net + warr_net + ins_net)
 
         if self.total_net_book_value > ZERO:
@@ -315,6 +369,12 @@ class AssetExecutiveScorecard(TenantNumbered):
         cap_qs = AssetCapitalization.objects.filter(tenant_id=tid, status="capitalized")
         if self.period_start and self.period_end:
             cap_qs = cap_qs.filter(in_service_date__range=(self.period_start, self.period_end))
+        if self.org_unit_id:
+            cap_qs = cap_qs.filter(
+                Q(operational_asset__org_unit_id=self.org_unit_id)
+                | Q(fixed_asset__location_id=self.org_unit_id)
+                | Q(requisition__target_org_unit_id=self.org_unit_id)
+            )
         cap_actual = cap_qs.aggregate(total=Sum("total_cost_basis"))["total"] or ZERO
         planned_capex = plan_agg["planned_capex"] or ZERO
         if planned_capex > ZERO:
