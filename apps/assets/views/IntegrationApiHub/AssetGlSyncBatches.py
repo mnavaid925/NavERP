@@ -33,18 +33,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def batch_list(request):
     """List tenant-scoped Asset GL Sync & Reconciliation Batches with KPIs and date/domain filters."""
-    base_qs = assets_scope(
-        AssetGlSyncBatch.objects.select_related(
-            "connector",
-            "fiscal_period",
-            "gl_account",
-            "offset_gl_account",
-            "currency",
-            "journal_entry",
-            "executed_by",
-        ),
-        request,
-    )
+    base_qs = assets_scope(AssetGlSyncBatch.objects.all(), request)
 
     kpis = base_qs.aggregate(
         total=Count("id"),
@@ -53,7 +42,11 @@ def batch_list(request):
         draft=Count("id", filter=Q(status="draft")),
     )
 
-    qs = base_qs
+    qs = base_qs.select_related(
+        "connector",
+        "currency",
+        "journal_entry",
+    ).defer("field_mapping_json", "payload_summary", "notes")
     q = (request.GET.get("q") or "").strip()
     connector_id = parse_pos_int(request.GET.get("connector"))
     sync_domain = (request.GET.get("sync_domain") or "").strip()
@@ -85,8 +78,10 @@ def batch_list(request):
     paginator = Paginator(qs.order_by("-batch_date", "-number"), 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    connectors = assets_scope(AssetIntegrationConnector.objects.all(), request).order_by(
-        "number"
+    connectors = (
+        assets_scope(AssetIntegrationConnector.objects.all(), request)
+        .only("id", "number", "name")
+        .order_by("number")
     )
 
     context = {
