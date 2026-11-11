@@ -3061,8 +3061,6 @@ class Command(BaseCommand):
                 review_frequency="monthly",
                 next_review_date=today + timezone.timedelta(days=30),
             )
-            ark1.calculate_scores()
-            ark1.save()
 
             ark2 = AssetRiskRegister.objects.create(
                 tenant=tenant,
@@ -3084,8 +3082,6 @@ class Command(BaseCommand):
                 review_frequency="quarterly",
                 next_review_date=today + timezone.timedelta(days=60),
             )
-            ark2.calculate_scores()
-            ark2.save()
 
             ark3 = AssetRiskRegister.objects.create(
                 tenant=tenant,
@@ -3107,8 +3103,6 @@ class Command(BaseCommand):
                 review_frequency="quarterly",
                 next_review_date=today + timezone.timedelta(days=45),
             )
-            ark3.calculate_scores()
-            ark3.save()
 
             ark4 = AssetRiskRegister.objects.create(
                 tenant=tenant,
@@ -3130,8 +3124,6 @@ class Command(BaseCommand):
                 review_frequency="semi_annually",
                 next_review_date=today + timezone.timedelta(days=90),
             )
-            ark4.calculate_scores()
-            ark4.save()
 
             # 2. Asset Business Continuity Plans
             abc1 = AssetBusinessContinuityPlan.objects.create(
