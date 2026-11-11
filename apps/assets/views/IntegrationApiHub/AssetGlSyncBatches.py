@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -266,53 +266,76 @@ def batch_delete(request, pk):
 @require_POST
 def execute_reconcile_batch(request, pk):
     """Reconcile GL batch variance and post a balanced Journal Entry when eligible (admin only)."""
-    batch = assets_object(
-        request,
-        AssetGlSyncBatch,
-        pk,
-        select_related=(
-            "connector",
-            "fiscal_period",
-            "gl_account",
-            "offset_gl_account",
-            "cost_center",
-            "currency",
-            "journal_entry",
-        ),
-    )
-
-    if batch.fiscal_period is not None and not batch.fiscal_period.is_open:
-        messages.error(
-            request,
-            f"Cannot execute {batch.number}: fiscal period {batch.fiscal_period.name} is {batch.fiscal_period.status} (must be open).",
-        )
-        return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
-
-    src_amt = batch.source_amount or Decimal("0.00")
-    tgt_amt = batch.target_gl_amount or Decimal("0.00")
-    variance = src_amt - tgt_amt
-    now = timezone.now()
-
-    already_posted = batch.journal_entry_id is not None
-    can_post_je = (
-        not already_posted
-        and batch.sync_domain in AssetGlSyncBatch.GL_POSTING_DOMAINS
-        and batch.gl_account_id is not None
-        and batch.offset_gl_account_id is not None
-        and batch.gl_account_id != batch.offset_gl_account_id
-        and batch.gl_account.tenant_id == batch.tenant_id
-        and batch.offset_gl_account.tenant_id == batch.tenant_id
-        and src_amt > Decimal("0.00")
-    )
-
     with transaction.atomic():
-        je = batch.journal_entry
+        batch = get_object_or_404(
+            AssetGlSyncBatch.objects.select_for_update(),
+            pk=pk,
+            tenant=request.tenant,
+        )
+
+        if batch.journal_entry_id is not None or batch.status == "posted":
+            messages.info(
+                request,
+                f"Batch {batch.number} is already posted to the General Ledger; no changes made.",
+            )
+            return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
+
+        if batch.status == "failed":
+            messages.error(
+                request,
+                f"Cannot execute {batch.number}: batch status is Failed.",
+            )
+            return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
+
+        connector = batch.connector
+        fiscal_period = batch.fiscal_period
+        gl_account = batch.gl_account
+        offset_gl_account = batch.offset_gl_account
+        cost_center = batch.cost_center
+        currency = batch.currency
+
+        for fk_label, rel in (
+            ("Connector", connector),
+            ("Fiscal period", fiscal_period),
+            ("Primary GL account", gl_account),
+            ("Offset GL account", offset_gl_account),
+            ("Cost center", cost_center),
+        ):
+            if rel is not None and getattr(rel, "tenant_id", None) != batch.tenant_id:
+                messages.error(
+                    request,
+                    f"Cannot execute {batch.number}: {fk_label} belongs to another workspace.",
+                )
+                return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
+
+        if fiscal_period is not None and not fiscal_period.is_open:
+            messages.error(
+                request,
+                f"Cannot execute {batch.number}: fiscal period {fiscal_period.name} is {fiscal_period.status} (must be open).",
+            )
+            return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
+
+        src_amt = batch.source_amount or Decimal("0.00")
+        tgt_amt = batch.target_gl_amount or Decimal("0.00")
+        variance = src_amt - tgt_amt
+        now = timezone.now()
+
+        can_post_je = (
+            variance == Decimal("0.00")
+            and batch.sync_domain in AssetGlSyncBatch.GL_POSTING_DOMAINS
+            and gl_account is not None
+            and offset_gl_account is not None
+            and gl_account.pk != offset_gl_account.pk
+            and src_amt > Decimal("0.00")
+        )
+
+        je = None
         if can_post_je:
             je = JournalEntry.objects.create(
                 tenant=batch.tenant,
                 entry_type="recurring",
                 entry_date=batch.batch_date,
-                fiscal_period=batch.fiscal_period,
+                fiscal_period=fiscal_period,
                 description=f"Asset GL Sync {batch.number} ({batch.get_sync_domain_display()})"[
                     :500
                 ],
@@ -322,31 +345,35 @@ def execute_reconcile_batch(request, pk):
                 approved_by=request.user,
                 posted_at=now,
             )
-            JournalLine.objects.create(
+            debit_line = JournalLine(
                 entry=je,
-                gl_account=batch.gl_account,
+                gl_account=gl_account,
                 debit=src_amt,
                 credit=Decimal("0.00"),
                 description=f"{batch.number} Debit — {batch.get_sync_domain_display()}"[
                     :255
                 ],
-                org_unit=batch.cost_center,
-                currency=batch.currency,
+                org_unit=cost_center,
+                currency=currency,
             )
-            JournalLine.objects.create(
+            debit_line.full_clean()
+            debit_line.save()
+
+            credit_line = JournalLine(
                 entry=je,
-                gl_account=batch.offset_gl_account,
+                gl_account=offset_gl_account,
                 debit=Decimal("0.00"),
                 credit=src_amt,
                 description=f"{batch.number} Offset Credit — {batch.get_sync_domain_display()}"[
                     :255
                 ],
-                org_unit=batch.cost_center,
-                currency=batch.currency,
+                org_unit=cost_center,
+                currency=currency,
             )
+            credit_line.full_clean()
+            credit_line.save()
+
             batch.journal_entry = je
-            batch.status = "posted"
-        elif already_posted or batch.status == "posted":
             batch.status = "posted"
         else:
             batch.status = "reconciled" if variance == Decimal("0.00") else "simulated"
@@ -395,11 +422,6 @@ def execute_reconcile_batch(request, pk):
         messages.success(
             request,
             f"Batch {batch.number} reconciled and posted balanced Journal Entry {je.number}.",
-        )
-    elif already_posted:
-        messages.info(
-            request,
-            f"Batch {batch.number} variance recomputed ({variance}); existing Journal Entry {batch.journal_entry.number} preserved.",
         )
     else:
         messages.success(
