@@ -173,9 +173,21 @@ def stream_detail(request, pk):
         ),
     )
 
-    readings_qs = AssetTelemetryReading.objects.filter(
-        tenant=stream.tenant
-    ).select_related("operational_asset", "fixed_asset", "recorded_by")
+    readings_qs = (
+        AssetTelemetryReading.objects.filter(tenant=stream.tenant)
+        .select_related("triggered_maintenance_request")
+        .only(
+            "id",
+            "number",
+            "recorded_at",
+            "metric_type",
+            "reading_value",
+            "metric_unit",
+            "threshold_status",
+            "triggered_maintenance_request__id",
+            "triggered_maintenance_request__number",
+        )
+    )
     if stream.operational_asset_id:
         readings_qs = readings_qs.filter(operational_asset_id=stream.operational_asset_id)
     elif stream.fixed_asset_id:
