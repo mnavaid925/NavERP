@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Risk Registers — Asset Risk Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Risk Management</span>
+            <span>/</span>
+            <span>Risk Registers</span>
+        </div>
+        <h1 class="page-title">Asset Risk Registers</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_risk_register_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Risk Register
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Identified Risks</div>
+            <div class="stat-value">{{ total_risks }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Risks</div>
+            <div class="stat-value">{{ critical_risks_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">High Risks</div>
+            <div class="stat-value">{{ high_risks_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Treatment</div>
+            <div class="stat-value">{{ active_treatment_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search risk, title, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="risk_category" class="form-select">
+                    <option value="">All Risk Categories</option>
+                    {% for val, label in category_choices %}
+                    <option value="{{ val }}" {% if request.GET.risk_category == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="inherent_risk_level" class="form-select">
+                    <option value="">All Inherent Levels</option>
+                    {% for val, label in level_choices %}
+                    <option value="{{ val }}" {% if request.GET.inherent_risk_level == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="treatment_strategy" class="form-select">
+                    <option value="">All Strategies</option>
+                    {% for val, label in strategy_choices %}
+                    <option value="{{ val }}" {% if request.GET.treatment_strategy == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline"><i data-lucide="filter" class="w-4 h-4"></i></button>
+                {% if request.GET.q or request.GET.status or request.GET.risk_category or request.GET.inherent_risk_level or request.GET.treatment_strategy %}
+                <a href="{% url 'assets:asset_risk_register_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="x" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Risk # & Title</th>
+                    <th>Category</th>
+                    <th>Subject Asset</th>
+                    <th>Inherent Score</th>
+                    <th>Residual Score</th>
+                    <th>Strategy</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rsk in risks %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_risk_register_detail' rsk.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ rsk.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ rsk.title|truncatechars:45 }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rsk.risk_category_badge_class }}">
+                            {{ rsk.get_risk_category_display }}
+                        </span>
+                        <div class="text-xs text-slate-500">{{ rsk.get_threat_source_display }}</div>
+                    </td>
+                    <td>
+                        {% if rsk.asset %}
+                        <div class="text-sm font-medium">{{ rsk.asset.name }}</div>
+                        <div class="text-xs text-slate-500">{{ rsk.asset.asset_code }}</div>
+                        {% elif rsk.category %}
+                        <div class="text-sm font-medium">{{ rsk.category.name }}</div>
+                        <div class="text-xs text-slate-500">Category-wide Profile</div>
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ rsk.inherent_risk_level_badge_class }}">
+                            Score: {{ rsk.inherent_risk_score }} ({{ rsk.get_inherent_risk_level_display }})
+                        </span>
+                        <div class="text-xs text-slate-500">L:{{ rsk.inherent_likelihood }} × I:{{ rsk.inherent_impact }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rsk.residual_risk_level_badge_class }}">
+                            Score: {{ rsk.residual_risk_score }} ({{ rsk.get_residual_risk_level_display }})
+                        </span>
+                        <div class="text-xs text-slate-500">L:{{ rsk.residual_likelihood }} × I:{{ rsk.residual_impact }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ rsk.treatment_strategy_badge_class }}">
+                            {{ rsk.get_treatment_strategy_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ rsk.status_badge_class }}">
+                            {{ rsk.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_risk_register_detail' rsk.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_risk_register_edit' rsk.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_risk_register_delete' rsk.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete risk register entry {{ rsk.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Asset Risk Registers Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">No risk registers match the criteria. Start by registering an operational risk.</p>
+                            <a href="{% url 'assets:asset_risk_register_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Risk Register
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} risks
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.risk_category %}&risk_category={{ request.GET.risk_category }}{% endif %}{% if request.GET.inherent_risk_level %}&inherent_risk_level={{ request.GET.inherent_risk_level }}{% endif %}{% if request.GET.treatment_strategy %}&treatment_strategy={{ request.GET.treatment_strategy }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.risk_category %}&risk_category={{ request.GET.risk_category }}{% endif %}{% if request.GET.inherent_risk_level %}&inherent_risk_level={{ request.GET.inherent_risk_level }}{% endif %}{% if request.GET.treatment_strategy %}&treatment_strategy={{ request.GET.treatment_strategy }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
