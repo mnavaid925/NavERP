@@ -132,6 +132,9 @@ def asset_executive_scorecard_detail(request, pk):
 @login_required
 @tenant_admin_required
 def asset_executive_scorecard_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating an executive scorecard.")
+        return redirect("assets:portfolio_dashboard")
     if request.method == "POST":
         form = AssetExecutiveScorecardForm(request.POST, tenant=request.tenant)
         if form.is_valid():
