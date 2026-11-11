@@ -1,7 +1,8 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -141,7 +142,11 @@ def asset_geofence_event_edit(request, pk):
 def asset_geofence_event_delete(request, pk):
     event = assets_object(request, AssetGeofenceEvent, pk)
     number = event.number
-    write_audit_log(request.user, event, "delete", tenant=request.tenant)
-    event.delete()
-    messages.success(request, f"Geofence alert {number} deleted successfully.")
+    try:
+        with transaction.atomic():
+            write_audit_log(request.user, event, "delete", tenant=request.tenant)
+            event.delete()
+        messages.success(request, f"Geofence alert {number} deleted successfully.")
+    except ProtectedError:
+        messages.error(request, f"Cannot delete geofence alert {number}: dependent records exist.")
     return redirect("assets:asset_geofence_event_list")
