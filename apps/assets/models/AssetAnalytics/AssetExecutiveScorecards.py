@@ -183,6 +183,8 @@ class AssetExecutiveScorecard(TenantNumbered):
             raise ValidationError(
                 "Published, board-approved, or archived scorecards are locked and cannot be recalculated."
             )
+        if not self.tenant_id:
+            return
 
         from apps.accounting.models.FixedAssets.FixedAssetsRegister import FixedAsset
         from apps.assets.models.AssetAnalytics.AssetLifecycleCostAnalyses import (
