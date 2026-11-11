@@ -290,6 +290,8 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
 
 ## 3. Views, Context Keys & URLconf Contract
 
+- **Shared List & Export Policy:** All 4 `11.14` list views paginate at `PAGE_SIZE = 15` (`_helpers.PAGE_SIZE`), and all CSV exports stream up to 10,000 rows via `qs[:10000].iterator(chunk_size=500)` with `csv_safe` formula-injection neutralization.
+
 ### 3.1 `AssetLifecycleCostAnalysis` Views & Routes (`AssetLifecycleCostAnalyses.py`)
 - `asset_lifecycle_cost_analysis_list` (`analytics/lifecycle-cost/`):
   - Filters (`GET`): `q`, `status`, `lifecycle_stage`, `recommendation`, `asset_category`, `org_unit`
