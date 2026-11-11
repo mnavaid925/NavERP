@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+
+from ._validators import validate_tenant_fks
 from django.db import models
 
 from apps.assets.models._base import TenantNumbered
@@ -292,5 +294,21 @@ class AssetTelemetryStream(TenantNumbered):
             errors["critical_threshold"] = (
                 "Critical threshold must be greater than or equal to warning threshold."
             )
+        if not self.operational_asset_id and not self.fixed_asset_id:
+            errors["operational_asset"] = (
+                "Link either an Operational Asset or a Financial Fixed Asset to ingest telemetry."
+            )
+        validate_tenant_fks(
+            self,
+            errors,
+            (
+                "connector",
+                "operational_asset",
+                "fixed_asset",
+                "steward",
+                "last_telemetry_reading",
+                "latest_maintenance_request",
+            ),
+        )
         if errors:
             raise ValidationError(errors)
