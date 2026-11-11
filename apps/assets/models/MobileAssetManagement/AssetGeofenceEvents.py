@@ -95,6 +95,7 @@ class AssetGeofenceEvent(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="assets_ageo_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "asset"], name="idx_ageo_ten_asset"),
             models.Index(fields=["tenant", "status"], name="idx_ageo_ten_stat"),
             models.Index(fields=["tenant", "event_type"], name="idx_ageo_ten_type"),
             models.Index(fields=["tenant", "severity"], name="idx_ageo_ten_sev"),
