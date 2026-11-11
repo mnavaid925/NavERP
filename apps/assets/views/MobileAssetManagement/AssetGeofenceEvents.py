@@ -53,7 +53,7 @@ def asset_geofence_event_list(request):
     critical_breaches_count = metrics["critical"]
     resolved_count = metrics["resolved"]
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, 15)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 
