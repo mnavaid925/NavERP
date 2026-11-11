@@ -303,6 +303,10 @@ class AssetReplacementPlan(TenantNumbered):
             models.Index(fields=["tenant", "funding_status"], name="idx_arpl_ten_fund"),
             models.Index(fields=["tenant", "priority_band"], name="idx_arpl_ten_prio"),
             models.Index(fields=["tenant", "planned_replacement_year"], name="idx_arpl_ten_year"),
+            models.Index(fields=["tenant", "asset_category"], name="idx_arpl_ten_cat"),
+            models.Index(fields=["tenant", "org_unit"], name="idx_arpl_ten_org"),
+            models.Index(fields=["tenant", "location"], name="idx_arpl_ten_loc"),
+            models.Index(fields=["tenant", "-priority_score"], name="idx_arpl_ten_pscore"),
         ]
 
     def __str__(self):
