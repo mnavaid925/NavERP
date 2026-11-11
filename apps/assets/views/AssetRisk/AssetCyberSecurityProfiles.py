@@ -89,9 +89,10 @@ def asset_cybersecurity_profile_list(request):
 @login_required
 def asset_cybersecurity_profile_detail(request, pk):
     profile = assets_object(
-        AssetCyberSecurityProfile.objects.select_related("asset"),
-        pk,
         request,
+        AssetCyberSecurityProfile,
+        pk,
+        select_related=["asset"],
     )
 
     return render(
@@ -133,7 +134,7 @@ def asset_cybersecurity_profile_create(request):
 @login_required
 @tenant_admin_required
 def asset_cybersecurity_profile_edit(request, pk):
-    profile = assets_object(AssetCyberSecurityProfile, pk, request)
+    profile = assets_object(request, AssetCyberSecurityProfile, pk)
     if request.method == "POST":
         form = AssetCyberSecurityProfileForm(request.POST, instance=profile, tenant=request.tenant)
         if form.is_valid():
@@ -160,7 +161,7 @@ def asset_cybersecurity_profile_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_cybersecurity_profile_delete(request, pk):
-    profile = assets_object(AssetCyberSecurityProfile, pk, request)
+    profile = assets_object(request, AssetCyberSecurityProfile, pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, profile, "delete", tenant=request.tenant)
@@ -174,7 +175,7 @@ def asset_cybersecurity_profile_delete(request, pk):
 @login_required
 @require_POST
 def asset_cybersecurity_profile_scan(request, pk):
-    profile = assets_object(AssetCyberSecurityProfile, pk, request)
+    profile = assets_object(request, AssetCyberSecurityProfile, pk)
     with transaction.atomic():
         profile.last_vulnerability_scan_date = timezone.now().date()
         profile.save(update_fields=["last_vulnerability_scan_date", "updated_at"])
