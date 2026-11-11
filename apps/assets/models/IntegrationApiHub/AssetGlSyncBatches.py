@@ -1,12 +1,11 @@
-import json
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-
-from ._validators import validate_tenant_fks
 from django.db import models
 from django.utils import timezone
+
+from ._validators import validate_json_object, validate_tenant_fks
 
 from apps.assets.models._base import TenantNumbered
 
@@ -267,19 +266,19 @@ class AssetGlSyncBatch(TenantNumbered):
             errors["offset_gl_account"] = (
                 "Offset GL account must differ from primary GL account."
             )
-        raw_json = (self.field_mapping_json or "").strip()
-        if raw_json:
-            try:
-                parsed = json.loads(raw_json)
-            except ValueError as exc:
-                errors["field_mapping_json"] = (
-                    "Field mapping must be valid JSON syntax."
-                )
-            else:
-                if not isinstance(parsed, dict):
-                    errors["field_mapping_json"] = (
-                        "Field mapping must be a JSON object ({...})."
-                    )
+        try:
+            validate_json_object(
+                self.field_mapping_json, field_label="Field mapping"
+            )
+        except ValidationError as exc:
+            errors["field_mapping_json"] = exc.messages
+        if (
+            self.payload_summary
+            and len(self.payload_summary.encode("utf-8")) > 65536
+        ):
+            errors["payload_summary"] = (
+                "Payload summary exceeds maximum size of 64 KB."
+            )
         validate_tenant_fks(
             self,
             errors,
