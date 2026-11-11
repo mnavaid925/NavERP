@@ -233,7 +233,7 @@ class AssetPortfolioScenario(TenantNumbered):
         )
         from apps.assets.models.AssetRisk.AssetRiskRegisters import AssetRiskRegister
 
-        horizon = max(1, int(self.horizon_years or 5))
+        horizon = min(30, max(1, int(self.horizon_years or 5)))
         tenant_id = self.tenant_id
 
         plan_qs = AssetReplacementPlan.objects.filter(tenant_id=tenant_id).exclude(
@@ -294,12 +294,14 @@ class AssetPortfolioScenario(TenantNumbered):
         base_fci = cap_decimal((base_backlog / total_crv) * Decimal("100.00")) if total_crv > ZERO else ZERO
         base_risk = risk_exposure
 
-        growth_factor = Decimal("1.00") + ((self.fleet_growth_pct or ZERO) / Decimal("100.00"))
+        growth_pct = max(Decimal("-95.00"), min(Decimal("500.00"), self.fleet_growth_pct or ZERO))
+        growth_factor = max(ZERO, Decimal("1.00") + (growth_pct / Decimal("100.00")))
         consol_pct = max(ZERO, min(Decimal("90.00"), self.consolidation_reduction_pct or ZERO))
         consol_factor = Decimal("1.00") - (consol_pct / Decimal("100.00"))
         eff_gain = max(ZERO, min(Decimal("80.00"), self.maintenance_efficiency_gain_pct or ZERO))
         eff_factor = Decimal("1.00") - (eff_gain / Decimal("100.00"))
-        accel_yrs = Decimal(self.acceleration_months or 0) / Decimal("12.00")
+        accel_months = max(-60, min(120, int(self.acceleration_months or 0)))
+        accel_yrs = Decimal(accel_months) / Decimal("12.00")
 
         capex_mult = growth_factor * consol_factor
         opex_mult = growth_factor * consol_factor * eff_factor
@@ -367,20 +369,21 @@ class AssetPortfolioScenario(TenantNumbered):
         sim_fci = cap_decimal((sim_backlog / sim_crv) * Decimal("100.00")) if sim_crv > ZERO else ZERO
         sim_risk = base_risk * risk_mult
 
-        self.baseline_capex_total = q2(base_capex)
-        self.simulated_capex_total = q2(sim_capex)
-        self.capex_variance_amount = q2(sim_capex - base_capex)
-        self.baseline_opex_maintenance = q2(base_opex)
-        self.simulated_opex_maintenance = q2(sim_opex)
-        self.opex_savings_amount = q2(base_opex - sim_opex)
-        self.baseline_deferred_backlog = q2(base_backlog)
-        self.simulated_deferred_backlog = q2(sim_backlog)
-        self.baseline_avg_health_score = q2(base_health)
-        self.simulated_avg_health_score = q2(sim_health)
+        max_money = Decimal("99999999999999.99")
+        self.baseline_capex_total = cap_decimal(base_capex, max_abs=max_money)
+        self.simulated_capex_total = cap_decimal(sim_capex, max_abs=max_money)
+        self.capex_variance_amount = cap_decimal(sim_capex - base_capex, max_abs=max_money)
+        self.baseline_opex_maintenance = cap_decimal(base_opex, max_abs=max_money)
+        self.simulated_opex_maintenance = cap_decimal(sim_opex, max_abs=max_money)
+        self.opex_savings_amount = cap_decimal(base_opex - sim_opex, max_abs=max_money)
+        self.baseline_deferred_backlog = cap_decimal(base_backlog, max_abs=max_money)
+        self.simulated_deferred_backlog = cap_decimal(sim_backlog, max_abs=max_money)
+        self.baseline_avg_health_score = cap_decimal(base_health, max_abs=Decimal("100.00"))
+        self.simulated_avg_health_score = cap_decimal(sim_health, max_abs=Decimal("100.00"))
         self.baseline_fci_pct = base_fci
         self.simulated_fci_pct = sim_fci
-        self.baseline_risk_exposure = q2(base_risk)
-        self.simulated_risk_exposure = q2(sim_risk)
+        self.baseline_risk_exposure = cap_decimal(base_risk, max_abs=max_money)
+        self.simulated_risk_exposure = cap_decimal(sim_risk, max_abs=max_money)
 
         # Economic NPV, Payback & BCR over horizon
         annual_opex_saving = (base_opex - sim_opex) / Decimal(horizon)
@@ -388,13 +391,17 @@ class AssetPortfolioScenario(TenantNumbered):
         annual_benefit = annual_opex_saving + annual_risk_saving
         incremental_capex = sim_capex - base_capex
 
-        disc_rate = (self.discount_rate_pct or Decimal("8.00")) / Decimal("100.00")
+        disc_pct = max(
+            ZERO,
+            min(Decimal("100.00"), self.discount_rate_pct if self.discount_rate_pct is not None else Decimal("8.00")),
+        )
+        disc_rate = disc_pct / Decimal("100.00")
         pv_benefits = ZERO
         for yr in range(1, horizon + 1):
             denom = (Decimal("1.00") + disc_rate) ** yr
             pv_benefits += annual_benefit / denom
 
-        self.net_present_value = q2(pv_benefits - incremental_capex)
+        self.net_present_value = cap_decimal(pv_benefits - incremental_capex, max_abs=max_money)
 
         investment = sim_capex if incremental_capex <= ZERO else incremental_capex
         if annual_benefit > ZERO and investment > ZERO:
@@ -423,8 +430,14 @@ class AssetPortfolioScenario(TenantNumbered):
         )
         if self.pk and self.baseline_scenario_id == self.pk:
             add_field_error(errors, "baseline_scenario", "A scenario cannot reference itself as its baseline.")
-        if (self.horizon_years or 0) < 1:
-            add_field_error(errors, "horizon_years", "Simulation horizon must be at least 1 year.")
+        if self.horizon_years is None or not (1 <= int(self.horizon_years) <= 30):
+            add_field_error(errors, "horizon_years", "Simulation horizon must be between 1 and 30 years.")
+        if self.acceleration_months is not None and not (-60 <= int(self.acceleration_months) <= 120):
+            add_field_error(errors, "acceleration_months", "Acceleration months must be between -60 and 120.")
+        if self.fleet_growth_pct is not None and (
+            self.fleet_growth_pct < Decimal("-95.00") or self.fleet_growth_pct > Decimal("500.00")
+        ):
+            add_field_error(errors, "fleet_growth_pct", "Fleet growth % must be between -95.00% and 500.00%.")
         if self.base_fiscal_year is not None and not (2000 <= int(self.base_fiscal_year) <= 2100):
             add_field_error(errors, "base_fiscal_year", "Base fiscal year must be between 2000 and 2100.")
         if (self.annual_capex_budget_limit or ZERO) < ZERO:
