@@ -2453,7 +2453,6 @@ def field_work_order_a(db, tenant_a, operational_asset_a, fixed_asset_a, admin_u
         status="in_progress",
         scheduled_start=now,
         scheduled_end=now + timezone.timedelta(hours=4),
-        scope_of_work="Inspect telemetry unit and calibrate strain gauge sensors." if hasattr(FieldWorkOrder, "scope_of_work") else "",
         work_performed_notes="Field diagnosis verified proper sensor output.",
     )
 
