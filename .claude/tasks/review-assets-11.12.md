@@ -49,6 +49,20 @@
   - `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25`: Add `"critical_spares_required"` to `.defer(...)` alongside other TextFields.
   - Secondary filter columns can optionally add composite indexes (`idx_ark_ten_strat`, `idx_arma_ten_eff`, `idx_abc_ten_scen`, `idx_acs_ten_dev`).
 
+### Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+- **Runtime URL Matrix (27 URLs + Landing):**
+  - 85 runtime checks passed.
+  - Cross-tenant IDOR verified: all foreign tenant accesses return 404.
+  - `@require_POST` verified: GET requests to mutators/actions return 405.
+- **Critical:**
+  - `CRIT-1`: `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31`: Search query `?q=<term>` crashes with HTTP 500 `FieldError: Unsupported lookup 'asset_code' for ForeignKey`. Fix: change to `Q(asset__code__icontains=q)`.
+- **Important:**
+  - `IMP-1`: `templates/assets/assetrisk/` (8 locations): Silent blank rendering of `asset.asset_code` across list and detail pages. Fix: change to `asset.code`.
+  - `IMP-2`: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: Unhandled `RelatedObjectDoesNotExist` in `__str__`.
+- **Minor:**
+  - `MIN-1`: Missing "Back to List" action button across all 4 detail templates.
+  - `MIN-2`: Action endpoint authorization disparity (`@tenant_admin_required`).
+
 ---
 
 ## Review Pass Log
@@ -109,6 +123,20 @@
   - `apps/assets/management/commands/seed_assets.py:3056,3079,3102,3125`: Remove redundant manual `.save()` / `calculate_scores()` calls.
   - `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25`: Add `"critical_spares_required"` to `.defer(...)` alongside other TextFields.
   - Secondary filter columns can optionally add composite indexes (`idx_ark_ten_strat`, `idx_arma_ten_eff`, `idx_abc_ten_scen`, `idx_acs_ten_dev`).
+
+### Pass 5: QA Smoke Tester (`qa-smoke-tester`)
+- **Runtime URL Matrix (27 URLs + Landing):**
+  - 85 runtime checks passed.
+  - Cross-tenant IDOR verified: all foreign tenant accesses return 404.
+  - `@require_POST` verified: GET requests to mutators/actions return 405.
+- **Critical:**
+  - `CRIT-1`: `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31`: Search query `?q=<term>` crashes with HTTP 500 `FieldError: Unsupported lookup 'asset_code' for ForeignKey`. Fix: change to `Q(asset__code__icontains=q)`.
+- **Important:**
+  - `IMP-1`: `templates/assets/assetrisk/` (8 locations): Silent blank rendering of `asset.asset_code` across list and detail pages. Fix: change to `asset.code`.
+  - `IMP-2`: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203`: Unhandled `RelatedObjectDoesNotExist` in `__str__`.
+- **Minor:**
+  - `MIN-1`: Missing "Back to List" action button across all 4 detail templates.
+  - `MIN-2`: Action endpoint authorization disparity (`@tenant_admin_required`).
 
 ---
 
