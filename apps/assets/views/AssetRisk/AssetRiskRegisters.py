@@ -95,9 +95,10 @@ def asset_risk_register_list(request):
 @login_required
 def asset_risk_register_detail(request, pk):
     risk = assets_object(
-        AssetRiskRegister.objects.select_related("asset", "category", "risk_owner"),
-        pk,
         request,
+        AssetRiskRegister,
+        pk,
+        select_related=["asset", "category", "risk_owner"],
     )
     mitigation_actions = risk.mitigation_actions.filter(tenant=request.tenant).select_related("assigned_to", "alternative_supplier")
 
@@ -141,7 +142,7 @@ def asset_risk_register_create(request):
 @login_required
 @tenant_admin_required
 def asset_risk_register_edit(request, pk):
-    risk = assets_object(AssetRiskRegister, pk, request)
+    risk = assets_object(request, AssetRiskRegister, pk)
     if request.method == "POST":
         form = AssetRiskRegisterForm(request.POST, instance=risk, tenant=request.tenant)
         if form.is_valid():
@@ -168,7 +169,7 @@ def asset_risk_register_edit(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_risk_register_delete(request, pk):
-    risk = assets_object(AssetRiskRegister, pk, request)
+    risk = assets_object(request, AssetRiskRegister, pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, risk, "delete", tenant=request.tenant)
@@ -182,7 +183,7 @@ def asset_risk_register_delete(request, pk):
 @login_required
 @require_POST
 def asset_risk_register_assess(request, pk):
-    risk = assets_object(AssetRiskRegister, pk, request)
+    risk = assets_object(request, AssetRiskRegister, pk)
     with transaction.atomic():
         risk.status = "assessed"
         risk.last_reviewed_at = timezone.now()
@@ -195,7 +196,7 @@ def asset_risk_register_assess(request, pk):
 @login_required
 @require_POST
 def asset_risk_register_close(request, pk):
-    risk = assets_object(AssetRiskRegister, pk, request)
+    risk = assets_object(request, AssetRiskRegister, pk)
     with transaction.atomic():
         risk.status = "closed"
         risk.last_reviewed_at = timezone.now()
