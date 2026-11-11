@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}{{ scenario.number }} — {{ scenario.name }} — What-If Scenario — NavERP{% endblock %}
 
@@ -79,21 +78,21 @@
         <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
         <div class="stat-body">
             <div class="stat-label">Simulated CapEx Total</div>
-            <div class="stat-value">${{ scenario.simulated_capex_total|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ scenario.simulated_capex_total|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="piggy-bank"></i></div>
         <div class="stat-body">
             <div class="stat-label">Projected OpEx Savings</div>
-            <div class="stat-value">${{ scenario.opex_savings_amount|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ scenario.opex_savings_amount|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="trending-up"></i></div>
         <div class="stat-body">
             <div class="stat-label">Net Present Value (NPV)</div>
-            <div class="stat-value">${{ scenario.net_present_value|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ scenario.net_present_value|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -131,7 +130,7 @@
                 </div>
                 <div class="detail-item">
                     <dt>Annual CapEx Limit</dt>
-                    <dd class="font-mono">${{ scenario.annual_capex_budget_limit|floatformat:2|intcomma }}</dd>
+                    <dd class="font-mono">${{ scenario.annual_capex_budget_limit|floatformat:"2g" }}</dd>
                 </div>
                 <div class="detail-item">
                     <dt>Discount / Inflation</dt>
@@ -176,20 +175,20 @@
                     <tbody>
                         <tr>
                             <td>Cumulative Capital Expenditure (CapEx)</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_capex_total|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_capex_total|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono">${{ scenario.capex_variance_amount|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_capex_total|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_capex_total|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono">${{ scenario.capex_variance_amount|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Maintenance Operating Spend (OpEx)</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_opex_maintenance|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_opex_maintenance|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono text-emerald-700">${{ scenario.opex_savings_amount|floatformat:2|intcomma }} saved</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_opex_maintenance|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_opex_maintenance|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-emerald-700">${{ scenario.opex_savings_amount|floatformat:"2g" }} saved</td>
                         </tr>
                         <tr>
                             <td>Deferred Maintenance Backlog</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_deferred_backlog|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_deferred_backlog|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_deferred_backlog|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_deferred_backlog|floatformat:"2g" }}</td>
                             <td class="text-right text-xs text-slate-500">Backlog impact</td>
                         </tr>
                         <tr>
@@ -206,8 +205,8 @@
                         </tr>
                         <tr>
                             <td>Open Financial Risk Exposure</td>
-                            <td class="text-right font-mono">${{ scenario.baseline_risk_exposure|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_risk_exposure|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ scenario.baseline_risk_exposure|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono font-semibold">${{ scenario.simulated_risk_exposure|floatformat:"2g" }}</td>
                             <td class="text-right text-xs text-slate-500">Risk mitigation</td>
                         </tr>
                     </tbody>
