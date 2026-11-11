@@ -18,9 +18,11 @@
         <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Telemetry Streams</a>
         <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline btn-sm">GL Sync Batches</a>
         <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline btn-sm">GIS Mappings</a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'assets:asset_integration_connector_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Connector
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -156,7 +158,9 @@
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
                             <a href="{% url 'assets:asset_integration_connector_detail' connector.pk %}" class="btn btn-outline btn-xs">View</a>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_integration_connector_edit' connector.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -167,9 +171,11 @@
                             <i data-lucide="plug" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
                             <div class="text-slate-600 font-medium">No asset integration connectors found</div>
                             <div class="text-xs text-slate-400 mb-3">Register ERP, SCADA/IoT, CMMS, General Ledger, or GIS endpoints for Asset Management.</div>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_integration_connector_create' %}" class="btn btn-primary btn-sm">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> Register First Connector
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
