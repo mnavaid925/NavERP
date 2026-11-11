@@ -27,31 +27,23 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Total Spatial Mappings</div>
-            <div class="stat-value">{{ total_count }}</div>
-        </div>
+        <div class="stat-label">Total Spatial Mappings</div>
+        <div class="stat-value">{{ total_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">In Sync</div>
-            <div class="stat-value">{{ in_sync_count }}</div>
-        </div>
+        <div class="stat-label">In Sync</div>
+        <div class="stat-value">{{ in_sync_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange"><i data-lucide="compass"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Drift Flagged</div>
-            <div class="stat-value">{{ drift_count }}</div>
-        </div>
+        <div class="stat-label">Drift Flagged</div>
+        <div class="stat-value">{{ drift_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="route"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Linear (LRS) Assets</div>
-            <div class="stat-value">{{ linear_count }}</div>
-        </div>
+        <div class="stat-label">Linear (LRS) Assets</div>
+        <div class="stat-value">{{ linear_count }}</div>
     </div>
 </div>
 
@@ -178,8 +170,8 @@
                     <td><span class="badge {{ mapping.status_badge_class }}">{{ mapping.get_status_display }}</span></td>
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
-                            <a href="{% url 'assets:asset_gis_mapping_detail' mapping.pk %}" class="btn btn-outline btn-xs">View</a>
-                            <a href="{% url 'assets:asset_gis_mapping_edit' mapping.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            <a href="{% url 'assets:asset_gis_mapping_detail' mapping.pk %}" class="btn btn-outline btn-sm">View</a>
+                            <a href="{% url 'assets:asset_gis_mapping_edit' mapping.pk %}" class="btn btn-outline btn-sm">Edit</a>
                         </div>
                     </td>
                 </tr>
@@ -202,7 +194,7 @@
     </div>
 
     {% if is_paginated %}
-    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
         <div class="text-xs text-slate-500">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
