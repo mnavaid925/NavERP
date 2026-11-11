@@ -52,8 +52,6 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
             "batch_date",
             "source_amount",
             "target_gl_amount",
-            "reconciliation_status",
-            "status",
             "field_mapping_json",
             "payload_summary",
             "notes",
@@ -87,8 +85,6 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
             "target_gl_amount": forms.NumberInput(
                 attrs={"class": "form-input", "step": "0.01", "min": "0"}
             ),
-            "reconciliation_status": forms.Select(attrs={"class": "form-select"}),
-            "status": forms.Select(attrs={"class": "form-select"}),
             "field_mapping_json": forms.Textarea(
                 attrs={
                     "class": "form-textarea font-mono text-xs",
