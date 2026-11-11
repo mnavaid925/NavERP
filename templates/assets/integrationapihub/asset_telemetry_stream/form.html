@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_telemetry_stream_list' %}">Telemetry Streams</a>
+            <span>/</span>
+            <span>{% if stream %}{{ stream.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">IoT / SCADA Stream Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the errors below:</div>
+                {% if form.non_field_errors %}
+                <div class="text-sm text-red-700 mb-1">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field in form %}
+                        {% for err in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ err }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector.id_for_label }}">Integration Connector *</label>
+                    {{ form.connector }}
+                    {% if form.connector.errors %}<div class="form-error">{{ form.connector.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.stream_protocol.id_for_label }}">Stream Protocol *</label>
+                    {{ form.stream_protocol }}
+                    {% if form.stream_protocol.errors %}<div class="form-error">{{ form.stream_protocol.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.stream_name.id_for_label }}">Stream Name *</label>
+                    {{ form.stream_name }}
+                    {% if form.stream_name.errors %}<div class="form-error">{{ form.stream_name.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.tag_address.id_for_label }}">Tag / Topic / Node Address *</label>
+                    {{ form.tag_address }}
+                    {% if form.tag_address.errors %}<div class="form-error">{{ form.tag_address.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.metric_type.id_for_label }}">Metric Type *</label>
+                    {{ form.metric_type }}
+                    {% if form.metric_type.errors %}<div class="form-error">{{ form.metric_type.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.metric_unit.id_for_label }}">Metric Unit *</label>
+                    {{ form.metric_unit }}
+                    {% if form.metric_unit.errors %}<div class="form-error">{{ form.metric_unit.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ingestion_mode.id_for_label }}">Ingestion Mode *</label>
+                    {{ form.ingestion_mode }}
+                    {% if form.ingestion_mode.errors %}<div class="form-error">{{ form.ingestion_mode.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.polling_interval_seconds.id_for_label }}">Polling Cadence (sec) *</label>
+                    {{ form.polling_interval_seconds }}
+                    {% if form.polling_interval_seconds.errors %}<div class="form-error">{{ form.polling_interval_seconds.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scale_factor.id_for_label }}">Scale Factor *</label>
+                    {{ form.scale_factor }}
+                    {% if form.scale_factor.errors %}<div class="form-error">{{ form.scale_factor.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.offset_value.id_for_label }}">Offset Value *</label>
+                    {{ form.offset_value }}
+                    {% if form.offset_value.errors %}<div class="form-error">{{ form.offset_value.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.deadband_delta.id_for_label }}">Deadband Delta *</label>
+                    {{ form.deadband_delta }}
+                    {% if form.deadband_delta.errors %}<div class="form-error">{{ form.deadband_delta.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.baseline_value.id_for_label }}">Baseline Value</label>
+                    {{ form.baseline_value }}
+                    {% if form.baseline_value.errors %}<div class="form-error">{{ form.baseline_value.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.warning_threshold.id_for_label }}">Warning Threshold</label>
+                    {{ form.warning_threshold }}
+                    {% if form.warning_threshold.errors %}<div class="form-error">{{ form.warning_threshold.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.critical_threshold.id_for_label }}">Critical Threshold</label>
+                    {{ form.critical_threshold }}
+                    {% if form.critical_threshold.errors %}<div class="form-error">{{ form.critical_threshold.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.stream_status.id_for_label }}">Stream Status *</label>
+                    {{ form.stream_status }}
+                    {% if form.stream_status.errors %}<div class="form-error">{{ form.stream_status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.steward.id_for_label }}">Telemetry Steward</label>
+                    {{ form.steward }}
+                    {% if form.steward.errors %}<div class="form-error">{{ form.steward.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-2">
+                    {{ form.auto_trigger_maintenance }}
+                    <label class="form-label mb-0" for="{{ form.auto_trigger_maintenance.id_for_label }}">Automatically create 11.5 Breakdown Maintenance Request when critical threshold is breached</label>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors|first }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Stream{% endif %}
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_telemetry_stream_detail' stream.pk %}{% else %}{% url 'assets:asset_telemetry_stream_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
