@@ -149,3 +149,15 @@ class MobileAssetInspection(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} - {self.title} ({self.get_overall_result_display()})"
+
+    @property
+    def status_badge_class(self):
+        return self.STATUS_CSS.get(self.status, "badge-slate")
+
+    @property
+    def result_badge_class(self):
+        return self.OVERALL_RESULT_CSS.get(self.overall_result, "badge-slate")
+
+    @property
+    def type_badge_class(self):
+        return self.INSPECTION_TYPE_CSS.get(self.inspection_type, "badge-slate")
