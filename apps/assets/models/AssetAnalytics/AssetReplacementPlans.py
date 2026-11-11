@@ -331,15 +331,19 @@ class AssetReplacementPlan(TenantNumbered):
     def recalculate_metrics(self):
         """Calculate Facility Condition Index (FCI), priority score/band, and inflation-adjusted CapEx."""
         if (
-            self.condition_assessment_id
+            self.tenant_id
+            and self.condition_assessment_id
             and self.condition_assessment
+            and self.condition_assessment.tenant_id == self.tenant_id
             and (self.condition_score is None or self.condition_score == Decimal("50.00"))
         ):
             self.condition_score = q2(self.condition_assessment.health_score)
 
         if (
-            self.lifecycle_analysis_id
+            self.tenant_id
+            and self.lifecycle_analysis_id
             and self.lifecycle_analysis
+            and self.lifecycle_analysis.tenant_id == self.tenant_id
             and (self.current_replacement_value or ZERO) <= ZERO
             and (self.lifecycle_analysis.current_replacement_value or ZERO) > ZERO
         ):
