@@ -81,7 +81,7 @@ class AssetGisMappingForm(TenantUniqueMixin, TenantModelForm):
             "elevation_meters": forms.NumberInput(
                 attrs={"class": "form-input", "step": "0.01"}
             ),
-            "is_linear_asset": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_linear_asset": forms.CheckboxInput(attrs={"class": "form-check"}),
             "lrs_route_id": forms.TextInput(
                 attrs={"class": "form-input", "placeholder": "e.g. ROUTE-I95-SEG4"}
             ),
