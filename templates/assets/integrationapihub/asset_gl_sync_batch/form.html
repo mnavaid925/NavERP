@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_gl_sync_batch_list' %}">GL Sync Batches</a>
+            <span>/</span>
+            <span>{% if batch %}{{ batch.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Financial &amp; General Ledger Batch Mapping</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the errors below:</div>
+                {% if form.non_field_errors %}
+                <div class="text-sm text-red-700 mb-1">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field in form %}
+                        {% for err in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ err }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector.id_for_label }}">Integration Connector *</label>
+                    {{ form.connector }}
+                    {% if form.connector.errors %}<div class="form-error">{{ form.connector.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_domain.id_for_label }}">Sync Domain *</label>
+                    {{ form.sync_domain }}
+                    {% if form.sync_domain.errors %}<div class="form-error">{{ form.sync_domain.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_direction.id_for_label }}">Sync Direction *</label>
+                    {{ form.sync_direction }}
+                    {% if form.sync_direction.errors %}<div class="form-error">{{ form.sync_direction.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.external_batch_ref.id_for_label }}">External Batch Reference</label>
+                    {{ form.external_batch_ref }}
+                    {% if form.external_batch_ref.errors %}<div class="form-error">{{ form.external_batch_ref.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.batch_date.id_for_label }}">Batch Date *</label>
+                    {{ form.batch_date }}
+                    {% if form.batch_date.errors %}<div class="form-error">{{ form.batch_date.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fiscal_period.id_for_label }}">Fiscal Period</label>
+                    {{ form.fiscal_period }}
+                    {% if form.fiscal_period.errors %}<div class="form-error">{{ form.fiscal_period.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gl_account.id_for_label }}">Primary GL Account (Dr)</label>
+                    {{ form.gl_account }}
+                    {% if form.gl_account.errors %}<div class="form-error">{{ form.gl_account.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.offset_gl_account.id_for_label }}">Offset GL Account (Cr)</label>
+                    {{ form.offset_gl_account }}
+                    {% if form.offset_gl_account.errors %}<div class="form-error">{{ form.offset_gl_account.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.source_amount.id_for_label }}">Source Subledger Amount *</label>
+                    {{ form.source_amount }}
+                    {% if form.source_amount.errors %}<div class="form-error">{{ form.source_amount.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_gl_amount.id_for_label }}">Target GL Amount *</label>
+                    {{ form.target_gl_amount }}
+                    {% if form.target_gl_amount.errors %}<div class="form-error">{{ form.target_gl_amount.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.currency.id_for_label }}">Currency</label>
+                    {{ form.currency }}
+                    {% if form.currency.errors %}<div class="form-error">{{ form.currency.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cost_center.id_for_label }}">Cost Center (Org Unit)</label>
+                    {{ form.cost_center }}
+                    {% if form.cost_center.errors %}<div class="form-error">{{ form.cost_center.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset</label>
+                    {{ form.fixed_asset }}
+                    {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.purchase_order.id_for_label }}">Purchase Order</label>
+                    {{ form.purchase_order }}
+                    {% if form.purchase_order.errors %}<div class="form-error">{{ form.purchase_order.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.capitalization.id_for_label }}">Asset Capitalization</label>
+                    {{ form.capitalization }}
+                    {% if form.capitalization.errors %}<div class="form-error">{{ form.capitalization.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.depreciation_schedule.id_for_label }}">Depreciation Schedule</label>
+                    {{ form.depreciation_schedule }}
+                    {% if form.depreciation_schedule.errors %}<div class="form-error">{{ form.depreciation_schedule.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.maintenance_request.id_for_label }}">Maintenance Request</label>
+                    {{ form.maintenance_request }}
+                    {% if form.maintenance_request.errors %}<div class="form-error">{{ form.maintenance_request.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Batch Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.reconciliation_status.id_for_label }}">Reconciliation Status *</label>
+                    {{ form.reconciliation_status }}
+                    {% if form.reconciliation_status.errors %}<div class="form-error">{{ form.reconciliation_status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.field_mapping_json.id_for_label }}">Field Mapping JSON</label>
+                    {{ form.field_mapping_json }}
+                    {% if form.field_mapping_json.errors %}<div class="form-error">{{ form.field_mapping_json.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.payload_summary.id_for_label }}">Payload Summary</label>
+                    {{ form.payload_summary }}
+                    {% if form.payload_summary.errors %}<div class="form-error">{{ form.payload_summary.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors|first }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create GL Sync Batch{% endif %}
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}{% else %}{% url 'assets:asset_gl_sync_batch_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
