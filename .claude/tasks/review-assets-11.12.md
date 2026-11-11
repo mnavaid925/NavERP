@@ -24,9 +24,10 @@ All six reviewers have run in strictly serial order:
 
 ### Critical
 
-- [ ] **`C1`**: `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31` — HTTP 500 `FieldError` Crash on Search Filter
+- [x] **`C1`**: `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py:31` — HTTP 500 `FieldError` Crash on Search Filter
   - **Issue:** Query uses `Q(asset__asset_code__icontains=q)`, but `scm.Asset` defines `code`, not `asset_code`. Any search query `?q=<term>` on `/assets/risk/cybersecurity/` crashes with `FieldError: Unsupported lookup 'asset_code'`.
   - **Fix:** Replace `Q(asset__asset_code__icontains=q)` with `Q(asset__code__icontains=q)`.
+  - **Status:** [x] fixed — fix(assets): fix asset code field lookup in cybersecurity search filter
 
 ---
 
