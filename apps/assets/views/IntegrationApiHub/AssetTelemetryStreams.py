@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -257,99 +257,136 @@ def stream_delete(request, pk):
 @require_POST
 def ingest_sample_reading(request, pk):
     """Normalize a simulated/sample payload into 11.7 AssetTelemetryReading and trigger 11.5 CBM if critical."""
-    stream = assets_object(
-        request,
-        AssetTelemetryStream,
-        pk,
-        select_related=("connector", "operational_asset", "fixed_asset"),
-    )
-    if stream.stream_status == "decommissioned":
-        messages.error(
-            request,
-            f"Stream {stream.number} is decommissioned and cannot ingest readings.",
-        )
-        return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
-
     raw_input = (request.POST.get("raw_value") or "").strip()
-    if raw_input:
-        try:
-            raw_val = Decimal(raw_input)
-        except InvalidOperation:
-            messages.error(request, "Raw telemetry reading must be a valid decimal number.")
-            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
-        if not raw_val.is_finite():
-            messages.error(request, "Raw telemetry reading must be finite.")
-            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
-    else:
-        raw_val = (
-            stream.warning_threshold
-            if stream.warning_threshold is not None
-            else (
-                stream.baseline_value
-                if stream.baseline_value is not None
-                else Decimal("25.0000")
-            )
-        )
-
-    normalized = (raw_val * stream.scale_factor + stream.offset_value).quantize(
-        Decimal("0.0001")
-    )
-    now = timezone.now()
-
-    if (
-        stream.deadband_delta
-        and stream.deadband_delta > Decimal("0")
-        and stream.last_ingested_value is not None
-        and abs(normalized - stream.last_ingested_value) < stream.deadband_delta
-    ):
-        stream.last_ingested_at = now
-        stream.save(update_fields=["last_ingested_at", "updated_at"])
-        messages.info(
-            request,
-            f"Sample reading {normalized} fell within deadband delta ({stream.deadband_delta}); no duplicate telemetry reading recorded.",
-        )
-        return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
-
-    mapped_metric_type, mapped_unit, note = stream.resolve_telemetry_metric_and_unit()
-    computed_status = stream.evaluate_reading_status(normalized)
-    reading_source = (
-        "scada_historian"
-        if stream.connector.connector_category == "iot_scada"
-        else "iot_sensor"
-    )
 
     with transaction.atomic():
-        reading = AssetTelemetryReading.objects.create(
-            tenant=stream.tenant,
-            operational_asset=stream.operational_asset,
-            fixed_asset=stream.fixed_asset,
-            sensor_identifier=stream.tag_address[:100],
-            recorded_by=request.user,
-            recorded_at=now,
-            source=reading_source,
-            metric_type=mapped_metric_type,
-            metric_unit=mapped_unit,
-            reading_value=normalized,
-            baseline_value=stream.baseline_value,
-            threshold_status=computed_status,
-            alert_notes=note,
+        stream = get_object_or_404(
+            AssetTelemetryStream.objects.select_for_update(),
+            pk=pk,
+            tenant=request.tenant,
         )
-        # AssetTelemetryReading.save() recalculates % deviation against baseline; keep stream threshold breach explicit.
-        if computed_status in ("warning", "critical"):
-            AssetTelemetryReading.objects.filter(pk=reading.pk).update(
-                threshold_status=computed_status
+        if stream.stream_status != "active":
+            messages.error(
+                request,
+                f"Stream {stream.number} is {stream.get_stream_status_display()} and must be Active to ingest readings.",
             )
-            reading.refresh_from_db()
+            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+
+        connector = stream.connector
+        op_asset = stream.operational_asset
+        fixed_asset = stream.fixed_asset
+        existing_mr = stream.latest_maintenance_request
+
+        for fk_label, rel in (
+            ("Connector", connector),
+            ("Operational asset", op_asset),
+            ("Fixed asset", fixed_asset),
+        ):
+            if rel is not None and getattr(rel, "tenant_id", None) != stream.tenant_id:
+                messages.error(
+                    request,
+                    f"Cannot ingest into {stream.number}: {fk_label} belongs to another workspace.",
+                )
+                return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+
+        if raw_input:
+            if len(raw_input) > 32:
+                messages.error(
+                    request,
+                    "Raw telemetry reading exceeds maximum input length (32 characters).",
+                )
+                return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+            try:
+                raw_val = Decimal(raw_input)
+            except (InvalidOperation, ValueError):
+                messages.error(
+                    request, "Raw telemetry reading must be a valid decimal number."
+                )
+                return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+            if not raw_val.is_finite():
+                messages.error(request, "Raw telemetry reading must be finite.")
+                return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+        else:
+            raw_val = (
+                stream.warning_threshold
+                if stream.warning_threshold is not None
+                else (
+                    stream.baseline_value
+                    if stream.baseline_value is not None
+                    else Decimal("25.0000")
+                )
+            )
+
+        try:
+            if abs(raw_val) > Decimal("999999999999"):
+                raise InvalidOperation("Raw reading magnitude out of bounds.")
+            normalized = (raw_val * stream.scale_factor + stream.offset_value).quantize(
+                Decimal("0.0001")
+            )
+        except (InvalidOperation, ArithmeticError):
+            messages.error(
+                request,
+                "Raw telemetry reading is outside the supported decimal precision/range.",
+            )
+            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+
+        if not normalized.is_finite() or abs(normalized) > Decimal("99999999.9999"):
+            messages.error(
+                request,
+                "Normalized telemetry reading must be between -99,999,999.9999 and 99,999,999.9999.",
+            )
+            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+
+        now = timezone.now()
+
+        if (
+            stream.deadband_delta
+            and stream.deadband_delta > Decimal("0")
+            and stream.last_ingested_value is not None
+            and abs(normalized - stream.last_ingested_value) < stream.deadband_delta
+        ):
+            stream.last_ingested_at = now
+            stream.save(update_fields=["last_ingested_at", "updated_at"])
+            messages.info(
+                request,
+                f"Sample reading {normalized} fell within deadband delta ({stream.deadband_delta}); no duplicate telemetry reading recorded.",
+            )
+            return redirect("assets:asset_telemetry_stream_detail", pk=stream.pk)
+
+        mapped_metric_type, mapped_unit, note = (
+            stream.resolve_telemetry_metric_and_unit()
+        )
+        computed_status = stream.evaluate_reading_status(normalized)
+        reading_source = (
+            "scada_historian"
+            if connector.connector_category == "iot_scada"
+            else "iot_sensor"
+        )
+
+        open_mr_statuses = ("submitted", "triaged", "assigned", "in_progress")
+        existing_open_mr = (
+            existing_mr
+            if (
+                existing_mr is not None
+                and existing_mr.tenant_id == stream.tenant_id
+                and existing_mr.status in open_mr_statuses
+            )
+            else None
+        )
 
         maint_req = None
-        if computed_status == "critical" and stream.auto_trigger_maintenance:
+        if (
+            computed_status == "critical"
+            and stream.auto_trigger_maintenance
+            and existing_open_mr is None
+        ):
             maint_req = AssetMaintenanceRequest.objects.create(
                 tenant=stream.tenant,
                 title=f"IoT Critical Alert: {stream.stream_name} ({stream.number})"[
                     :255
                 ],
-                fixed_asset=stream.fixed_asset,
-                operational_asset=stream.operational_asset,
+                fixed_asset=fixed_asset,
+                operational_asset=op_asset,
                 requester=request.user,
                 request_type="breakdown_repair",
                 urgency="critical",
@@ -361,10 +398,33 @@ def ingest_sample_reading(request, pk):
                     f"breaching critical threshold {stream.critical_threshold}."
                 ),
             )
-            AssetTelemetryReading.objects.filter(pk=reading.pk).update(
-                triggered_maintenance_request=maint_req
-            )
             stream.latest_maintenance_request = maint_req
+
+        reading = AssetTelemetryReading.objects.create(
+            tenant=stream.tenant,
+            operational_asset=op_asset,
+            fixed_asset=fixed_asset,
+            sensor_identifier=stream.tag_address[:100],
+            recorded_by=request.user,
+            recorded_at=now,
+            source=reading_source,
+            metric_type=mapped_metric_type,
+            metric_unit=mapped_unit,
+            reading_value=normalized,
+            baseline_value=stream.baseline_value,
+            threshold_status=computed_status,
+            alert_notes=note,
+            triggered_maintenance_request=maint_req,
+        )
+        # AssetTelemetryReading.save() recalculates % deviation against baseline; preserve stream threshold classification cleanly.
+        if (
+            stream.warning_threshold is not None
+            or stream.critical_threshold is not None
+        ) and reading.threshold_status != computed_status:
+            AssetTelemetryReading.objects.filter(pk=reading.pk).update(
+                threshold_status=computed_status
+            )
+            reading.threshold_status = computed_status
 
         stream.last_ingested_value = normalized
         stream.last_ingested_at = now
@@ -398,6 +458,11 @@ def ingest_sample_reading(request, pk):
         messages.warning(
             request,
             f"Ingested {normalized} -> {reading.number} (CRITICAL). Auto-created maintenance request {maint_req.number}.",
+        )
+    elif computed_status == "critical" and existing_open_mr is not None:
+        messages.warning(
+            request,
+            f"Ingested {normalized} -> {reading.number} (CRITICAL). Existing open maintenance request {existing_open_mr.number} remains active.",
         )
     else:
         messages.success(
