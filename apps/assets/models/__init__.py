@@ -66,6 +66,12 @@ from apps.assets.models.AssetCompliance import (
     AssetComplianceIncident,
     AssetPermitLicense,
 )
+from apps.assets.models.AssetRisk import (
+    AssetBusinessContinuityPlan,
+    AssetCyberSecurityProfile,
+    AssetRiskMitigationAction,
+    AssetRiskRegister,
+)
 
 __all__ = [
     "TenantOwned",
@@ -114,4 +120,8 @@ __all__ = [
     "AssetComplianceAudit",
     "AssetPermitLicense",
     "AssetComplianceIncident",
+    "AssetRiskRegister",
+    "AssetBusinessContinuityPlan",
+    "AssetCyberSecurityProfile",
+    "AssetRiskMitigationAction",
 ]
