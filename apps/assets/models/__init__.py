@@ -72,6 +72,12 @@ from apps.assets.models.AssetRisk import (
     AssetRiskMitigationAction,
     AssetRiskRegister,
 )
+from apps.assets.models.MobileAssetManagement import (
+    AssetGeofenceEvent,
+    AssetScanLog,
+    FieldWorkOrder,
+    MobileAssetInspection,
+)
 
 __all__ = [
     "TenantOwned",
@@ -124,4 +130,8 @@ __all__ = [
     "AssetBusinessContinuityPlan",
     "AssetCyberSecurityProfile",
     "AssetRiskMitigationAction",
+    "MobileAssetInspection",
+    "FieldWorkOrder",
+    "AssetScanLog",
+    "AssetGeofenceEvent",
 ]
