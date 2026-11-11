@@ -57,5 +57,5 @@ class AssetScanLogForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["asset"])
+        reject_foreign(self, cleaned_data, ["asset", "scanned_by"])
         return cleaned_data
