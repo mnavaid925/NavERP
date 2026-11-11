@@ -150,6 +150,20 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
             self.fields["cost_center"].queryset = OrgUnit.objects.filter(
                 tenant=self.tenant
             ).order_by("name")
+        else:
+            for fk_field in (
+                "connector",
+                "fiscal_period",
+                "gl_account",
+                "offset_gl_account",
+                "fixed_asset",
+                "purchase_order",
+                "capitalization",
+                "depreciation_schedule",
+                "maintenance_request",
+                "cost_center",
+            ):
+                self.fields[fk_field].queryset = self.fields[fk_field].queryset.model.objects.none()
 
         if self.instance and self.instance.currency_id:
             self.fields["currency"].queryset = Currency.objects.filter(
