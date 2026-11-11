@@ -106,7 +106,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
   - `retry_policy_max`: `PositiveSmallIntegerField(default=3)`
   - `polling_interval_minutes`: `PositiveIntegerField(default=15)`
   - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="draft")`
-  - `health_status`: `CharField(max_length=20, choices=HEALTH_STATUS_CHOICES, default="unverified")`
+  - `health_status`: `CharField(max_length=20, choices=HEALTH_STATUS_CHOICES, default="unverified", editable=False)`
   - `vendor_partner`: `ForeignKey("core.Party", on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")`
   - `default_org_unit`: `ForeignKey("core.OrgUnit", on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")`
   - `default_currency`: `ForeignKey("accounting.Currency", on_delete=models.SET_NULL, null=True, blank=True, related_name="asset_integration_connectors")` *(GLOBAL — no tenant)*
@@ -281,8 +281,8 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
   - `source_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
   - `target_gl_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"))`
   - `variance_amount`: `DecimalField(max_digits=16, decimal_places=2, default=Decimal("0.00"), editable=False)`
-  - `reconciliation_status`: `CharField(max_length=24, choices=RECONCILIATION_STATUS_CHOICES, default="pending")`
-  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft")`
+  - `reconciliation_status`: `CharField(max_length=24, choices=RECONCILIATION_STATUS_CHOICES, default="pending", editable=False)`
+  - `status`: `CharField(max_length=24, choices=STATUS_CHOICES, default="draft", editable=False)`
   - `records_processed`: `PositiveIntegerField(default=0, editable=False)`
   - `records_succeeded`: `PositiveIntegerField(default=0, editable=False)`
   - `records_failed`: `PositiveIntegerField(default=0, editable=False)`
@@ -362,7 +362,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
   - `geojson_payload`: `TextField(blank=True)`
   - `system_of_record`: `CharField(max_length=24, choices=SYSTEM_OF_RECORD_CHOICES, default="erp_authoritative")`
   - `sync_direction`: `CharField(max_length=20, choices=SYNC_DIRECTION_CHOICES, default="bidirectional")`
-  - `drift_status`: `CharField(max_length=24, choices=DRIFT_STATUS_CHOICES, default="unverified")`
+  - `drift_status`: `CharField(max_length=24, choices=DRIFT_STATUS_CHOICES, default="unverified", editable=False)`
   - `status`: `CharField(max_length=20, choices=STATUS_CHOICES, default="active")`
   - `last_spatial_sync_at`: `DateTimeField(null=True, blank=True, editable=False)`
   - `gis_custodian`: `ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="custodian_gis_mappings")`
@@ -384,11 +384,11 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
 
 ## 2. Forms Contract
 
-All 4 forms subclass `(TenantUniqueMixin, TenantModelForm)` (from `apps.assets.forms._common`), use explicit `Meta.fields` whitelists (NEVER `__all__` or `exclude`), scope tenant FKs to `self.tenant` inside `if hasattr(self, "tenant") and self.tenant is not None:`, NEVER pass global `Currency` to `reject_foreign(...)`, and NEVER query `.filter(is_active=True)` on `core.OrgUnit` or `core.Party`.
+All 4 forms subclass `(TenantUniqueMixin, TenantModelForm)` (from `apps.assets.forms._common`), use explicit `Meta.fields` whitelists (NEVER `__all__` or `exclude`), scope tenant FKs to `self.tenant` inside `if hasattr(self, "tenant") and self.tenant is not None:` (and fail closed to `.none()` when `self.tenant is None`), NEVER pass global `Currency` to `reject_foreign(...)`, and NEVER query `.filter(is_active=True)` on `core.OrgUnit` or `core.Party`.
 
 ### 2.1 `AssetIntegrationConnectorForm`
-- **`Meta.fields`** (20 editable fields; excludes `tenant`, `number`, `api_key_prefix`, `api_key_hash`, `last_heartbeat_at`, `last_sync_at`, `consecutive_failures`, `last_error_message`, `created_at`, `updated_at`):
-  `["name", "connector_category", "provider", "protocol", "sync_direction", "environment", "endpoint_url", "auth_method", "rate_limit_rpm", "timeout_seconds", "retry_policy_max", "polling_interval_minutes", "status", "health_status", "vendor_partner", "default_org_unit", "default_currency", "owner", "webhook_verify_tls", "notes"]`
+- **`Meta.fields`** (19 editable fields; excludes `tenant`, `number`, `health_status`, `api_key_prefix`, `api_key_hash`, `last_heartbeat_at`, `last_sync_at`, `consecutive_failures`, `last_error_message`, `created_at`, `updated_at`):
+  `["name", "connector_category", "provider", "protocol", "sync_direction", "environment", "endpoint_url", "auth_method", "rate_limit_rpm", "timeout_seconds", "retry_policy_max", "polling_interval_minutes", "status", "vendor_partner", "default_org_unit", "default_currency", "owner", "webhook_verify_tls", "notes"]`
 - **Widgets**: `"endpoint_url": forms.TextInput(...)` (NOT `URLInput`).
 - **FK Querysets**: `vendor_partner` (`Party.objects.filter(tenant=self.tenant)`), `default_org_unit` (`OrgUnit.objects.filter(tenant=self.tenant)`), `default_currency` (`Currency.objects.filter(is_active=True)`), `owner` (`User.objects.filter(tenant=self.tenant)`).
 - **`clean_endpoint_url()`**: delegates to `validate_connector_endpoint_url`.
@@ -404,14 +404,14 @@ All 4 forms subclass `(TenantUniqueMixin, TenantModelForm)` (from `apps.assets.f
   - `polling_interval_seconds >= 1`, `scale_factor != 0`, `deadband_delta >= 0`, `critical_threshold >= warning_threshold` when both provided.
 
 ### 2.3 `AssetGlSyncBatchForm`
-- **`Meta.fields`** (22 editable fields; excludes `tenant`, `number`, `variance_amount`, `records_processed`, `records_succeeded`, `records_failed`, `synced_at`, `journal_entry`, `executed_by`, `created_at`, `updated_at`):
-  `["connector", "sync_domain", "sync_direction", "external_batch_ref", "fiscal_period", "gl_account", "offset_gl_account", "fixed_asset", "purchase_order", "capitalization", "depreciation_schedule", "maintenance_request", "cost_center", "currency", "batch_date", "source_amount", "target_gl_amount", "reconciliation_status", "status", "field_mapping_json", "payload_summary", "notes"]`
+- **`Meta.fields`** (20 editable fields; excludes `tenant`, `number`, `variance_amount`, `reconciliation_status`, `status`, `records_processed`, `records_succeeded`, `records_failed`, `synced_at`, `journal_entry`, `executed_by`, `created_at`, `updated_at`):
+  `["connector", "sync_domain", "sync_direction", "external_batch_ref", "fiscal_period", "gl_account", "offset_gl_account", "fixed_asset", "purchase_order", "capitalization", "depreciation_schedule", "maintenance_request", "cost_center", "currency", "batch_date", "source_amount", "target_gl_amount", "field_mapping_json", "payload_summary", "notes"]`
 - **FK Querysets**: 10 tenant FKs (`connector`, `fiscal_period`, `gl_account` [is_active=True or saved], `offset_gl_account`, `fixed_asset`, `purchase_order`, `capitalization`, `depreciation_schedule`, `maintenance_request`, `cost_center`) scoped by `tenant=self.tenant`; `currency` filtered `Currency.objects.filter(is_active=True)`.
-- **`clean()`**: `reject_foreign(self, cleaned_data, ["connector", "fiscal_period", "gl_account", "offset_gl_account", "fixed_asset", "purchase_order", "capitalization", "depreciation_schedule", "maintenance_request", "cost_center"])` (NOT `currency`); validate `source_amount >= 0`, `target_gl_amount >= 0`, `gl_account != offset_gl_account`, valid JSON dict on `field_mapping_json`.
+- **`clean()`**: `reject_foreign(self, cleaned_data, ["connector", "fiscal_period", "gl_account", "offset_gl_account", "fixed_asset", "purchase_order", "capitalization", "depreciation_schedule", "maintenance_request", "cost_center"])` (NOT `currency`); validate `source_amount >= 0`, `target_gl_amount >= 0`, `gl_account != offset_gl_account`, bounded finite JSON dict on `field_mapping_json`, bounded size on `payload_summary`.
 
 ### 2.4 `AssetGisMappingForm`
-- **`Meta.fields`** (23 editable fields; excludes `tenant`, `number`, `last_spatial_sync_at`, `created_at`, `updated_at`):
-  `["connector", "operational_asset", "location", "org_unit", "external_feature_id", "layer_name", "geometry_type", "coordinate_system_srid", "latitude", "longitude", "elevation_meters", "is_linear_asset", "lrs_route_id", "lrs_from_measure", "lrs_to_measure", "lrs_measure_unit", "geojson_payload", "system_of_record", "sync_direction", "drift_status", "status", "gis_custodian", "notes"]`
+- **`Meta.fields`** (22 editable fields; excludes `tenant`, `number`, `drift_status`, `last_spatial_sync_at`, `created_at`, `updated_at`):
+  `["connector", "operational_asset", "location", "org_unit", "external_feature_id", "layer_name", "geometry_type", "coordinate_system_srid", "latitude", "longitude", "elevation_meters", "is_linear_asset", "lrs_route_id", "lrs_from_measure", "lrs_to_measure", "lrs_measure_unit", "geojson_payload", "system_of_record", "sync_direction", "status", "gis_custodian", "notes"]`
 - **FK Querysets**: `connector`, `operational_asset`, `location`, `org_unit`, `gis_custodian` scoped by `tenant=self.tenant`.
 - **`clean()`**: `reject_foreign(self, cleaned_data, ["connector", "operational_asset", "location", "org_unit", "gis_custodian"])`; validate coordinate bounds, SRID >= 1, LRS measure range, valid JSON object on `geojson_payload`.
 
@@ -419,7 +419,7 @@ All 4 forms subclass `(TenantUniqueMixin, TenantModelForm)` (from `apps.assets.f
 
 ## 3. Views, Custom Actions & URLconf Contract
 
-All list/detail/edit/delete/action views use `assets_scope` and `assets_object(..., select_related=...)` from `apps.assets.views._common`, `@login_required` (with `@tenant_admin_required` on `rotate_secret` and `execute_reconcile_batch`), and `@require_POST` on mutations (`delete` and custom actions). Pagination: `Paginator(qs, 25)` passing `paginator`, `page_obj`, `is_paginated` alongside entity-specific context keys.
+All list/detail/edit/delete/action views use `assets_scope` and `assets_object(..., select_related=...)` from `apps.assets.views._common`, `@login_required` (with `@tenant_admin_required` on `connector_create`, `connector_edit`, `connector_delete`, `rotate_secret`, `stream_delete`, `batch_delete`, `execute_reconcile_batch`, `mapping_delete`; create views also fail closed when `request.tenant is None`), and `@require_POST` on mutations (`delete` and custom actions). Non-admin users do not see `@tenant_admin_required` action/delete buttons in list/detail templates. Pagination: `Paginator(qs, 25)` passing `paginator`, `page_obj`, `is_paginated` alongside entity-specific context keys.
 
 ### 3.1 `AssetIntegrationConnectors`
 - **URL Patterns** (prefix `integration/connectors/`):
@@ -453,10 +453,10 @@ All list/detail/edit/delete/action views use `assets_scope` and `assets_object(.
   - Detail: `stream`, `recent_readings` (last 10 `AssetTelemetryReading` records filtered by tenant + linked asset)
   - Form: `form`, `stream` (`None` on create), `is_edit`, `title`
 - **Action `ingest_sample_reading` (`@login_required`, `@require_POST`)**:
-  - Reads `raw_value` from POST (defaults to `stream.warning_threshold or stream.baseline_value or Decimal("25.0000")` when omitted/blank; invalid decimal triggers `messages.error` and redirects).
-  - Computes `normalized = (raw * stream.scale_factor) + stream.offset_value`.
+  - Reads `raw_value` from POST (defaults to `stream.warning_threshold or stream.baseline_value or Decimal("25.0000")` when omitted/blank; rejects invalid/non-finite decimals, inputs > 32 chars, or `abs(normalized) > Decimal("99999999.9999")` with `messages.error` and redirect).
+  - Inside `transaction.atomic()` locking the stream with `select_for_update()`: requires `stream.stream_status == "active"`, validates linked FK tenancy, computes `normalized = (raw * stream.scale_factor) + stream.offset_value`.
   - If `stream.deadband_delta > 0 and stream.last_ingested_value is not None and abs(normalized - stream.last_ingested_value) < stream.deadband_delta`: updates `last_ingested_at` only and reports deadband skip.
-  - Otherwise inside `transaction.atomic()`: maps `metric_type`/`metric_unit` via `STREAM_TO_TELEMETRY_METRIC_MAP`, computes stream threshold status (`critical` if `>= critical_threshold`, `warning` if `>= warning_threshold`, else `normal`), creates `AssetTelemetryReading`, enforces computed status post-save via `.update(threshold_status=...)` when warning/critical breached, auto-creates `AssetMaintenanceRequest` (`urgency="critical"`, `request_type="breakdown_repair"`, non-blank `title` + `symptom_description`) if `critical` & `stream.auto_trigger_maintenance`, updates `stream` telemetry pointers/counts, logs `write_audit_log(..., "ingest", ...)`.
+  - Otherwise maps `metric_type`/`metric_unit` via `STREAM_TO_TELEMETRY_METRIC_MAP` / `UNIT_FALLBACK_MAP`, computes stream threshold status (`critical` if `>= critical_threshold`, `warning` if `>= warning_threshold`, else `normal`), deduplicates open `AssetMaintenanceRequest` when `latest_maintenance_request.status in ("submitted", "triaged", "assigned", "in_progress")`, creates `AssetTelemetryReading` (linking `triggered_maintenance_request`), syncs `threshold_status` post-save when thresholds are configured (including `"normal"`), updates `stream` telemetry pointers/counts, logs `write_audit_log(..., "ingest", ...)`.
 
 ### 3.3 `AssetGlSyncBatches`
 - **URL Patterns** (prefix `integration/gl-sync-batches/`):
@@ -471,11 +471,12 @@ All list/detail/edit/delete/action views use `assets_scope` and `assets_object(.
   - List: `batches`, `paginator`, `page_obj`, `is_paginated`, `total_count`, `posted_count`, `variance_count`, `draft_count`, `connectors`, `domain_choices`, `status_choices`, `reconciliation_choices`, `search_query`
   - Detail: `batch`
   - Form: `form`, `batch` (`None` on create), `is_edit`, `title`
-- **Action `execute_reconcile_batch` (`@tenant_admin_required`, `@require_POST`)**:
-  - If `batch.fiscal_period and not batch.fiscal_period.is_open`: error + redirect cleanly without state change or JE creation.
+- **Action `execute_reconcile_batch` (`@tenant_admin_required`, `@require_POST`) & Posted Edit Lock**:
+  - `batch_edit` rejects editing once `batch.journal_entry_id is not None or batch.status == "posted"`; UI hides Execute/Edit/Delete on posted batches.
+  - Inside `transaction.atomic()` locking the batch row with `select_for_update()`: exits early if already posted (`journal_entry_id is not None or status == "posted"`) or `status == "failed"`, verifies same-tenant FKs (`connector`, `fiscal_period`, `gl_account`, `offset_gl_account`, `cost_center`), and if `batch.fiscal_period and not batch.fiscal_period.is_open`: error + redirect cleanly without state change or JE creation.
   - Computes `variance = batch.source_amount - batch.target_gl_amount`.
   - Sets `reconciliation_status = "reconciled" if variance == Decimal("0.00") else "variance_flagged"`.
-  - Inside `transaction.atomic()`: creates 1 balanced `JournalEntry(entry_type="recurring", status="posted", entry_date=batch.batch_date, fiscal_period=batch.fiscal_period)` + 2 `JournalLine` rows (Debit `gl_account`, Credit `offset_gl_account`, strictly one nonzero per line) ONLY when `sync_domain in ("depreciation_posting", "capitalization_sync", "work_order_cost_rollup")`, both accounts set, `source_amount > 0`, and `batch.journal_entry_id is None`.
+  - Creates 1 balanced `JournalEntry(entry_type="recurring", status="posted", entry_date=batch.batch_date, fiscal_period=batch.fiscal_period)` + 2 validated `JournalLine` rows (`full_clean()` + `save()`, Debit `gl_account`, Credit `offset_gl_account`, strictly one nonzero per line) ONLY when `sync_domain in ("depreciation_posting", "capitalization_sync", "work_order_cost_rollup")`, both accounts set, `source_amount > 0`, `variance == Decimal("0.00")`, and `batch.journal_entry_id is None`.
   - Updates `status` (`"posted"` if JE created/already posted, else `"reconciled"` if zero variance else `"simulated"`), `variance_amount`, counts, `synced_at`, `executed_by`, logs `write_audit_log(..., "reconcile", ...)`.
 
 ### 3.4 `AssetGisMappings`
