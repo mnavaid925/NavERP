@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_scan_log_list' %}">Scan Logs</a>
+            <span>/</span>
+            <span>{% if scan %}{{ scan.number }}{% else %}Record Scan{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Scan Metadata & Payload</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.raw_payload.id_for_label }}">Scanned Barcode / QR / RFID Payload *</label>
+                    {{ form.raw_payload }}
+                    {% if form.raw_payload.errors %}<div class="form-error">{{ form.raw_payload.errors|first }}</div>{% endif %}
+                    <span class="text-xs text-slate-500">Raw characters decoded from physical barcode, 2D QR code, or RFID EPC tag.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scan_method.id_for_label }}">Scan Method *</label>
+                    {{ form.scan_method }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scan_context.id_for_label }}">Scan Context *</label>
+                    {{ form.scan_context }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Matched Asset (Optional)</label>
+                    {{ form.asset }}
+                    <span class="text-xs text-slate-500">Asset record identified by barcode lookup.</span>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.match_status.id_for_label }}">Match Status *</label>
+                    {{ form.match_status }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scanned_by.id_for_label }}">Scanner Operator *</label>
+                    {{ form.scanned_by }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.device_info.id_for_label }}">Scanner Hardware / Device Info</label>
+                    {{ form.device_info }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gps_latitude.id_for_label }}">GPS Latitude</label>
+                    {{ form.gps_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gps_longitude.id_for_label }}">GPS Longitude</label>
+                    {{ form.gps_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gps_accuracy_m.id_for_label }}">GPS Accuracy (Meters)</label>
+                    {{ form.gps_accuracy_m }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.client_sync_id.id_for_label }}">Offline Client Sync UUID</label>
+                    {{ form.client_sync_id }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Scan Observation Notes</label>
+                    {{ form.notes }}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-6 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_offline_captured }}
+                        <span class="text-sm font-medium text-slate-800">Captured Offline</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if scan %}{% url 'assets:asset_scan_log_detail' scan.pk %}{% else %}{% url 'assets:asset_scan_log_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Scan Record
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
