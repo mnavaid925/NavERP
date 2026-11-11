@@ -46,7 +46,7 @@ class AssetScanLog(TenantNumbered):
     SCAN_METHOD_CSS = {
         "camera_barcode": "badge-info",
         "camera_qr": "badge-green",
-        "bluetooth_rfid": "badge-purple",
+        "bluetooth_rfid": "badge-info",
         "handheld_laser": "badge-slate",
         "manual_entry": "badge-muted",
     }
@@ -56,7 +56,7 @@ class AssetScanLog(TenantNumbered):
         "checkout_verification": "badge-slate",
         "work_order_init": "badge-amber",
         "receiving": "badge-green",
-        "location_reconciliation": "badge-purple",
+        "location_reconciliation": "badge-info",
     }
 
     scanned_by = models.ForeignKey(
