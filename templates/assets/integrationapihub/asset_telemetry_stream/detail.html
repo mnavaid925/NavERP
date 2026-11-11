@@ -86,11 +86,11 @@
             </div>
             <div class="detail-item">
                 <dt>Operational Asset</dt>
-                <dd>{% if stream.operational_asset %}{{ stream.operational_asset }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                <dd>{% if stream.operational_asset %}<a href="{% url 'scm:asset_detail' stream.operational_asset.pk %}" class="text-brand hover:underline">{{ stream.operational_asset }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Financial Fixed Asset</dt>
-                <dd>{% if stream.fixed_asset %}{{ stream.fixed_asset }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                <dd>{% if stream.fixed_asset %}<a href="{% url 'accounting:fixed_asset_detail' stream.fixed_asset.pk %}" class="text-brand hover:underline">{{ stream.fixed_asset }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
             </div>
             <div class="detail-item">
                 <dt>Metric &amp; Unit</dt>
