@@ -104,85 +104,99 @@
   - [x] Competitive market research of 8 leading lease administration & equipment finance suites (`.claude/tasks/research-assets-11.10.md`)
   - [x] Commit research catalog
 
-- [ ] **Phase 2: Planning & Specification**
+- [x] **Phase 2: Planning & Specification**
   - [x] Checkable implementation plan in `.claude/tasks/todo.md`
-  - [ ] Commit `todo.md`
-  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.10.md`
-  - [ ] Commit contract file
+  - [x] Commit `todo.md`
+  - [x] Freeze pre-build contract in `.claude/tasks/contract-assets-11.10.md`
+  - [x] Commit contract file
 
-- [ ] **Phase 3: Serial Build (Entity by Entity)**
-  - [ ] **Entity 1: `AssetLeaseContract`**
-    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py`
-    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`
-    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py`
-    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseContracts.py`
-    - [ ] `templates/assets/assetleaserental/asset_lease_contract/list.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_contract/detail.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_contract/form.html`
-  - [ ] **Entity 2: `AssetLeaseSchedule`**
-    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py`
-    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseSchedules.py`
-    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py`
-    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseSchedules.py`
-    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/list.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/detail.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_schedule/form.html`
-  - [ ] **Entity 3: `AssetLeaseModification`**
-    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseModifications.py`
-    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py`
-    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py`
-    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseModifications.py`
-    - [ ] `templates/assets/assetleaserental/asset_lease_modification/list.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_modification/detail.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_modification/form.html`
-  - [ ] **Entity 4: `AssetLeaseBuyAnalysis`**
-    - [ ] `apps/assets/models/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
-    - [ ] `apps/assets/forms/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
-    - [ ] `apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
-    - [ ] `apps/assets/urls/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
-    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/list.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/detail.html`
-    - [ ] `templates/assets/assetleaserental/asset_lease_buy_analysis/form.html`
-  - [ ] **Integrate**
-    - [ ] Re-export all 4 entities in `apps/assets/models/__init__.py`
-    - [ ] Re-export all forms in `apps/assets/forms/__init__.py`
-    - [ ] Re-export all views in `apps/assets/views/__init__.py`
-    - [ ] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
-    - [ ] Register all 4 models in `apps/assets/admin.py`
-    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.10 seed data
-    - [ ] Wire `LIVE_LINKS["11.10"]` in `apps/core/navigation.py`
-    - [ ] Run `makemigrations assets` (claims `0013_...`)
-    - [ ] Run `migrate`
-    - [ ] Run `seed_assets` twice (idempotency check)
-    - [ ] Run `manage.py check`
-  - [ ] **Smoke Test**
-    - [ ] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
+- [x] **Phase 3: Serial Build (Entity by Entity)**
+  - [x] **Entity 1: `AssetLeaseContract`**
+    - [x] `apps/assets/models/AssetLeaseRental/AssetLeaseContracts.py`
+    - [x] `apps/assets/forms/AssetLeaseRental/AssetLeaseContracts.py`
+    - [x] `apps/assets/views/AssetLeaseRental/AssetLeaseContracts.py`
+    - [x] `apps/assets/urls/AssetLeaseRental/AssetLeaseContracts.py`
+    - [x] `templates/assets/assetleaserental/asset_lease_contract/list.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_contract/detail.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_contract/form.html`
+  - [x] **Entity 2: `AssetLeaseSchedule`**
+    - [x] `apps/assets/models/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [x] `apps/assets/forms/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [x] `apps/assets/views/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [x] `apps/assets/urls/AssetLeaseRental/AssetLeaseSchedules.py`
+    - [x] `templates/assets/assetleaserental/asset_lease_schedule/list.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_schedule/detail.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_schedule/form.html`
+  - [x] **Entity 3: `AssetLeaseModification`**
+    - [x] `apps/assets/models/AssetLeaseRental/AssetLeaseModifications.py`
+    - [x] `apps/assets/forms/AssetLeaseRental/AssetLeaseModifications.py`
+    - [x] `apps/assets/views/AssetLeaseRental/AssetLeaseModifications.py`
+    - [x] `apps/assets/urls/AssetLeaseRental/AssetLeaseModifications.py`
+    - [x] `templates/assets/assetleaserental/asset_lease_modification/list.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_modification/detail.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_modification/form.html`
+  - [x] **Entity 4: `AssetLeaseBuyAnalysis`**
+    - [x] `apps/assets/models/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [x] `apps/assets/forms/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [x] `apps/assets/views/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [x] `apps/assets/urls/AssetLeaseRental/AssetLeaseBuyAnalyses.py`
+    - [x] `templates/assets/assetleaserental/asset_lease_buy_analysis/list.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_buy_analysis/detail.html`
+    - [x] `templates/assets/assetleaserental/asset_lease_buy_analysis/form.html`
+  - [x] **Integrate**
+    - [x] Re-export all 4 entities in `apps/assets/models/__init__.py`
+    - [x] Re-export all forms in `apps/assets/forms/__init__.py`
+    - [x] Re-export all views in `apps/assets/views/__init__.py`
+    - [x] Re-export all urlpatterns in `apps/assets/urls/__init__.py`
+    - [x] Register all 4 models in `apps/assets/admin.py`
+    - [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.10 seed data
+    - [x] Wire `LIVE_LINKS["11.10"]` in `apps/core/navigation.py`
+    - [x] Run `makemigrations assets` (claims `0013_...`)
+    - [x] Run `migrate`
+    - [x] Run `seed_assets` twice (idempotency check)
+    - [x] Run `manage.py check`
+  - [x] **Smoke Test**
+    - [x] Execute smoke test script covering all URLs, IDOR (404), and comment leak assertions
 
-- [ ] **Phase 4: Six Reviewers (Strictly Serial)**
-  - [ ] 1. `code-reviewer`
-  - [ ] 2. `explorer`
-  - [ ] 3. `frontend-reviewer`
-  - [ ] 4. `performance-reviewer`
-  - [ ] 5. `qa-smoke-tester`
-  - [ ] 6. `security-reviewer`
-  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.10.md` and commit
+- [x] **Phase 4: Six Reviewers (Strictly Serial)**
+  - [x] 1. `code-reviewer`
+  - [x] 2. `explorer`
+  - [x] 3. `frontend-reviewer`
+  - [x] 4. `performance-reviewer`
+  - [x] 5. `qa-smoke-tester`
+  - [x] 6. `security-reviewer`
+  - [x] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.10.md` and commit
 
-- [ ] **Phase 5: Code Fixer**
-  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
-  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+- [x] **Phase 5: Code Fixer**
+  - [x] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [x] Mark each finding `[x] fixed` or `[~] skipped`
 
-- [ ] **Phase 6: Comprehensive Test Suite**
-  - [ ] Write `apps/assets/tests/test_assetleaserental_models.py`
-  - [ ] Write `apps/assets/tests/test_assetleaserental_forms.py`
-  - [ ] Write `apps/assets/tests/test_assetleaserental_views.py`
-  - [ ] Write `apps/assets/tests/test_assetleaserental_security.py`
-  - [ ] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green
+- [x] **Phase 6: Comprehensive Test Suite**
+  - [x] Write `apps/assets/tests/test_assetleaserental_models.py`
+  - [x] Write `apps/assets/tests/test_assetleaserental_forms.py`
+  - [x] Write `apps/assets/tests/test_assetleaserental_views.py`
+  - [x] Write `apps/assets/tests/test_assetleaserental_security.py`
+  - [x] Execute full unfiltered test suite (`pytest apps/assets/tests/`) and achieve 100% green (1,686 passed)
 
-- [ ] **Phase 7: Documentation & Close-Out**
-  - [ ] Update `README.md`
-  - [ ] Update `.claude/skills/assets/SKILL.md`
-  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.10.md`
-  - [ ] Update close-out in `todo.md`
+- [x] **Phase 7: Documentation & Close-Out**
+  - [x] Update `README.md`
+  - [x] Update `.claude/skills/assets/SKILL.md`
+  - [x] Document gap register in `.claude/tasks/gaps-assets-11.10.md` (**Gaps: None**)
+  - [x] Update close-out in `todo.md`
+
+### Sub-module 11.10 Close-Out Summary
+- **Module:** 11 Asset Management System (`assets`)
+- **Sub-module:** 11.10 Lease & Rental Management
+- **Completed Date:** 2026-11-11
+- **Delivered Entities:**
+  1. `AssetLeaseContract` (`ALC-`): Master Lease Agreement (MLA) administration, ASC 842 & IFRS 16 5-criteria statutory operating vs finance classification engine, Right-of-Use (ROU) initial asset & liability PV capitalization, contract activation & early buyout/termination lifecycles.
+  2. `AssetLeaseSchedule` (`ALSP-`): Sequential period-by-period amortization payment installments, interest accretion, principal reduction, straight-line ROU depreciation, and payment settlement tracking with contract balance sync.
+  3. `AssetLeaseModification` (`ALMD-`): Contract amendments for term extensions, payment adjustments, partial/full early terminations, impairment write-downs, discount rate remeasurements, liability & ROU adjustments, and gain/loss recognition.
+  4. `AssetLeaseBuyAnalysis` (`ALBA-`): Discounted cash flow (DCF) comparative financial modeling, corporate WACC hurdle discounting, debt financing loan schedules, depreciation tax shield benefits, nominal TCO comparisons, and automated Net Advantage to Leasing (NAL) decision recommendation engine.
+- **Integration & Seeding:** Migration `0013_...` applied; `seed_assets` ran twice cleanly and idempotently; `LIVE_LINKS["11.10"]` wired in `apps/core/navigation.py`.
+- **Review Burn-Down:** 31/31 review findings (C1–C3, I1–I14, M1–M14) resolved and verified in Phase 5.
+- **Test Suite:** 68 dedicated unit, form, view, and security tests for 11.10; full app suite **1,686 passed (100% green)** in unfiltered run.
+- **Gaps:** None (see `.claude/tasks/gaps-assets-11.10.md`).
 
 ---
 # Sub-module 11.11: Compliance & Regulatory Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.11.md` (2026-11-10)
