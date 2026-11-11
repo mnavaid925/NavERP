@@ -53,7 +53,7 @@ class AssetPortfolioScenarioForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input", "placeholder": "e.g. FY2027 Accelerated Chiller & Fleet Replacement"}
             ),
             "scenario_type": forms.Select(attrs={"class": "form-select"}),
-            "is_baseline": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "is_baseline": forms.CheckboxInput(attrs={"class": "form-check"}),
             "base_fiscal_year": forms.NumberInput(attrs={"class": "form-input", "min": "2000", "max": "2100"}),
             "horizon_years": forms.NumberInput(attrs={"class": "form-input", "min": "1", "max": "30"}),
             "scope_org_unit": forms.Select(attrs={"class": "form-select"}),
