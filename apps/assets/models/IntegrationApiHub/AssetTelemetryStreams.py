@@ -2,11 +2,11 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-
-from ._validators import validate_tenant_fks
 from django.db import models
 
 from apps.assets.models._base import TenantNumbered
+
+from ._validators import validate_tenant_fks
 
 STREAM_TO_TELEMETRY_METRIC_MAP = {
     "runtime_hours": ("motor_current_amperage", "amperes"),
@@ -26,7 +26,7 @@ FALLBACK_11_7_METRIC_DEFAULT_UNIT = {
 }
 
 UNIT_FALLBACK_MAP = {
-    "hours": "amperes",
+    "hours": "celsius",
     "cycles": "g_force",
     "kwh": "amperes",
 }
@@ -237,7 +237,7 @@ class AssetTelemetryStream(TenantNumbered):
             else "bearing_temperature"
         )
         if self.metric_unit in UNIT_FALLBACK_MAP:
-            mapped_unit = FALLBACK_11_7_METRIC_DEFAULT_UNIT.get(mapped_type, "celsius")
+            mapped_unit = UNIT_FALLBACK_MAP[self.metric_unit]
         elif self.metric_unit in {
             "mm_per_s",
             "g_force",
