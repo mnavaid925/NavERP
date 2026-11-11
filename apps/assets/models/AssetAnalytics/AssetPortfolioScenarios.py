@@ -222,6 +222,8 @@ class AssetPortfolioScenario(TenantNumbered):
             raise ValidationError(
                 "Adopted or archived portfolio scenarios are locked and cannot be re-simulated."
             )
+        if not self.tenant_id:
+            return
         from apps.assets.models.AssetAnalytics.AssetLifecycleCostAnalyses import (
             AssetLifecycleCostAnalysis,
         )
@@ -277,13 +279,23 @@ class AssetPortfolioScenario(TenantNumbered):
         risk_exposure = risk_qs.aggregate(total=Sum("financial_exposure_amount"))["total"] or ZERO
 
         base_capex = plan_agg["capex"] or plan_agg["base_cost"] or ZERO
-        if base_capex <= ZERO and self.baseline_scenario_id and self.baseline_scenario:
+        if (
+            base_capex <= ZERO
+            and self.baseline_scenario_id
+            and self.baseline_scenario
+            and self.baseline_scenario.tenant_id == self.tenant_id
+        ):
             base_capex = self.baseline_scenario.baseline_capex_total or ZERO
         if base_capex <= ZERO and (self.annual_capex_budget_limit or ZERO) > ZERO:
             base_capex = self.annual_capex_budget_limit * Decimal(horizon)
 
         base_opex = (alcc_agg["pm"] or ZERO) + (alcc_agg["cm"] or ZERO) + (alcc_agg["svc"] or ZERO)
-        if base_opex <= ZERO and self.baseline_scenario_id and self.baseline_scenario:
+        if (
+            base_opex <= ZERO
+            and self.baseline_scenario_id
+            and self.baseline_scenario
+            and self.baseline_scenario.tenant_id == self.tenant_id
+        ):
             base_opex = self.baseline_scenario.baseline_opex_maintenance or ZERO
         elif base_opex <= ZERO and base_capex > ZERO:
             base_opex = base_capex * Decimal("0.20")
