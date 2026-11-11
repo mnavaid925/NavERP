@@ -146,9 +146,8 @@ def connector_detail(request, pk):
     )
 
     plaintext_once = None
-    reveal = request.session.get("_aicn_secret_reveal")
+    reveal = request.session.pop("_aicn_secret_reveal", None)
     if isinstance(reveal, dict) and reveal.get("pk") == connector.pk:
-        request.session.pop("_aicn_secret_reveal", None)
         plaintext_once = reveal.get("secret")
 
     streams = connector.telemetry_streams.only(
