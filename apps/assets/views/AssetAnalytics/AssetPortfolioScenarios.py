@@ -27,15 +27,18 @@ from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
 
 
+_AWIF_SELECT_RELATED = (
+    "scope_org_unit",
+    "scope_category",
+    "currency",
+    "baseline_scenario",
+    "owner",
+)
+
+
 def _filter_awif_queryset(request):
     qs = assets_scope(
-        AssetPortfolioScenario.objects.select_related(
-            "scope_org_unit",
-            "scope_category",
-            "currency",
-            "baseline_scenario",
-            "owner",
-        ).defer("assumptions_summary"),
+        AssetPortfolioScenario.objects.select_related(*_AWIF_SELECT_RELATED).defer("assumptions_summary"),
         request,
     )
     q = request.GET.get("q", "").strip()
@@ -118,13 +121,7 @@ def asset_portfolio_scenario_detail(request, pk):
         request,
         AssetPortfolioScenario,
         pk,
-        select_related=[
-            "scope_org_unit",
-            "scope_category",
-            "currency",
-            "baseline_scenario",
-            "owner",
-        ],
+        select_related=_AWIF_SELECT_RELATED,
     )
     return render(
         request,
@@ -214,7 +211,12 @@ def asset_portfolio_scenario_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_portfolio_scenario_simulate(request, pk):
-    scenario = assets_object(request, AssetPortfolioScenario, pk)
+    scenario = assets_object(
+        request,
+        AssetPortfolioScenario,
+        pk,
+        select_related=("baseline_scenario", "currency"),
+    )
     if scenario.is_locked:
         messages.error(
             request,
