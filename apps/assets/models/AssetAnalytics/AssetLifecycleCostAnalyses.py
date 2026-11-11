@@ -392,6 +392,8 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         energy, downtime, insurance, and disposal/warranty recoveries from linked asset records.
         """
         if not self.tenant_id or (not self.fixed_asset_id and not self.operational_asset_id):
+            if self.status == "draft":
+                self.status = "calculated"
             self.recalculate_metrics()
             if save:
                 self.save()
