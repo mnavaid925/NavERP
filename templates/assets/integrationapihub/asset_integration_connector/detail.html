@@ -58,7 +58,35 @@
         <p class="text-sm text-amber-900 dark:text-amber-200 mb-2">
             Store this credential securely now. NavERP saves only the prefix and SHA-256 digest and will never show the plaintext value again.
         </p>
-        <code class="font-mono text-sm block p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-amber-200 dark:border-amber-800 rounded break-all">{{ plaintext_once }}</code>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+            <code id="revealed-secret-code" class="flex-1 font-mono text-sm block p-3 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-amber-200 dark:border-amber-800 rounded break-all">{{ plaintext_once }}</code>
+            <button type="button" id="copy-secret-btn" class="btn btn-outline btn-sm shrink-0" aria-label="Copy credential to clipboard">
+                <i data-lucide="copy" class="w-4 h-4 me-1"></i>
+                <span id="copy-secret-label">Copy</span>
+            </button>
+        </div>
+        <script>
+        (function () {
+            var btn = document.getElementById("copy-secret-btn");
+            var codeEl = document.getElementById("revealed-secret-code");
+            var labelEl = document.getElementById("copy-secret-label");
+            if (!btn || !codeEl || !labelEl) return;
+            btn.addEventListener("click", function () {
+                var val = codeEl.textContent || "";
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                    navigator.clipboard.writeText(val).then(function () {
+                        labelEl.textContent = "Copied!";
+                        setTimeout(function () { labelEl.textContent = "Copy"; }, 2000);
+                    });
+                } else {
+                    var range = document.createRange();
+                    range.selectNodeContents(codeEl);
+                    var sel = window.getSelection();
+                    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+                }
+            });
+        })();
+        </script>
     </div>
 </div>
 {% endif %}
