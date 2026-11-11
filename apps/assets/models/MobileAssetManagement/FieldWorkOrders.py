@@ -62,7 +62,7 @@ class FieldWorkOrder(TenantNumbered):
         "scheduled_pm": "badge-green",
         "inspection_followup": "badge-info",
         "calibration": "badge-slate",
-        "installation": "badge-purple",
+        "installation": "badge-info",
     }
 
     title = models.CharField(max_length=200, help_text="Brief title of the field service task")
