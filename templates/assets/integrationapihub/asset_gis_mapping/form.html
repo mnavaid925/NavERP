@@ -155,12 +155,6 @@
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="{{ form.drift_status.id_for_label }}">Drift Status *</label>
-                    {{ form.drift_status }}
-                    {% if form.drift_status.errors %}<div class="form-error">{{ form.drift_status.errors|first }}</div>{% endif %}
-                </div>
-
-                <div class="form-group">
                     <label class="form-label" for="{{ form.status.id_for_label }}">Mapping Status *</label>
                     {{ form.status }}
                     {% if form.status.errors %}<div class="form-error">{{ form.status.errors|first }}</div>{% endif %}
