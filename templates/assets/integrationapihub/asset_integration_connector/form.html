@@ -145,9 +145,12 @@
                     {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors|first }}</div>{% endif %}
                 </div>
 
-                <div class="form-group md:col-span-2 flex items-center gap-2">
-                    {{ form.webhook_verify_tls }}
-                    <label class="form-label mb-0" for="{{ form.webhook_verify_tls.id_for_label }}">Verify TLS / X.509 certificates on endpoint connections</label>
+                <div class="form-group md:col-span-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.webhook_verify_tls }}
+                        <label class="form-label mb-0" for="{{ form.webhook_verify_tls.id_for_label }}">Verify TLS / X.509 certificates on endpoint connections</label>
+                    </div>
+                    {% if form.webhook_verify_tls.errors %}<div class="form-error">{{ form.webhook_verify_tls.errors|first }}</div>{% endif %}
                 </div>
 
                 <div class="form-group md:col-span-2">
