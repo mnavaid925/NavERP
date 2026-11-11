@@ -57,7 +57,138 @@ from apps.assets.models import (
     AssetGlSyncBatch,
     AssetIntegrationConnector,
     AssetTelemetryStream,
+    AssetExecutiveScorecard,
+    AssetLifecycleCostAnalysis,
+    AssetPortfolioScenario,
+    AssetReplacementPlan,
 )
+
+
+@admin.register(AssetLifecycleCostAnalysis)
+class AssetLifecycleCostAnalysisAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "lifecycle_stage",
+        "total_lifecycle_cost",
+        "maintenance_to_rav_pct",
+        "recommendation",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "asset_category", "currency")
+    list_filter = ("status", "lifecycle_stage", "recommendation", "asset_category")
+    search_fields = ("number", "title", "notes")
+    readonly_fields = (
+        "number",
+        "total_lifecycle_cost",
+        "equivalent_annual_cost",
+        "maintenance_to_rav_pct",
+        "opex_to_capex_ratio",
+        "economic_eol_year",
+    )
+
+
+@admin.register(AssetReplacementPlan)
+class AssetReplacementPlanAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "planned_replacement_year",
+        "planned_quarter",
+        "priority_score",
+        "priority_band",
+        "funding_status",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "asset_category", "currency")
+    list_filter = ("status", "funding_status", "priority_band", "replacement_strategy", "planned_replacement_year")
+    search_fields = ("number", "title", "notes")
+    readonly_fields = (
+        "number",
+        "priority_score",
+        "priority_band",
+        "fci_ratio_pct",
+        "inflation_adjusted_cost",
+        "deferral_penalty_cost",
+    )
+
+
+@admin.register(AssetPortfolioScenario)
+class AssetPortfolioScenarioAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "name",
+        "scenario_type",
+        "base_fiscal_year",
+        "horizon_years",
+        "is_baseline",
+        "net_present_value",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "scope_org_unit", "scope_category", "currency")
+    list_filter = ("status", "scenario_type", "is_baseline", "base_fiscal_year")
+    search_fields = ("number", "name", "assumptions_summary")
+    readonly_fields = (
+        "number",
+        "baseline_capex_total",
+        "simulated_capex_total",
+        "capex_variance_amount",
+        "baseline_opex_maintenance",
+        "simulated_opex_maintenance",
+        "opex_savings_amount",
+        "baseline_deferred_backlog",
+        "simulated_deferred_backlog",
+        "baseline_avg_health_score",
+        "simulated_avg_health_score",
+        "baseline_fci_pct",
+        "simulated_fci_pct",
+        "baseline_risk_exposure",
+        "simulated_risk_exposure",
+        "net_present_value",
+        "payback_period_years",
+        "benefit_cost_ratio",
+    )
+
+
+@admin.register(AssetExecutiveScorecard)
+class AssetExecutiveScorecardAdmin(admin.ModelAdmin):
+    list_display = (
+        "number",
+        "title",
+        "period_type",
+        "period_start",
+        "period_end",
+        "rag_status",
+        "asset_roi_pct",
+        "portfolio_fci_pct",
+        "status",
+        "tenant",
+    )
+    list_select_related = ("tenant", "org_unit", "asset_category", "currency")
+    list_filter = ("status", "period_type", "rag_status", "asset_category")
+    search_fields = ("number", "title", "executive_summary")
+    readonly_fields = (
+        "number",
+        "rag_status",
+        "total_asset_count",
+        "gross_replacement_value",
+        "total_net_book_value",
+        "total_maintenance_spend",
+        "asset_roi_pct",
+        "maintenance_cost_to_rav_pct",
+        "planned_maintenance_ratio_pct",
+        "portfolio_fci_pct",
+        "capex_budget_utilization_pct",
+        "fleet_availability_pct",
+        "portfolio_oee_pct",
+        "compliance_audit_pass_rate_pct",
+        "open_compliance_incidents",
+        "total_risk_exposure_amount",
+        "unfunded_replacement_backlog",
+    )
 
 
 @admin.register(AssetRequisition)
