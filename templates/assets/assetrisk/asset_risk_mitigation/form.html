@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ action.number }}{% else %}New Mitigation Action{% endif %} — Asset Risk — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_risk_mitigation_action_list' %}">Mitigation Actions</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ action.number }}{% else %}New Action{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Mitigation Action: {{ action.number }}{% else %}New Risk Mitigation & Contingency Action{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Action Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.risk.id_for_label }}">Parent Asset Risk *</label>
+                    {{ form.risk }}
+                    {% if form.risk.errors %}<div class="form-error">{{ form.risk.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.action_type.id_for_label }}">Action Type *</label>
+                    {{ form.action_type }}
+                    {% if form.action_type.errors %}<div class="form-error">{{ form.action_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.priority.id_for_label }}">Priority *</label>
+                    {{ form.priority }}
+                    {% if form.priority.errors %}<div class="form-error">{{ form.priority.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.assigned_to.id_for_label }}">Assigned Lead</label>
+                    {{ form.assigned_to }}
+                    {% if form.assigned_to.errors %}<div class="form-error">{{ form.assigned_to.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.alternative_supplier.id_for_label }}">Alternative Supplier (Dual-Sourcing)</label>
+                    {{ form.alternative_supplier }}
+                    {% if form.alternative_supplier.errors %}<div class="form-error">{{ form.alternative_supplier.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.target_completion_date.id_for_label }}">Target Completion Date *</label>
+                    {{ form.target_completion_date }}
+                    {% if form.target_completion_date.errors %}<div class="form-error">{{ form.target_completion_date.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.effectiveness_rating.id_for_label }}">Effectiveness Evaluation</label>
+                    {{ form.effectiveness_rating }}
+                    {% if form.effectiveness_rating.errors %}<div class="form-error">{{ form.effectiveness_rating.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.estimated_cost.id_for_label }}">Estimated Cost ($)</label>
+                    {{ form.estimated_cost }}
+                    {% if form.estimated_cost.errors %}<div class="form-error">{{ form.estimated_cost.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.actual_cost.id_for_label }}">Actual Incurred Cost ($)</label>
+                    {{ form.actual_cost }}
+                    {% if form.actual_cost.errors %}<div class="form-error">{{ form.actual_cost.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.description.id_for_label }}">Action Description & Technical Deliverables</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}<div class="form-error">{{ form.description.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.verification_notes.id_for_label }}">Verification Observations & Evidence</label>
+                    {{ form.verification_notes }}
+                    {% if form.verification_notes.errors %}<div class="form-error">{{ form.verification_notes.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Action
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_risk_mitigation_action_detail' action.pk %}{% else %}{% url 'assets:asset_risk_mitigation_action_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
