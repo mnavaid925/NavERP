@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Portfolio Performance Dashboard — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Asset Analytics &amp; Business Intelligence</span>
+            <span>/</span>
+            <span>Portfolio Performance Dashboard</span>
+        </div>
+        <h1 class="page-title">Portfolio Performance &amp; Intelligence Dashboard</h1>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print
+        </button>
+        <a href="{% url 'assets:portfolio_dashboard_export_csv' %}?org_unit={{ request.GET.org_unit|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&location={{ request.GET.location|urlencode }}&fiscal_year={{ selected_fiscal_year }}" class="btn btn-outline">
+            <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
+        </a>
+        <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline">LCC Studies</a>
+        <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline">Replacement Plans</a>
+        <a href="{% url 'assets:scenario_compare' %}" class="btn btn-outline">Compare Scenarios</a>
+        <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="btn btn-primary">Executive KPIs</a>
+    </div>
+</div>
+
+<!-- Dashboard Scope Filters -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <select name="org_unit" class="form-select">
+                    <option value="">All Org Units</option>
+                    {% for ou in org_units %}
+                    <option value="{{ ou.pk }}" {% if request.GET.org_unit == ou.pk|stringformat:"d" %}selected{% endif %}>{{ ou.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="asset_category" class="form-select">
+                    <option value="">All Asset Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.pk }}" {% if request.GET.asset_category == cat.pk|stringformat:"d" %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="location" class="form-select">
+                    <option value="">All Locations</option>
+                    {% for loc in locations %}
+                    <option value="{{ loc.pk }}" {% if request.GET.location == loc.pk|stringformat:"d" %}selected{% endif %}>{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="fiscal_year" class="form-select">
+                    {% for yr in fiscal_years %}
+                    <option value="{{ yr }}" {% if selected_fiscal_year == yr %}selected{% endif %}>Forecast Base: FY{{ yr }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-outline w-full">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter Portfolio
+                </button>
+                {% if request.GET.org_unit or request.GET.asset_category or request.GET.location or request.GET.fiscal_year %}
+                <a href="{% url 'assets:portfolio_dashboard' %}" class="btn btn-outline" title="Reset Filters">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Primary KPI Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Portfolio &amp; NBV</div>
+            <div class="stat-value">${{ kpis.total_nbv|floatformat:2|intcomma }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ kpis.total_assets|intcomma }} active assets (Acq ${{ kpis.total_acquisition_value|floatformat:0|intcomma }})</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="heart-pulse"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Avg Health &amp; Portfolio FCI</div>
+            <div class="stat-value">{{ kpis.avg_health_score|floatformat:1 }} / 100</div>
+            <div class="text-xs text-slate-500 mt-1">Facility Condition Index: {{ kpis.portfolio_fci_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="landmark"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">5-Year CapEx Demand</div>
+            <div class="stat-value">${{ kpis.five_year_capex_demand|floatformat:2|intcomma }}</div>
+            <div class="text-xs text-amber-700 mt-1">Unfunded backlog: ${{ kpis.unfunded_backlog_total|floatformat:0|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Open Risk Exposure</div>
+            <div class="stat-value">${{ kpis.open_risk_exposure|floatformat:2|intcomma }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ compliance_summary.pass_rate_pct|floatformat:1 }}% audit pass · {{ kpis.open_incidents_count }} open incidents</div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 1: Asset Health Heat Map & 5-Year CapEx Forecast -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Health Heat Map -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Asset Health Heat Map (Condition × Criticality)</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Condition Grade</th>
+                            <th class="text-center">Critical</th>
+                            <th class="text-center">High</th>
+                            <th class="text-center">Medium</th>
+                            <th class="text-center">Low</th>
+                            <th class="text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in health_matrix %}
+                        <tr>
+                            <td class="font-medium">{{ row.label }}</td>
+                            <td class="text-center">
+                                {% if row.counts.critical %}<span class="badge badge-red">{{ row.counts.critical }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if row.counts.high %}<span class="badge badge-amber">{{ row.counts.high }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if row.counts.medium %}<span class="badge badge-info">{{ row.counts.medium }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if row.counts.low %}<span class="badge badge-green">{{ row.counts.low }}</span>{% else %}<span class="text-slate-400">0</span>{% endif %}
+                            </td>
+                            <td class="text-right font-mono font-semibold">{{ row.total }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5-Year CapEx Forecast -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">5-Year Capital Replacement Demand ({{ selected_fiscal_year }}–{{ selected_fiscal_year|add:4 }})</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th class="text-right">Plans</th>
+                            <th class="text-right">Escalated CapEx</th>
+                            <th class="text-right">Allocated</th>
+                            <th class="text-right">Unfunded</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for yr in capex_forecast_years %}
+                        <tr>
+                            <td class="font-medium">
+                                <a href="{% url 'assets:asset_replacement_plan_list' %}?planned_replacement_year={{ yr.year }}" class="text-blue-600 hover:underline">
+                                    FY{{ yr.year }}
+                                </a>
+                            </td>
+                            <td class="text-right font-mono">{{ yr.plan_count }}</td>
+                            <td class="text-right font-mono font-semibold">${{ yr.inflation_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono text-emerald-700">${{ yr.funded_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono text-red-700">${{ yr.unfunded_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Top TCO Bad Actors & Risk/Compliance Exposure -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Bad Actors -->
+    <div class="card lg:col-span-2">
+        <div class="card-header flex items-center justify-between">
+            <h2 class="text-base font-semibold text-slate-800">Top Lifecycle Cost (TCO) Bad Actors</h2>
+            <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="text-xs text-blue-600 hover:underline">View All Studies</a>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Study</th>
+                            <th>Asset / Category</th>
+                            <th class="text-right">Net TCO</th>
+                            <th class="text-right">Maint / RAV %</th>
+                            <th>Recommendation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ba in bad_actors %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' ba.pk %}" class="font-medium text-blue-600 hover:underline">
+                                    {{ ba.number }}
+                                </a>
+                                <div class="text-xs text-slate-500">{{ ba.title|truncatechars:35 }}</div>
+                            </td>
+                            <td>
+                                {% if ba.operational_asset %}{{ ba.operational_asset.name }}{% elif ba.fixed_asset %}{{ ba.fixed_asset.name }}{% elif ba.asset_category %}{{ ba.asset_category.name }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-right font-mono font-semibold">${{ ba.total_lifecycle_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">{{ ba.maintenance_to_rav_pct|floatformat:1 }}%</td>
+                            <td><span class="badge {{ ba.recommendation_badge_class }}">{{ ba.get_recommendation_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-sm text-slate-500 py-4">No lifecycle cost analyses recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk & Compliance Posture -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Risk Exposure &amp; Compliance</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap mb-4">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Risk Tier</th>
+                            <th class="text-right">Count</th>
+                            <th class="text-right">Exposure</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in risk_posture_rows %}
+                        <tr>
+                            <td><span class="badge {{ r.badge_class }}">{{ r.label }}</span></td>
+                            <td class="text-right font-mono">{{ r.count }}</td>
+                            <td class="text-right font-mono">${{ r.exposure|floatformat:2|intcomma }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="text-xs text-slate-600 space-y-1 border-t pt-3">
+                <div><strong>Audits Completed / Scheduled:</strong> {{ compliance_summary.total_audits }}</div>
+                <div><strong>Checkpoint Pass Rate:</strong> {{ compliance_summary.pass_rate_pct|floatformat:2 }}%</div>
+                <div><strong>Open Incidents:</strong> {{ compliance_summary.open_incidents }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 3: Recent Executive Scorecards -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Recent Executive Scorecards (AKPI)</h2>
+        <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="text-xs text-blue-600 hover:underline">Manage Scorecards</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Scorecard</th>
+                    <th>Period</th>
+                    <th>RAG</th>
+                    <th class="text-right">Asset ROI %</th>
+                    <th class="text-right">MCR %</th>
+                    <th class="text-right">Portfolio FCI %</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sc in recent_scorecards %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_executive_scorecard_detail' sc.pk %}" class="font-medium text-blue-600 hover:underline">{{ sc.number }}</a>
+                        <div class="text-xs text-slate-500">{{ sc.title|truncatechars:45 }}</div>
+                    </td>
+                    <td>{{ sc.period_start }} → {{ sc.period_end }}</td>
+                    <td><span class="badge {{ sc.rag_status_badge_class }}">{{ sc.get_rag_status_display }}</span></td>
+                    <td class="text-right font-mono">{{ sc.asset_roi_pct|floatformat:2 }}%</td>
+                    <td class="text-right font-mono">{{ sc.maintenance_cost_to_rav_pct|floatformat:2 }}%</td>
+                    <td class="text-right font-mono">{{ sc.portfolio_fci_pct|floatformat:2 }}%</td>
+                    <td><span class="badge {{ sc.status_badge_class }}">{{ sc.get_status_display }}</span></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center text-sm text-slate-500 py-4">No executive scorecards published yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
