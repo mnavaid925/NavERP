@@ -37,9 +37,10 @@ def add_field_error(errors, field_name, message):
 
 
 def validate_tenant_fks(instance, errors, field_names):
-    """Ensure every populated tenant-scoped ForeignKey matches the instance tenant."""
+    """Ensure workspace tenant is set and every populated tenant-scoped ForeignKey matches it."""
     tenant_id = getattr(instance, "tenant_id", None)
     if not tenant_id:
+        add_field_error(errors, "__all__", "Workspace tenant context is required.")
         return
     for field_name in field_names:
         if getattr(instance, f"{field_name}_id", None) is None:
