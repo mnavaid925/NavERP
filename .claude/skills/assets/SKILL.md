@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, and asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, and certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, and lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -25,6 +25,8 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.7 Asset Reliability & Condition Monitoring**: Multi-technique non-destructive testing (NDT) condition assessments, continuous IoT & SCADA telemetry streaming with threshold anomaly alerts, FMEA failure mode cataloging with RPN risk matrix & RCM strategies, and metrology calibration records with automated drift/error calculation and corrective maintenance work order generation.
 - **11.8 Warranty & Insurance Management**: Manufacturer OEM and extended warranty policies with meter/calendar limits and deductible tracking, warranty claim submissions with OEM defect resolution and net financial recovery, industrial property & machinery breakdown insurance policies with premium/limit tracking, and casualty insurance claims with adjuster assignments, proof-of-loss filings, salvage recovery, and direct indemnity settlements.
 - **11.9 Asset Disposal & Retirement**: Asset decommissioning requests, technical & residual value appraisals, multi-channel disposal execution (competitive auctions / private resales with bid tracking, equipment vendor trade-ins with dealer allowance netting, and certified scrap/salvage de-manufacturing with EPA hazardous waste abatement compliance and Certificate of Destruction COD tracking).
+- **11.10 Lease & Rental Management**: Master Lease Agreement (MLA) administration, ASC 842 / IFRS 16 statutory operating vs finance lease classification, actuarial amortization payment schedules with ROU asset depreciation and liability reduction, contract modifications/remeasurements, early buyouts and terminations, and discounted cash flow Lease vs. Buy total cost of ownership (TCO) and Net Advantage to Leasing (NAL) modeling.
+- **11.11 Compliance & Regulatory Management**: Asset compliance frameworks, regulatory audits, operating permits & environmental licenses, and safety/compliance incident tracking.
 
 ---
 
@@ -386,6 +388,20 @@ apps/assets/
    - **Fields:** `number`, `title`, `policy` (FK `AssetInsurancePolicy`), `fixed_asset` (FK `accounting.FixedAsset`), `operational_asset` (FK `scm.Asset`), `incident_report` (FK `AssetIncidentReport`), `incident_date`, `incident_location`, `peril_type` (`fire_explosion`, `mechanical_breakdown`, `electrical_arcing_surge`, `water_liquid_damage`, `natural_catastrophe`, `operator_error_impact`, `theft_burglary`, `business_interruption_loss`), `incident_description`, `carrier_claim_number`, `adjuster_party` (FK `core.Party`), `adjuster_name_fallback`, `adjuster_phone`, `adjuster_email`, `date_reported_to_carrier`, `proof_of_loss_filed`, `proof_of_loss_date`, `proof_of_loss_document` (FK `core.Document`), `claimed_loss_amount`, `deductible_applied`, `settlement_payout_amount`, `salvage_recovery_amount`, `net_carrier_indemnity`, `currency` (FK `accounting.Currency`), `settlement_method` (`direct_indemnity_check`, `vendor_direct_repair`, `replacement_asset_procurement`, `none_denied`), `settlement_date`, `settlement_notes`, `claim_status` (`incident_reported`, `adjuster_assigned`, `proof_of_loss_filed`, `under_carrier_review`, `approved_pending_payout`, `settled_paid`, `denied_disputed`, `closed`), `claims_officer` (FK `User`).
    - **Invariants:** Double numeric validation on settlement/salvage payouts (L35), net recovery calculation (`settlement_payout_amount + salvage_recovery_amount`), adjuster assignment workflow, proof-of-loss tracking, view-level status guards.
 
+### 11.10 Lease & Rental Management
+1. **`AssetLeaseContract`** (`ALC-`):
+   - **Fields:** `number`, `title`, `master_lease_agreement_ref`, `lessor` (FK `core.Party`), `asset` (FK `scm.Asset`), `category` (FK `AssetCategory`), `fixed_asset` (FK `accounting.FixedAsset`), `inception_date`, `commencement_date`, `expiration_date`, `first_payment_date`, `early_termination_notice_date`, `lease_term_months`, `economic_life_months`, `payment_amount`, `payment_frequency`, `payment_timing`, `discount_rate_pct`, `fair_market_value`, `initial_direct_costs`, `lease_incentives`, `residual_value_guarantee`, `purchase_option_price`, `transfer_of_ownership`, `has_purchase_option`, `is_specialized_asset`, `classification` (`operating`, `finance`), `classification_overridden`, `classification_notes`, `initial_lease_liability`, `initial_rou_asset_value`, `current_lease_liability`, `current_rou_asset_carrying_value`, `status` (`draft`, `pending_approval`, `active`, `modified`, `expired`, `terminated`, `buyout`), `approved_by` (FK `User`), `notes`.
+   - **Invariants:** 5-criteria statutory lease classification test (transfer of ownership, purchase option, lease term >= 75% life, PV of payments >= 90% FMV, specialized asset), actuarial present value calculation of minimum lease payments, Right-of-Use (ROU) initial asset capitalizing initial direct costs and deducting lessor incentives.
+2. **`AssetLeaseSchedule`** (`ALSP-`):
+   - **Fields:** `number`, `lease_contract` (FK `AssetLeaseContract`), `period_number`, `due_date`, `payment_amount`, `beginning_liability`, `interest_expense`, `principal_reduction`, `ending_liability`, `rou_depreciation`, `ending_rou_asset_value`, `status` (`scheduled`, `accrued`, `paid`, `cancelled`), `payment_reference`, `paid_date`, `notes`.
+   - **Invariants:** Sequential amortization schedule generated with atomic numbering, straight-line ROU depreciation, compound periodic interest rate accretion, automatic contract balance sync upon payment.
+3. **`AssetLeaseModification`** (`ALMD-`):
+   - **Fields:** `number`, `lease_contract` (FK `AssetLeaseContract`), `modification_type` (`term_extension`, `payment_change`, `partial_termination`, `full_termination`, `impairment`, `discount_rate_change`), `request_date`, `effective_date`, `prior_lease_liability`, `revised_lease_liability`, `liability_adjustment`, `prior_rou_asset_value`, `revised_rou_asset_value`, `rou_asset_adjustment`, `gain_loss_on_modification`, `impairment_loss_recognized`, `revised_term_months`, `revised_payment_amount`, `revised_discount_rate_pct`, `requested_by` (FK `User`), `approved_by` (FK `User`), `status` (`draft`, `submitted`, `approved`, `rejected`, `executed`), `justification`, `notes`.
+   - **Invariants:** Remeasurement workflow adjusting parent lease liability and ROU asset balances, gain/loss recognition on scope terminations, audit trail logging.
+4. **`AssetLeaseBuyAnalysis`** (`ALBA-`):
+   - **Fields:** `number`, `title`, `description`, `target_asset_name`, `category` (FK `AssetCategory`), `expected_useful_life_years`, `purchase_price`, `down_payment_pct`, `loan_interest_rate_pct`, `loan_term_years`, `estimated_salvage_value`, `annual_maintenance_cost_buy`, `annual_insurance_tax_buy`, `lease_term_months`, `monthly_lease_payment`, `upfront_lease_fees`, `end_of_lease_purchase_option`, `lessor_covers_maintenance`, `annual_maintenance_cost_lease`, `discount_rate_wacc_pct`, `corporate_tax_rate_pct`, `npv_purchase_option`, `npv_lease_option`, `tco_purchase_option`, `tco_lease_option`, `net_advantage_to_leasing`, `recommendation` (`buy`, `lease`, `neutral`), `status` (`draft`, `evaluated`, `approved`, `rejected`), `evaluated_by` (FK `User`), `approved_by` (FK `User`), `evaluation_notes`.
+   - **Invariants:** Discounted after-tax Net Present Value (NPV) modeling using corporate WACC hurdle rate, debt loan amortization schedules, depreciation tax shield benefits, nominal TCO comparisons, Net Advantage to Leasing (NAL) recommendation.
+
 ---
 
 ## Key URLs & Routes (11.2, 11.3, 11.4 & 11.5)
@@ -688,6 +704,39 @@ Namespace: `assets:`
   - `assets:asset_scrap_salvage_record_cod`: `/assets/disposal/scrap-salvage/<pk>/record-cod/` [POST]
   - `assets:asset_scrap_salvage_settle`: `/assets/disposal/scrap-salvage/<pk>/settle/` [POST, Admin]
 
+### 11.10 Lease & Rental Management
+- **Lease Contracts:**
+  - `assets:asset_lease_contract_list`: `/assets/leases/`
+  - `assets:asset_lease_contract_create`: `/assets/leases/create/`
+  - `assets:asset_lease_contract_detail`: `/assets/leases/<pk>/`
+  - `assets:asset_lease_contract_edit`: `/assets/leases/<pk>/edit/`
+  - `assets:asset_lease_contract_delete`: `/assets/leases/<pk>/delete/` [POST, Admin]
+  - `assets:asset_lease_contract_calculate`: `/assets/leases/<pk>/calculate/` [POST]
+  - `assets:asset_lease_contract_activate`: `/assets/leases/<pk>/activate/` [POST, Admin]
+  - `assets:asset_lease_contract_terminate`: `/assets/leases/<pk>/terminate/` [POST]
+- **Lease Payment & Amortization Schedules:**
+  - `assets:asset_lease_schedule_list`: `/assets/lease-schedules/`
+  - `assets:asset_lease_schedule_create`: `/assets/lease-schedules/create/`
+  - `assets:asset_lease_schedule_detail`: `/assets/lease-schedules/<pk>/`
+  - `assets:asset_lease_schedule_edit`: `/assets/lease-schedules/<pk>/edit/`
+  - `assets:asset_lease_schedule_delete`: `/assets/lease-schedules/<pk>/delete/` [POST, Admin]
+  - `assets:asset_lease_schedule_mark_paid`: `/assets/lease-schedules/<pk>/mark-paid/` [POST]
+  - `assets:asset_lease_schedule_accrue`: `/assets/lease-schedules/<pk>/accrue/` [POST]
+- **Lease Modifications & Remeasurements:**
+  - `assets:asset_lease_modification_list`: `/assets/modifications/`
+  - `assets:asset_lease_modification_create`: `/assets/modifications/create/`
+  - `assets:asset_lease_modification_detail`: `/assets/modifications/<pk>/`
+  - `assets:asset_lease_modification_edit`: `/assets/modifications/<pk>/edit/`
+  - `assets:asset_lease_modification_delete`: `/assets/modifications/<pk>/delete/` [POST, Admin]
+  - `assets:asset_lease_modification_approve`: `/assets/modifications/<pk>/approve/` [POST, Admin]
+- **Lease vs. Buy Capital Analyses:**
+  - `assets:asset_lease_buy_analysis_list`: `/assets/lease-buy-analyses/`
+  - `assets:asset_lease_buy_analysis_create`: `/assets/lease-buy-analyses/create/`
+  - `assets:asset_lease_buy_analysis_detail`: `/assets/lease-buy-analyses/<pk>/`
+  - `assets:asset_lease_buy_analysis_edit`: `/assets/lease-buy-analyses/<pk>/edit/`
+  - `assets:asset_lease_buy_analysis_delete`: `/assets/lease-buy-analyses/<pk>/delete/` [POST, Admin]
+  - `assets:asset_lease_buy_analysis_evaluate`: `/assets/lease-buy-analyses/<pk>/evaluate/` [POST]
+
 ### 11.11 Compliance & Regulatory Management
 - **Compliance Frameworks:**
   - `assets:asset_compliance_framework_list`: `/assets/compliance/frameworks/`
@@ -753,7 +802,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (1,600+ passing tests across 11.1 through 11.11).
+Unfiltered run on SQLite in-memory test database (1,686 passing tests across 11.1 through 11.11).
 
 ---
 
@@ -767,5 +816,6 @@ Unfiltered run on SQLite in-memory test database (1,600+ passing tests across 11
 - `11.7`: Reliability & Condition Monitoring (`assets:asset_condition_assessment_list`)
 - `11.8`: Warranty & Insurance Management (`assets:asset_warranty_list`)
 - `11.9`: Asset Disposal & Retirement (`assets:asset_disposal_request_list`)
+- `11.10`: Lease & Rental Management (`assets:asset_lease_contract_list`)
 - `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
 
