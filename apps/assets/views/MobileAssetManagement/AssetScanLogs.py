@@ -93,7 +93,7 @@ def asset_scan_log_create(request):
             messages.success(request, f"Scan log {scan.number} recorded successfully.")
             return redirect("assets:asset_scan_log_detail", pk=scan.pk)
     else:
-        initial = {"scanned_by": request.user, "scanned_at": timezone.now()}
+        initial = {"scanned_by": request.user}
         form = AssetScanLogForm(tenant=request.tenant, initial=initial)
 
     return render(
