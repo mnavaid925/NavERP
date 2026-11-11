@@ -91,6 +91,12 @@ from apps.assets.forms.MobileAssetManagement import (
     FieldWorkOrderForm,
     MobileAssetInspectionForm,
 )
+from apps.assets.forms.IntegrationApiHub import (
+    AssetGisMappingForm,
+    AssetGlSyncBatchForm,
+    AssetIntegrationConnectorForm,
+    AssetTelemetryStreamForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -160,4 +166,8 @@ __all__ = [
     "FieldWorkOrderForm",
     "AssetScanLogForm",
     "AssetGeofenceEventForm",
+    "AssetIntegrationConnectorForm",
+    "AssetTelemetryStreamForm",
+    "AssetGlSyncBatchForm",
+    "AssetGisMappingForm",
 ]
