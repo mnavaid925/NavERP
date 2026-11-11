@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Systems &amp; GL Sync Batches — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_integration_connector_list' %}">Integration &amp; API Hub</a>
+            <span>/</span>
+            <span>GL Sync Batches</span>
+        </div>
+        <h1 class="page-title">Financial Systems &amp; GL Sync Batches</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline btn-sm">Connectors</a>
+        <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Telemetry Streams</a>
+        <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline btn-sm">GIS Mappings</a>
+        <a href="{% url 'assets:asset_gl_sync_batch_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New GL Sync Batch
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="layers"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Sync Batches</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="book-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Posted to GL</div>
+            <div class="stat-value">{{ posted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="scale"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Variances Flagged</div>
+            <div class="stat-value">{{ variance_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="file-clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Draft Queue</div>
+            <div class="stat-value">{{ draft_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Batch #, external ref, connector..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Connector</label>
+                <select name="connector" class="form-select">
+                    <option value="">All Connectors</option>
+                    {% for c in connectors %}
+                    <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Sync Domain</label>
+                <select name="sync_domain" class="form-select">
+                    <option value="">All Domains</option>
+                    {% for val, label in domain_choices %}
+                    <option value="{{ val }}" {% if request.GET.sync_domain == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Batch Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Reconciliation</label>
+                <select name="reconciliation_status" class="form-select">
+                    <option value="">All Reconciliation</option>
+                    {% for val, label in reconciliation_choices %}
+                    <option value="{{ val }}" {% if request.GET.reconciliation_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Date From</label>
+                <input type="date" name="date_from" value="{{ request.GET.date_from }}" class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Date To</label>
+                <input type="date" name="date_to" value="{{ request.GET.date_to }}" class="form-input">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Batch #</th>
+                    <th>Domain / Connector</th>
+                    <th>Batch Date</th>
+                    <th class="text-right">Source Amt</th>
+                    <th class="text-right">Target GL Amt</th>
+                    <th class="text-right">Variance</th>
+                    <th>Reconciliation</th>
+                    <th>Status</th>
+                    <th>Journal Entry</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for batch in batches %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="text-brand hover:underline">
+                            {{ batch.number }}
+                        </a>
+                        {% if batch.external_batch_ref %}
+                        <div class="text-xs text-muted">{{ batch.external_batch_ref }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ batch.get_sync_domain_display }}</div>
+                        <div class="text-xs text-muted">{{ batch.connector.number }} &middot; {{ batch.connector.name }}</div>
+                    </td>
+                    <td>{{ batch.batch_date|date:"Y-m-d" }}</td>
+                    <td class="text-right font-mono">{{ batch.source_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
+                    <td class="text-right font-mono">{{ batch.target_gl_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
+                    <td class="text-right font-mono {% if batch.variance_amount != 0 %}text-danger font-semibold{% endif %}">
+                        {{ batch.variance_amount }}
+                    </td>
+                    <td><span class="badge {{ batch.reconciliation_badge_class }}">{{ batch.get_reconciliation_status_display }}</span></td>
+                    <td><span class="badge {{ batch.status_badge_class }}">{{ batch.get_status_display }}</span></td>
+                    <td class="font-mono text-xs">
+                        {% if batch.journal_entry %}
+                        <a href="{% url 'accounting:journal_entry_detail' batch.journal_entry.pk %}" class="text-brand hover:underline">{{ batch.journal_entry.number }}</a>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-right">
+                        <div class="flex justify-end gap-1">
+                            <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_gl_sync_batch_edit' batch.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="layers" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No asset GL sync batches recorded</div>
+                            <div class="text-xs text-slate-400 mb-3">Create and reconcile depreciation, capitalization, or work-order GL posting batches.</div>
+                            <a href="{% url 'assets:asset_gl_sync_batch_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First GL Batch
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.sync_domain %}&sync_domain={{ request.GET.sync_domain|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.reconciliation_status %}&reconciliation_status={{ request.GET.reconciliation_status|urlencode }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.sync_domain %}&sync_domain={{ request.GET.sync_domain|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.reconciliation_status %}&reconciliation_status={{ request.GET.reconciliation_status|urlencode }}{% endif %}{% if request.GET.date_from %}&date_from={{ request.GET.date_from|urlencode }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
