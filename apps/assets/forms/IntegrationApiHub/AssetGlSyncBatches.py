@@ -1,7 +1,7 @@
-import json
 from decimal import Decimal
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from apps.accounting.models import Currency, FiscalPeriod, FixedAsset, GLAccount
@@ -19,6 +19,7 @@ from apps.assets.models.AssetMaintenance.AssetMaintenanceRequests import (
 from apps.assets.models.AssetProcurement.AssetCapitalizations import (
     AssetCapitalization,
 )
+from apps.assets.models.IntegrationApiHub._validators import validate_json_object
 from apps.assets.models.IntegrationApiHub.AssetGlSyncBatches import (
     AssetGlSyncBatch,
 )
@@ -246,19 +247,19 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
                 "Offset GL account must differ from primary GL account.",
             )
 
-        raw_json = (cleaned_data.get("field_mapping_json") or "").strip()
-        if raw_json:
-            try:
-                parsed = json.loads(raw_json)
-            except ValueError:
-                self.add_error(
-                    "field_mapping_json", "Field mapping must be valid JSON syntax."
-                )
-            else:
-                if not isinstance(parsed, dict):
-                    self.add_error(
-                        "field_mapping_json",
-                        "Field mapping must be a JSON object ({...}).",
-                    )
+        try:
+            validate_json_object(
+                cleaned_data.get("field_mapping_json"),
+                field_label="Field mapping",
+            )
+        except ValidationError as exc:
+            self.add_error("field_mapping_json", exc)
+
+        payload_summary = cleaned_data.get("payload_summary")
+        if payload_summary and len(payload_summary.encode("utf-8")) > 65536:
+            self.add_error(
+                "payload_summary",
+                "Payload summary exceeds maximum size of 64 KB.",
+            )
 
         return cleaned_data
