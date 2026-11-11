@@ -73,9 +73,10 @@ All six reviewers have run in strictly serial order:
 
 ### Minor
 
-- [ ] **`M1`**: `templates/assets/assetrisk/*/detail.html` (all 4 detail templates) — Missing "Back to List" Action Button in Header
+- [x] **`M1`**: `templates/assets/assetrisk/*/detail.html` (all 4 detail templates) — Missing "Back to List" Action Button in Header
   - **Issue:** Detail headers contain mutator actions but lack a direct `<a href="..." class="btn btn-outline"><i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back to List</a>`.
   - **Fix:** Add Back to List button to `page-actions` across the 4 detail templates.
+  - **Status:** [x] fixed — feat(assets): add back to list button across assetrisk detail templates
 
 - [ ] **`M2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:163` & `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py:51` — Server-Side Boundary Validation on CVSS Score
   - **Issue:** `cve_risk_score` lacks server-side range validation `[0.0, 10.0]`.
