@@ -18,7 +18,9 @@ from apps.core.utils import write_audit_log
 @login_required
 def field_work_order_list(request):
     qs = assets_scope(
-        FieldWorkOrder.objects.select_related("asset", "fixed_asset", "assigned_technician", "maintenance_request"),
+        FieldWorkOrder.objects.select_related(
+            "asset", "fixed_asset", "assigned_technician", "maintenance_request"
+        ).defer("parts_requisition_notes", "work_performed_notes"),
         request,
     )
 
