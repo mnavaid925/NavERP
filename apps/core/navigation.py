@@ -3304,6 +3304,22 @@ LIVE_LINKS = {
         "Penalties & Violations": "assets:asset_compliance_incident_list",
         "Compliance & Regulatory Management": "assets:asset_compliance_framework_list",
     },
+    "11.12": {
+        "Risk Identification & Assessment": "assets:asset_risk_register_list",
+        "Business Continuity Planning": "assets:asset_business_continuity_plan_list",
+        "Cybersecurity for Connected Assets": "assets:asset_cybersecurity_profile_list",
+        "Geopolitical & Supply Chain Risk": "assets:asset_risk_mitigation_action_list",
+        "Risk Mitigation & Contingency": "assets:asset_risk_mitigation_action_list",
+        # Plural and convenience aliases
+        "Asset Risk Management": "assets:asset_risk_register_list",
+        "Risk Registers": "assets:asset_risk_register_list",
+        "Business Continuity Plans": "assets:asset_business_continuity_plan_list",
+        "Continuity Plans": "assets:asset_business_continuity_plan_list",
+        "Cybersecurity Profiles": "assets:asset_cybersecurity_profile_list",
+        "Connected Asset Cybersecurity": "assets:asset_cybersecurity_profile_list",
+        "Mitigation Actions": "assets:asset_risk_mitigation_action_list",
+        "Risk Mitigations": "assets:asset_risk_mitigation_action_list",
+    },
     "11.13": {
         "Mobile Inspection & Data Capture": "assets:mobile_asset_inspection_list",
         "Field Technician Work Orders": "assets:field_work_order_list",
