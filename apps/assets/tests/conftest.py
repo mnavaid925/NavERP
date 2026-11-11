@@ -47,6 +47,10 @@ from apps.assets.models import (
     AssetComplianceAudit,
     AssetPermitLicense,
     AssetComplianceIncident,
+    AssetLeaseBuyAnalysis,
+    AssetLeaseContract,
+    AssetLeaseModification,
+    AssetLeaseSchedule,
 )
 
 
@@ -2161,6 +2165,235 @@ def compliance_incident_b(db, tenant_b, operational_asset_b, vendor_party_b, adm
         target_resolution_date=today + timezone.timedelta(days=7),
         status="open",
     )
+
+
+# ---------------------------------------------------------------------------
+# Sub-module 11.10: Lease & Rental Management Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def lease_contract_a(db, tenant_a, vendor_party_a, operational_asset_a, category_root_a, fixed_asset_a, admin_user):
+    today = timezone.now().date()
+    alc = AssetLeaseContract.objects.create(
+        tenant=tenant_a,
+        title="Finance Lease for 5-Axis CNC Machining Center",
+        master_lease_agreement_ref="MLA-2025-IND-A01",
+        lessor=vendor_party_a,
+        asset=operational_asset_a,
+        category=category_root_a,
+        fixed_asset=fixed_asset_a,
+        inception_date=today - timezone.timedelta(days=180),
+        commencement_date=today - timezone.timedelta(days=180),
+        expiration_date=today + timezone.timedelta(days=900),
+        first_payment_date=today - timezone.timedelta(days=180),
+        lease_term_months=36,
+        economic_life_months=48,
+        payment_amount=Decimal("4500.00"),
+        payment_frequency="monthly",
+        payment_timing="arrears",
+        discount_rate_pct=Decimal("5.5000"),
+        fair_market_value=Decimal("160000.00"),
+        initial_direct_costs=Decimal("1200.00"),
+        lease_incentives=Decimal("500.00"),
+        residual_value_guarantee=Decimal("10000.00"),
+        purchase_option_price=Decimal("15000.00"),
+        has_purchase_option=True,
+        transfer_of_ownership=False,
+        is_specialized_asset=False,
+        classification="finance",
+        status="active",
+        approved_by=admin_user,
+        notes="Primary CNC cell finance lease fixture.",
+    )
+    alc.calculate_present_value()
+    alc.save()
+    return alc
+
+
+@pytest.fixture
+def lease_contract_b(db, tenant_b, vendor_party_b, operational_asset_b, category_root_b, admin_b):
+    today = timezone.now().date()
+    alc = AssetLeaseContract.objects.create(
+        tenant=tenant_b,
+        title="Operating Lease for Forklift Fleet",
+        master_lease_agreement_ref="MLA-2026-FLT-B09",
+        lessor=vendor_party_b,
+        asset=operational_asset_b,
+        category=category_root_b,
+        inception_date=today - timezone.timedelta(days=60),
+        commencement_date=today - timezone.timedelta(days=60),
+        expiration_date=today + timezone.timedelta(days=660),
+        first_payment_date=today - timezone.timedelta(days=60),
+        lease_term_months=24,
+        economic_life_months=84,
+        payment_amount=Decimal("2800.00"),
+        payment_frequency="monthly",
+        payment_timing="advance",
+        discount_rate_pct=Decimal("4.7500"),
+        fair_market_value=Decimal("110000.00"),
+        classification="operating",
+        status="active",
+        approved_by=admin_b,
+        notes="Tenant B operating lease fixture.",
+    )
+    alc.calculate_present_value()
+    alc.save()
+    return alc
+
+
+@pytest.fixture
+def lease_schedule_a(db, tenant_a, lease_contract_a):
+    today = timezone.now().date()
+    return AssetLeaseSchedule.objects.create(
+        tenant=tenant_a,
+        lease_contract=lease_contract_a,
+        period_number=1,
+        due_date=today - timezone.timedelta(days=150),
+        payment_amount=Decimal("4500.00"),
+        beginning_liability=Decimal("130000.00"),
+        interest_expense=Decimal("595.83"),
+        principal_reduction=Decimal("3904.17"),
+        ending_liability=Decimal("126095.83"),
+        rou_depreciation=Decimal("3625.00"),
+        ending_rou_asset_value=Decimal("126875.00"),
+        status="paid",
+        paid_date=today - timezone.timedelta(days=150),
+        payment_reference="ACH-2026-001",
+    )
+
+
+@pytest.fixture
+def lease_schedule_b(db, tenant_b, lease_contract_b):
+    today = timezone.now().date()
+    return AssetLeaseSchedule.objects.create(
+        tenant=tenant_b,
+        lease_contract=lease_contract_b,
+        period_number=1,
+        due_date=today - timezone.timedelta(days=30),
+        payment_amount=Decimal("2800.00"),
+        beginning_liability=Decimal("63000.00"),
+        interest_expense=Decimal("249.38"),
+        principal_reduction=Decimal("2550.62"),
+        ending_liability=Decimal("60449.38"),
+        rou_depreciation=Decimal("2625.00"),
+        ending_rou_asset_value=Decimal("60375.00"),
+        status="scheduled",
+    )
+
+
+@pytest.fixture
+def lease_modification_a(db, tenant_a, lease_contract_a, admin_user):
+    today = timezone.now().date()
+    return AssetLeaseModification.objects.create(
+        tenant=tenant_a,
+        lease_contract=lease_contract_a,
+        modification_type="term_extension",
+        request_date=today - timezone.timedelta(days=30),
+        effective_date=today - timezone.timedelta(days=15),
+        prior_lease_liability=Decimal("125000.00"),
+        revised_lease_liability=Decimal("142000.00"),
+        liability_adjustment=Decimal("17000.00"),
+        prior_rou_asset_value=Decimal("120000.00"),
+        revised_rou_asset_value=Decimal("137000.00"),
+        rou_asset_adjustment=Decimal("17000.00"),
+        revised_term_months=48,
+        requested_by=admin_user,
+        approved_by=admin_user,
+        status="executed",
+        justification="Production volume increases necessitate term extension.",
+        notes="Controller approved modification fixture.",
+    )
+
+
+@pytest.fixture
+def lease_modification_b(db, tenant_b, lease_contract_b, admin_b):
+    today = timezone.now().date()
+    return AssetLeaseModification.objects.create(
+        tenant=tenant_b,
+        lease_contract=lease_contract_b,
+        modification_type="payment_adjustment",
+        request_date=today - timezone.timedelta(days=10),
+        effective_date=today - timezone.timedelta(days=5),
+        prior_lease_liability=Decimal("60000.00"),
+        revised_lease_liability=Decimal("55000.00"),
+        liability_adjustment=Decimal("-5000.00"),
+        prior_rou_asset_value=Decimal("60000.00"),
+        revised_rou_asset_value=Decimal("55000.00"),
+        rou_asset_adjustment=Decimal("-5000.00"),
+        revised_payment_amount=Decimal("2500.00"),
+        requested_by=admin_b,
+        status="submitted",
+        justification="Vendor concession rate reduction.",
+        notes="Pending tenant B approval.",
+    )
+
+
+@pytest.fixture
+def lease_buy_analysis_a(db, tenant_a, category_root_a, admin_user):
+    alba = AssetLeaseBuyAnalysis.objects.create(
+        tenant=tenant_a,
+        title="CapEx Decision: High-Capacity 50-Ton Overhead Gantry Crane",
+        description="Outright debt purchase vs 5-year operating lease evaluation.",
+        target_asset_name="Konecranes 50T Industrial Gantry Crane",
+        category=category_root_a,
+        expected_useful_life_years=Decimal("10.0"),
+        purchase_price=Decimal("240000.00"),
+        down_payment_pct=Decimal("15.00"),
+        loan_interest_rate_pct=Decimal("5.75"),
+        loan_term_years=Decimal("5.0"),
+        estimated_salvage_value=Decimal("35000.00"),
+        annual_maintenance_cost_buy=Decimal("6500.00"),
+        annual_insurance_tax_buy=Decimal("3200.00"),
+        lease_term_months=60,
+        monthly_lease_payment=Decimal("4200.00"),
+        upfront_lease_fees=Decimal("5000.00"),
+        end_of_lease_purchase_option=Decimal("25000.00"),
+        lessor_covers_maintenance=True,
+        annual_maintenance_cost_lease=Decimal("0.00"),
+        discount_rate_wacc_pct=Decimal("8.00"),
+        corporate_tax_rate_pct=Decimal("21.00"),
+        evaluated_by=admin_user,
+        status="evaluated",
+        evaluation_notes="Long life favors buy scenario.",
+    )
+    alba.evaluate_financial_models()
+    alba.save()
+    return alba
+
+
+@pytest.fixture
+def lease_buy_analysis_b(db, tenant_b, category_root_b, admin_b):
+    alba = AssetLeaseBuyAnalysis.objects.create(
+        tenant=tenant_b,
+        title="CapEx Decision: Automated Packaging Palletizer System",
+        description="Rapid tech turnover favors 3-year operating lease.",
+        target_asset_name="Fanuc M-410iC Robotic Palletizing Cell",
+        category=category_root_b,
+        expected_useful_life_years=Decimal("4.0"),
+        purchase_price=Decimal("185000.00"),
+        down_payment_pct=Decimal("20.00"),
+        loan_interest_rate_pct=Decimal("6.50"),
+        loan_term_years=Decimal("4.0"),
+        estimated_salvage_value=Decimal("15000.00"),
+        annual_maintenance_cost_buy=Decimal("8500.00"),
+        annual_insurance_tax_buy=Decimal("2400.00"),
+        lease_term_months=36,
+        monthly_lease_payment=Decimal("2900.00"),
+        upfront_lease_fees=Decimal("2500.00"),
+        end_of_lease_purchase_option=Decimal("10000.00"),
+        lessor_covers_maintenance=True,
+        annual_maintenance_cost_lease=Decimal("0.00"),
+        discount_rate_wacc_pct=Decimal("8.50"),
+        corporate_tax_rate_pct=Decimal("21.00"),
+        evaluated_by=admin_b,
+        approved_by=admin_b,
+        status="approved",
+        evaluation_notes="Leasing recommended.",
+    )
+    alba.evaluate_financial_models()
+    alba.save()
+    return alba
+
 
 
 
