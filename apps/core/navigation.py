@@ -3304,6 +3304,23 @@ LIVE_LINKS = {
         "Penalties & Violations": "assets:asset_compliance_incident_list",
         "Compliance & Regulatory Management": "assets:asset_compliance_framework_list",
     },
+    "11.13": {
+        "Mobile Inspection & Data Capture": "assets:mobile_asset_inspection_list",
+        "Field Technician Work Orders": "assets:field_work_order_list",
+        "Barcode/RFID Scanning": "assets:asset_scan_log_list",
+        "GPS & Geofencing": "assets:asset_geofence_event_list",
+        "Offline Synchronization": "assets:mobile_asset_inspection_list",
+        # Plural and convenience aliases
+        "Mobile Inspections": "assets:mobile_asset_inspection_list",
+        "Field Work Orders": "assets:field_work_order_list",
+        "Asset Scans": "assets:asset_scan_log_list",
+        "Scan Logs": "assets:asset_scan_log_list",
+        "Barcode Scanning": "assets:asset_scan_log_list",
+        "RFID Scanning": "assets:asset_scan_log_list",
+        "Geofence Alerts": "assets:asset_geofence_event_list",
+        "GPS Geofencing": "assets:asset_geofence_event_list",
+        "Mobile Asset Management": "assets:mobile_asset_inspection_list",
+    },
 
 
 
