@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}IoT &amp; SCADA Telemetry Streams — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_integration_connector_list' %}">Integration &amp; API Hub</a>
+            <span>/</span>
+            <span>Telemetry Streams</span>
+        </div>
+        <h1 class="page-title">IoT &amp; SCADA Telemetry Streams</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline btn-sm">Connectors</a>
+        <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline btn-sm">GL Sync Batches</a>
+        <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline btn-sm">GIS Mappings</a>
+        <a href="{% url 'assets:asset_telemetry_stream_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Telemetry Stream
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="radio"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Streams</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active Feeds</div>
+            <div class="stat-value">{{ active_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Faulted Streams</div>
+            <div class="stat-value">{{ faulted_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Auto-Trigger CBM</div>
+            <div class="stat-value">{{ auto_cbm_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Number, tag, stream name..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Connector</label>
+                <select name="connector" class="form-select">
+                    <option value="">All Connectors</option>
+                    {% for c in connectors %}
+                    <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Operational Asset</label>
+                <select name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for a in assets_list %}
+                    <option value="{{ a.pk }}" {% if request.GET.operational_asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} &middot; {{ a.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Protocol</label>
+                <select name="stream_protocol" class="form-select">
+                    <option value="">All Protocols</option>
+                    {% for val, label in protocol_choices %}
+                    <option value="{{ val }}" {% if request.GET.stream_protocol == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="stream_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.stream_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Stream &amp; Tag Address</th>
+                    <th>Connector</th>
+                    <th>Asset Target</th>
+                    <th>Metric / Mode</th>
+                    <th>Thresholds</th>
+                    <th>Last Value</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stream in streams %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_telemetry_stream_detail' stream.pk %}" class="text-brand hover:underline">
+                            {{ stream.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ stream.stream_name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ stream.tag_address }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'assets:asset_integration_connector_detail' stream.connector.pk %}" class="text-brand hover:underline text-sm">
+                            {{ stream.connector.number }}
+                        </a>
+                        <div class="text-xs text-muted">{{ stream.get_stream_protocol_display }}</div>
+                    </td>
+                    <td>
+                        {% if stream.operational_asset %}
+                        <div class="text-sm">{{ stream.operational_asset.code }} &middot; {{ stream.operational_asset.name }}</div>
+                        {% endif %}
+                        {% if stream.fixed_asset %}
+                        <div class="text-xs text-muted">{{ stream.fixed_asset.number }} &middot; {{ stream.fixed_asset.name }}</div>
+                        {% endif %}
+                        {% if not stream.operational_asset and not stream.fixed_asset %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ stream.get_metric_type_display }}</div>
+                        <div class="text-xs text-muted">{{ stream.get_ingestion_mode_display }} ({{ stream.polling_interval_seconds }}s)</div>
+                    </td>
+                    <td class="font-mono text-xs">
+                        {% if stream.warning_threshold is not None or stream.critical_threshold is not None %}
+                        Warn: {{ stream.warning_threshold|default:"—" }}<br>Crit: {{ stream.critical_threshold|default:"—" }}
+                        {% else %}
+                        <span class="text-muted">None</span>
+                        {% endif %}
+                    </td>
+                    <td class="font-mono text-sm">
+                        {% if stream.last_ingested_value is not None %}
+                        {{ stream.last_ingested_value }} {{ stream.get_metric_unit_display }}
+                        <div class="text-xs text-muted">{{ stream.readings_ingested_count }} ingested</div>
+                        {% else %}
+                        <span class="text-muted">No samples</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge {{ stream.status_badge_class }}">{{ stream.get_stream_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="flex justify-end gap-1">
+                            <a href="{% url 'assets:asset_telemetry_stream_detail' stream.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_telemetry_stream_edit' stream.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="radio" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No telemetry streams configured</div>
+                            <div class="text-xs text-slate-400 mb-3">Bind OPC-UA nodes, MQTT topics, or PI tags to asset telemetry and CBM maintenance rules.</div>
+                            <a href="{% url 'assets:asset_telemetry_stream_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First Stream
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.stream_protocol %}&stream_protocol={{ request.GET.stream_protocol|urlencode }}{% endif %}{% if request.GET.stream_status %}&stream_status={{ request.GET.stream_status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.stream_protocol %}&stream_protocol={{ request.GET.stream_protocol|urlencode }}{% endif %}{% if request.GET.stream_status %}&stream_status={{ request.GET.stream_status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
