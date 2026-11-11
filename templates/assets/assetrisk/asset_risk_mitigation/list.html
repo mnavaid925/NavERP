@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Mitigation Actions — Asset Risk Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Risk Management</span>
+            <span>/</span>
+            <span>Mitigation Actions</span>
+        </div>
+        <h1 class="page-title">Risk Mitigation & Contingency Actions</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_risk_mitigation_action_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Mitigation Action
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="clipboard-list"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Mitigation Tasks</div>
+            <div class="stat-value">{{ total_actions }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Progress</div>
+            <div class="stat-value">{{ in_progress_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Verified Effective</div>
+            <div class="stat-value">{{ verified_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Actual Spent</div>
+            <div class="stat-value font-mono">${{ total_actual_cost|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search action, risk, assignee..." class="form-input" />
+            </div>
+            <div>
+                <select name="action_type" class="form-select">
+                    <option value="">All Action Types</option>
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if request.GET.action_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="priority" class="form-select">
+                    <option value="">All Priorities</option>
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if request.GET.priority == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="effectiveness_rating" class="form-select">
+                    <option value="">All Effectiveness Ratings</option>
+                    {% for val, label in effectiveness_choices %}
+                    <option value="{{ val }}" {% if request.GET.effectiveness_rating == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline"><i data-lucide="filter" class="w-4 h-4"></i></button>
+                {% if request.GET.q or request.GET.action_type or request.GET.priority or request.GET.status or request.GET.effectiveness_rating %}
+                <a href="{% url 'assets:asset_risk_mitigation_action_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="x" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Action # & Title</th>
+                    <th>Parent Risk</th>
+                    <th>Action Type</th>
+                    <th>Priority</th>
+                    <th>Assignee / Supplier</th>
+                    <th>Target Date</th>
+                    <th>Status</th>
+                    <th>Effectiveness</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for act in actions %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_risk_mitigation_action_detail' act.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ act.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ act.title|truncatechars:45 }}</div>
+                    </td>
+                    <td>
+                        <a href="{% url 'assets:asset_risk_register_detail' act.risk.pk %}" class="font-medium text-slate-800 hover:underline">
+                            {{ act.risk.number }}
+                        </a>
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ act.risk.title }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.action_type_badge_class }}">
+                            {{ act.get_action_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.priority_badge_class }}">
+                            {{ act.get_priority_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if act.assigned_to %}
+                        <div class="text-sm font-medium">{{ act.assigned_to.get_full_name|default:act.assigned_to.username }}</div>
+                        {% endif %}
+                        {% if act.alternative_supplier %}
+                        <div class="text-xs text-slate-500">Supplier: {{ act.alternative_supplier.name }}</div>
+                        {% endif %}
+                        {% if not act.assigned_to and not act.alternative_supplier %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ act.target_completion_date }}</td>
+                    <td>
+                        <span class="badge {{ act.status_badge_class }}">
+                            {{ act.get_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ act.effectiveness_badge_class }}">
+                            {{ act.get_effectiveness_rating_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_risk_mitigation_action_detail' act.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_risk_mitigation_action_edit' act.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_risk_mitigation_action_delete' act.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete action {{ act.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Risk Mitigation Actions Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Execute engineering safeguards, dual-sourcing, or spare buffer strategies.</p>
+                            <a href="{% url 'assets:asset_risk_mitigation_action_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Mitigation Action
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} actions
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.effectiveness_rating %}&effectiveness_rating={{ request.GET.effectiveness_rating }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.action_type %}&action_type={{ request.GET.action_type }}{% endif %}{% if request.GET.priority %}&priority={{ request.GET.priority }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.effectiveness_rating %}&effectiveness_rating={{ request.GET.effectiveness_rating }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
