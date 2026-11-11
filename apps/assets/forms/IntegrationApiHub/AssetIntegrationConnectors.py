@@ -97,6 +97,10 @@ class AssetIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
             self.fields["owner"].queryset = User.objects.filter(
                 tenant=self.tenant
             ).order_by("username")
+        else:
+            self.fields["vendor_partner"].queryset = Party.objects.none()
+            self.fields["default_org_unit"].queryset = OrgUnit.objects.none()
+            self.fields["owner"].queryset = User.objects.none()
 
         if self.instance and self.instance.default_currency_id:
             self.fields["default_currency"].queryset = Currency.objects.filter(
