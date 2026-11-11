@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Business Continuity Plans — Asset Risk Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Risk Management</span>
+            <span>/</span>
+            <span>Continuity Plans</span>
+        </div>
+        <h1 class="page-title">Business Continuity & Redundancy Plans</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_business_continuity_plan_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Continuity Plan
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total BCP Plans</div>
+            <div class="stat-value">{{ total_plans }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Active & Approved</div>
+            <div class="stat-value">{{ active_plans_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Single Points of Failure</div>
+            <div class="stat-value">{{ spof_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Avg Recovery Time (RTO)</div>
+            <div class="stat-value">{{ avg_rto_hours }} hrs</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search plan, asset, site..." class="form-input" />
+            </div>
+            <div>
+                <select name="redundancy_type" class="form-select">
+                    <option value="">All Redundancy Types</option>
+                    {% for val, label in redundancy_choices %}
+                    <option value="{{ val }}" {% if request.GET.redundancy_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="disaster_scenario" class="form-select">
+                    <option value="">All Disaster Scenarios</option>
+                    {% for val, label in scenario_choices %}
+                    <option value="{{ val }}" {% if request.GET.disaster_scenario == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline"><i data-lucide="filter" class="w-4 h-4"></i></button>
+                {% if request.GET.q or request.GET.redundancy_type or request.GET.disaster_scenario or request.GET.status %}
+                <a href="{% url 'assets:asset_business_continuity_plan_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="x" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Plan # & Title</th>
+                    <th>Primary Asset</th>
+                    <th>Redundancy Strategy</th>
+                    <th>Backup Unit / Alternate</th>
+                    <th>RTO / RPO / MTD</th>
+                    <th>Disaster Scenario</th>
+                    <th>Drill Result</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_business_continuity_plan_detail' plan.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ plan.number }}
+                        </a>
+                        <div class="text-xs text-slate-500">{{ plan.title|truncatechars:45 }}</div>
+                    </td>
+                    <td>
+                        {% if plan.primary_asset %}
+                        <div class="text-sm font-medium">{{ plan.primary_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.primary_asset.asset_code }}</div>
+                        {% else %}
+                        <span class="text-slate-400">General Facility</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ plan.redundancy_type_badge_class }}">
+                            {{ plan.get_redundancy_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if plan.backup_redundant_asset %}
+                        <div class="text-sm font-medium">{{ plan.backup_redundant_asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ plan.backup_redundant_asset.asset_code }}</div>
+                        {% elif plan.alternate_facility_site %}
+                        <div class="text-xs text-slate-700 font-medium">{{ plan.alternate_facility_site }}</div>
+                        {% else %}
+                        <span class="text-slate-400">No Backup Unit</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-700 font-mono">
+                        <div>RTO: {{ plan.recovery_time_objective_hours }}h</div>
+                        <div>RPO: {{ plan.recovery_point_objective_hours }}h</div>
+                        <div>MTD: {{ plan.maximum_tolerable_downtime_hours }}h</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ plan.disaster_scenario_badge_class }}">
+                            {{ plan.get_disaster_scenario_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ plan.drill_result_badge_class }}">
+                            {{ plan.get_drill_result_display }}
+                        </span>
+                        {% if plan.last_drill_date %}
+                        <div class="text-xs text-slate-500">{{ plan.last_drill_date }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ plan.status_badge_class }}">
+                            {{ plan.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_business_continuity_plan_detail' plan.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_business_continuity_plan_edit' plan.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_business_continuity_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete continuity plan {{ plan.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Business Continuity Plans Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Protect mission-critical equipment with redundant systems and recovery objectives.</p>
+                            <a href="{% url 'assets:asset_business_continuity_plan_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Continuity Plan
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} plans
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.redundancy_type %}&redundancy_type={{ request.GET.redundancy_type }}{% endif %}{% if request.GET.disaster_scenario %}&disaster_scenario={{ request.GET.disaster_scenario }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.redundancy_type %}&redundancy_type={{ request.GET.redundancy_type }}{% endif %}{% if request.GET.disaster_scenario %}&disaster_scenario={{ request.GET.disaster_scenario }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
