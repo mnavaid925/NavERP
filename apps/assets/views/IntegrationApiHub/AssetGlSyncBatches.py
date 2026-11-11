@@ -9,6 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from ._common import parse_pos_int, verified_connector_initial
+
 from apps.accounting.models import JournalEntry, JournalLine
 from apps.assets.forms.IntegrationApiHub.AssetGlSyncBatches import (
     AssetGlSyncBatchForm,
@@ -53,7 +55,7 @@ def batch_list(request):
 
     qs = base_qs
     q = (request.GET.get("q") or "").strip()
-    connector_id = (request.GET.get("connector") or "").strip()
+    connector_id = parse_pos_int(request.GET.get("connector"))
     sync_domain = (request.GET.get("sync_domain") or "").strip()
     status = (request.GET.get("status") or "").strip()
     reconciliation_status = (request.GET.get("reconciliation_status") or "").strip()
@@ -67,8 +69,8 @@ def batch_list(request):
             | Q(connector__number__icontains=q)
             | Q(connector__name__icontains=q)
         )
-    if connector_id.isdigit():
-        qs = qs.filter(connector_id=int(connector_id))
+    if connector_id is not None:
+        qs = qs.filter(connector_id=connector_id)
     if sync_domain in dict(AssetGlSyncBatch.SYNC_DOMAIN_CHOICES):
         qs = qs.filter(sync_domain=sync_domain)
     if status in dict(AssetGlSyncBatch.STATUS_CHOICES):
@@ -141,10 +143,7 @@ def batch_create(request):
             )
             return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
     else:
-        initial = {}
-        connector_id = (request.GET.get("connector") or "").strip()
-        if connector_id.isdigit():
-            initial["connector"] = int(connector_id)
+        initial = verified_connector_initial(request)
         form = AssetGlSyncBatchForm(tenant=request.tenant, initial=initial)
 
     return render(
