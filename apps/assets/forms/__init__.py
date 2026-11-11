@@ -79,6 +79,12 @@ from apps.assets.forms.AssetCompliance import (
     AssetComplianceIncidentForm,
     AssetPermitLicenseForm,
 )
+from apps.assets.forms.AssetRisk import (
+    AssetBusinessContinuityPlanForm,
+    AssetCyberSecurityProfileForm,
+    AssetRiskMitigationActionForm,
+    AssetRiskRegisterForm,
+)
 from apps.assets.forms.MobileAssetManagement import (
     AssetGeofenceEventForm,
     AssetScanLogForm,
@@ -146,6 +152,10 @@ __all__ = [
     "AssetComplianceAuditForm",
     "AssetPermitLicenseForm",
     "AssetComplianceIncidentForm",
+    "AssetRiskRegisterForm",
+    "AssetBusinessContinuityPlanForm",
+    "AssetCyberSecurityProfileForm",
+    "AssetRiskMitigationActionForm",
     "MobileAssetInspectionForm",
     "FieldWorkOrderForm",
     "AssetScanLogForm",
