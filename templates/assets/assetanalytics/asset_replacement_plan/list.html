@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Replacement Plans & CapEx Forecasts — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -48,14 +47,14 @@
         <div class="stat-icon orange"><i data-lucide="alert-circle"></i></div>
         <div class="stat-body">
             <div class="stat-label">Unfunded Backlog CapEx</div>
-            <div class="stat-value">${{ unfunded_plans_value|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ unfunded_plans_value|floatformat:"2g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="landmark"></i></div>
         <div class="stat-body">
             <div class="stat-label">Inflation-Adjusted Forecast</div>
-            <div class="stat-value">${{ total_capex_forecast|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ total_capex_forecast|floatformat:"2g" }}</div>
         </div>
     </div>
 </div>
@@ -192,8 +191,8 @@
                     </td>
                     <td class="text-right font-mono">{{ p.fci_ratio_pct|floatformat:1 }}%</td>
                     <td class="text-right font-mono font-semibold text-slate-900">
-                        ${{ p.inflation_adjusted_cost|floatformat:2|intcomma }}
-                        <div class="text-xs font-normal text-slate-500">Base: ${{ p.estimated_replacement_cost|floatformat:0|intcomma }}</div>
+                        ${{ p.inflation_adjusted_cost|floatformat:"2g" }}
+                        <div class="text-xs font-normal text-slate-500">Base: ${{ p.estimated_replacement_cost|floatformat:"0g" }}</div>
                     </td>
                     <td>
                         <span class="badge {{ p.funding_status_badge_class }}">{{ p.get_funding_status_display }}</span>
