@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}{{ connector.number }} — Integration Connector — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_integration_connector_list' %}">Integration Connectors</a>
+            <span>/</span>
+            <span>{{ connector.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
+            <h1 class="page-title">{{ connector.name }}</h1>
+            <span class="badge badge-slate">{{ connector.number }}</span>
+            <span class="badge {{ connector.status_badge_class }}">{{ connector.get_status_display }}</span>
+            <span class="badge {{ connector.health_badge_class }}">{{ connector.get_health_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <form method="post" action="{% url 'assets:asset_integration_connector_test' connector.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i data-lucide="activity" class="w-4 h-4 me-1"></i> Test Connection
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:asset_integration_connector_rotate_secret' connector.pk %}" class="inline" onsubmit="return confirm('Rotate credential now? Existing tokens using the old secret will be invalidated.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline btn-sm">
+                <i data-lucide="key-round" class="w-4 h-4 me-1"></i> Rotate Secret
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_integration_connector_edit' connector.pk %}" class="btn btn-outline btn-sm">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_integration_connector_delete' connector.pk %}" class="inline" onsubmit="return confirm('Delete connector {{ connector.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline btn-sm">Back to List</a>
+    </div>
+</div>
+
+{% if plaintext_once %}
+<div class="card mb-6 border-amber-300 bg-amber-50">
+    <div class="card-header">
+        <h2 class="card-title text-amber-900">
+            <i data-lucide="alert-triangle" class="w-4 h-4 inline me-1"></i> One-Time Credential Reveal — Copy Now
+        </h2>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-amber-900 mb-2">
+            Store this credential securely now. NavERP saves only the prefix and SHA-256 digest and will never show the plaintext value again.
+        </p>
+        <code class="font-mono text-sm block p-3 bg-white border border-amber-200 rounded break-all">{{ plaintext_once }}</code>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Connector Profile &amp; Transport Governance</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Connector Number</dt>
+                <dd class="font-mono font-semibold">{{ connector.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Category</dt>
+                <dd>{{ connector.get_connector_category_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Provider</dt>
+                <dd>{{ connector.get_provider_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Protocol</dt>
+                <dd>{{ connector.get_protocol_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Sync Direction</dt>
+                <dd>{{ connector.get_sync_direction_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Environment</dt>
+                <dd><span class="badge badge-info">{{ connector.get_environment_display }}</span></dd>
+            </div>
+            <div class="detail-item">
+                <dt>Endpoint URL</dt>
+                <dd class="font-mono text-sm break-all">{{ connector.endpoint_url }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Authentication Method</dt>
+                <dd>{{ connector.get_auth_method_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Credential Prefix</dt>
+                <dd class="font-mono">{% if connector.api_key_prefix %}{{ connector.api_key_prefix }}***{% else %}<span class="text-muted">Not rotated</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Verify TLS Certificates</dt>
+                <dd>{% if connector.webhook_verify_tls %}<span class="badge badge-green">Enabled</span>{% else %}<span class="badge badge-amber">Disabled</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Rate / Timeout / Retries</dt>
+                <dd>{{ connector.rate_limit_rpm }} rpm &middot; {{ connector.timeout_seconds }}s timeout &middot; max {{ connector.retry_policy_max }} retries</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Polling Interval</dt>
+                <dd>Every {{ connector.polling_interval_minutes }} min</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Vendor / Partner</dt>
+                <dd>{{ connector.vendor_partner|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Default Org Unit</dt>
+                <dd>{{ connector.default_org_unit|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Default Currency</dt>
+                <dd>{{ connector.default_currency|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Technical Owner</dt>
+                <dd>{{ connector.owner|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Heartbeat</dt>
+                <dd>{% if connector.last_heartbeat_at %}{{ connector.last_heartbeat_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">Never tested</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Consecutive Failures</dt>
+                <dd>{{ connector.consecutive_failures }}</dd>
+            </div>
+        </dl>
+
+        {% if connector.last_error_message %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Last Diagnostic Message</div>
+            <div class="text-sm text-red-700 bg-red-50 p-3 rounded font-mono">{{ connector.last_error_message }}</div>
+        </div>
+        {% endif %}
+
+        {% if connector.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Implementation Notes</div>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ connector.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm">Telemetry Streams</h3>
+            <a href="{% url 'assets:asset_telemetry_stream_list' %}?connector={{ connector.pk }}" class="btn btn-outline btn-xs">View All</a>
+        </div>
+        <div class="card-body">
+            {% if streams %}
+            <ul class="space-y-2 text-sm">
+                {% for s in streams %}
+                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <a href="{% url 'assets:asset_telemetry_stream_detail' s.pk %}" class="text-brand font-medium hover:underline">{{ s.number }} &middot; {{ s.stream_name }}</a>
+                    <span class="badge {{ s.status_badge_class }}">{{ s.get_stream_status_display }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-xs text-muted">No telemetry streams attached to this connector.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm">GL Sync Batches</h3>
+            <a href="{% url 'assets:asset_gl_sync_batch_list' %}?connector={{ connector.pk }}" class="btn btn-outline btn-xs">View All</a>
+        </div>
+        <div class="card-body">
+            {% if gl_batches %}
+            <ul class="space-y-2 text-sm">
+                {% for b in gl_batches %}
+                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <a href="{% url 'assets:asset_gl_sync_batch_detail' b.pk %}" class="text-brand font-medium hover:underline">{{ b.number }} &middot; {{ b.get_sync_domain_display }}</a>
+                    <span class="badge {{ b.status_badge_class }}">{{ b.get_status_display }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-xs text-muted">No GL sync batches recorded for this connector.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header flex justify-between items-center">
+            <h3 class="card-title text-sm">GIS Spatial Mappings</h3>
+            <a href="{% url 'assets:asset_gis_mapping_list' %}?connector={{ connector.pk }}" class="btn btn-outline btn-xs">View All</a>
+        </div>
+        <div class="card-body">
+            {% if gis_mappings %}
+            <ul class="space-y-2 text-sm">
+                {% for m in gis_mappings %}
+                <li class="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <a href="{% url 'assets:asset_gis_mapping_detail' m.pk %}" class="text-brand font-medium hover:underline">{{ m.number }} &middot; {{ m.layer_name }}</a>
+                    <span class="badge {{ m.drift_badge_class }}">{{ m.get_drift_status_display }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-xs text-muted">No GIS feature mappings attached to this connector.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
