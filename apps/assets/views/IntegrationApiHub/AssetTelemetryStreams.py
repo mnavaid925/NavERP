@@ -25,6 +25,7 @@ from apps.assets.models.IntegrationApiHub.AssetTelemetryStreams import (
     AssetTelemetryStream,
 )
 from apps.assets.views._common import assets_object, assets_scope
+from apps.core.decorators import tenant_admin_required
 from apps.core.utils import write_audit_log
 from apps.scm.models import Asset
 
@@ -234,7 +235,7 @@ def stream_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def stream_delete(request, pk):
     """Delete a tenant-scoped Asset Telemetry Stream."""
