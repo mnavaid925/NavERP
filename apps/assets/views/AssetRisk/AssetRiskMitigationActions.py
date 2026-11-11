@@ -197,6 +197,9 @@ def asset_risk_mitigation_action_delete(request, pk):
 @require_POST
 def asset_risk_mitigation_action_complete(request, pk):
     action = assets_object(request, AssetRiskMitigationAction, pk)
+    if action.status not in ["planned", "in_progress"]:
+        messages.warning(request, f"Mitigation action '{action.number}' cannot be marked Completed from status '{action.get_status_display()}'.")
+        return redirect("assets:asset_risk_mitigation_action_detail", pk=action.pk)
     with transaction.atomic():
         action.status = "completed"
         action.actual_completion_date = timezone.now().date()
@@ -210,6 +213,9 @@ def asset_risk_mitigation_action_complete(request, pk):
 @require_POST
 def asset_risk_mitigation_action_verify(request, pk):
     action = assets_object(request, AssetRiskMitigationAction, pk)
+    if action.status != "completed":
+        messages.warning(request, f"Mitigation action '{action.number}' cannot be verified from status '{action.get_status_display()}'.")
+        return redirect("assets:asset_risk_mitigation_action_detail", pk=action.pk)
     effectiveness = request.POST.get("effectiveness_rating", "highly_effective").strip()
     if effectiveness not in dict(AssetRiskMitigationAction.EFFECTIVENESS_CHOICES):
         effectiveness = "highly_effective"
