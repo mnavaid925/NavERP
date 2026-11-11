@@ -97,6 +97,12 @@ from apps.assets.forms.IntegrationApiHub import (
     AssetIntegrationConnectorForm,
     AssetTelemetryStreamForm,
 )
+from apps.assets.forms.AssetAnalytics import (
+    AssetExecutiveScorecardForm,
+    AssetLifecycleCostAnalysisForm,
+    AssetPortfolioScenarioForm,
+    AssetReplacementPlanForm,
+)
 
 __all__ = [
     "TenantUniqueMixin",
@@ -170,4 +176,8 @@ __all__ = [
     "AssetTelemetryStreamForm",
     "AssetGlSyncBatchForm",
     "AssetGisMappingForm",
+    "AssetLifecycleCostAnalysisForm",
+    "AssetReplacementPlanForm",
+    "AssetPortfolioScenarioForm",
+    "AssetExecutiveScorecardForm",
 ]
