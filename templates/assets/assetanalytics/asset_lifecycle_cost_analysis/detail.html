@@ -24,6 +24,7 @@
         <button type="button" onclick="window.print()" class="btn btn-outline">
             <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print
         </button>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         {% if not analysis.is_locked %}
         <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_populate' analysis.pk %}" class="inline">
             {% csrf_token %}
@@ -69,6 +70,7 @@
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         {% endif %}
         <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
