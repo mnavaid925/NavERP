@@ -21,9 +21,11 @@
         <a href="{% url 'assets:asset_replacement_plan_export_csv' %}?q={{ request.GET.q|urlencode }}&status={{ request.GET.status|urlencode }}&funding_status={{ request.GET.funding_status|urlencode }}&priority_band={{ request.GET.priority_band|urlencode }}&replacement_strategy={{ request.GET.replacement_strategy|urlencode }}&planned_replacement_year={{ request.GET.planned_replacement_year|urlencode }}&org_unit={{ request.GET.org_unit|urlencode }}&asset_category={{ request.GET.asset_category|urlencode }}&location={{ request.GET.location|urlencode }}" class="btn btn-outline">
             <i data-lucide="download" class="w-4 h-4 me-1"></i> Export CSV
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <a href="{% url 'assets:asset_replacement_plan_create' %}" class="btn btn-primary">
             <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Replacement Plan
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -206,6 +208,7 @@
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not p.is_locked %}
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_replacement_plan_edit' p.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
@@ -215,6 +218,7 @@
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                             {% endif %}
                         </div>
                     </td>
@@ -226,9 +230,11 @@
                             <i data-lucide="calendar-range" class="w-12 h-12 text-slate-400 mb-3"></i>
                             <h3 class="text-base font-semibold text-slate-800">No Asset Replacement Plans Found</h3>
                             <p class="text-sm text-slate-500 mb-4">Plan capital replacements with risk-weighted priority scoring and multi-year inflation forecasting.</p>
+                            {% if request.user.is_superuser or request.user.is_tenant_admin %}
                             <a href="{% url 'assets:asset_replacement_plan_create' %}" class="btn btn-primary">
                                 <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Replacement Plan
                             </a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
