@@ -141,6 +141,7 @@ class MobileAssetInspection(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="assets_mins_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "asset"], name="idx_mins_ten_asset"),
             models.Index(fields=["tenant", "status"], name="idx_mins_ten_stat"),
             models.Index(fields=["tenant", "overall_result"], name="idx_mins_ten_res"),
             models.Index(fields=["tenant", "inspection_type"], name="idx_mins_ten_type"),
