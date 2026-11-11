@@ -415,7 +415,9 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
             raise ValidationError(
                 "Approved or archived lifecycle cost analyses are locked and cannot be recalculated."
             )
-        if not self.tenant_id or (not self.fixed_asset_id and not self.operational_asset_id):
+        if not self.tenant_id:
+            return
+        if not self.fixed_asset_id and not self.operational_asset_id:
             if self.status == "draft":
                 self.status = "calculated"
             self.recalculate_metrics()
@@ -450,9 +452,19 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         if cap_basis > ZERO:
             self.acquisition_capital_cost = q2(cap_basis - install_sum) if cap_basis >= install_sum else q2(cap_basis)
             self.installation_commissioning_cost = q2(install_sum)
-        elif self.fixed_asset_id and self.fixed_asset and (self.fixed_asset.acquisition_cost or ZERO) > ZERO:
+        elif (
+            self.fixed_asset_id
+            and self.fixed_asset
+            and self.fixed_asset.tenant_id == self.tenant_id
+            and (self.fixed_asset.acquisition_cost or ZERO) > ZERO
+        ):
             self.acquisition_capital_cost = q2(self.fixed_asset.acquisition_cost)
-        elif self.operational_asset_id and self.operational_asset and (self.operational_asset.purchase_cost or ZERO) > ZERO:
+        elif (
+            self.operational_asset_id
+            and self.operational_asset
+            and self.operational_asset.tenant_id == self.tenant_id
+            and (self.operational_asset.purchase_cost or ZERO) > ZERO
+        ):
             self.acquisition_capital_cost = q2(self.operational_asset.purchase_cost)
 
         pm_sum = AssetMaintenanceLog.objects.filter(
@@ -508,7 +520,12 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         accum_val = depr_posted["max_accum"] or depr_posted["sum_depr"] or ZERO
         if accum_val > ZERO:
             self.accumulated_depreciation_cost = q2(accum_val)
-        elif self.fixed_asset_id and self.fixed_asset and (self.fixed_asset.accumulated_depreciation or ZERO) > ZERO:
+        elif (
+            self.fixed_asset_id
+            and self.fixed_asset
+            and self.fixed_asset.tenant_id == self.tenant_id
+            and (self.fixed_asset.accumulated_depreciation or ZERO) > ZERO
+        ):
             self.accumulated_depreciation_cost = q2(self.fixed_asset.accumulated_depreciation)
 
         salvage_est = AssetDisposalRequest.objects.filter(
@@ -518,7 +535,12 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         )["total"] or ZERO
         if salvage_est > ZERO:
             self.expected_salvage_value = q2(salvage_est)
-        elif self.fixed_asset_id and self.fixed_asset and (self.fixed_asset.salvage_value or ZERO) > ZERO:
+        elif (
+            self.fixed_asset_id
+            and self.fixed_asset
+            and self.fixed_asset.tenant_id == self.tenant_id
+            and (self.fixed_asset.salvage_value or ZERO) > ZERO
+        ):
             self.expected_salvage_value = q2(self.fixed_asset.salvage_value)
 
         warranty_rec = AssetWarrantyClaim.objects.filter(
@@ -547,7 +569,12 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
             self.warranty_insurance_recoveries = q2(total_rec)
 
         if (self.current_replacement_value or ZERO) <= ZERO:
-            if self.asset_model_id and self.asset_model and (self.asset_model.estimated_replacement_cost or ZERO) > ZERO:
+            if (
+                self.asset_model_id
+                and self.asset_model
+                and self.asset_model.tenant_id == self.tenant_id
+                and (self.asset_model.estimated_replacement_cost or ZERO) > ZERO
+            ):
                 self.current_replacement_value = q2(self.asset_model.estimated_replacement_cost)
             elif (self.acquisition_capital_cost or ZERO) > ZERO:
                 self.current_replacement_value = q2(self.acquisition_capital_cost)
