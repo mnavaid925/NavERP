@@ -73,7 +73,7 @@ class AssetIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
             "default_org_unit": forms.Select(attrs={"class": "form-select"}),
             "default_currency": forms.Select(attrs={"class": "form-select"}),
             "owner": forms.Select(attrs={"class": "form-select"}),
-            "webhook_verify_tls": forms.CheckboxInput(attrs={"class": "form-checkbox"}),
+            "webhook_verify_tls": forms.CheckboxInput(attrs={"class": "form-check"}),
             "notes": forms.Textarea(
                 attrs={
                     "class": "form-textarea",
