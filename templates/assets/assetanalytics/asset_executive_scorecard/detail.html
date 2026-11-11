@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ scorecard.number }} — {{ scorecard.title }} — Executive Scorecard — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_executive_scorecard_list' %}">Executive Scorecards</a>
+            <span>/</span>
+            <span>{{ scorecard.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ scorecard.number }} — {{ scorecard.title }}</h1>
+            <span class="badge {{ scorecard.status_badge_class }}">{{ scorecard.get_status_display }}</span>
+            <span class="badge {{ scorecard.rag_status_badge_class }}">{{ scorecard.get_rag_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print Executive Brief
+        </button>
+        {% if not scorecard.is_locked %}
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_compute' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Compute Live KPIs
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_publish' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Publish Snapshot
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_executive_scorecard_edit' scorecard.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        {% endif %}
+        {% if scorecard.status == "published" %}
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_approve' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i data-lucide="shield-check" class="w-4 h-4 me-1"></i> Board Approve
+            </button>
+        </form>
+        {% endif %}
+        {% if scorecard.status != "archived" %}
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_archive' scorecard.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'assets:asset_executive_scorecard_delete' scorecard.pk %}" class="inline" onsubmit="return confirm('Delete executive scorecard {{ scorecard.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_executive_scorecard_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Top Executive KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="trending-up"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Asset ROI % (Target {{ scorecard.target_asset_roi_pct|floatformat:1 }}%)</div>
+            <div class="stat-value">{{ scorecard.asset_roi_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">MCR % RAV (Target ≤ {{ scorecard.target_mcr_pct|floatformat:1 }}%)</div>
+            <div class="stat-value">{{ scorecard.maintenance_cost_to_rav_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-square"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Compliance Pass Rate (Target {{ scorecard.target_compliance_rate_pct|floatformat:1 }}%)</div>
+            <div class="stat-value">{{ scorecard.compliance_audit_pass_rate_pct|floatformat:1 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Open Risk Exposure</div>
+            <div class="stat-value">${{ scorecard.total_risk_exposure_amount|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Period Scope &amp; Governance</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Scorecard Number</dt>
+                    <dd class="font-mono">{{ scorecard.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Period Coverage</dt>
+                    <dd>{{ scorecard.get_period_type_display }} ({{ scorecard.period_start }} → {{ scorecard.period_end }})</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Org Unit Scope</dt>
+                    <dd>{{ scorecard.org_unit.name|default:"Enterprise-Wide" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Category Scope</dt>
+                    <dd>{{ scorecard.asset_category.name|default:"All Categories" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Snapshot Lock State</dt>
+                    <dd>{% if scorecard.is_locked %}<span class="badge badge-amber">Locked Snapshot</span>{% else %}<span class="badge badge-slate">Draft Editable</span>{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Prepared By</dt>
+                    <dd>{{ scorecard.prepared_by.get_full_name|default:scorecard.prepared_by|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Approved By</dt>
+                    <dd>{{ scorecard.approved_by.get_full_name|default:scorecard.approved_by|default:"Pending Board Sign-Off" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Portfolio Financial, Reliability &amp; Compliance Benchmarks</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Active Asset Count</dt>
+                    <dd class="font-mono">{{ scorecard.total_asset_count|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Gross Replacement Value (RAV)</dt>
+                    <dd class="font-mono">${{ scorecard.gross_replacement_value|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Total Net Book Value</dt>
+                    <dd class="font-mono">${{ scorecard.total_net_book_value|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Period Maintenance Spend</dt>
+                    <dd class="font-mono">${{ scorecard.total_maintenance_spend|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Annual Asset Return Basis</dt>
+                    <dd class="font-mono">${{ scorecard.annual_asset_return_amount|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Planned Maintenance Ratio</dt>
+                    <dd class="font-mono">{{ scorecard.planned_maintenance_ratio_pct|floatformat:1 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Portfolio FCI %</dt>
+                    <dd class="font-mono">{{ scorecard.portfolio_fci_pct|floatformat:2 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>CapEx Utilization %</dt>
+                    <dd class="font-mono">{{ scorecard.capex_budget_utilization_pct|floatformat:1 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fleet Availability / OEE</dt>
+                    <dd class="font-mono">{{ scorecard.fleet_availability_pct|floatformat:1 }}% / {{ scorecard.portfolio_oee_pct|floatformat:1 }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Open Compliance Incidents</dt>
+                    <dd class="font-mono">{{ scorecard.open_compliance_incidents }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Unfunded Replacement Backlog</dt>
+                    <dd class="font-mono font-semibold text-red-700">${{ scorecard.unfunded_replacement_backlog|floatformat:2|intcomma }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+{% if scorecard.executive_summary %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Executive Commentary &amp; Action Plan</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-slate-700 whitespace-pre-line">{{ scorecard.executive_summary }}</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
