@@ -82,5 +82,5 @@ class MobileAssetInspectionForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["asset", "fixed_asset"])
+        reject_foreign(self, cleaned_data, ["asset", "fixed_asset", "inspector"])
         return cleaned_data
