@@ -168,7 +168,9 @@
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
                             <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="btn btn-outline btn-xs">View</a>
+                            {% if not batch.journal_entry and batch.status != "posted" %}
                             <a href="{% url 'assets:asset_gl_sync_batch_edit' batch.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
