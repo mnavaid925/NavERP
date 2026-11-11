@@ -205,15 +205,17 @@
                             <a href="{% url 'assets:asset_replacement_plan_detail' p.pk %}" class="btn-icon" title="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
+                            {% if not p.is_locked %}
                             <a href="{% url 'assets:asset_replacement_plan_edit' p.pk %}" class="btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
-                            <form method="post" action="{% url 'assets:asset_replacement_plan_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ p.number }}?');">
+                            <form method="post" action="{% url 'assets:asset_replacement_plan_delete' p.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ p.number|escapejs }}?');">
                                 {% csrf_token %}
                                 <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
