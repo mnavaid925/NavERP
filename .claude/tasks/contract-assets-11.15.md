@@ -297,6 +297,8 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
   - `Index(fields=["tenant", "sync_domain"], name="idx_agls_ten_dom")` *(16 chars)*
   - `Index(fields=["tenant", "status"], name="idx_agls_ten_stat")` *(17 chars)*
   - `Index(fields=["tenant", "reconciliation_status"], name="idx_agls_ten_rec")` *(16 chars)*
+  - `Index(fields=["tenant", "batch_date", "number"], name="idx_agls_ten_date_num")` *(21 chars)*
+  - `Index(fields=["tenant", "connector"], name="idx_agls_ten_conn")` *(17 chars)*
 - **Validation (`clean()`)**:
   - `source_amount >= 0`, `target_gl_amount >= 0`.
   - If `gl_account` and `offset_gl_account` are both set and `gl_account_id == offset_gl_account_id`: ValidationError on `offset_gl_account`.
@@ -372,6 +374,7 @@ All 4 models inherit from `apps.assets.models._base.TenantNumbered` (provides `t
   - `Index(fields=["tenant", "operational_asset"], name="idx_agis_ten_asset")` *(18 chars)*
   - `Index(fields=["tenant", "drift_status"], name="idx_agis_ten_drift")` *(18 chars)*
   - `Index(fields=["tenant", "status"], name="idx_agis_ten_stat")` *(17 chars)*
+  - `Index(fields=["tenant", "connector"], name="idx_agis_ten_conn")` *(17 chars)*
 - **Validation (`clean()`)**:
   - `latitude`: if not None, `-90 <= latitude <= 90`
   - `longitude`: if not None, `-180 <= longitude <= 180`
