@@ -136,6 +136,9 @@ def asset_portfolio_scenario_detail(request, pk):
 @login_required
 @tenant_admin_required
 def asset_portfolio_scenario_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a portfolio scenario.")
+        return redirect("assets:portfolio_dashboard")
     if request.method == "POST":
         form = AssetPortfolioScenarioForm(request.POST, tenant=request.tenant)
         if form.is_valid():
