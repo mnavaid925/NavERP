@@ -26,6 +26,7 @@
                 <i data-lucide="activity" class="w-4 h-4 me-1"></i> Test Connection
             </button>
         </form>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         <form method="post" action="{% url 'assets:asset_integration_connector_rotate_secret' connector.pk %}" class="inline" onsubmit="return confirm('Rotate credential now? Existing tokens using the old secret will be invalidated.');">
             {% csrf_token %}
             <button type="submit" class="btn btn-outline btn-sm">
@@ -41,6 +42,7 @@
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline btn-sm">Back to List</a>
     </div>
 </div>
