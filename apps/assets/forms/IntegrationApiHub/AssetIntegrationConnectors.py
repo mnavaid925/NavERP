@@ -36,7 +36,6 @@ class AssetIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
             "retry_policy_max",
             "polling_interval_minutes",
             "status",
-            "health_status",
             "vendor_partner",
             "default_org_unit",
             "default_currency",
@@ -70,7 +69,6 @@ class AssetIntegrationConnectorForm(TenantUniqueMixin, TenantModelForm):
                 attrs={"class": "form-input", "min": 1}
             ),
             "status": forms.Select(attrs={"class": "form-select"}),
-            "health_status": forms.Select(attrs={"class": "form-select"}),
             "vendor_partner": forms.Select(attrs={"class": "form-select"}),
             "default_org_unit": forms.Select(attrs={"class": "form-select"}),
             "default_currency": forms.Select(attrs={"class": "form-select"}),
