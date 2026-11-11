@@ -23,12 +23,7 @@ from apps.core.utils import write_audit_log
 @login_required
 def connector_list(request):
     """List tenant-scoped Asset Integration Connectors with KPI counts and filters."""
-    base_qs = assets_scope(
-        AssetIntegrationConnector.objects.select_related(
-            "vendor_partner", "default_org_unit", "default_currency", "owner"
-        ),
-        request,
-    )
+    base_qs = assets_scope(AssetIntegrationConnector.objects.all(), request)
 
     kpis = base_qs.aggregate(
         total=Count("id"),
@@ -39,7 +34,7 @@ def connector_list(request):
         ),
     )
 
-    qs = base_qs
+    qs = base_qs.defer("notes", "last_error_message")
     q = (request.GET.get("q") or "").strip()
     connector_category = (request.GET.get("connector_category") or "").strip()
     provider = (request.GET.get("provider") or "").strip()
@@ -156,14 +151,14 @@ def connector_detail(request, pk):
         request.session.pop("_aicn_secret_reveal", None)
         plaintext_once = reveal.get("secret")
 
-    streams = connector.telemetry_streams.select_related(
-        "operational_asset", "fixed_asset"
+    streams = connector.telemetry_streams.only(
+        "id", "number", "stream_name", "stream_status"
     ).order_by("number")[:10]
-    gl_batches = connector.gl_sync_batches.select_related(
-        "fiscal_period", "journal_entry"
+    gl_batches = connector.gl_sync_batches.only(
+        "id", "number", "sync_domain", "status", "batch_date"
     ).order_by("-batch_date", "-number")[:10]
-    gis_mappings = connector.gis_mappings.select_related(
-        "operational_asset", "location"
+    gis_mappings = connector.gis_mappings.only(
+        "id", "number", "layer_name", "drift_status"
     ).order_by("number")[:10]
 
     return render(
