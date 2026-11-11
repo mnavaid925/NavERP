@@ -3,6 +3,7 @@ from django.contrib import admin
 from apps.assets.models import (
     AssetAcquisitionReceipt,
     AssetAudit,
+    AssetBusinessContinuityPlan,
     AssetCalibrationRecord,
     AssetCapitalization,
     AssetCategory,
@@ -12,6 +13,7 @@ from apps.assets.models import (
     AssetConditionAssessment,
     AssetCriticalityAssessment,
     AssetCustodyLog,
+    AssetCyberSecurityProfile,
     AssetDepreciationSchedule,
     AssetDisposalRequest,
     AssetResaleListing,
@@ -37,6 +39,8 @@ from apps.assets.models import (
     AssetPermitLicense,
     AssetRequisition,
     AssetRevaluation,
+    AssetRiskMitigationAction,
+    AssetRiskRegister,
     AssetServiceContract,
     AssetSpecificationTemplate,
     AssetTag,
@@ -434,6 +438,39 @@ class AssetGeofenceEventAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "asset", "acknowledged_by")
     list_filter = ("status", "event_type", "severity")
     search_fields = ("number", "fence_name", "resolution_notes")
+
+
+@admin.register(AssetRiskRegister)
+class AssetRiskRegisterAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "risk_category", "asset", "inherent_risk_score", "inherent_risk_level", "residual_risk_level", "status", "tenant")
+    list_select_related = ("tenant", "asset", "category", "risk_owner")
+    list_filter = ("status", "risk_category", "inherent_risk_level", "residual_risk_level")
+    search_fields = ("number", "title", "failure_mode")
+
+
+@admin.register(AssetBusinessContinuityPlan)
+class AssetBusinessContinuityPlanAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "primary_asset", "redundancy_type", "recovery_time_objective_hours", "disaster_scenario", "drill_result", "status", "tenant")
+    list_select_related = ("tenant", "primary_asset", "backup_redundant_asset", "emergency_lead")
+    list_filter = ("status", "redundancy_type", "disaster_scenario", "drill_result")
+    search_fields = ("number", "title", "alternate_facility_site")
+
+
+@admin.register(AssetCyberSecurityProfile)
+class AssetCyberSecurityProfileAdmin(admin.ModelAdmin):
+    list_display = ("number", "asset", "device_type", "network_zone", "ip_address", "firmware_version", "cve_risk_score", "security_posture_status", "tenant")
+    list_select_related = ("tenant", "asset")
+    list_filter = ("security_posture_status", "firmware_update_status", "network_zone", "device_type")
+    search_fields = ("number", "asset__name", "ip_address", "mac_address")
+
+
+@admin.register(AssetRiskMitigationAction)
+class AssetRiskMitigationActionAdmin(admin.ModelAdmin):
+    list_display = ("number", "title", "risk", "action_type", "priority", "assigned_to", "target_completion_date", "status", "effectiveness_rating", "tenant")
+    list_select_related = ("tenant", "risk", "assigned_to", "alternative_supplier")
+    list_filter = ("status", "priority", "action_type", "effectiveness_rating")
+    search_fields = ("number", "title", "risk__number")
+
 
 
 
