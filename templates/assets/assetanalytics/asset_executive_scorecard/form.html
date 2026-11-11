@@ -72,11 +72,6 @@
                     {{ form.prepared_by }}
                     {% if form.prepared_by.errors %}<div class="form-error">{{ form.prepared_by.errors }}</div>{% endif %}
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="{{ form.approved_by.id_for_label }}">Executive Approver</label>
-                    {{ form.approved_by }}
-                    {% if form.approved_by.errors %}<div class="form-error">{{ form.approved_by.errors }}</div>{% endif %}
-                </div>
             </div>
 
             <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
