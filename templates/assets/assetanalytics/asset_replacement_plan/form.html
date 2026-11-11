@@ -129,11 +129,6 @@
                     {{ form.funding_status }}
                     {% if form.funding_status.errors %}<div class="form-error">{{ form.funding_status.errors }}</div>{% endif %}
                 </div>
-                <div class="form-group">
-                    <label class="form-label" for="{{ form.status.id_for_label }}">Plan Status *</label>
-                    {{ form.status }}
-                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors }}</div>{% endif %}
-                </div>
             </div>
 
             <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
