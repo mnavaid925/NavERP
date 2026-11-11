@@ -73,15 +73,15 @@ def overview(request):
     )
     stream_agg = assets_scope(AssetTelemetryStream.objects.all(), request).aggregate(
         total=Count("id"),
-        active=Count("id", filter=Q(status="active")),
+        active=Count("id", filter=Q(stream_status="active")),
     )
     gl_batch_agg = assets_scope(AssetGlSyncBatch.objects.all(), request).aggregate(
         total=Count("id"),
-        posted=Count("id", filter=Q(status="posted")),
+        posted=Count("id", filter=Q(status__in=["posted", "reconciled"])),
     )
     gis_agg = assets_scope(AssetGisMapping.objects.all(), request).aggregate(
         total=Count("id"),
-        drifted=Count("id", filter=Q(drift_status__in=["drifted", "missing"])),
+        drifted=Count("id", filter=Q(drift_status__in=["location_drift", "attribute_drift"])),
     )
 
     kpis = {
