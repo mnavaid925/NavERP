@@ -33,7 +33,7 @@ All six reviewers have run in strictly serial order:
 
 ### Important
 
-- [ ] **`I1`**: `templates/assets/assetrisk/` (8 occurrences across 4 templates) — Broken Template Field Reference `asset.asset_code` Rendering Blank
+- [x] **`I1`**: `templates/assets/assetrisk/` (8 occurrences across 4 templates) — Broken Template Field Reference `asset.asset_code` Rendering Blank
   - **Issue:** `scm.Asset` defines `code`, not `asset_code`. Template lookups `asset.asset_code`, `primary_asset.asset_code`, and `backup_redundant_asset.asset_code` fail silently and render blank strings in the UI.
   - **Locations:**
     - `templates/assets/assetrisk/asset_risk_register/list.html:137`: `rsk.asset.asset_code` -> `rsk.asset.code`
@@ -44,6 +44,7 @@ All six reviewers have run in strictly serial order:
     - `templates/assets/assetrisk/asset_business_continuity/detail.html:78`: `plan.backup_redundant_asset.asset_code` -> `plan.backup_redundant_asset.code`
     - `templates/assets/assetrisk/asset_cybersecurity/list.html:127`: `prof.asset.asset_code` -> `prof.asset.code`
     - `templates/assets/assetrisk/asset_cybersecurity/detail.html:52`: `profile.asset.asset_code` -> `profile.asset.code`
+  - **Status:** [x] fixed — fix(assets): use asset code instead of asset_code across assetrisk templates
 
 - [ ] **`I2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203` — Unhandled `RelatedObjectDoesNotExist` in `AssetCyberSecurityProfile.__str__`
   - **Issue:** Direct dereference of `self.asset.name` raises an uncaught exception if `asset` is not yet loaded or unset during form initialization or audit logging.
