@@ -3343,15 +3343,8 @@ LIVE_LINKS = {
         "CMMS/EAM Connectivity": "assets:asset_integration_connector_list?connector_category=cmms_eam",
         "Financial Systems & General Ledger": "assets:asset_gl_sync_batch_list",
         "GIS & Mapping Tools": "assets:asset_gis_mapping_list",
-        # Convenience aliases
+        # Extra live leaf for unfiltered connector hub
         "Integration Connectors": "assets:asset_integration_connector_list",
-        "API Hub": "assets:asset_integration_connector_list",
-        "Telemetry Streams": "assets:asset_telemetry_stream_list",
-        "IoT & SCADA": "assets:asset_telemetry_stream_list",
-        "GL Sync Batches": "assets:asset_gl_sync_batch_list",
-        "GL Reconciliation": "assets:asset_gl_sync_batch_list",
-        "GIS Mappings": "assets:asset_gis_mapping_list",
-        "Integration & API Hub": "assets:asset_integration_connector_list",
     },
 
 
