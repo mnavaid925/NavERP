@@ -173,6 +173,7 @@ def asset_business_continuity_plan_delete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_business_continuity_plan_activate(request, pk):
     plan = assets_object(request, AssetBusinessContinuityPlan, pk)
