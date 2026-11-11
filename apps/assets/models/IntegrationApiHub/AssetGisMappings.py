@@ -133,7 +133,10 @@ class AssetGisMapping(TenantNumbered):
         max_length=20, choices=SYNC_DIRECTION_CHOICES, default="bidirectional"
     )
     drift_status = models.CharField(
-        max_length=24, choices=DRIFT_STATUS_CHOICES, default="unverified"
+        max_length=24,
+        choices=DRIFT_STATUS_CHOICES,
+        default="unverified",
+        editable=False,
     )
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="active"
