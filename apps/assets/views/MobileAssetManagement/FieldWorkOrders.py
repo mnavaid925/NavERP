@@ -92,6 +92,13 @@ def field_work_order_create(request):
             work_order.tenant = request.tenant
             if not work_order.assigned_technician_id:
                 work_order.assigned_technician = request.user
+            now = timezone.now()
+            if work_order.status in ["on_site", "in_progress", "completed"] and not work_order.actual_arrival:
+                work_order.actual_arrival = now
+            if work_order.status == "completed" and not work_order.completed_at:
+                work_order.completed_at = now
+            if work_order.signature_name and not work_order.signed_at:
+                work_order.signed_at = now
             work_order.save()
             write_audit_log(request.user, work_order, "create", tenant=request.tenant)
             messages.success(request, f"Field work order {work_order.number} created successfully.")
@@ -128,7 +135,15 @@ def field_work_order_edit(request, pk):
     if request.method == "POST":
         form = FieldWorkOrderForm(request.POST, instance=work_order, tenant=request.tenant)
         if form.is_valid():
-            work_order = form.save()
+            work_order = form.save(commit=False)
+            now = timezone.now()
+            if work_order.status in ["on_site", "in_progress", "completed"] and not work_order.actual_arrival:
+                work_order.actual_arrival = now
+            if work_order.status == "completed" and not work_order.completed_at:
+                work_order.completed_at = now
+            if work_order.signature_name and not work_order.signed_at:
+                work_order.signed_at = now
+            work_order.save()
             write_audit_log(request.user, work_order, "update", tenant=request.tenant)
             messages.success(request, f"Field work order {work_order.number} updated successfully.")
             return redirect("assets:field_work_order_detail", pk=work_order.pk)
