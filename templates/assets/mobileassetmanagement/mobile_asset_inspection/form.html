@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:mobile_asset_inspection_list' %}">Mobile Inspections</a>
+            <span>/</span>
+            <span>{% if inspection %}{{ inspection.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-900">Inspection Checklist & Field Data</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the following errors:</div>
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                    <li><strong>{{ field|title }}:</strong> {{ errors|join:", " }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.title.id_for_label }}">Inspection Title *</label>
+                    {{ form.title }}
+                    {% if form.title.errors %}<div class="form-error">{{ form.title.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.inspection_type.id_for_label }}">Inspection Type *</label>
+                    {{ form.inspection_type }}
+                    {% if form.inspection_type.errors %}<div class="form-error">{{ form.inspection_type.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Subject Asset *</label>
+                    {{ form.asset }}
+                    {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset (Optional)</label>
+                    {{ form.fixed_asset }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.inspector.id_for_label }}">Field Inspector *</label>
+                    {{ form.inspector }}
+                    {% if form.inspector.errors %}<div class="form-error">{{ form.inspector.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.inspection_date.id_for_label }}">Inspection Date/Time *</label>
+                    {{ form.inspection_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.scheduled_date.id_for_label }}">Scheduled Date (Optional)</label>
+                    {{ form.scheduled_date }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.overall_result.id_for_label }}">Overall Result *</label>
+                    {{ form.overall_result }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.condition_rating.id_for_label }}">Condition Rating (1-5) *</label>
+                    {{ form.condition_rating }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.meter_reading.id_for_label }}">Meter / Odometer Reading</label>
+                    {{ form.meter_reading }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Lifecycle Status *</label>
+                    {{ form.status }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.checklist_summary.id_for_label }}">Checklist Items & Answers</label>
+                    {{ form.checklist_summary }}
+                    <span class="text-xs text-slate-500">Record pass/fail checklist items evaluated during the inspection.</span>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.findings_summary.id_for_label }}">Findings & Defect Summary</label>
+                    {{ form.findings_summary }}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.voice_notes_transcription.id_for_label }}">Voice Memo Dictation</label>
+                    {{ form.voice_notes_transcription }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.photo_url.id_for_label }}">Photo URL</label>
+                    {{ form.photo_url }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.photo_caption.id_for_label }}">Photo Caption</label>
+                    {{ form.photo_caption }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gps_latitude.id_for_label }}">GPS Latitude</label>
+                    {{ form.gps_latitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gps_longitude.id_for_label }}">GPS Longitude</label>
+                    {{ form.gps_longitude }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.location_accuracy_m.id_for_label }}">GPS Accuracy (m)</label>
+                    {{ form.location_accuracy_m }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.client_sync_id.id_for_label }}">Offline Client Sync UUID</label>
+                    {{ form.client_sync_id }}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-6 pt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.corrective_action_required }}
+                        <span class="text-sm font-medium text-slate-800">Corrective Action Required</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        {{ form.is_offline_captured }}
+                        <span class="text-sm font-medium text-slate-800">Captured Offline</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <a href="{% if inspection %}{% url 'assets:mobile_asset_inspection_detail' inspection.pk %}{% else %}{% url 'assets:mobile_asset_inspection_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Inspection
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
