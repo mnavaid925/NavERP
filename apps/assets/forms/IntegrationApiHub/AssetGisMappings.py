@@ -127,6 +127,15 @@ class AssetGisMappingForm(TenantUniqueMixin, TenantModelForm):
             self.fields["gis_custodian"].queryset = User.objects.filter(
                 tenant=self.tenant
             ).order_by("username")
+        else:
+            for fk_field in (
+                "connector",
+                "operational_asset",
+                "location",
+                "org_unit",
+                "gis_custodian",
+            ):
+                self.fields[fk_field].queryset = self.fields[fk_field].queryset.model.objects.none()
 
         for optional_field in (
             "operational_asset",
