@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Scan Logs — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Mobile Asset Management</span>
+            <span>/</span>
+            <span>Scan Logs</span>
+        </div>
+        <h1 class="page-title">Barcode, QR & RFID Scan Logs</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_scan_log_create' %}" class="btn btn-primary">
+            <i data-lucide="scan" class="w-4 h-4 me-1"></i> Record Scan
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="qr-code"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Scans</div>
+            <div class="stat-value">{{ total_scans }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Matched Assets</div>
+            <div class="stat-value">{{ matched_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Unmatched / Not Found</div>
+            <div class="stat-value">{{ not_found_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="radio"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Bluetooth / RFID</div>
+            <div class="stat-value">{{ rfid_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Barcode payload, asset, device..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Scan Method</label>
+                <select name="scan_method" class="form-select">
+                    <option value="">All Methods</option>
+                    {% for val, label in method_choices %}
+                    <option value="{{ val }}" {% if request.GET.scan_method == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Scan Context</label>
+                <select name="scan_context" class="form-select">
+                    <option value="">All Contexts</option>
+                    {% for val, label in context_choices %}
+                    <option value="{{ val }}" {% if request.GET.scan_context == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Match Status</label>
+                <select name="match_status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in match_choices %}
+                    <option value="{{ val }}" {% if request.GET.match_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_scan_log_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Scans Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title text-base font-semibold">Scan Audit Trail ({{ paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Payload & Barcode</th>
+                    <th>Matched Asset</th>
+                    <th>Method</th>
+                    <th>Context</th>
+                    <th>Match Status</th>
+                    <th>Scanner / User</th>
+                    <th>Scanned At</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in scans %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_scan_log_detail' item.pk %}" class="text-blue-600 hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-mono text-sm font-semibold text-slate-900">{{ item.raw_payload }}</div>
+                        {% if item.device_info %}
+                        <div class="text-xs text-slate-500 truncate max-w-xs">{{ item.device_info }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.asset %}
+                        <div class="font-medium text-slate-800">
+                            <i data-lucide="cpu" class="w-3 h-3 inline me-1 text-blue-600"></i>{{ item.asset.name }}
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">{{ item.asset.code }}</div>
+                        {% else %}
+                        <span class="text-slate-400 italic">No asset linked</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.scan_method_badge_class }}">
+                            {{ item.get_scan_method_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.scan_context_badge_class }}">
+                            {{ item.get_scan_context_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.match_status_badge_class }}">
+                            {{ item.get_match_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-sm">
+                        {% if item.scanned_by %}
+                        {{ item.scanned_by.get_full_name|default:item.scanned_by.username }}
+                        {% else %}
+                        <span class="text-slate-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ item.scanned_at|date:"M d, Y H:i" }}
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_scan_log_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_scan_log_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_scan_log_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete scan log {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="scan" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No mobile scan logs found</div>
+                            <div class="text-xs text-slate-400 mb-3">Scan barcodes, QR codes, or Bluetooth RFID tags in the field for fast asset audits.</div>
+                            <a href="{% url 'assets:asset_scan_log_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Record First Scan
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.match_status %}&match_status={{ request.GET.match_status }}{% endif %}{% if request.GET.scan_method %}&scan_method={{ request.GET.scan_method }}{% endif %}{% if request.GET.scan_context %}&scan_context={{ request.GET.scan_context }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.match_status %}&match_status={{ request.GET.match_status }}{% endif %}{% if request.GET.scan_method %}&scan_method={{ request.GET.scan_method }}{% endif %}{% if request.GET.scan_context %}&scan_context={{ request.GET.scan_context }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
