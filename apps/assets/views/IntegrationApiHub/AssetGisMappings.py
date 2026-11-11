@@ -7,6 +7,8 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from ._common import parse_pos_int, verified_connector_initial
+
 from apps.assets.forms.IntegrationApiHub.AssetGisMappings import (
     AssetGisMappingForm,
 )
@@ -47,8 +49,8 @@ def mapping_list(request):
 
     qs = base_qs
     q = (request.GET.get("q") or "").strip()
-    connector_id = (request.GET.get("connector") or "").strip()
-    asset_id = (request.GET.get("operational_asset") or "").strip()
+    connector_id = parse_pos_int(request.GET.get("connector"))
+    asset_id = parse_pos_int(request.GET.get("operational_asset"))
     geometry_type = (request.GET.get("geometry_type") or "").strip()
     drift_status = (request.GET.get("drift_status") or "").strip()
     status = (request.GET.get("status") or "").strip()
@@ -61,10 +63,10 @@ def mapping_list(request):
             | Q(lrs_route_id__icontains=q)
             | Q(connector__number__icontains=q)
         )
-    if connector_id.isdigit():
-        qs = qs.filter(connector_id=int(connector_id))
-    if asset_id.isdigit():
-        qs = qs.filter(operational_asset_id=int(asset_id))
+    if connector_id is not None:
+        qs = qs.filter(connector_id=connector_id)
+    if asset_id is not None:
+        qs = qs.filter(operational_asset_id=asset_id)
     if geometry_type in dict(AssetGisMapping.GEOMETRY_TYPE_CHOICES):
         qs = qs.filter(geometry_type=geometry_type)
     if drift_status in dict(AssetGisMapping.DRIFT_STATUS_CHOICES):
@@ -135,10 +137,7 @@ def mapping_create(request):
             )
             return redirect("assets:asset_gis_mapping_detail", pk=mapping.pk)
     else:
-        initial = {}
-        connector_id = (request.GET.get("connector") or "").strip()
-        if connector_id.isdigit():
-            initial["connector"] = int(connector_id)
+        initial = verified_connector_initial(request)
         form = AssetGisMappingForm(tenant=request.tenant, initial=initial)
 
     return render(
