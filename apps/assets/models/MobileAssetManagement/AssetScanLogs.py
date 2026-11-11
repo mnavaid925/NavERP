@@ -90,6 +90,7 @@ class AssetScanLog(TenantNumbered):
             models.UniqueConstraint(fields=["tenant", "number"], name="assets_ascn_ten_num_uniq"),
         ]
         indexes = [
+            models.Index(fields=["tenant", "asset"], name="idx_ascn_ten_asset"),
             models.Index(fields=["tenant", "match_status"], name="idx_ascn_ten_stat"),
             models.Index(fields=["tenant", "scan_context"], name="idx_ascn_ten_ctxt"),
             models.Index(fields=["tenant", "scan_method"], name="idx_ascn_ten_meth"),
