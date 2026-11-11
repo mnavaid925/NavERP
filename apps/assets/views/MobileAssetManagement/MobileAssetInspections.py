@@ -16,7 +16,11 @@ from apps.core.utils import write_audit_log
 @login_required
 def mobile_asset_inspection_list(request):
     qs = assets_scope(
-        MobileAssetInspection.objects.select_related("asset", "fixed_asset", "inspector"),
+        MobileAssetInspection.objects.select_related("asset", "fixed_asset", "inspector").defer(
+            "checklist_summary",
+            "voice_notes_transcription",
+            "findings_summary",
+        ),
         request,
     )
 
