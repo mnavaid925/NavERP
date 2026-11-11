@@ -35,17 +35,7 @@ from apps.scm.models import Asset
 @login_required
 def stream_list(request):
     """List tenant-scoped IoT/SCADA Telemetry Streams with KPI counts and filters."""
-    base_qs = assets_scope(
-        AssetTelemetryStream.objects.select_related(
-            "connector",
-            "operational_asset",
-            "fixed_asset",
-            "steward",
-            "last_telemetry_reading",
-            "latest_maintenance_request",
-        ),
-        request,
-    )
+    base_qs = assets_scope(AssetTelemetryStream.objects.all(), request)
 
     kpis = base_qs.aggregate(
         total=Count("id"),
@@ -54,7 +44,11 @@ def stream_list(request):
         auto_cbm=Count("id", filter=Q(auto_trigger_maintenance=True)),
     )
 
-    qs = base_qs
+    qs = base_qs.select_related(
+        "connector",
+        "operational_asset",
+        "fixed_asset",
+    ).defer("notes")
     q = (request.GET.get("q") or "").strip()
     connector_id = parse_pos_int(request.GET.get("connector"))
     asset_id = parse_pos_int(request.GET.get("operational_asset"))
@@ -81,10 +75,16 @@ def stream_list(request):
     paginator = Paginator(qs.order_by("number"), 25)
     page_obj = paginator.get_page(request.GET.get("page"))
 
-    connectors = assets_scope(AssetIntegrationConnector.objects.all(), request).order_by(
-        "number"
+    connectors = (
+        assets_scope(AssetIntegrationConnector.objects.all(), request)
+        .only("id", "number", "name")
+        .order_by("number")
     )
-    assets_list = assets_scope(Asset.objects.all(), request).order_by("code")
+    assets_list = (
+        assets_scope(Asset.objects.all(), request)
+        .only("id", "code", "name")
+        .order_by("code")
+    )
 
     context = {
         "streams": page_obj,
