@@ -166,6 +166,9 @@ def asset_replacement_plan_detail(request, pk):
 @login_required
 @tenant_admin_required
 def asset_replacement_plan_create(request):
+    if request.tenant is None:
+        messages.error(request, "Select a tenant workspace before creating a replacement plan.")
+        return redirect("assets:portfolio_dashboard")
     if request.method == "POST":
         form = AssetReplacementPlanForm(request.POST, tenant=request.tenant)
         if form.is_valid():
