@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_integration_connector_list' %}">Integration Connectors</a>
+            <span>/</span>
+            <span>{% if connector %}{{ connector.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Connector Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the errors below:</div>
+                {% if form.non_field_errors %}
+                <div class="text-sm text-red-700 mb-1">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field in form %}
+                        {% for err in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ err }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.name.id_for_label }}">Connector Name *</label>
+                    {{ form.name }}
+                    {% if form.name.errors %}<div class="form-error">{{ form.name.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector_category.id_for_label }}">Integration Domain *</label>
+                    {{ form.connector_category }}
+                    {% if form.connector_category.errors %}<div class="form-error">{{ form.connector_category.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.provider.id_for_label }}">External Provider *</label>
+                    {{ form.provider }}
+                    {% if form.provider.errors %}<div class="form-error">{{ form.provider.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.protocol.id_for_label }}">Transport Protocol *</label>
+                    {{ form.protocol }}
+                    {% if form.protocol.errors %}<div class="form-error">{{ form.protocol.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_direction.id_for_label }}">Sync Direction *</label>
+                    {{ form.sync_direction }}
+                    {% if form.sync_direction.errors %}<div class="form-error">{{ form.sync_direction.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.environment.id_for_label }}">Environment *</label>
+                    {{ form.environment }}
+                    {% if form.environment.errors %}<div class="form-error">{{ form.environment.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.auth_method.id_for_label }}">Authentication Method *</label>
+                    {{ form.auth_method }}
+                    {% if form.auth_method.errors %}<div class="form-error">{{ form.auth_method.errors|first }}</div>{% endif %}
+                    <div class="form-help">Credentials are generated and rotated from the connector detail page after saving.</div>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.endpoint_url.id_for_label }}">Endpoint URI *</label>
+                    {{ form.endpoint_url }}
+                    {% if form.endpoint_url.errors %}<div class="form-error">{{ form.endpoint_url.errors|first }}</div>{% endif %}
+                    <div class="form-help">Supports https://, http://, opc.tcp://, mqtts://, mqtt://, tcps://, sftp://, and wss:// (private/localhost targets blocked).</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.rate_limit_rpm.id_for_label }}">Rate Limit (req/min) *</label>
+                    {{ form.rate_limit_rpm }}
+                    {% if form.rate_limit_rpm.errors %}<div class="form-error">{{ form.rate_limit_rpm.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.timeout_seconds.id_for_label }}">Timeout (seconds) *</label>
+                    {{ form.timeout_seconds }}
+                    {% if form.timeout_seconds.errors %}<div class="form-error">{{ form.timeout_seconds.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.retry_policy_max.id_for_label }}">Max Retries *</label>
+                    {{ form.retry_policy_max }}
+                    {% if form.retry_policy_max.errors %}<div class="form-error">{{ form.retry_policy_max.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.polling_interval_minutes.id_for_label }}">Polling Interval (min) *</label>
+                    {{ form.polling_interval_minutes }}
+                    {% if form.polling_interval_minutes.errors %}<div class="form-error">{{ form.polling_interval_minutes.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Operational Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.health_status.id_for_label }}">Health Status *</label>
+                    {{ form.health_status }}
+                    {% if form.health_status.errors %}<div class="form-error">{{ form.health_status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.vendor_partner.id_for_label }}">Vendor / Partner</label>
+                    {{ form.vendor_partner }}
+                    {% if form.vendor_partner.errors %}<div class="form-error">{{ form.vendor_partner.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_org_unit.id_for_label }}">Default Org Unit</label>
+                    {{ form.default_org_unit }}
+                    {% if form.default_org_unit.errors %}<div class="form-error">{{ form.default_org_unit.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.default_currency.id_for_label }}">Default Currency</label>
+                    {{ form.default_currency }}
+                    {% if form.default_currency.errors %}<div class="form-error">{{ form.default_currency.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.owner.id_for_label }}">Technical Owner</label>
+                    {{ form.owner }}
+                    {% if form.owner.errors %}<div class="form-error">{{ form.owner.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-2">
+                    {{ form.webhook_verify_tls }}
+                    <label class="form-label mb-0" for="{{ form.webhook_verify_tls.id_for_label }}">Verify TLS / X.509 certificates on endpoint connections</label>
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors|first }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create Connector{% endif %}
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_integration_connector_detail' connector.pk %}{% else %}{% url 'assets:asset_integration_connector_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
