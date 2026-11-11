@@ -137,7 +137,11 @@
                 </div>
                 <div class="detail-item">
                     <dt>Purchase Order</dt>
-                    <dd>{{ batch.purchase_order|default:"—" }}</dd>
+                    <dd>
+                        {% if batch.purchase_order %}
+                        <a href="{% url 'scm:purchaseorder_detail' batch.purchase_order.pk %}" class="text-brand hover:underline">{{ batch.purchase_order }}</a>
+                        {% else %}<span class="text-muted">—</span>{% endif %}
+                    </dd>
                 </div>
                 <div class="detail-item">
                     <dt>Asset Capitalization</dt>
