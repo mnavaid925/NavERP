@@ -71,6 +71,12 @@ class AssetComplianceIncidentForm(TenantUniqueMixin, TenantModelForm):
             self.fields["status"].choices = [
                 (k, v) for k, v in AssetComplianceIncident.STATUS_CHOICES if k not in ["resolved", "closed"]
             ]
+        if "fine_assessed" in self.fields:
+            self.fields["fine_assessed"].required = False
+            self.fields["fine_assessed"].initial = Decimal("0.00")
+        if "fine_paid" in self.fields:
+            self.fields["fine_paid"].required = False
+            self.fields["fine_paid"].initial = Decimal("0.00")
 
     def clean_status(self):
         status = self.cleaned_data.get("status")
