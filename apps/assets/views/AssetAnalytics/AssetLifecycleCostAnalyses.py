@@ -27,17 +27,20 @@ from apps.core.models.OrgUnit import OrgUnit
 from apps.core.utils import write_audit_log
 
 
+_ALCC_SELECT_RELATED = (
+    "fixed_asset",
+    "operational_asset",
+    "asset_category",
+    "asset_model",
+    "org_unit",
+    "currency",
+    "analyzed_by",
+)
+
+
 def _filter_alcc_queryset(request):
     qs = assets_scope(
-        AssetLifecycleCostAnalysis.objects.select_related(
-            "fixed_asset",
-            "operational_asset",
-            "asset_category",
-            "asset_model",
-            "org_unit",
-            "currency",
-            "analyzed_by",
-        ).defer("notes"),
+        AssetLifecycleCostAnalysis.objects.select_related(*_ALCC_SELECT_RELATED).defer("notes"),
         request,
     )
     q = request.GET.get("q", "").strip()
@@ -118,15 +121,7 @@ def asset_lifecycle_cost_analysis_detail(request, pk):
         request,
         AssetLifecycleCostAnalysis,
         pk,
-        select_related=[
-            "fixed_asset",
-            "operational_asset",
-            "asset_category",
-            "asset_model",
-            "org_unit",
-            "currency",
-            "analyzed_by",
-        ],
+        select_related=_ALCC_SELECT_RELATED,
     )
     return render(
         request,
@@ -233,7 +228,12 @@ def asset_lifecycle_cost_analysis_delete(request, pk):
 @tenant_admin_required
 @require_POST
 def asset_lifecycle_cost_analysis_populate(request, pk):
-    analysis = assets_object(request, AssetLifecycleCostAnalysis, pk)
+    analysis = assets_object(
+        request,
+        AssetLifecycleCostAnalysis,
+        pk,
+        select_related=("fixed_asset", "operational_asset", "asset_model"),
+    )
     if analysis.is_locked:
         messages.error(
             request,
