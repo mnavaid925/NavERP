@@ -86,5 +86,5 @@ class FieldWorkOrderForm(TenantUniqueMixin, TenantModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        reject_foreign(self, cleaned_data, ["asset", "fixed_asset", "maintenance_request"])
+        reject_foreign(self, cleaned_data, ["asset", "fixed_asset", "maintenance_request", "assigned_technician"])
         return cleaned_data
