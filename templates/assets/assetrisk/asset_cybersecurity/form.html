@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %}Edit {{ profile.number }}{% else %}New Device Profile{% endif %} — Cybersecurity — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_cybersecurity_profile_list' %}">Cybersecurity</a>
+            <span>/</span>
+            <span>{% if is_edit %}Edit {{ profile.number }}{% else %}New Profile{% endif %}</span>
+        </div>
+        <h1 class="page-title">{% if is_edit %}Edit Device Profile: {{ profile.number }}{% else %}New Connected Asset Cybersecurity Profile{% endif %}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="p-4 mb-6 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                {{ form.non_field_errors }}
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.asset.id_for_label }}">Connected Asset *</label>
+                    {{ form.asset }}
+                    {% if form.asset.errors %}<div class="form-error">{{ form.asset.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.device_type.id_for_label }}">Device Type *</label>
+                    {{ form.device_type }}
+                    {% if form.device_type.errors %}<div class="form-error">{{ form.device_type.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.network_zone.id_for_label }}">Purdue Network Zone *</label>
+                    {{ form.network_zone }}
+                    {% if form.network_zone.errors %}<div class="form-error">{{ form.network_zone.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.exposure_level.id_for_label }}">Exposure Level *</label>
+                    {{ form.exposure_level }}
+                    {% if form.exposure_level.errors %}<div class="form-error">{{ form.exposure_level.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.ip_address.id_for_label }}">IP Address</label>
+                    {{ form.ip_address }}
+                    {% if form.ip_address.errors %}<div class="form-error">{{ form.ip_address.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.mac_address.id_for_label }}">MAC Address</label>
+                    {{ form.mac_address }}
+                    {% if form.mac_address.errors %}<div class="form-error">{{ form.mac_address.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.protocol_used.id_for_label }}">Industrial Protocol *</label>
+                    {{ form.protocol_used }}
+                    {% if form.protocol_used.errors %}<div class="form-error">{{ form.protocol_used.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.security_posture_status.id_for_label }}">Security Posture Status *</label>
+                    {{ form.security_posture_status }}
+                    {% if form.security_posture_status.errors %}<div class="form-error">{{ form.security_posture_status.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <!-- Firmware & Patching Section -->
+            <div class="p-4 mb-6 rounded-lg border border-slate-200 bg-slate-50">
+                <h3 class="text-sm font-semibold text-slate-800 uppercase tracking-wider mb-3">Firmware Management & Blackout Windows</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.firmware_version.id_for_label }}">Active Firmware *</label>
+                        {{ form.firmware_version }}
+                        {% if form.firmware_version.errors %}<div class="form-error">{{ form.firmware_version.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.latest_available_firmware.id_for_label }}">Latest Available Firmware</label>
+                        {{ form.latest_available_firmware }}
+                        {% if form.latest_available_firmware.errors %}<div class="form-error">{{ form.latest_available_firmware.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.firmware_update_status.id_for_label }}">Update Status *</label>
+                        {{ form.firmware_update_status }}
+                        {% if form.firmware_update_status.errors %}<div class="form-error">{{ form.firmware_update_status.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" for="{{ form.patch_freeze_until.id_for_label }}">Patch Freeze Until</label>
+                        {{ form.patch_freeze_until }}
+                        {% if form.patch_freeze_until.errors %}<div class="form-error">{{ form.patch_freeze_until.errors }}</div>{% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vulnerabilities & Compensating Controls -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.cve_risk_score.id_for_label }}">Base CVSS Score (0.0 - 10.0)</label>
+                    {{ form.cve_risk_score }}
+                    {% if form.cve_risk_score.errors %}<div class="form-error">{{ form.cve_risk_score.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.last_vulnerability_scan_date.id_for_label }}">Last Vulnerability Scan Date</label>
+                    {{ form.last_vulnerability_scan_date }}
+                    {% if form.last_vulnerability_scan_date.errors %}<div class="form-error">{{ form.last_vulnerability_scan_date.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.known_vulnerabilities_cve.id_for_label }}">Known CVE Vulnerabilities & Security Advisories</label>
+                    {{ form.known_vulnerabilities_cve }}
+                    {% if form.known_vulnerabilities_cve.errors %}<div class="form-error">{{ form.known_vulnerabilities_cve.errors }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.compensating_controls.id_for_label }}">Compensating Security Controls (Firewall rules, physical locks)</label>
+                    {{ form.compensating_controls }}
+                    {% if form.compensating_controls.errors %}<div class="form-error">{{ form.compensating_controls.errors }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i> Save Profile
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_cybersecurity_profile_detail' profile.pk %}{% else %}{% url 'assets:asset_cybersecurity_profile_list' %}{% endif %}" class="btn btn-outline">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
