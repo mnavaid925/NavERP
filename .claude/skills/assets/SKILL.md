@@ -81,6 +81,11 @@ apps/assets/
       AssetResaleListings.py                  <- AssetResaleListing [ARSL-]
       AssetTradeIns.py                        <- AssetTradeIn [ATIN-]
       AssetScrapSalvages.py                   <- AssetScrapSalvage [ASCR-]
+    AssetCompliance/                          <- Sub-module 11.11 models
+      AssetComplianceFrameworks.py            <- AssetComplianceFramework [ACF-]
+      AssetComplianceAudits.py                <- AssetComplianceAudit [ACA-]
+      AssetPermitLicenses.py                  <- AssetPermitLicense [APL-]
+      AssetComplianceIncidents.py             <- AssetComplianceIncident [ACI-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -129,6 +134,11 @@ apps/assets/
       AssetResaleListings.py                  <- AssetResaleListingForm
       AssetTradeIns.py                        <- AssetTradeInForm
       AssetScrapSalvages.py                   <- AssetScrapSalvageForm
+    AssetCompliance/                          <- Sub-module 11.11 forms
+      AssetComplianceFrameworks.py            <- AssetComplianceFrameworkForm
+      AssetComplianceAudits.py                <- AssetComplianceAuditForm
+      AssetPermitLicenses.py                  <- AssetPermitLicenseForm
+      AssetComplianceIncidents.py             <- AssetComplianceIncidentForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -178,6 +188,11 @@ apps/assets/
       AssetResaleListings.py                  <- Listing CRUD + record_bid, accept_sale, mark_paid, mark_delivered
       AssetTradeIns.py                        <- Trade-In CRUD + surrender, settle
       AssetScrapSalvages.py                   <- Scrap/Salvage CRUD + certify_abatement, record_cod, settle
+    AssetCompliance/                          <- Sub-module 11.11 views
+      AssetComplianceFrameworks.py            <- Framework CRUD + delete (ProtectedError handled, tenant admin)
+      AssetComplianceAudits.py                <- Audit CRUD + start, complete, delete (status guarded, tenant admin)
+      AssetPermitLicenses.py                  <- Permit CRUD + renew (status guarded), delete (tenant admin)
+      AssetComplianceIncidents.py             <- Incident CRUD + resolve, close, delete (status guarded, tenant admin)
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -225,6 +240,11 @@ apps/assets/
       AssetResaleListings.py
       AssetTradeIns.py
       AssetScrapSalvages.py
+    AssetCompliance/                          <- Sub-module 11.11 URL route definitions
+      AssetComplianceFrameworks.py
+      AssetComplianceAudits.py
+      AssetPermitLicenses.py
+      AssetComplianceIncidents.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
     seed_assets.py                            <- Idempotent demonstration data seeder (11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 & 11.9)
@@ -266,6 +286,10 @@ apps/assets/
     test_assetdisposal_forms.py               <- 11.9 Form validations, clean rules, tenant foreign key isolation
     test_assetdisposal_views.py               <- 11.9 View contracts, filters, status guards, settlements
     test_assetdisposal_security.py            <- 11.9 IDOR (404), RBAC gates, mass assignment, idempotency
+    test_compliance_models.py                 <- 11.11 Model invariants, auto-numbering, properties, constraints
+    test_compliance_forms.py                  <- 11.11 Form validation, mass-assignment exclusion, reject_foreign
+    test_compliance_views.py                  <- 11.11 View context contracts, filters, status guards, actions
+    test_compliance_security.py               <- 11.11 IDOR (404), RBAC gates (403), method safety (405), audits
 ```
 
 ---
@@ -664,6 +688,37 @@ Namespace: `assets:`
   - `assets:asset_scrap_salvage_record_cod`: `/assets/disposal/scrap-salvage/<pk>/record-cod/` [POST]
   - `assets:asset_scrap_salvage_settle`: `/assets/disposal/scrap-salvage/<pk>/settle/` [POST, Admin]
 
+### 11.11 Compliance & Regulatory Management
+- **Compliance Frameworks:**
+  - `assets:asset_compliance_framework_list`: `/assets/compliance/frameworks/`
+  - `assets:asset_compliance_framework_create`: `/assets/compliance/frameworks/create/`
+  - `assets:asset_compliance_framework_detail`: `/assets/compliance/frameworks/<pk>/`
+  - `assets:asset_compliance_framework_edit`: `/assets/compliance/frameworks/<pk>/edit/`
+  - `assets:asset_compliance_framework_delete`: `/assets/compliance/frameworks/<pk>/delete/` [POST, Admin]
+- **Compliance Audits:**
+  - `assets:asset_compliance_audit_list`: `/assets/compliance/audits/`
+  - `assets:asset_compliance_audit_create`: `/assets/compliance/audits/create/`
+  - `assets:asset_compliance_audit_detail`: `/assets/compliance/audits/<pk>/`
+  - `assets:asset_compliance_audit_edit`: `/assets/compliance/audits/<pk>/edit/`
+  - `assets:asset_compliance_audit_start`: `/assets/compliance/audits/<pk>/start/` [POST]
+  - `assets:asset_compliance_audit_complete`: `/assets/compliance/audits/<pk>/complete/` [POST]
+  - `assets:asset_compliance_audit_delete`: `/assets/compliance/audits/<pk>/delete/` [POST, Admin]
+- **Operating Permits & Licenses:**
+  - `assets:asset_permit_license_list`: `/assets/compliance/permits/`
+  - `assets:asset_permit_license_create`: `/assets/compliance/permits/create/`
+  - `assets:asset_permit_license_detail`: `/assets/compliance/permits/<pk>/`
+  - `assets:asset_permit_license_edit`: `/assets/compliance/permits/<pk>/edit/`
+  - `assets:asset_permit_license_renew`: `/assets/compliance/permits/<pk>/renew/` [POST]
+  - `assets:asset_permit_license_delete`: `/assets/compliance/permits/<pk>/delete/` [POST, Admin]
+- **Compliance Incidents & Citations:**
+  - `assets:asset_compliance_incident_list`: `/assets/compliance/incidents/`
+  - `assets:asset_compliance_incident_create`: `/assets/compliance/incidents/create/`
+  - `assets:asset_compliance_incident_detail`: `/assets/compliance/incidents/<pk>/`
+  - `assets:asset_compliance_incident_edit`: `/assets/compliance/incidents/<pk>/edit/`
+  - `assets:asset_compliance_incident_resolve`: `/assets/compliance/incidents/<pk>/resolve/` [POST]
+  - `assets:asset_compliance_incident_close`: `/assets/compliance/incidents/<pk>/close/` [POST]
+  - `assets:asset_compliance_incident_delete`: `/assets/compliance/incidents/<pk>/delete/` [POST, Admin]
+
 ---
 
 ## Conventions & Gotchas
@@ -698,7 +753,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (1,392 passing tests across 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, and 11.9).
+Unfiltered run on SQLite in-memory test database (1,600+ passing tests across 11.1 through 11.11).
 
 ---
 
@@ -712,4 +767,5 @@ Unfiltered run on SQLite in-memory test database (1,392 passing tests across 11.
 - `11.7`: Reliability & Condition Monitoring (`assets:asset_condition_assessment_list`)
 - `11.8`: Warranty & Insurance Management (`assets:asset_warranty_list`)
 - `11.9`: Asset Disposal & Retirement (`assets:asset_disposal_request_list`)
+- `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
 
