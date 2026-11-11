@@ -307,7 +307,7 @@ def test_compliance_view_framework_create_post_valid(client_a, tenant_a, categor
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        target_object_id=str(created.pk),
+        object_id=created.pk,
     ).exists()
 
 
@@ -364,7 +364,7 @@ def test_compliance_view_framework_edit_post_valid(client_a, tenant_a, complianc
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(compliance_framework_a.pk),
+        object_id=compliance_framework_a.pk,
     ).exists()
 
 
@@ -395,7 +395,7 @@ def test_compliance_view_framework_delete_post_unlinked(client_a, tenant_a):
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        target_object_id=str(fw.pk),
+        object_id=fw.pk,
     ).exists()
 
 
@@ -580,7 +580,7 @@ def test_compliance_view_audit_create_post_valid(client_a, tenant_a, compliance_
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        target_object_id=str(created.pk),
+        object_id=created.pk,
     ).exists()
 
 
@@ -681,7 +681,7 @@ def test_compliance_view_audit_edit_post_valid(client_a, tenant_a, compliance_fr
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(audit.pk),
+        object_id=audit.pk,
     ).exists()
 
 
@@ -714,7 +714,7 @@ def test_compliance_view_audit_start_success(client_a, tenant_a, compliance_fram
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(audit.pk),
+        object_id=audit.pk,
     ).exists()
 
 
@@ -769,7 +769,7 @@ def test_compliance_view_audit_complete_success(client_a, tenant_a, compliance_f
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(audit.pk),
+        object_id=audit.pk,
     ).exists()
 
 
@@ -829,7 +829,7 @@ def test_compliance_view_audit_delete_scheduled_success(client_a, tenant_a, comp
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        target_object_id=str(audit.pk),
+        object_id=audit.pk,
     ).exists()
 
 
@@ -1009,7 +1009,7 @@ def test_compliance_view_permit_create_post_valid(client_a, tenant_a, operationa
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        target_object_id=str(created.pk),
+        object_id=created.pk,
     ).exists()
 
 
@@ -1069,7 +1069,7 @@ def test_compliance_view_permit_edit_post_valid(client_a, tenant_a, permit_licen
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(permit_license_a.pk),
+        object_id=permit_license_a.pk,
     ).exists()
 
 
@@ -1094,7 +1094,7 @@ def test_compliance_view_permit_renew_success(client_a, tenant_a, permit_license
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(permit_license_a.pk),
+        object_id=permit_license_a.pk,
     ).exists()
 
 
@@ -1160,7 +1160,7 @@ def test_compliance_view_permit_delete_success(client_a, tenant_a, operational_a
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        target_object_id=str(permit.pk),
+        object_id=permit.pk,
     ).exists()
 
 
@@ -1339,7 +1339,7 @@ def test_compliance_view_incident_create_post_valid(client_a, tenant_a, operatio
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="create",
-        target_object_id=str(created.pk),
+        object_id=created.pk,
     ).exists()
 
 
@@ -1463,7 +1463,7 @@ def test_compliance_view_incident_edit_post_valid(client_a, tenant_a, operationa
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(incident.pk),
+        object_id=incident.pk,
     ).exists()
 
 
@@ -1500,7 +1500,7 @@ def test_compliance_view_incident_resolve_success(client_a, tenant_a, operationa
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(incident.pk),
+        object_id=incident.pk,
     ).exists()
 
 
@@ -1557,7 +1557,7 @@ def test_compliance_view_incident_close_success(client_a, compliance_incident_a,
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="update",
-        target_object_id=str(compliance_incident_a.pk),
+        object_id=compliance_incident_a.pk,
     ).exists()
 
 
@@ -1623,7 +1623,7 @@ def test_compliance_view_incident_delete_open_success(client_a, tenant_a, operat
     assert AuditLog.objects.filter(
         tenant=tenant_a,
         action="delete",
-        target_object_id=str(incident.pk),
+        object_id=incident.pk,
     ).exists()
 
 
@@ -1717,4 +1717,4 @@ def test_compliance_view_unauthenticated_redirects(url_name, uses_pk, compliance
 
     resp = anon_client.get(url)
     assert resp.status_code == 302
-    assert "/accounts/login/" in resp.url
+    assert "/login/" in resp.url
