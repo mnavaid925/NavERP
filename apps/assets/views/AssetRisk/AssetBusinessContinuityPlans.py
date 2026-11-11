@@ -21,7 +21,7 @@ def asset_business_continuity_plan_list(request):
             "primary_asset",
             "backup_redundant_asset",
             "emergency_lead",
-        ).defer("failover_procedure", "failback_procedure"),
+        ).defer("failover_procedure", "failback_procedure", "critical_spares_required"),
         request,
     )
 
