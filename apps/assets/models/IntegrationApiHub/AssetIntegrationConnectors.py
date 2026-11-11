@@ -274,7 +274,10 @@ class AssetIntegrationConnector(TenantNumbered):
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     health_status = models.CharField(
-        max_length=20, choices=HEALTH_STATUS_CHOICES, default="unverified"
+        max_length=20,
+        choices=HEALTH_STATUS_CHOICES,
+        default="unverified",
+        editable=False,
     )
 
     vendor_partner = models.ForeignKey(
