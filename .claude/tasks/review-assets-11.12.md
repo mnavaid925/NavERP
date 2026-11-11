@@ -46,9 +46,10 @@ All six reviewers have run in strictly serial order:
     - `templates/assets/assetrisk/asset_cybersecurity/detail.html:52`: `profile.asset.asset_code` -> `profile.asset.code`
   - **Status:** [x] fixed — fix(assets): use asset code instead of asset_code across assetrisk templates
 
-- [ ] **`I2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203` — Unhandled `RelatedObjectDoesNotExist` in `AssetCyberSecurityProfile.__str__`
+- [x] **`I2`**: `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py:203` — Unhandled `RelatedObjectDoesNotExist` in `AssetCyberSecurityProfile.__str__`
   - **Issue:** Direct dereference of `self.asset.name` raises an uncaught exception if `asset` is not yet loaded or unset during form initialization or audit logging.
   - **Fix:** Change to `f"{self.number} — {self.asset.name if getattr(self, 'asset_id', None) else 'Unlinked'} ({self.get_device_type_display()})"`.
+  - **Status:** [x] fixed — fix(assets): safeguard __str__ in AssetCyberSecurityProfile against unlinked asset
 
 - [ ] **`I3`**: `apps/assets/views/AssetRisk/` — Missing Server-Side State Machine Guards on Workflow Action Endpoints
   - **Issue:** Mutating POST actions execute unconditional status overwrites without validating the current status, allowing invalid transitions or regressions via direct POST.
