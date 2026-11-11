@@ -480,32 +480,85 @@ class AssetRiskMitigationActionAdmin(admin.ModelAdmin):
 class AssetIntegrationConnectorAdmin(admin.ModelAdmin):
     list_display = ("number", "name", "connector_category", "provider", "protocol", "environment", "status", "health_status", "tenant")
     list_select_related = ("tenant", "vendor_partner", "default_org_unit", "default_currency", "owner")
-    list_filter = ("status", "health_status", "connector_category", "provider", "environment")
+    list_filter = ("tenant", "status", "health_status", "connector_category", "provider", "environment")
     search_fields = ("number", "name", "endpoint_url", "api_key_prefix")
+    exclude = ("api_key_hash",)
+    readonly_fields = (
+        "number",
+        "api_key_prefix",
+        "health_status",
+        "last_heartbeat_at",
+        "last_sync_at",
+        "consecutive_failures",
+        "last_error_message",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(AssetTelemetryStream)
 class AssetTelemetryStreamAdmin(admin.ModelAdmin):
     list_display = ("number", "stream_name", "connector", "operational_asset", "metric_type", "stream_protocol", "stream_status", "readings_ingested_count", "tenant")
     list_select_related = ("tenant", "connector", "operational_asset", "fixed_asset", "steward")
-    list_filter = ("stream_status", "stream_protocol", "metric_type", "auto_trigger_maintenance")
+    list_filter = ("tenant", "stream_status", "stream_protocol", "metric_type", "auto_trigger_maintenance")
     search_fields = ("number", "stream_name", "tag_address", "connector__number")
+    readonly_fields = (
+        "number",
+        "last_ingested_value",
+        "last_ingested_at",
+        "readings_ingested_count",
+        "last_telemetry_reading",
+        "latest_maintenance_request",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(AssetGlSyncBatch)
 class AssetGlSyncBatchAdmin(admin.ModelAdmin):
     list_display = ("number", "sync_domain", "connector", "batch_date", "source_amount", "target_gl_amount", "variance_amount", "reconciliation_status", "status", "tenant")
     list_select_related = ("tenant", "connector", "fiscal_period", "gl_account", "offset_gl_account", "journal_entry")
-    list_filter = ("status", "reconciliation_status", "sync_domain", "sync_direction")
+    list_filter = ("tenant", "status", "reconciliation_status", "sync_domain", "sync_direction")
     search_fields = ("number", "external_batch_ref", "connector__number")
+    readonly_fields = (
+        "number",
+        "variance_amount",
+        "reconciliation_status",
+        "status",
+        "records_processed",
+        "records_succeeded",
+        "records_failed",
+        "synced_at",
+        "journal_entry",
+        "executed_by",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and (obj.journal_entry_id is not None or obj.status == "posted"):
+            return False
+        return super().has_change_permission(request, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and (obj.journal_entry_id is not None or obj.status == "posted"):
+            return False
+        return super().has_delete_permission(request, obj=obj)
 
 
 @admin.register(AssetGisMapping)
 class AssetGisMappingAdmin(admin.ModelAdmin):
     list_display = ("number", "layer_name", "external_feature_id", "operational_asset", "geometry_type", "coordinate_system_srid", "drift_status", "status", "tenant")
     list_select_related = ("tenant", "connector", "operational_asset", "location", "gis_custodian")
-    list_filter = ("status", "drift_status", "geometry_type", "is_linear_asset")
+    list_filter = ("tenant", "status", "drift_status", "geometry_type", "is_linear_asset")
     search_fields = ("number", "layer_name", "external_feature_id", "lrs_route_id")
+    readonly_fields = (
+        "number",
+        "drift_status",
+        "last_spatial_sync_at",
+        "created_at",
+        "updated_at",
+    )
 
 
 
