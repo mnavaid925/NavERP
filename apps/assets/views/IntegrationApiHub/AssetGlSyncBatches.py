@@ -236,7 +236,7 @@ def batch_edit(request, pk):
     )
 
 
-@login_required
+@tenant_admin_required
 @require_POST
 def batch_delete(request, pk):
     """Delete a draft/unposted Asset GL Sync Batch."""
