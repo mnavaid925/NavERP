@@ -119,6 +119,11 @@ class AssetTelemetryStreamForm(TenantUniqueMixin, TenantModelForm):
             self.fields["steward"].queryset = User.objects.filter(
                 tenant=self.tenant
             ).order_by("username")
+        else:
+            self.fields["connector"].queryset = AssetIntegrationConnector.objects.none()
+            self.fields["operational_asset"].queryset = Asset.objects.none()
+            self.fields["fixed_asset"].queryset = FixedAsset.objects.none()
+            self.fields["steward"].queryset = User.objects.none()
 
         for optional_field in (
             "operational_asset",
