@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load humanize %}
 
 {% block title %}Portfolio Performance Dashboard — Asset Analytics & BI — NavERP{% endblock %}
 
@@ -84,8 +83,8 @@
         <div class="stat-icon blue"><i data-lucide="boxes"></i></div>
         <div class="stat-body">
             <div class="stat-label">Active Portfolio &amp; NBV</div>
-            <div class="stat-value">${{ kpis.total_nbv|floatformat:2|intcomma }}</div>
-            <div class="text-xs text-slate-500 mt-1">{{ kpis.total_assets|intcomma }} active assets (Acq ${{ kpis.total_acquisition_value|floatformat:0|intcomma }})</div>
+            <div class="stat-value">${{ kpis.total_nbv|floatformat:"2g" }}</div>
+            <div class="text-xs text-slate-500 mt-1">{{ kpis.total_assets|floatformat:"0g" }} active assets (Acq ${{ kpis.total_acquisition_value|floatformat:"0g" }})</div>
         </div>
     </div>
     <div class="stat-card">
@@ -100,15 +99,15 @@
         <div class="stat-icon orange"><i data-lucide="landmark"></i></div>
         <div class="stat-body">
             <div class="stat-label">5-Year CapEx Demand</div>
-            <div class="stat-value">${{ kpis.five_year_capex_demand|floatformat:2|intcomma }}</div>
-            <div class="text-xs text-amber-700 mt-1">Unfunded backlog: ${{ kpis.unfunded_backlog_total|floatformat:0|intcomma }}</div>
+            <div class="stat-value">${{ kpis.five_year_capex_demand|floatformat:"2g" }}</div>
+            <div class="text-xs text-amber-700 mt-1">Unfunded backlog: ${{ kpis.unfunded_backlog_total|floatformat:"0g" }}</div>
         </div>
     </div>
     <div class="stat-card">
         <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
         <div class="stat-body">
             <div class="stat-label">Open Risk Exposure</div>
-            <div class="stat-value">${{ kpis.open_risk_exposure|floatformat:2|intcomma }}</div>
+            <div class="stat-value">${{ kpis.open_risk_exposure|floatformat:"2g" }}</div>
             <div class="text-xs text-slate-500 mt-1">{{ compliance_summary.pass_rate_pct|floatformat:1 }}% audit pass · {{ kpis.open_incidents_count }} open incidents</div>
         </div>
     </div>
@@ -185,9 +184,9 @@
                                 </a>
                             </td>
                             <td class="text-right font-mono">{{ yr.plan_count }}</td>
-                            <td class="text-right font-mono font-semibold">${{ yr.inflation_cost|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono text-emerald-700">${{ yr.funded_cost|floatformat:2|intcomma }}</td>
-                            <td class="text-right font-mono text-red-700">${{ yr.unfunded_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ yr.inflation_cost|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-emerald-700">${{ yr.funded_cost|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-red-700">${{ yr.unfunded_cost|floatformat:"2g" }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -229,7 +228,7 @@
                             <td>
                                 {% if ba.operational_asset %}{{ ba.operational_asset.name }}{% elif ba.fixed_asset %}{{ ba.fixed_asset.name }}{% elif ba.asset_category %}{{ ba.asset_category.name }}{% else %}—{% endif %}
                             </td>
-                            <td class="text-right font-mono font-semibold">${{ ba.total_lifecycle_cost|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono font-semibold">${{ ba.total_lifecycle_cost|floatformat:"2g" }}</td>
                             <td class="text-right font-mono">{{ ba.maintenance_to_rav_pct|floatformat:1 }}%</td>
                             <td><span class="badge {{ ba.recommendation_badge_class }}">{{ ba.get_recommendation_display }}</span></td>
                         </tr>
@@ -264,7 +263,7 @@
                         <tr>
                             <td><span class="badge {{ r.badge_class }}">{{ r.label }}</span></td>
                             <td class="text-right font-mono">{{ r.count }}</td>
-                            <td class="text-right font-mono">${{ r.exposure|floatformat:2|intcomma }}</td>
+                            <td class="text-right font-mono">${{ r.exposure|floatformat:"2g" }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
