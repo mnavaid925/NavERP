@@ -51,12 +51,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Number, tag, stream name..." class="form-input">
+                <label class="form-label text-xs" for="id_filter_q">Search</label>
+                <input id="id_filter_q" type="text" name="q" value="{{ search_query }}" placeholder="Number, tag, stream name..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Connector</label>
-                <select name="connector" class="form-select">
+                <label class="form-label text-xs" for="id_filter_connector">Connector</label>
+                <select id="id_filter_connector" name="connector" class="form-select">
                     <option value="">All Connectors</option>
                     {% for c in connectors %}
                     <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
@@ -64,8 +64,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Operational Asset</label>
-                <select name="operational_asset" class="form-select">
+                <label class="form-label text-xs" for="id_filter_asset">Operational Asset</label>
+                <select id="id_filter_asset" name="operational_asset" class="form-select">
                     <option value="">All Assets</option>
                     {% for a in assets_list %}
                     <option value="{{ a.pk }}" {% if request.GET.operational_asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} &middot; {{ a.name }}</option>
@@ -73,8 +73,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Protocol</label>
-                <select name="stream_protocol" class="form-select">
+                <label class="form-label text-xs" for="id_filter_protocol">Protocol</label>
+                <select id="id_filter_protocol" name="stream_protocol" class="form-select">
                     <option value="">All Protocols</option>
                     {% for val, label in protocol_choices %}
                     <option value="{{ val }}" {% if request.GET.stream_protocol == val %}selected{% endif %}>{{ label }}</option>
@@ -82,8 +82,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="stream_status" class="form-select">
+                <label class="form-label text-xs" for="id_filter_status">Status</label>
+                <select id="id_filter_status" name="stream_status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.stream_status == val %}selected{% endif %}>{{ label }}</option>
@@ -94,7 +94,7 @@
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
                 </button>
-                <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </a>
             </div>
