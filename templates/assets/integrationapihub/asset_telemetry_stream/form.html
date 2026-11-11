@@ -68,12 +68,14 @@
                 <div class="form-group">
                     <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
                     {{ form.operational_asset }}
+                    <div class="form-help">Link at least one Operational Asset or Financial Fixed Asset.</div>
                     {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors|first }}</div>{% endif %}
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="{{ form.fixed_asset.id_for_label }}">Financial Fixed Asset</label>
                     {{ form.fixed_asset }}
+                    <div class="form-help">Optional if Operational Asset is linked above.</div>
                     {% if form.fixed_asset.errors %}<div class="form-error">{{ form.fixed_asset.errors|first }}</div>{% endif %}
                 </div>
 
@@ -149,9 +151,12 @@
                     {% if form.steward.errors %}<div class="form-error">{{ form.steward.errors|first }}</div>{% endif %}
                 </div>
 
-                <div class="form-group md:col-span-2 flex items-center gap-2">
-                    {{ form.auto_trigger_maintenance }}
-                    <label class="form-label mb-0" for="{{ form.auto_trigger_maintenance.id_for_label }}">Automatically create 11.5 Breakdown Maintenance Request when critical threshold is breached</label>
+                <div class="form-group md:col-span-2">
+                    <div class="flex items-center gap-2">
+                        {{ form.auto_trigger_maintenance }}
+                        <label class="form-label mb-0" for="{{ form.auto_trigger_maintenance.id_for_label }}">Automatically create 11.5 Breakdown Maintenance Request when critical threshold is breached</label>
+                    </div>
+                    {% if form.auto_trigger_maintenance.errors %}<div class="form-error">{{ form.auto_trigger_maintenance.errors|first }}</div>{% endif %}
                 </div>
 
                 <div class="form-group md:col-span-2">
