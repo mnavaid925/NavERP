@@ -124,8 +124,8 @@
             </div>
         </dl>
 
-        <div class="mt-6 pt-4 border-t border-slate-100">
-            <h3 class="text-xs uppercase tracking-wider text-slate-500 mb-3">Linked ERP &amp; Asset Subledger References</h3>
+        <div class="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <h3 class="text-xs uppercase tracking-wider text-muted mb-3">Linked ERP &amp; Asset Subledger References</h3>
             <dl class="detail-grid">
                 <div class="detail-item">
                     <dt>Financial Fixed Asset</dt>
@@ -167,23 +167,23 @@
         </div>
 
         {% if batch.field_mapping_json %}
-        <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Field Mapping Schema (JSON)</div>
-            <pre class="font-mono text-xs bg-slate-50 p-3 rounded border border-slate-200 overflow-x-auto">{{ batch.field_mapping_json }}</pre>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div class="text-xs uppercase tracking-wider text-muted mb-1">Field Mapping Schema (JSON)</div>
+            <pre class="font-mono text-xs bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 p-3 rounded border border-slate-200 dark:border-slate-700 overflow-x-auto">{{ batch.field_mapping_json }}</pre>
         </div>
         {% endif %}
 
         {% if batch.payload_summary %}
-        <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Payload Summary</div>
-            <p class="text-sm text-slate-700 whitespace-pre-line">{{ batch.payload_summary }}</p>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div class="text-xs uppercase tracking-wider text-muted mb-1">Payload Summary</div>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ batch.payload_summary }}</p>
         </div>
         {% endif %}
 
         {% if batch.notes %}
-        <div class="mt-4 pt-4 border-t border-slate-100">
-            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Notes</div>
-            <p class="text-sm text-slate-700 whitespace-pre-line">{{ batch.notes }}</p>
+        <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
+            <div class="text-xs uppercase tracking-wider text-muted mb-1">Notes</div>
+            <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">{{ batch.notes }}</p>
         </div>
         {% endif %}
     </div>
