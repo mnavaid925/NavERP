@@ -153,7 +153,7 @@
                     </td>
                     <td class="font-mono text-xs">
                         {% if stream.warning_threshold is not None or stream.critical_threshold is not None %}
-                        Warn: {{ stream.warning_threshold|default:"—" }}<br>Crit: {{ stream.critical_threshold|default:"—" }}
+                        Warn: {% if stream.warning_threshold is not None %}{{ stream.warning_threshold }}{% else %}—{% endif %}<br>Crit: {% if stream.critical_threshold is not None %}{{ stream.critical_threshold }}{% else %}—{% endif %}
                         {% else %}
                         <span class="text-muted">None</span>
                         {% endif %}
