@@ -131,16 +131,36 @@ class AssetGlSyncBatchForm(TenantUniqueMixin, TenantModelForm):
             self.fields["fixed_asset"].queryset = FixedAsset.objects.filter(
                 tenant=self.tenant
             ).order_by("number")
-            self.fields["purchase_order"].queryset = PurchaseOrder.objects.filter(
-                tenant=self.tenant
-            ).order_by("-order_date", "-number")
+            self.fields["purchase_order"].queryset = (
+                PurchaseOrder.objects.filter(tenant=self.tenant)
+                .select_related("vendor")
+                .only(
+                    "id",
+                    "number",
+                    "order_date",
+                    "vendor_id",
+                    "vendor__id",
+                    "vendor__name",
+                )
+                .order_by("-order_date", "-number")
+            )
             self.fields["capitalization"].queryset = AssetCapitalization.objects.filter(
                 tenant=self.tenant
             ).order_by("-number")
             self.fields["depreciation_schedule"].queryset = (
-                AssetDepreciationSchedule.objects.filter(
-                    tenant=self.tenant
-                ).order_by("-schedule_date", "-number")
+                AssetDepreciationSchedule.objects.filter(tenant=self.tenant)
+                .select_related("fixed_asset")
+                .only(
+                    "id",
+                    "number",
+                    "schedule_date",
+                    "fiscal_year",
+                    "period_number",
+                    "fixed_asset_id",
+                    "fixed_asset__id",
+                    "fixed_asset__name",
+                )
+                .order_by("-schedule_date", "-number")
             )
             self.fields["maintenance_request"].queryset = (
                 AssetMaintenanceRequest.objects.filter(
