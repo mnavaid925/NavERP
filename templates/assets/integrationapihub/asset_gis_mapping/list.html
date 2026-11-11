@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+
+{% block title %}GIS &amp; Spatial Asset Mappings — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_integration_connector_list' %}">Integration &amp; API Hub</a>
+            <span>/</span>
+            <span>GIS Mappings</span>
+        </div>
+        <h1 class="page-title">GIS &amp; Spatial Asset Mappings</h1>
+    </div>
+    <div class="page-actions flex flex-wrap gap-2">
+        <a href="{% url 'assets:asset_integration_connector_list' %}" class="btn btn-outline btn-sm">Connectors</a>
+        <a href="{% url 'assets:asset_telemetry_stream_list' %}" class="btn btn-outline btn-sm">Telemetry Streams</a>
+        <a href="{% url 'assets:asset_gl_sync_batch_list' %}" class="btn btn-outline btn-sm">GL Sync Batches</a>
+        <a href="{% url 'assets:asset_gis_mapping_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New GIS Mapping
+        </a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Spatial Mappings</div>
+            <div class="stat-value">{{ total_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">In Sync</div>
+            <div class="stat-value">{{ in_sync_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="compass"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Drift Flagged</div>
+            <div class="stat-value">{{ drift_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="route"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Linear (LRS) Assets</div>
+            <div class="stat-value">{{ linear_count }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Number, feature ID, layer, route..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Connector</label>
+                <select name="connector" class="form-select">
+                    <option value="">All Connectors</option>
+                    {% for c in connectors %}
+                    <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Operational Asset</label>
+                <select name="operational_asset" class="form-select">
+                    <option value="">All Assets</option>
+                    {% for a in assets_list %}
+                    <option value="{{ a.pk }}" {% if request.GET.operational_asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} &middot; {{ a.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Geometry Type</label>
+                <select name="geometry_type" class="form-select">
+                    <option value="">All Geometries</option>
+                    {% for val, label in geometry_choices %}
+                    <option value="{{ val }}" {% if request.GET.geometry_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Drift Status</label>
+                <select name="drift_status" class="form-select">
+                    <option value="">All Drift States</option>
+                    {% for val, label in drift_choices %}
+                    <option value="{{ val }}" {% if request.GET.drift_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2 md:col-span-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline" title="Reset filters">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Mapping #</th>
+                    <th>Layer &amp; External Feature ID</th>
+                    <th>Asset / Location</th>
+                    <th>Geometry &amp; SRID</th>
+                    <th>Coordinates / LRS</th>
+                    <th>System of Record</th>
+                    <th>Drift</th>
+                    <th>Status</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mapping in mappings %}
+                <tr>
+                    <td class="font-mono font-medium">
+                        <a href="{% url 'assets:asset_gis_mapping_detail' mapping.pk %}" class="text-brand hover:underline">
+                            {{ mapping.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ mapping.layer_name }}</div>
+                        <div class="text-xs text-muted font-mono">{{ mapping.external_feature_id }}</div>
+                    </td>
+                    <td>
+                        {% if mapping.operational_asset %}
+                        <div class="text-sm">{{ mapping.operational_asset.code }} &middot; {{ mapping.operational_asset.name }}</div>
+                        {% endif %}
+                        {% if mapping.location %}
+                        <div class="text-xs text-muted">{{ mapping.location }}</div>
+                        {% endif %}
+                        {% if not mapping.operational_asset and not mapping.location %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div>{{ mapping.get_geometry_type_display }}</div>
+                        <div class="text-xs text-muted font-mono">EPSG:{{ mapping.coordinate_system_srid }}</div>
+                    </td>
+                    <td class="font-mono text-xs">
+                        {% if mapping.latitude is not None and mapping.longitude is not None %}
+                        {{ mapping.latitude }}, {{ mapping.longitude }}
+                        {% endif %}
+                        {% if mapping.is_linear_asset and mapping.lrs_route_id %}
+                        <div class="text-muted">{{ mapping.lrs_route_id }} ({{ mapping.lrs_from_measure|default:"0" }}-{{ mapping.lrs_to_measure|default:"0" }} {{ mapping.get_lrs_measure_unit_display }})</div>
+                        {% endif %}
+                        {% if mapping.latitude is None and not mapping.is_linear_asset %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-slate">{{ mapping.get_system_of_record_display }}</span></td>
+                    <td><span class="badge {{ mapping.drift_badge_class }}">{{ mapping.get_drift_status_display }}</span></td>
+                    <td><span class="badge {{ mapping.status_badge_class }}">{{ mapping.get_status_display }}</span></td>
+                    <td class="text-right">
+                        <div class="flex justify-end gap-1">
+                            <a href="{% url 'assets:asset_gis_mapping_detail' mapping.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_gis_mapping_edit' mapping.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="map-pin" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No GIS spatial mappings found</div>
+                            <div class="text-xs text-slate-400 mb-3">Link ArcGIS or QGIS feature layers, coordinates, and LRS corridors to NavERP assets.</div>
+                            <a href="{% url 'assets:asset_gis_mapping_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Create First GIS Mapping
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.geometry_type %}&geometry_type={{ request.GET.geometry_type|urlencode }}{% endif %}{% if request.GET.drift_status %}&drift_status={{ request.GET.drift_status|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% if request.GET.connector %}&connector={{ request.GET.connector|urlencode }}{% endif %}{% if request.GET.operational_asset %}&operational_asset={{ request.GET.operational_asset|urlencode }}{% endif %}{% if request.GET.geometry_type %}&geometry_type={{ request.GET.geometry_type|urlencode }}{% endif %}{% if request.GET.drift_status %}&drift_status={{ request.GET.drift_status|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
