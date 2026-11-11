@@ -296,10 +296,10 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
   - Context keys: `analyses`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `stage_choices`, `recommendation_choices`, `categories`, `org_units`, `total_analyses`, `avg_tco`, `replace_candidates_count`, `total_tco_value`
 - `asset_lifecycle_cost_analysis_create` (`analytics/lifecycle-cost/new/`): context `form`, `analysis=None`, `is_edit=False`
 - `asset_lifecycle_cost_analysis_detail` (`analytics/lifecycle-cost/<int:pk>/`): context `analysis`, `total_capex`, `total_maint`, `total_opex`, `total_recoveries`
-- `asset_lifecycle_cost_analysis_edit` (`analytics/lifecycle-cost/<int:pk>/edit/`): context `form`, `analysis`, `is_edit=True`
-- `asset_lifecycle_cost_analysis_delete` (`analytics/lifecycle-cost/<int:pk>/delete/`): POST-only
-- `asset_lifecycle_cost_analysis_populate` (`analytics/lifecycle-cost/<int:pk>/populate/`): POST-only, calls `populate_from_asset_records()`, audit action `"populate"`
-- `asset_lifecycle_cost_analysis_transition` (`analytics/lifecycle-cost/<int:pk>/status/`): POST-only (`target_status` in `reviewed`/`approved`/`archived`), audit action `"update"`
+- `asset_lifecycle_cost_analysis_edit` (`analytics/lifecycle-cost/<int:pk>/edit/`): enforces lock (`approved`/`archived` -> error flash + redirect to detail); context `form`, `analysis`, `is_edit=True`
+- `asset_lifecycle_cost_analysis_delete` (`analytics/lifecycle-cost/<int:pk>/delete/`): POST-only; enforces lock (`approved`/`archived` -> error flash + redirect to detail)
+- `asset_lifecycle_cost_analysis_populate` (`analytics/lifecycle-cost/<int:pk>/populate/`): POST-only; enforces lock (`approved`/`archived`), calls `populate_from_asset_records()`, audit action `"populate"`
+- `asset_lifecycle_cost_analysis_transition` (`analytics/lifecycle-cost/<int:pk>/status/`): POST-only; enforces `ALLOWED_TRANSITIONS` (`draft -> calculated/reviewed/archived`, `calculated -> reviewed/approved/archived`, `reviewed -> approved/archived`, `approved -> archived`, `archived -> {}`), audit action `"update"`
 - `asset_lifecycle_cost_analysis_export_csv` (`analytics/lifecycle-cost/export-csv/`): CSV attachment (`alcc-analyses.csv`)
 
 ### 3.2 `AssetReplacementPlan` Views & Routes (`AssetReplacementPlans.py`)
@@ -308,10 +308,10 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
   - Context keys: `plans`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `funding_choices`, `priority_choices`, `strategy_choices`, `years`, `org_units`, `categories`, `locations`, `total_plans`, `critical_plans_count`, `unfunded_plans_value`, `total_capex_forecast`
 - `asset_replacement_plan_create` (`analytics/replacement-plans/new/`): context `form`, `plan=None`, `is_edit=False`
 - `asset_replacement_plan_detail` (`analytics/replacement-plans/<int:pk>/`): context `plan`
-- `asset_replacement_plan_edit` (`analytics/replacement-plans/<int:pk>/edit/`): context `form`, `plan`, `is_edit=True`
-- `asset_replacement_plan_delete` (`analytics/replacement-plans/<int:pk>/delete/`): POST-only
-- `asset_replacement_plan_recalculate` (`analytics/replacement-plans/<int:pk>/recalculate/`): POST-only, audit action `"compute"`
-- `asset_replacement_plan_transition` (`analytics/replacement-plans/<int:pk>/status/`): POST-only (`target_status` in `proposed`/`approved`/`scheduled`/`deferred`/`cancelled`), audit action `"update"`
+- `asset_replacement_plan_edit` (`analytics/replacement-plans/<int:pk>/edit/`): enforces lock (`approved`/`scheduled`/`executed`/`cancelled` -> error flash + redirect to detail); context `form`, `plan`, `is_edit=True`
+- `asset_replacement_plan_delete` (`analytics/replacement-plans/<int:pk>/delete/`): POST-only; enforces lock (`approved`/`scheduled`/`executed`/`cancelled` -> error flash + redirect to detail)
+- `asset_replacement_plan_recalculate` (`analytics/replacement-plans/<int:pk>/recalculate/`): POST-only; enforces lock, audit action `"compute"`
+- `asset_replacement_plan_transition` (`analytics/replacement-plans/<int:pk>/status/`): POST-only; enforces `ALLOWED_TRANSITIONS` (`forecasted -> proposed/approved/deferred/cancelled`, `proposed -> approved/deferred/cancelled`, `approved -> scheduled/deferred/cancelled`, `scheduled -> executed/deferred/cancelled`, `deferred -> proposed/cancelled`, terminal `executed`/`cancelled`), audit action `"update"`
 - `asset_replacement_plan_export_csv` (`analytics/replacement-plans/export-csv/`): CSV attachment (`arpl-replacement-plans.csv`)
 
 ### 3.3 `AssetPortfolioScenario` Views & Routes (`AssetPortfolioScenarios.py`)
@@ -320,10 +320,10 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
   - Context keys: `scenarios`, `page_obj`, `paginator`, `is_paginated`, `status_choices`, `type_choices`, `years`, `org_units`, `categories`, `total_scenarios`, `simulated_count`, `adopted_count`, `best_npv`
 - `asset_portfolio_scenario_create` (`analytics/scenarios/new/`): context `form`, `scenario=None`, `is_edit=False`
 - `asset_portfolio_scenario_detail` (`analytics/scenarios/<int:pk>/`): context `scenario`
-- `asset_portfolio_scenario_edit` (`analytics/scenarios/<int:pk>/edit/`): context `form`, `scenario`, `is_edit=True`
-- `asset_portfolio_scenario_delete` (`analytics/scenarios/<int:pk>/delete/`): POST-only
-- `asset_portfolio_scenario_simulate` (`analytics/scenarios/<int:pk>/simulate/`): POST-only, calls `run_simulation()`, audit action `"simulate"`
-- `asset_portfolio_scenario_transition` (`analytics/scenarios/<int:pk>/status/`): POST-only (`target_status` in `under_review`/`recommended`/`adopted`/`archived`), audit action `"update"`
+- `asset_portfolio_scenario_edit` (`analytics/scenarios/<int:pk>/edit/`): enforces lock (`adopted`/`archived` -> error flash + redirect to detail); context `form`, `scenario`, `is_edit=True`
+- `asset_portfolio_scenario_delete` (`analytics/scenarios/<int:pk>/delete/`): POST-only; enforces lock (`adopted`/`archived` -> error flash + redirect to detail)
+- `asset_portfolio_scenario_simulate` (`analytics/scenarios/<int:pk>/simulate/`): POST-only; enforces lock (`adopted`/`archived`), calls `run_simulation()`, audit action `"simulate"`
+- `asset_portfolio_scenario_transition` (`analytics/scenarios/<int:pk>/status/`): POST-only; enforces `ALLOWED_TRANSITIONS` (`draft -> simulated/under_review/archived`, `simulated -> under_review/recommended/archived`, `under_review -> recommended/archived`, `recommended -> adopted/archived`, `adopted -> archived`, `archived -> {}`), audit action `"update"`
 - `asset_portfolio_scenario_export_csv` (`analytics/scenarios/export-csv/`): CSV attachment (`awif-scenarios.csv`)
 
 ### 3.4 `AssetExecutiveScorecard` Views & Routes (`AssetExecutiveScorecards.py`)
@@ -333,10 +333,10 @@ All forms inherit `(TenantUniqueMixin, TenantModelForm)`.
 - `asset_executive_scorecard_create` (`analytics/scorecards/new/`): context `form`, `scorecard=None`, `is_edit=False`
 - `asset_executive_scorecard_detail` (`analytics/scorecards/<int:pk>/`): context `scorecard`
 - `asset_executive_scorecard_edit` (`analytics/scorecards/<int:pk>/edit/`): enforces draft-lock (`if scorecard.is_locked`: error flash + redirect to detail); context `form`, `scorecard`, `is_edit=True`
-- `asset_executive_scorecard_delete` (`analytics/scorecards/<int:pk>/delete/`): POST-only (blocks deletion if `board_approved` unless draft/archived? No — follow standard delete or block only `ProtectedError`; keep consistent or block `board_approved` gracefully — let's keep standard `assets_object` + `delete()` unless protected, wait: blocking `delete` on `board_approved` would break generic delete tests if any create approved and delete, so allow delete in test/admin or keep standard CRUD delete!)
+- `asset_executive_scorecard_delete` (`analytics/scorecards/<int:pk>/delete/`): POST-only; enforces draft-lock (`if scorecard.is_locked`: error flash + redirect to detail)
 - `asset_executive_scorecard_compute` (`analytics/scorecards/<int:pk>/compute/`): POST-only, enforces draft-lock (`if scorecard.is_locked`: error flash + redirect), calls `compute_from_live_portfolio()`, audit action `"compute"`
 - `asset_executive_scorecard_publish` (`analytics/scorecards/<int:pk>/publish/`): POST-only (`draft -> published`), audit action `"publish"`
-- `asset_executive_scorecard_approve` (`analytics/scorecards/<int:pk>/approve/`): POST-only `@tenant_admin_required` (`published -> board_approved`, sets `approved_by=request.user`), audit action `"approve"`
+- `asset_executive_scorecard_approve` (`analytics/scorecards/<int:pk>/approve/`): POST-only `@tenant_admin_required` (`published -> board_approved`, blocks `prepared_by_id == request.user.pk` for SoD, sets `approved_by=request.user`), audit action `"approve"`
 - `asset_executive_scorecard_archive` (`analytics/scorecards/<int:pk>/archive/`): POST-only, audit action `"archive"`
 - `asset_executive_scorecard_export_csv` (`analytics/scorecards/export-csv/`): CSV attachment (`akpi-scorecards.csv`)
 
