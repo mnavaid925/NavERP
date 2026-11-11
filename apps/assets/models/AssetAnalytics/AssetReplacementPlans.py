@@ -77,6 +77,18 @@ class AssetReplacementPlan(TenantNumbered):
         "cancelled": "badge-muted",
     }
 
+    LOCKED_STATUSES = {"approved", "scheduled", "executed", "cancelled"}
+
+    ALLOWED_TRANSITIONS = {
+        "forecasted": {"proposed", "approved", "deferred", "cancelled"},
+        "proposed": {"approved", "deferred", "cancelled"},
+        "approved": {"scheduled", "deferred", "cancelled"},
+        "scheduled": {"executed", "deferred", "cancelled"},
+        "deferred": {"proposed", "cancelled"},
+        "executed": set(),
+        "cancelled": set(),
+    }
+
     FUNDING_STATUS_CSS = {
         "unfunded": "badge-red",
         "requested": "badge-amber",
@@ -295,6 +307,10 @@ class AssetReplacementPlan(TenantNumbered):
 
     def __str__(self):
         return f"{self.number} — {self.title}"
+
+    @property
+    def is_locked(self):
+        return self.status in self.LOCKED_STATUSES
 
     @property
     def status_badge_class(self):
