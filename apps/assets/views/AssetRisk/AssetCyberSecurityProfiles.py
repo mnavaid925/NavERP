@@ -28,7 +28,7 @@ def asset_cybersecurity_profile_list(request):
         qs = qs.filter(
             Q(number__icontains=q)
             | Q(asset__name__icontains=q)
-            | Q(asset__asset_code__icontains=q)
+            | Q(asset__code__icontains=q)
             | Q(ip_address__icontains=q)
             | Q(mac_address__icontains=q)
             | Q(firmware_version__icontains=q)
