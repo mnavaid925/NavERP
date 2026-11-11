@@ -184,6 +184,9 @@ def asset_risk_register_delete(request, pk):
 @require_POST
 def asset_risk_register_assess(request, pk):
     risk = assets_object(request, AssetRiskRegister, pk)
+    if risk.status != "identified":
+        messages.error(request, f"Risk '{risk.number}' cannot be marked as Assessed from status '{risk.get_status_display()}'.")
+        return redirect("assets:asset_risk_register_detail", pk=risk.pk)
     with transaction.atomic():
         risk.status = "assessed"
         risk.last_reviewed_at = timezone.now()
@@ -197,6 +200,9 @@ def asset_risk_register_assess(request, pk):
 @require_POST
 def asset_risk_register_close(request, pk):
     risk = assets_object(request, AssetRiskRegister, pk)
+    if risk.status == "closed":
+        messages.warning(request, f"Risk '{risk.number}' is already closed.")
+        return redirect("assets:asset_risk_register_detail", pk=risk.pk)
     with transaction.atomic():
         risk.status = "closed"
         risk.last_reviewed_at = timezone.now()
