@@ -118,13 +118,13 @@
                     <th>Batch #</th>
                     <th>Domain / Connector</th>
                     <th>Batch Date</th>
-                    <th class="text-right">Source Amt</th>
-                    <th class="text-right">Target GL Amt</th>
-                    <th class="text-right">Variance</th>
+                    <th class="text-end">Source Amt</th>
+                    <th class="text-end">Target GL Amt</th>
+                    <th class="text-end">Variance</th>
                     <th>Reconciliation</th>
                     <th>Status</th>
                     <th>Journal Entry</th>
-                    <th class="text-right">Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -143,9 +143,9 @@
                         <div class="text-xs text-muted">{{ batch.connector.number }} &middot; {{ batch.connector.name }}</div>
                     </td>
                     <td>{{ batch.batch_date|date:"Y-m-d" }}</td>
-                    <td class="text-right font-mono">{{ batch.source_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
-                    <td class="text-right font-mono">{{ batch.target_gl_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
-                    <td class="text-right font-mono {% if batch.variance_amount != 0 %}text-danger font-semibold{% endif %}">
+                    <td class="text-end font-mono">{{ batch.source_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
+                    <td class="text-end font-mono">{{ batch.target_gl_amount }} {% if batch.currency %}{{ batch.currency.code }}{% endif %}</td>
+                    <td class="text-end font-mono {% if batch.variance_amount != 0 %}text-danger font-semibold{% endif %}">
                         {{ batch.variance_amount }}
                     </td>
                     <td><span class="badge {{ batch.reconciliation_badge_class }}">{{ batch.get_reconciliation_status_display }}</span></td>
@@ -157,7 +157,7 @@
                         <span class="text-muted">—</span>
                         {% endif %}
                     </td>
-                    <td class="text-right">
+                    <td class="text-end">
                         <div class="flex justify-end gap-1">
                             <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="btn btn-outline btn-sm">View</a>
                             {% if not batch.journal_entry and batch.status != "posted" %}
