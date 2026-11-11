@@ -221,90 +221,95 @@
 
 ## Sub-module 11.12 Implementation Checklist
 
-- [ ] **Phase 1: Research**
+- [x] **Phase 1: Research**
   - [x] Competitive market research of 8 leading EAM/IRM/OT-Cybersecurity suites (`.claude/tasks/research-assets-11.12.md`)
   - [x] Commit research catalog
 
-- [ ] **Phase 2: Planning & Specification**
+- [x] **Phase 2: Planning & Specification**
   - [x] Checkable implementation plan in `.claude/tasks/todo.md`
-  - [ ] Commit `todo.md`
-  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.12.md`
-  - [ ] Commit contract file
+  - [x] Commit `todo.md`
+  - [x] Freeze pre-build contract in `.claude/tasks/contract-assets-11.12.md`
+  - [x] Commit contract file
 
-- [ ] **Phase 3: Serial Build (Entity by Entity)**
-  - [ ] **Entity 1: `AssetRiskRegister`**
-    - [ ] `apps/assets/models/AssetRisk/AssetRiskRegisters.py`
-    - [ ] `apps/assets/forms/AssetRisk/AssetRiskRegisters.py`
-    - [ ] `apps/assets/views/AssetRisk/AssetRiskRegisters.py`
-    - [ ] `apps/assets/urls/AssetRisk/AssetRiskRegisters.py`
-    - [ ] `templates/assets/assetrisk/asset_risk_register/list.html`
-    - [ ] `templates/assets/assetrisk/asset_risk_register/detail.html`
-    - [ ] `templates/assets/assetrisk/asset_risk_register/form.html`
-  - [ ] **Entity 2: `AssetBusinessContinuityPlan`**
-    - [ ] `apps/assets/models/AssetRisk/AssetBusinessContinuityPlans.py`
-    - [ ] `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py`
-    - [ ] `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py`
-    - [ ] `apps/assets/urls/AssetRisk/AssetBusinessContinuityPlans.py`
-    - [ ] `templates/assets/assetrisk/asset_business_continuity/list.html`
-    - [ ] `templates/assets/assetrisk/asset_business_continuity/detail.html`
-    - [ ] `templates/assets/assetrisk/asset_business_continuity/form.html`
-  - [ ] **Entity 3: `AssetCyberSecurityProfile`**
-    - [ ] `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py`
-    - [ ] `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py`
-    - [ ] `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py`
-    - [ ] `apps/assets/urls/AssetRisk/AssetCyberSecurityProfiles.py`
-    - [ ] `templates/assets/assetrisk/asset_cybersecurity/list.html`
-    - [ ] `templates/assets/assetrisk/asset_cybersecurity/detail.html`
-    - [ ] `templates/assets/assetrisk/asset_cybersecurity/form.html`
-  - [ ] **Entity 4: `AssetRiskMitigationAction`**
-    - [ ] `apps/assets/models/AssetRisk/AssetRiskMitigationActions.py`
-    - [ ] `apps/assets/forms/AssetRisk/AssetRiskMitigationActions.py`
-    - [ ] `apps/assets/views/AssetRisk/AssetRiskMitigationActions.py`
-    - [ ] `apps/assets/urls/AssetRisk/AssetRiskMitigationActions.py`
-    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/list.html`
-    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/detail.html`
-    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/form.html`
-  - [ ] **Integrate**
-    - [ ] Re-export models in `apps/assets/models/__init__.py`
-    - [ ] Re-export forms in `apps/assets/forms/__init__.py`
-    - [ ] Re-export views in `apps/assets/views/__init__.py`
-    - [ ] Wire URL routes in `apps/assets/urls/__init__.py`
-    - [ ] Register all 4 models in `apps/assets/admin.py`
-    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.12 seed data
-    - [ ] Wire `LIVE_LINKS["11.12"]` in `apps/core/navigation.py`
-    - [ ] Run `makemigrations assets` (claims `0015_...`)
-    - [ ] Run `migrate`
-    - [ ] Run `seed_assets` twice (idempotency check)
-    - [ ] Run `manage.py check`
-  - [ ] **Smoke Test**
-    - [ ] Build & run `temp/smoke_assets_11_12.py` asserting status 200/302, content assertions, and IDOR 404
+- [x] **Phase 3: Serial Build (Entity by Entity)**
+  - [x] **Entity 1: `AssetRiskRegister`**
+    - [x] `apps/assets/models/AssetRisk/AssetRiskRegisters.py`
+    - [x] `apps/assets/forms/AssetRisk/AssetRiskRegisters.py`
+    - [x] `apps/assets/views/AssetRisk/AssetRiskRegisters.py`
+    - [x] `apps/assets/urls/AssetRisk/AssetRiskRegisters.py`
+    - [x] `templates/assets/assetrisk/asset_risk_register/list.html`
+    - [x] `templates/assets/assetrisk/asset_risk_register/detail.html`
+    - [x] `templates/assets/assetrisk/asset_risk_register/form.html`
+  - [x] **Entity 2: `AssetBusinessContinuityPlan`**
+    - [x] `apps/assets/models/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [x] `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [x] `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [x] `apps/assets/urls/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [x] `templates/assets/assetrisk/asset_business_continuity/list.html`
+    - [x] `templates/assets/assetrisk/asset_business_continuity/detail.html`
+    - [x] `templates/assets/assetrisk/asset_business_continuity/form.html`
+  - [x] **Entity 3: `AssetCyberSecurityProfile`**
+    - [x] `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [x] `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [x] `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [x] `apps/assets/urls/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [x] `templates/assets/assetrisk/asset_cybersecurity/list.html`
+    - [x] `templates/assets/assetrisk/asset_cybersecurity/detail.html`
+    - [x] `templates/assets/assetrisk/asset_cybersecurity/form.html`
+  - [x] **Entity 4: `AssetRiskMitigationAction`**
+    - [x] `apps/assets/models/AssetRisk/AssetRiskMitigationActions.py`
+    - [x] `apps/assets/forms/AssetRisk/AssetRiskMitigationActions.py`
+    - [x] `apps/assets/views/AssetRisk/AssetRiskMitigationActions.py`
+    - [x] `apps/assets/urls/AssetRisk/AssetRiskMitigationActions.py`
+    - [x] `templates/assets/assetrisk/asset_risk_mitigation/list.html`
+    - [x] `templates/assets/assetrisk/asset_risk_mitigation/detail.html`
+    - [x] `templates/assets/assetrisk/asset_risk_mitigation/form.html`
+  - [x] **Integrate**
+    - [x] Re-export models in `apps/assets/models/__init__.py`
+    - [x] Re-export forms in `apps/assets/forms/__init__.py`
+    - [x] Re-export views in `apps/assets/views/__init__.py`
+    - [x] Wire URL routes in `apps/assets/urls/__init__.py`
+    - [x] Register all 4 models in `apps/assets/admin.py`
+    - [x] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.12 seed data
+    - [x] Wire `LIVE_LINKS["11.12"]` in `apps/core/navigation.py`
+    - [x] Run `makemigrations assets` (claimed `0015_...`; later added `0017_alter_assetcybersecurityprofile_cve_risk_score.py`)
+    - [x] Run `migrate`
+    - [x] Run `seed_assets` twice (idempotency check)
+    - [x] Run `manage.py check`
+  - [x] **Smoke Test**
+    - [x] Build & run `temp/smoke_assets_11_12.py` asserting status 200/302, content assertions, and IDOR 404
 
-- [ ] **Phase 4: Review Pass (6 Serial Reviewers)**
-  - [ ] `code-reviewer` agent
-  - [ ] `explorer` agent
-  - [ ] `frontend-reviewer` agent
-  - [ ] `performance-reviewer` agent
-  - [ ] `qa-smoke-tester` agent
-  - [ ] `security-reviewer` agent
-  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.12.md` and commit
+- [x] **Phase 4: Review Pass (6 Serial Reviewers)**
+  - [x] `code-reviewer` agent
+  - [x] `explorer` agent
+  - [x] `frontend-reviewer` agent
+  - [x] `performance-reviewer` agent
+  - [x] `qa-smoke-tester` agent
+  - [x] `security-reviewer` agent
+  - [x] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.12.md` and commit
 
-- [ ] **Phase 5: Code Fixer**
-  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
-  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+- [x] **Phase 5: Code Fixer**
+  - [x] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [x] Mark each finding `[x] fixed` or `[~] skipped`
 
-- [ ] **Phase 6: Automated Test Suite**
-  - [ ] Update shared `tests/conftest.py` if needed
-  - [ ] Author `tests/test_asset_risk_models.py`
-  - [ ] Author `tests/test_asset_risk_forms.py`
-  - [ ] Author `tests/test_asset_risk_views.py`
-  - [ ] Author `tests/test_asset_risk_security.py`
-  - [ ] Run full unfiltered test suite (`pytest apps/assets/tests/`) and confirm 100% green
+- [x] **Phase 6: Automated Test Suite**
+  - [x] Update shared `tests/conftest.py` if needed
+  - [x] Author `tests/test_asset_risk_models.py` (30 tests)
+  - [x] Author `tests/test_asset_risk_forms.py` (26 tests)
+  - [x] Author `tests/test_asset_risk_views.py` (13 tests)
+  - [x] Author `tests/test_asset_risk_security.py` (8 tests)
+  - [x] Run full unfiltered test suite (`pytest apps/assets/tests/`) and confirm 100% green (`1908 passed`)
 
-- [ ] **Phase 7: Close-Out & Skill Updates**
-  - [ ] Update `.claude/skills/assets/SKILL.md` with 11.12 entities, routes, and context
-  - [ ] Update `README.md` marking 11.12 complete
-  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.12.md`
-  - [ ] Update close-out in `todo.md`
+- [x] **Phase 7: Close-Out & Skill Updates**
+  - [x] Update `.claude/skills/assets/SKILL.md` with 11.12 entities, routes, and context
+  - [x] Update `README.md` marking 11.12 complete
+  - [x] Document gap register in `.agents/tasks/gaps-assets-11.12.md`
+  - [x] Update close-out in `todo.md`
+
+### Sub-module 11.12 Review & Verification Summary
+- **Review Findings:** All 12 findings (`C1`, `I1`–`I4`, `M1`–`M7`) resolved (`[x] fixed`) in [`.claude/tasks/review-assets-11.12.md`](review-assets-11.12.md).
+- **Automated Tests:** Full unfiltered `venv\Scripts\pytest.exe apps/assets/tests/` run passed cleanly: `1908 passed, 54 warnings` (zero failures, zero skips), including 77 dedicated tests across `test_asset_risk_models.py` (30), `test_asset_risk_forms.py` (26), `test_asset_risk_views.py` (13), and `test_asset_risk_security.py` (8).
+- **Gaps:** None — see [`.agents/tasks/gaps-assets-11.12.md`](../../.agents/tasks/gaps-assets-11.12.md).
 
 ---
 # Sub-module 11.10: Lease & Rental Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.10.md` (2026-11-10)
