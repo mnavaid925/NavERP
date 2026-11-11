@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}{{ profile.number }} — {{ profile.asset.name }} — Cybersecurity — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_cybersecurity_profile_list' %}">Cybersecurity</a>
+            <span>/</span>
+            <span>{{ profile.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ profile.number }} — {{ profile.asset.name }}</h1>
+            <span class="badge {{ profile.posture_status_badge_class }}">{{ profile.get_security_posture_status_display }}</span>
+            <span class="badge {{ profile.network_zone_badge_class }}">{{ profile.get_network_zone_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <a href="{% url 'assets:asset_cybersecurity_profile_edit' profile.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_cybersecurity_profile_scan' profile.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline text-blue-600">
+                <i data-lucide="search" class="w-4 h-4 me-1"></i> Record Vulnerability Scan
+            </button>
+        </form>
+        <form method="post" action="{% url 'assets:asset_cybersecurity_profile_delete' profile.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete profile {{ profile.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Network & Device Hardware Info -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Hardware & Network Topology (IEC 62443)</h2>
+        </div>
+        <div class="card-body">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Physical Equipment</div>
+                    <div>
+                        <div class="font-medium text-slate-900">{{ profile.asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ profile.asset.asset_code }}</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Device Type</div>
+                    <div class="text-sm font-medium text-slate-800">{{ profile.get_device_type_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Purdue Network Zone</div>
+                    <div>
+                        <span class="badge {{ profile.network_zone_badge_class }} text-sm">{{ profile.get_network_zone_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Exposure Level</div>
+                    <div>
+                        <span class="badge {{ profile.exposure_level_badge_class }} text-sm">{{ profile.get_exposure_level_display }}</span>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">IP Address</div>
+                    <div class="font-mono text-sm font-semibold text-slate-900">{{ profile.ip_address|default:"Not Assigned" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">MAC Address</div>
+                    <div class="font-mono text-sm text-slate-700">{{ profile.mac_address|default:"—" }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Industrial Protocol</div>
+                    <div class="text-sm font-medium text-slate-800 font-mono">{{ profile.get_protocol_used_display }}</div>
+                </div>
+                <div>
+                    <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Last Vulnerability Scan</div>
+                    <div class="text-sm font-medium text-slate-800">
+                        {{ profile.last_vulnerability_scan_date|default:"Never Scanned" }}
+                    </div>
+                </div>
+            </div>
+
+            {% if profile.compensating_controls %}
+            <div class="mt-6 pt-4 border-t border-slate-100">
+                <div class="text-xs text-slate-500 uppercase tracking-wider mb-1">Compensating Security Controls</div>
+                <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    {{ profile.compensating_controls }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Firmware & Vulnerability Card -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Firmware & Vulnerability Status</h2>
+        </div>
+        <div class="card-body space-y-4">
+            <!-- Firmware Version Card -->
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Active Firmware</div>
+                <div class="text-xl font-bold text-slate-900 font-mono mb-1">{{ profile.firmware_version }}</div>
+                {% if profile.latest_available_firmware %}
+                <div class="text-xs text-slate-500">Latest Available: <strong class="font-mono">{{ profile.latest_available_firmware }}</strong></div>
+                {% endif %}
+                <div class="mt-2">
+                    <span class="badge {{ profile.firmware_status_badge_class }}">{{ profile.get_firmware_update_status_display }}</span>
+                </div>
+            </div>
+
+            <!-- CVSS Risk Score Card -->
+            <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">Base CVSS Score</div>
+                <div class="text-2xl font-bold font-mono {% if profile.cve_risk_score >= 8 %}text-red-600{% elif profile.cve_risk_score >= 5 %}text-amber-600{% else %}text-emerald-600{% endif %}">
+                    {{ profile.cve_risk_score }} / 10.0
+                </div>
+                <div class="text-xs text-slate-500">Common Vulnerability Scoring System</div>
+            </div>
+
+            {% if profile.patch_freeze_until %}
+            <div class="p-3 rounded-lg border border-amber-200 bg-amber-50">
+                <div class="text-xs font-semibold uppercase tracking-wider text-amber-800 mb-1">Active Patch Freeze Window</div>
+                <div class="text-sm font-medium text-amber-900">Until {{ profile.patch_freeze_until }}</div>
+                <div class="text-xs text-amber-700 mt-1">Firmware deployments are held due to active production campaign.</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Known CVE Details Card -->
+{% if profile.known_vulnerabilities_cve %}
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Known CVE Advisories & Vulnerability Details</h2>
+    </div>
+    <div class="card-body">
+        <div class="text-sm text-slate-700 whitespace-pre-line leading-relaxed font-mono bg-slate-50 p-4 rounded-lg border border-slate-200">
+            {{ profile.known_vulnerabilities_cve }}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
