@@ -227,10 +227,9 @@ class AssetExecutiveScorecard(TenantNumbered):
 
         fa_qs = FixedAsset.objects.filter(tenant_id=tid).exclude(status="disposed")
         if self.org_unit_id:
-            linked_fa_ids = list(
-                scm_qs.exclude(fixed_asset_id__isnull=True).values_list("fixed_asset_id", flat=True)
+            fa_qs = fa_qs.filter(
+                pk__in=scm_qs.exclude(fixed_asset_id__isnull=True).values("fixed_asset_id")
             )
-            fa_qs = fa_qs.filter(pk__in=linked_fa_ids)
 
         scm_count = scm_qs.count()
         fa_agg = fa_qs.aggregate(
