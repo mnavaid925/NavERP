@@ -357,7 +357,7 @@ class AssetReplacementPlan(TenantNumbered):
         crit = min(max(Decimal(int(self.criticality_weight or 5)), Decimal("1")), Decimal("10")) * Decimal("10.00")
 
         score = (Decimal("100.00") - cond) * Decimal("0.40") + fail_risk * Decimal("0.35") + crit * Decimal("0.25")
-        self.priority_score = q2(score)
+        self.priority_score = cap_decimal(score, max_abs=Decimal("9999.99"))
 
         if self.priority_score >= Decimal("75.00"):
             self.priority_band = "critical"
@@ -371,9 +371,12 @@ class AssetReplacementPlan(TenantNumbered):
         current_year = timezone.localdate().year
         target_year = int(self.planned_replacement_year or current_year)
         years_out = min(20, max(0, target_year - current_year))
-        inf_rate = (self.inflation_rate_pct or ZERO) / Decimal("100.00")
-        base_cost = self.estimated_replacement_cost or ZERO
-        self.inflation_adjusted_cost = q2(base_cost * ((Decimal("1.00") + inf_rate) ** years_out))
+        inf_rate = max(ZERO, min(Decimal("50.00"), self.inflation_rate_pct or ZERO)) / Decimal("100.00")
+        base_cost = max(ZERO, self.estimated_replacement_cost or ZERO)
+        self.inflation_adjusted_cost = cap_decimal(
+            base_cost * ((Decimal("1.00") + inf_rate) ** years_out),
+            max_abs=Decimal("999999999999.99"),
+        )
 
     def clean(self):
         errors = {}
@@ -396,6 +399,8 @@ class AssetReplacementPlan(TenantNumbered):
         )
         if not (1 <= (self.criticality_weight or 0) <= 10):
             add_field_error(errors, "criticality_weight", "Criticality weight must be between 1 and 10.")
+        if self.remaining_useful_life_months is not None and not (0 <= int(self.remaining_useful_life_months) <= 1200):
+            add_field_error(errors, "remaining_useful_life_months", "Remaining useful life must be between 0 and 1200 months.")
         if self.condition_score is not None and (self.condition_score < ZERO or self.condition_score > Decimal("100.00")):
             add_field_error(errors, "condition_score", "Condition score must be between 0 and 100.")
         if self.failure_risk_score is not None and (self.failure_risk_score < ZERO or self.failure_risk_score > Decimal("100.00")):
