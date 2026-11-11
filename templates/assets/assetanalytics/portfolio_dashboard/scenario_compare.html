@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}Scenario Comparison Matrix — Asset Analytics & BI — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_portfolio_scenario_list' %}">What-If Scenarios</a>
+            <span>/</span>
+            <span>Compare Scenarios</span>
+        </div>
+        <h1 class="page-title">What-If Scenario Comparison Matrix</h1>
+    </div>
+    <div class="page-actions flex items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print Matrix
+        </button>
+        <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> All Scenarios
+        </a>
+    </div>
+</div>
+
+<!-- Multi-Select Scenario Selector -->
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Select Scenarios to Compare</h2>
+    </div>
+    <div class="card-body">
+        {% if all_scenarios %}
+        <form method="get">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                {% for s in all_scenarios %}
+                <label class="flex items-start gap-2 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" name="scenarios" value="{{ s.pk }}" {% if s.pk in selected_ids %}checked{% endif %} class="mt-1" />
+                    <div>
+                        <div class="font-medium text-sm text-slate-900">{{ s.number }} — {{ s.name|truncatechars:35 }}</div>
+                        <div class="text-xs text-slate-500">{{ s.get_scenario_type_display }} · FY{{ s.base_fiscal_year }}</div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="git-compare" class="w-4 h-4 me-1"></i> Update Comparison
+                </button>
+                <a href="{% url 'assets:scenario_compare' %}" class="btn btn-outline">Reset Selection</a>
+            </div>
+        </form>
+        {% else %}
+        <p class="text-sm text-slate-500">No portfolio scenarios created yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Side-by-Side Comparison Matrix -->
+<div class="card">
+    <div class="card-header flex items-center justify-between">
+        <h2 class="text-base font-semibold text-slate-800">Side-by-Side Strategic Comparison</h2>
+        {% if baseline_scenario %}
+        <span class="badge badge-slate">BAU Baseline: {{ baseline_scenario.number }}</span>
+        {% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Metric / Dimension</th>
+                    {% for s in compared_scenarios %}
+                    <th class="text-right">
+                        <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="text-blue-600 hover:underline">{{ s.number }}</a>
+                        <div class="text-xs font-normal text-slate-500">{{ s.name|truncatechars:26 }}</div>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if compared_scenarios %}
+                <tr>
+                    <td class="font-medium">Scenario Driver</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right"><span class="badge {{ s.scenario_type_badge_class }}">{{ s.get_scenario_type_display }}</span></td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Workflow Status</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right"><span class="badge {{ s.status_badge_class }}">{{ s.get_status_display }}</span></td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Fiscal Year &amp; Horizon</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">FY{{ s.base_fiscal_year }} / {{ s.horizon_years }}y</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated CapEx Total</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono font-semibold">${{ s.simulated_capex_total|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">CapEx Variance vs. Baseline</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">${{ s.capex_variance_amount|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated Maint OpEx</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">${{ s.simulated_opex_maintenance|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">OpEx Savings Amount</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono text-emerald-700">${{ s.opex_savings_amount|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated Deferred Backlog</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">${{ s.simulated_deferred_backlog|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated Portfolio FCI %</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">{{ s.simulated_fci_pct|floatformat:2 }}%</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated Avg Health Score</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">{{ s.simulated_avg_health_score|floatformat:2 }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Simulated Risk Exposure</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">${{ s.simulated_risk_exposure|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr class="bg-blue-50 font-semibold">
+                    <td>Net Present Value (NPV)</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono text-blue-900">${{ s.net_present_value|floatformat:2|intcomma }}</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Benefit-Cost Ratio (BCR)</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">{{ s.benefit_cost_ratio|floatformat:2 }}x</td>
+                    {% endfor %}
+                </tr>
+                <tr>
+                    <td class="font-medium">Payback Period (Years)</td>
+                    {% for s in compared_scenarios %}
+                    <td class="text-right font-mono">{{ s.payback_period_years|floatformat:2 }} yrs</td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="2" class="text-center text-sm text-slate-500 py-6">Select one or more scenarios above to view side-by-side comparisons.</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
