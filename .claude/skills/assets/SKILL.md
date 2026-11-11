@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, and mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring, and integration & API hub — ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 key rotation & SSRF defense, SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation, GL sync & reconciliation batches posting balanced JournalEntry rows, and GIS/LRS spatial coordinate & drift verification). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13, 11.15), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -29,6 +29,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.11 Compliance & Regulatory Management**: Asset compliance frameworks, regulatory audits, operating permits & environmental licenses, and safety/compliance incident tracking.
 - **11.12 Asset Risk Management**: Enterprise asset risk register with 5x5 inherent/residual scoring (`[ARK-]`), business continuity and redundancy failover plans with drill tracking (`[ABC-]`), OT/IoT/SCADA cybersecurity profiles with Purdue network zoning and CVE/CVSS scoring (`[ACS-]`), and risk mitigation / geopolitical dual-sourcing contingency actions with verification (`[ARMA-]`).
 - **11.13 Mobile Asset Management**: Digital mobile inspection checklists & offline sync capture (`[MINS-]`), field technician work orders with dispatch/arrival/sign-off tracking (`[MFWO-]`), barcode/QR/RFID mobile scan capture logs (`[ASCN-]`), and GPS perimeter/geofence security alerts (`[AGEO-]`).
+- **11.15 Integration & API Hub**: ERP/CMMS/SCADA/GL/GIS connectors with SHA-256 secret rotation & SSRF defense (`[AICN-]`), IoT/SCADA telemetry streams with deadband filtering & 11.7/11.5 CBM escalation (`[ATMS-]`), GL sync & reconciliation batches posting balanced `JournalEntry` rows (`[AGLS-]`), and GIS/LRS spatial coordinate & drift verification (`[AGIS-]`).
 
 ---
 
@@ -100,6 +101,12 @@ apps/assets/
       FieldWorkOrders.py                      <- FieldWorkOrder [MFWO-]
       AssetScanLogs.py                        <- AssetScanLog [ASCN-]
       AssetGeofenceEvents.py                  <- AssetGeofenceEvent [AGEO-]
+    IntegrationApiHub/                        <- Sub-module 11.15 models
+      _validators.py                          <- Shared validate_tenant_fks & validate_json_object helpers
+      AssetIntegrationConnectors.py           <- AssetIntegrationConnector [AICN-] (SSRF URL guard + SHA-256 secrets)
+      AssetTelemetryStreams.py                <- AssetTelemetryStream [ATMS-]
+      AssetGlSyncBatches.py                   <- AssetGlSyncBatch [AGLS-]
+      AssetGisMappings.py                     <- AssetGisMapping [AGIS-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -163,6 +170,11 @@ apps/assets/
       FieldWorkOrders.py                      <- FieldWorkOrderForm
       AssetScanLogs.py                        <- AssetScanLogForm
       AssetGeofenceEvents.py                  <- AssetGeofenceEventForm
+    IntegrationApiHub/                        <- Sub-module 11.15 forms
+      AssetIntegrationConnectors.py           <- AssetIntegrationConnectorForm
+      AssetTelemetryStreams.py                <- AssetTelemetryStreamForm
+      AssetGlSyncBatches.py                   <- AssetGlSyncBatchForm
+      AssetGisMappings.py                     <- AssetGisMappingForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -227,6 +239,12 @@ apps/assets/
       FieldWorkOrders.py                      <- Field Work Order CRUD (arrival/completed/signed timestamps + defer)
       AssetScanLogs.py                        <- Barcode/QR/RFID Scan Log CRUD
       AssetGeofenceEvents.py                  <- GPS Perimeter Breach & Geofence Event CRUD (auto acknowledged_by/at)
+    IntegrationApiHub/                        <- Sub-module 11.15 views
+      _common.py                              <- Shared parse_pos_int, verified_connector_initial, is_tenant_admin_user helpers
+      AssetIntegrationConnectors.py           <- Connector CRUD (admin create/edit/delete) + test_connection + rotate_secret
+      AssetTelemetryStreams.py                <- Stream CRUD + ingest_sample_reading (11.7 reading + 11.5 CBM escalation)
+      AssetGlSyncBatches.py                   <- GL Batch CRUD (posted lock) + execute_reconcile_batch (atomic balanced JournalEntry)
+      AssetGisMappings.py                     <- GIS Mapping CRUD + verify_spatial_sync
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -289,9 +307,14 @@ apps/assets/
       FieldWorkOrders.py
       AssetScanLogs.py
       AssetGeofenceEvents.py
+    IntegrationApiHub/                        <- Sub-module 11.15 URL route definitions
+      AssetIntegrationConnectors.py
+      AssetTelemetryStreams.py
+      AssetGlSyncBatches.py
+      AssetGisMappings.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13, 11.15)
   tests/
     conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal, mobile)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
@@ -342,6 +365,10 @@ apps/assets/
     test_mobile_asset_forms.py                <- 11.13 Form tenant scoping, reject_foreign (incl. user FKs), system exclusions
     test_mobile_asset_views.py                <- 11.13 View contracts, filters, timestamps, pagination, audit logs
     test_mobile_asset_security.py             <- 11.13 IDOR (404), CSRF (403), XSS escaping, method safety (405), mass assignment
+    test_integration_api_hub_models.py        <- 11.15 Model invariants, AICN/ATMS/AGLS/AGIS sequences, SSRF, JSON, clean()
+    test_integration_api_hub_forms.py         <- 11.15 Form .none() fallback, reject_foreign, exclusions, O(1) dropdowns
+    test_integration_api_hub_views.py         <- 11.15 Views, overview KPIs, 11.7/11.5 telemetry, balanced JE reconciliation
+    test_integration_api_hub_security.py      <- 11.15 IDOR (404), @tenant_admin_required (403), CSRF, SSRF, 100-user scale
 ```
 
 ---
@@ -881,6 +908,39 @@ Templates under `templates/assets/mobileassetmanagement/{mobile_asset_inspection
   - `assets:asset_geofence_event_edit`: `/assets/mobile/geofence/<pk>/edit/`
   - `assets:asset_geofence_event_delete`: `/assets/mobile/geofence/<pk>/delete/` [POST]
 
+### 11.15 Integration & API Hub
+Templates under `templates/assets/integrationapihub/{asset_integration_connector,asset_telemetry_stream,asset_gl_sync_batch,asset_gis_mapping}/{list,detail,form}.html`. Seeder method `_seed_tenant_11_15(tenant)` in `seed_assets.py` creates demo Integration Connectors (`AICN-`), Telemetry Streams (`ATMS-`), GL Sync Batches (`AGLS-`), and GIS Mappings (`AGIS-`). Migrations: `0018_assetintegrationconnector_assetglsyncbatch_and_more` and `0019_alter_assetgismapping_drift_status_and_more`.
+
+- **Integration Connectors (`AssetIntegrationConnector` [AICN-]):** Reuses `core.Party`, `core.OrgUnit`, `accounting.Currency` (global — no tenant filter), `User`; SHA-256 `api_key_hash` + 8-char prefix (`editable=False`) with pop-once `_aicn_secret_reveal` session banner; hardened SSRF URL validation (`https`, `http`, `opc.tcp`, `mqtts`, `mqtt`, `tcps`, `sftp`, `wss`; blocks obfuscated IPv4/IPv6/CGNAT/userinfo/internal suffixes); zero outbound sockets on connection test (`ProtectedError` on delete).
+  - `assets:asset_integration_connector_list`: `/assets/integration/connectors/`
+  - `assets:asset_integration_connector_create`: `/assets/integration/connectors/create/` [Admin]
+  - `assets:asset_integration_connector_detail`: `/assets/integration/connectors/<pk>/`
+  - `assets:asset_integration_connector_edit`: `/assets/integration/connectors/<pk>/edit/` [Admin]
+  - `assets:asset_integration_connector_delete`: `/assets/integration/connectors/<pk>/delete/` [POST, Admin]
+  - `assets:asset_integration_connector_test`: `/assets/integration/connectors/<pk>/test/` [POST]
+  - `assets:asset_integration_connector_rotate_secret`: `/assets/integration/connectors/<pk>/rotate-secret/` [POST, Admin]
+- **Telemetry Streams (`AssetTelemetryStream` [ATMS-]):** Reuses `AssetIntegrationConnector` (`PROTECT`), `scm.Asset`, `accounting.FixedAsset`, `User`, `AssetTelemetryReading` (11.7), and `AssetMaintenanceRequest` (11.5); atomic row-locked `ingest_sample_reading` enforces `stream_status="active"`, deadband suppression, explicit `"normal"` threshold persistence, bounded decimals, and deduplicated critical breakdown `AssetMaintenanceRequest` escalation.
+  - `assets:asset_telemetry_stream_list`: `/assets/integration/telemetry-streams/`
+  - `assets:asset_telemetry_stream_create`: `/assets/integration/telemetry-streams/create/` (`?connector=<pk>` verified prefill)
+  - `assets:asset_telemetry_stream_detail`: `/assets/integration/telemetry-streams/<pk>/`
+  - `assets:asset_telemetry_stream_edit`: `/assets/integration/telemetry-streams/<pk>/edit/`
+  - `assets:asset_telemetry_stream_delete`: `/assets/integration/telemetry-streams/<pk>/delete/` [POST, Admin]
+  - `assets:asset_telemetry_stream_ingest`: `/assets/integration/telemetry-streams/<pk>/ingest/` [POST]
+- **GL Sync Batches (`AssetGlSyncBatch` [AGLS-]):** Reuses `AssetIntegrationConnector` (`PROTECT`), `accounting.FiscalPeriod`, `accounting.GLAccount`, `accounting.FixedAsset`, `accounting.JournalEntry` / `JournalLine`, `accounting.Currency` (global), `scm.PurchaseOrder`, `AssetCapitalization`, `AssetDepreciationSchedule`, `AssetMaintenanceRequest`, `core.OrgUnit`, `User`; atomic row-locked `execute_reconcile_batch` checks open period + zero variance + same-tenant FKs and posts one balanced `JournalEntry(entry_type="recurring", status="posted")`; posted batches are immutable (`batch_edit`/`batch_delete`/re-execute blocked).
+  - `assets:asset_gl_sync_batch_list`: `/assets/integration/gl-sync-batches/`
+  - `assets:asset_gl_sync_batch_create`: `/assets/integration/gl-sync-batches/create/` (`?connector=<pk>` verified prefill)
+  - `assets:asset_gl_sync_batch_detail`: `/assets/integration/gl-sync-batches/<pk>/`
+  - `assets:asset_gl_sync_batch_edit`: `/assets/integration/gl-sync-batches/<pk>/edit/` (locked when posted)
+  - `assets:asset_gl_sync_batch_delete`: `/assets/integration/gl-sync-batches/<pk>/delete/` [POST, Admin, locked when posted]
+  - `assets:asset_gl_sync_batch_execute`: `/assets/integration/gl-sync-batches/<pk>/execute/` [POST, Admin]
+- **GIS Spatial Mappings (`AssetGisMapping` [AGIS-]):** Reuses `AssetIntegrationConnector` (`PROTECT`), `scm.Asset`, `scm.Location`, `core.OrgUnit`, `User`; supports WGS84/SRID coordinates, LRS route measures (`0.000`-safe rendering), and `<= 64 KB` strict dict `geojson_payload` validation; `verify_spatial_sync` computes `in_sync` / `location_drift` / `attribute_drift`.
+  - `assets:asset_gis_mapping_list`: `/assets/integration/gis-mappings/`
+  - `assets:asset_gis_mapping_create`: `/assets/integration/gis-mappings/create/` (`?connector=<pk>` verified prefill)
+  - `assets:asset_gis_mapping_detail`: `/assets/integration/gis-mappings/<pk>/`
+  - `assets:asset_gis_mapping_edit`: `/assets/integration/gis-mappings/<pk>/edit/`
+  - `assets:asset_gis_mapping_delete`: `/assets/integration/gis-mappings/<pk>/delete/` [POST, Admin]
+  - `assets:asset_gis_mapping_verify_sync`: `/assets/integration/gis-mappings/<pk>/verify/` [POST]
+
 ---
 
 ## Conventions & Gotchas
@@ -897,7 +957,7 @@ Templates under `templates/assets/mobileassetmanagement/{mobile_asset_inspection
    - Badges: `badge-green`, `badge-red`, `badge-amber`, `badge-info`, `badge-slate`, `badge-muted`.
    - Component classes: `.table-wrap`, `.text-brand`, `.empty-state`, `.pagination`.
 5. **RBAC & Privilege Separation**:
-   - Audit variance reconciliation and write-off authorizations require `@tenant_admin_required`. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
+   - Audit variance reconciliation, write-off authorizations, and 11.15 connector writes / secret rotation / GL batch execution / IntegrationApiHub deletes require `@tenant_admin_required`. Guard UI buttons with `{% if request.user.is_superuser or request.user.is_tenant_admin %}`.
 6. **Filter-Preserving Pagination**:
    - All filter parameters (`?q=`, `?status=`, `?type=`, `?location=`, `?asset=`) are strictly preserved in pagination links.
 
@@ -915,7 +975,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12 and 145 tests for 11.13).
+Unfiltered run on SQLite in-memory test database (2,283 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12, 145 tests for 11.13, and 375 tests for 11.15).
 
 ---
 
@@ -933,4 +993,5 @@ Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `a
 - `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
 - `11.12`: Risk Identification & Assessment (`assets:asset_risk_register_list`), Business Continuity Planning (`assets:asset_business_continuity_plan_list`), Cybersecurity for Connected Assets (`assets:asset_cybersecurity_profile_list`), Geopolitical & Supply Chain Risk / Risk Mitigation & Contingency (`assets:asset_risk_mitigation_action_list`)
 - `11.13`: Mobile Inspection & Data Capture (`assets:mobile_asset_inspection_list`), Field Technician Work Orders (`assets:field_work_order_list`), Barcode/RFID Scanning (`assets:asset_scan_log_list`), GPS & Geofencing (`assets:asset_geofence_event_list`), Offline Synchronization (`assets:mobile_asset_inspection_list`)
+- `11.15`: ERP Integration (`assets:asset_integration_connector_list?connector_category=erp_procurement`), IoT & SCADA Systems (`assets:asset_telemetry_stream_list`), CMMS/EAM Connectivity (`assets:asset_integration_connector_list?connector_category=cmms_eam`), Financial Systems & General Ledger (`assets:asset_gl_sync_batch_list`), GIS & Mapping Tools (`assets:asset_gis_mapping_list`), Integration Connectors (`assets:asset_integration_connector_list`)
 
