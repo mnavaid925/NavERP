@@ -54,6 +54,10 @@ from apps.assets.models import (
     AssetInsurancePolicy,
     AssetInsuranceClaim,
     CapitalizationPolicy,
+    AssetGeofenceEvent,
+    AssetScanLog,
+    FieldWorkOrder,
+    MobileAssetInspection,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -2704,3 +2708,293 @@ class Command(BaseCommand):
             alba2.save()
 
         self.stdout.write(f"[{tenant.name}] 11.10 Seeding complete (3 lease contracts, schedules, 1 modification, 2 lease vs buy analyses).")
+
+        # Sub-module 11.13: Mobile Asset Management
+        if MobileAssetInspection.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.13 Mobile Asset Management already seeded; skipping.")
+        else:
+            scm_asset1 = Asset.objects.filter(tenant=tenant).first()
+            scm_asset2 = Asset.objects.filter(tenant=tenant).order_by("pk")[1] if Asset.objects.filter(tenant=tenant).count() > 1 else scm_asset1
+
+            if not scm_asset1:
+                self.stdout.write(f"[{tenant.name}] Warning: No SCM assets found; skipping 11.13 mobile seeding.")
+            else:
+                fixed_asset1 = FixedAsset.objects.filter(tenant=tenant).first()
+
+                # Inspections
+                mins1 = MobileAssetInspection.objects.create(
+                    tenant=tenant,
+                    title="Daily CNC Milling Machine Walkaround Inspection",
+                    inspection_type="routine_pm",
+                    asset=scm_asset1,
+                    fixed_asset=fixed_asset1,
+                    inspector=user,
+                    inspection_date=timezone.now() - timezone.timedelta(days=2),
+                    scheduled_date=(timezone.now() - timezone.timedelta(days=2)).date(),
+                    overall_result="pass",
+                    condition_rating=5,
+                    meter_reading=Decimal("1420.50"),
+                    checklist_summary="Spindle Lubrication: OK\nEmergency Interlocks: PASS\nCoolant Sump Level: 85%\nTelescopic Way Covers: Undamaged",
+                    findings_summary="Machine in excellent operating condition. Zero fluid leaks observed.",
+                    photo_url="https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=800",
+                    photo_caption="Clean spindle head and way cover inspection",
+                    voice_notes_transcription="Spindle runout checked with dial indicator, well within 2 micron tolerance.",
+                    corrective_action_required=False,
+                    gps_latitude=Decimal("37.774929"),
+                    gps_longitude=Decimal("-122.419416"),
+                    location_accuracy_m=4.2,
+                    client_sync_id="c1a2b3c4-mins-001",
+                    is_offline_captured=False,
+                    status="approved",
+                )
+
+                mins2 = MobileAssetInspection.objects.create(
+                    tenant=tenant,
+                    title="Forklift Pre-Shift Safety & Hydraulic Audit",
+                    inspection_type="pre_trip",
+                    asset=scm_asset2,
+                    fixed_asset=None,
+                    inspector=user,
+                    inspection_date=timezone.now() - timezone.timedelta(days=1),
+                    scheduled_date=(timezone.now() - timezone.timedelta(days=1)).date(),
+                    overall_result="conditional_pass",
+                    condition_rating=3,
+                    meter_reading=Decimal("3820.00"),
+                    checklist_summary="Mast Chains: Good\nForks: Undamaged\nTilt Cylinder: Minor seepage\nBrake Response: Normal",
+                    findings_summary="Minor hydraulic weeping noticed around tilt cylinder gland nut. Servicing due.",
+                    photo_url="https://images.unsplash.com/photo-1581092335397-9583fe92d232?w=800",
+                    photo_caption="Trace oil seepage around mast tilt cylinder gland",
+                    voice_notes_transcription="Operator reports tilt cylinder gland nut has slight weeping under maximum rated load.",
+                    corrective_action_required=True,
+                    gps_latitude=Decimal("37.775112"),
+                    gps_longitude=Decimal("-122.419985"),
+                    location_accuracy_m=6.8,
+                    client_sync_id="c1a2b3c4-mins-002",
+                    is_offline_captured=True,
+                    synced_at=timezone.now() - timezone.timedelta(hours=18),
+                    status="submitted",
+                )
+
+                mins3 = MobileAssetInspection.objects.create(
+                    tenant=tenant,
+                    title="Overhead Crane Safety & Hoist Brake Audit",
+                    inspection_type="safety_audit",
+                    asset=scm_asset1,
+                    fixed_asset=fixed_asset1,
+                    inspector=user,
+                    inspection_date=timezone.now() - timezone.timedelta(hours=6),
+                    scheduled_date=timezone.now().date(),
+                    overall_result="fail",
+                    condition_rating=2,
+                    meter_reading=Decimal("9450.25"),
+                    checklist_summary="Wire Rope: Fraying detected\nLimit Switch: PASS\nHook Latch: Broken\nMain Brake: Slip under test load",
+                    findings_summary="CRITICAL: Wire rope exhibits 4 broken strands near equalizer sheave. Hoist tagged out.",
+                    photo_url="https://images.unsplash.com/photo-1581092580497-e0d23cbdf1dc?w=800",
+                    photo_caption="Broken safety hook latch and rope strand fatigue",
+                    voice_notes_transcription="Urgent lock-out required immediately. Do not lift loads above 500kg until rope replacement.",
+                    corrective_action_required=True,
+                    gps_latitude=Decimal("37.774850"),
+                    gps_longitude=Decimal("-122.419200"),
+                    location_accuracy_m=3.5,
+                    client_sync_id="c1a2b3c4-mins-003",
+                    is_offline_captured=False,
+                    status="under_review",
+                )
+
+                # Field Work Orders
+                fwo1 = FieldWorkOrder.objects.create(
+                    tenant=tenant,
+                    title="Preventive Spindle Bearing Lube & Filter Kit Service",
+                    work_order_type="scheduled_pm",
+                    priority="medium",
+                    status="in_progress",
+                    asset=scm_asset1,
+                    fixed_asset=fixed_asset1,
+                    assigned_technician=user,
+                    scheduled_start=timezone.now() - timezone.timedelta(hours=4),
+                    scheduled_end=timezone.now() + timezone.timedelta(hours=2),
+                    actual_arrival=timezone.now() - timezone.timedelta(hours=3, minutes=45),
+                    labor_wrench_minutes=150,
+                    safety_lockout_confirmed=True,
+                    parts_requisition_notes="1x Mobil Vactra #2 Way Oil (5L)\n1x Donaldson Hydraulic Return Filter #P550388\n2x O-Ring Nitrile 70",
+                    estimated_parts_cost=Decimal("245.00"),
+                    work_performed_notes="Flushed reservoir, replaced return filter element, bled hydraulic manifold. Verifying flow rate.",
+                    dispatch_latitude=Decimal("37.774900"),
+                    dispatch_longitude=Decimal("-122.419400"),
+                    is_offline_captured=False,
+                )
+
+                fwo2 = FieldWorkOrder.objects.create(
+                    tenant=tenant,
+                    title="Emergency Hydraulic Cylinder Seal Replacement",
+                    work_order_type="emergency_repair",
+                    priority="urgent",
+                    status="completed",
+                    asset=scm_asset2,
+                    fixed_asset=None,
+                    assigned_technician=user,
+                    scheduled_start=timezone.now() - timezone.timedelta(days=1, hours=8),
+                    scheduled_end=timezone.now() - timezone.timedelta(days=1, hours=4),
+                    actual_arrival=timezone.now() - timezone.timedelta(days=1, hours=7, minutes=50),
+                    completed_at=timezone.now() - timezone.timedelta(days=1, hours=4, minutes=15),
+                    labor_wrench_minutes=210,
+                    safety_lockout_confirmed=True,
+                    parts_requisition_notes="1x Cylinder Gland Packing Kit #CYL-449\n10L Tellus S2 MX 46 Hydraulic Fluid",
+                    estimated_parts_cost=Decimal("410.00"),
+                    work_performed_notes="Replaced worn rod seal and wiper ring. Torqued gland nut to 180 Nm. Pressure tested to 250 bar with zero leakage.",
+                    signature_name="Marcus Vance",
+                    signature_designation="Production Floor Supervisor",
+                    signed_at=timezone.now() - timezone.timedelta(days=1, hours=4, minutes=10),
+                    dispatch_latitude=Decimal("37.775100"),
+                    dispatch_longitude=Decimal("-122.419900"),
+                    completion_latitude=Decimal("37.775120"),
+                    completion_longitude=Decimal("-122.419910"),
+                    is_offline_captured=True,
+                    synced_at=timezone.now() - timezone.timedelta(days=1, hours=3),
+                )
+
+                fwo3 = FieldWorkOrder.objects.create(
+                    tenant=tenant,
+                    title="Precision Laser Alignment & Calibration",
+                    work_order_type="calibration",
+                    priority="high",
+                    status="dispatched",
+                    asset=scm_asset1,
+                    fixed_asset=fixed_asset1,
+                    assigned_technician=user,
+                    scheduled_start=timezone.now() + timezone.timedelta(days=1),
+                    scheduled_end=timezone.now() + timezone.timedelta(days=1, hours=4),
+                    labor_wrench_minutes=0,
+                    safety_lockout_confirmed=False,
+                    parts_requisition_notes="1x Fluke Laser Alignment Target Kit\nCalibration Verification Certificate Pack",
+                    estimated_parts_cost=Decimal("120.00"),
+                    work_performed_notes="Scheduled dispatch for quarterly laser alignment verification.",
+                    dispatch_latitude=Decimal("37.774900"),
+                    dispatch_longitude=Decimal("-122.419400"),
+                    is_offline_captured=False,
+                )
+
+                # Scan Logs
+                ascn1 = AssetScanLog.objects.create(
+                    tenant=tenant,
+                    scanned_by=user,
+                    scanned_at=timezone.now() - timezone.timedelta(hours=5),
+                    scan_context="field_audit",
+                    scan_method="camera_qr",
+                    raw_payload=f"AST-QR-{scm_asset1.code}",
+                    asset=scm_asset1,
+                    match_status="matched",
+                    gps_latitude=Decimal("37.774929"),
+                    gps_longitude=Decimal("-122.419416"),
+                    gps_accuracy_m=4.5,
+                    device_info="Zebra TC57 Rugged Touch Computer / Android 11",
+                    notes="Verified in Bay 3 machining center.",
+                )
+
+                ascn2 = AssetScanLog.objects.create(
+                    tenant=tenant,
+                    scanned_by=user,
+                    scanned_at=timezone.now() - timezone.timedelta(hours=3),
+                    scan_context="checkout_verification",
+                    scan_method="camera_barcode",
+                    raw_payload=f"BARC-{scm_asset2.code}-001",
+                    asset=scm_asset2,
+                    match_status="matched",
+                    gps_latitude=Decimal("37.775112"),
+                    gps_longitude=Decimal("-122.419985"),
+                    gps_accuracy_m=5.1,
+                    device_info="Samsung Galaxy Tab Active 4 Pro / Chrome 124",
+                    notes="Forklift signed out for warehouse transfer shift.",
+                )
+
+                ascn3 = AssetScanLog.objects.create(
+                    tenant=tenant,
+                    scanned_by=user,
+                    scanned_at=timezone.now() - timezone.timedelta(hours=2),
+                    scan_context="work_order_init",
+                    scan_method="bluetooth_rfid",
+                    raw_payload="E2801160600002049A32DF81",
+                    asset=scm_asset1,
+                    match_status="matched",
+                    gps_latitude=Decimal("37.774900"),
+                    gps_longitude=Decimal("-122.419400"),
+                    gps_accuracy_m=3.0,
+                    device_info="Nordic ID EXA51e UHF RFID Reader (Bluetooth)",
+                    notes="UHF EPC tag instant interrogation before maintenance.",
+                )
+
+                ascn4 = AssetScanLog.objects.create(
+                    tenant=tenant,
+                    scanned_by=user,
+                    scanned_at=timezone.now() - timezone.timedelta(minutes=45),
+                    scan_context="receiving",
+                    scan_method="camera_barcode",
+                    raw_payload="UNREG-TAG-9948271",
+                    asset=None,
+                    match_status="not_found",
+                    gps_latitude=Decimal("37.774700"),
+                    gps_longitude=Decimal("-122.419100"),
+                    gps_accuracy_m=8.0,
+                    device_info="iPhone 14 Pro / Safari Mobile",
+                    notes="Unknown vendor crate tag; barcode not registered in NavERP asset database.",
+                )
+
+                # Geofence Events
+                ageo1 = AssetGeofenceEvent.objects.create(
+                    tenant=tenant,
+                    asset=scm_asset1,
+                    fence_name="Plant 1 Machining Hall Boundary",
+                    center_latitude=Decimal("37.774900"),
+                    center_longitude=Decimal("-122.419400"),
+                    radius_meters=60,
+                    recorded_latitude=Decimal("37.774925"),
+                    recorded_longitude=Decimal("-122.419410"),
+                    recorded_accuracy_m=3.2,
+                    distance_from_center_m=3.4,
+                    event_type="inside_perimeter",
+                    severity="info",
+                    status="resolved",
+                    detected_at=timezone.now() - timezone.timedelta(hours=8),
+                    acknowledged_by=user,
+                    acknowledged_at=timezone.now() - timezone.timedelta(hours=7, minutes=50),
+                    resolution_notes="Routine daily position ping: asset within authorized CNC cell zone.",
+                )
+
+                ageo2 = AssetGeofenceEvent.objects.create(
+                    tenant=tenant,
+                    asset=scm_asset2,
+                    fence_name="Logistics Yard Perimeter",
+                    center_latitude=Decimal("37.775100"),
+                    center_longitude=Decimal("-122.419900"),
+                    radius_meters=120,
+                    recorded_latitude=Decimal("37.775950"),
+                    recorded_longitude=Decimal("-122.420800"),
+                    recorded_accuracy_m=5.0,
+                    distance_from_center_m=118.2,
+                    event_type="boundary_warning",
+                    severity="medium",
+                    status="open_alert",
+                    detected_at=timezone.now() - timezone.timedelta(hours=2),
+                    resolution_notes="Forklift approaching North gate boundary. Driver notified via dashboard.",
+                )
+
+                ageo3 = AssetGeofenceEvent.objects.create(
+                    tenant=tenant,
+                    asset=scm_asset1,
+                    fence_name="Equipment Secure Staging Yard",
+                    center_latitude=Decimal("37.774800"),
+                    center_longitude=Decimal("-122.419200"),
+                    radius_meters=100,
+                    recorded_latitude=Decimal("37.777200"),
+                    recorded_longitude=Decimal("-122.422500"),
+                    recorded_accuracy_m=4.1,
+                    distance_from_center_m=385.6,
+                    event_type="perimeter_exit",
+                    severity="critical",
+                    status="under_investigation",
+                    detected_at=timezone.now() - timezone.timedelta(minutes=30),
+                    resolution_notes="ALARM: Asset GPS transponder detected outside secure perimeter without dispatch authorization. Security dispatched to investigate.",
+                )
+
+            self.stdout.write(f"[{tenant.name}] 11.13 Seeding complete (3 inspections, 3 work orders, 4 scans, 3 geofence events).")
+
