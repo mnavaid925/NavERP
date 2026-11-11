@@ -174,6 +174,10 @@ class AssetGisMapping(TenantNumbered):
                 fields=["tenant", "status"],
                 name="idx_agis_ten_stat",
             ),
+            models.Index(
+                fields=["tenant", "connector"],
+                name="idx_agis_ten_conn",
+            ),
         ]
 
     def __str__(self):
