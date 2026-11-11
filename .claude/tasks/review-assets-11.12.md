@@ -83,9 +83,10 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Add `MinValueValidator(Decimal("0.0")), MaxValueValidator(Decimal("10.0"))` to the model field and clean in form.
   - **Status:** [x] fixed — fix(assets): add CVSS range validators to AssetCyberSecurityProfile model and form
 
-- [ ] **`M3`**: `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py:30,32` — Disable Direct Editing of Drill History in General Edit Form
+- [x] **`M3`**: `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py:30,32` — Disable Direct Editing of Drill History in General Edit Form
   - **Issue:** `last_drill_date` and `drill_result` are directly editable in `AssetBusinessContinuityPlanForm`.
   - **Fix:** Mark `last_drill_date` and `drill_result` as `disabled = True` in `__init__`.
+  - **Status:** [x] fixed — fix(assets): disable drill history fields on AssetBusinessContinuityPlanForm
 
 - [ ] **`M4`**: `templates/assets/assetrisk/*/list.html:94` — Accessibility: Icon-Only Filter Submit Button
   - **Issue:** Filter submit buttons lack `title` / `aria-label`.
