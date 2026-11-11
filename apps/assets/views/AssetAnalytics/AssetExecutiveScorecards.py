@@ -191,6 +191,12 @@ def asset_executive_scorecard_edit(request, pk):
 @require_POST
 def asset_executive_scorecard_delete(request, pk):
     scorecard = assets_object(request, AssetExecutiveScorecard, pk)
+    if scorecard.is_locked:
+        messages.error(
+            request,
+            f"Scorecard '{scorecard.number}' is locked ({scorecard.get_status_display()}) and cannot be deleted.",
+        )
+        return redirect("assets:asset_executive_scorecard_detail", pk=scorecard.pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, scorecard, "delete", tenant=request.tenant)
