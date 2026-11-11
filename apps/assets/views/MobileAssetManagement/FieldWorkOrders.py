@@ -99,6 +99,8 @@ def field_work_order_create(request):
                 work_order.completed_at = now
             if work_order.signature_name and not work_order.signed_at:
                 work_order.signed_at = now
+            if work_order.is_offline_captured and not work_order.synced_at:
+                work_order.synced_at = now
             work_order.save()
             write_audit_log(request.user, work_order, "create", tenant=request.tenant)
             messages.success(request, f"Field work order {work_order.number} created successfully.")
@@ -143,6 +145,8 @@ def field_work_order_edit(request, pk):
                 work_order.completed_at = now
             if work_order.signature_name and not work_order.signed_at:
                 work_order.signed_at = now
+            if work_order.is_offline_captured and not work_order.synced_at:
+                work_order.synced_at = now
             work_order.save()
             write_audit_log(request.user, work_order, "update", tenant=request.tenant)
             messages.success(request, f"Field work order {work_order.number} updated successfully.")
