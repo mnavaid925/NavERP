@@ -71,6 +71,10 @@ class AssetBusinessContinuityPlanForm(TenantUniqueMixin, TenantModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "last_drill_date" in self.fields:
+            self.fields["last_drill_date"].disabled = True
+        if "drill_result" in self.fields:
+            self.fields["drill_result"].disabled = True
         if hasattr(self, "tenant") and self.tenant is not None:
             self.fields["primary_asset"].queryset = Asset.objects.filter(tenant=self.tenant)
             self.fields["backup_redundant_asset"].queryset = Asset.objects.filter(tenant=self.tenant)
