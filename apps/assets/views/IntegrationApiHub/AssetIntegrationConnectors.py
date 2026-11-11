@@ -90,13 +90,13 @@ def connector_list(request):
 @login_required
 def connector_create(request):
     """Create a new Asset Integration Connector."""
+    if request.tenant is None:
+        messages.error(
+            request,
+            "An active tenant workspace is required to create an integration connector.",
+        )
+        return redirect("assets:asset_integration_connector_list")
     if request.method == "POST":
-        if request.tenant is None:
-            messages.error(
-                request,
-                "An active tenant workspace is required to create an integration connector.",
-            )
-            return redirect("assets:asset_integration_connector_list")
         form = AssetIntegrationConnectorForm(request.POST, tenant=request.tenant)
         if form.is_valid():
             with transaction.atomic():
