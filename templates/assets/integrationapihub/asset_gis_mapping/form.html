@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — Integration &amp; API Hub — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_gis_mapping_list' %}">GIS Mappings</a>
+            <span>/</span>
+            <span>{% if mapping %}{{ mapping.number }}{% else %}New{% endif %}</span>
+        </div>
+        <h1 class="page-title">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="card max-w-4xl">
+    <div class="card-header">
+        <h2 class="card-title">Spatial Feature &amp; Linear Referencing Configuration</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+
+            {% if form.errors %}
+            <div class="card bg-red-50 border border-red-200 p-4 mb-4">
+                <div class="text-sm font-semibold text-red-800 mb-1">Please correct the errors below:</div>
+                {% if form.non_field_errors %}
+                <div class="text-sm text-red-700 mb-1">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <ul class="list-disc list-inside text-sm text-red-700">
+                    {% for field in form %}
+                        {% for err in field.errors %}
+                        <li><strong>{{ field.label }}:</strong> {{ err }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.connector.id_for_label }}">GIS Connector *</label>
+                    {{ form.connector }}
+                    {% if form.connector.errors %}<div class="form-error">{{ form.connector.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.operational_asset.id_for_label }}">Operational Asset</label>
+                    {{ form.operational_asset }}
+                    {% if form.operational_asset.errors %}<div class="form-error">{{ form.operational_asset.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.location.id_for_label }}">SCM Location</label>
+                    {{ form.location }}
+                    {% if form.location.errors %}<div class="form-error">{{ form.location.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.org_unit.id_for_label }}">Org Unit</label>
+                    {{ form.org_unit }}
+                    {% if form.org_unit.errors %}<div class="form-error">{{ form.org_unit.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.layer_name.id_for_label }}">GIS Layer Name *</label>
+                    {{ form.layer_name }}
+                    {% if form.layer_name.errors %}<div class="form-error">{{ form.layer_name.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.external_feature_id.id_for_label }}">External Feature ID *</label>
+                    {{ form.external_feature_id }}
+                    {% if form.external_feature_id.errors %}<div class="form-error">{{ form.external_feature_id.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.geometry_type.id_for_label }}">Geometry Type *</label>
+                    {{ form.geometry_type }}
+                    {% if form.geometry_type.errors %}<div class="form-error">{{ form.geometry_type.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.coordinate_system_srid.id_for_label }}">Coordinate SRID *</label>
+                    {{ form.coordinate_system_srid }}
+                    {% if form.coordinate_system_srid.errors %}<div class="form-error">{{ form.coordinate_system_srid.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.latitude.id_for_label }}">Latitude (&deg;)</label>
+                    {{ form.latitude }}
+                    {% if form.latitude.errors %}<div class="form-error">{{ form.latitude.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.longitude.id_for_label }}">Longitude (&deg;)</label>
+                    {{ form.longitude }}
+                    {% if form.longitude.errors %}<div class="form-error">{{ form.longitude.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.elevation_meters.id_for_label }}">Elevation (meters)</label>
+                    {{ form.elevation_meters }}
+                    {% if form.elevation_meters.errors %}<div class="form-error">{{ form.elevation_meters.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.gis_custodian.id_for_label }}">GIS Custodian</label>
+                    {{ form.gis_custodian }}
+                    {% if form.gis_custodian.errors %}<div class="form-error">{{ form.gis_custodian.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2 flex items-center gap-2">
+                    {{ form.is_linear_asset }}
+                    <label class="form-label mb-0" for="{{ form.is_linear_asset.id_for_label }}">Linear Referencing System (LRS) Corridor Asset (pipeline, track, feeder)</label>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lrs_route_id.id_for_label }}">LRS Route Identifier</label>
+                    {{ form.lrs_route_id }}
+                    {% if form.lrs_route_id.errors %}<div class="form-error">{{ form.lrs_route_id.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lrs_measure_unit.id_for_label }}">LRS Measure Unit *</label>
+                    {{ form.lrs_measure_unit }}
+                    {% if form.lrs_measure_unit.errors %}<div class="form-error">{{ form.lrs_measure_unit.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lrs_from_measure.id_for_label }}">LRS From Measure</label>
+                    {{ form.lrs_from_measure }}
+                    {% if form.lrs_from_measure.errors %}<div class="form-error">{{ form.lrs_from_measure.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.lrs_to_measure.id_for_label }}">LRS To Measure</label>
+                    {{ form.lrs_to_measure }}
+                    {% if form.lrs_to_measure.errors %}<div class="form-error">{{ form.lrs_to_measure.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.system_of_record.id_for_label }}">System of Record *</label>
+                    {{ form.system_of_record }}
+                    {% if form.system_of_record.errors %}<div class="form-error">{{ form.system_of_record.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.sync_direction.id_for_label }}">Sync Direction *</label>
+                    {{ form.sync_direction }}
+                    {% if form.sync_direction.errors %}<div class="form-error">{{ form.sync_direction.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.drift_status.id_for_label }}">Drift Status *</label>
+                    {{ form.drift_status }}
+                    {% if form.drift_status.errors %}<div class="form-error">{{ form.drift_status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="{{ form.status.id_for_label }}">Mapping Status *</label>
+                    {{ form.status }}
+                    {% if form.status.errors %}<div class="form-error">{{ form.status.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.geojson_payload.id_for_label }}">GeoJSON Payload</label>
+                    {{ form.geojson_payload }}
+                    {% if form.geojson_payload.errors %}<div class="form-error">{{ form.geojson_payload.errors|first }}</div>{% endif %}
+                </div>
+
+                <div class="form-group md:col-span-2">
+                    <label class="form-label" for="{{ form.notes.id_for_label }}">Spatial Notes</label>
+                    {{ form.notes }}
+                    {% if form.notes.errors %}<div class="form-error">{{ form.notes.errors|first }}</div>{% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 pt-4 border-t border-slate-100">
+                <button type="submit" class="btn btn-primary">
+                    <i data-lucide="save" class="w-4 h-4 me-1"></i>
+                    {% if is_edit %}Save Changes{% else %}Create GIS Mapping{% endif %}
+                </button>
+                <a href="{% if is_edit %}{% url 'assets:asset_gis_mapping_detail' mapping.pk %}{% else %}{% url 'assets:asset_gis_mapping_list' %}{% endif %}" class="btn btn-outline">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
