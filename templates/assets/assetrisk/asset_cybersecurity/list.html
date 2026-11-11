@@ -91,7 +91,7 @@
                     <option value="{{ val }}" {% if request.GET.firmware_update_status == val %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="btn btn-outline"><i data-lucide="filter" class="w-4 h-4"></i></button>
+                <button type="submit" class="btn btn-outline" title="Apply Filters" aria-label="Apply Filters"><i data-lucide="filter" class="w-4 h-4"></i></button>
                 {% if request.GET.q or request.GET.device_type or request.GET.network_zone or request.GET.security_posture_status or request.GET.firmware_update_status %}
                 <a href="{% url 'assets:asset_cybersecurity_profile_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="x" class="w-4 h-4"></i></a>
                 {% endif %}
