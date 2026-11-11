@@ -238,75 +238,75 @@
 ## Phase 1 & Phase 2 (Research & Plan)
 - [x] Research commercial EAM/ERP integration hubs & write `.claude/tasks/research-assets-11.15.md`
 - [x] Author Sub-module 11.15 build plan in `.claude/tasks/todo.md`
-- [ ] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.15.md` (every model field, choice, form field/exclusion, URL name, exact view context var, badge mapping, and `AssetTelemetryReading` metric/threshold alignment rule)
+- [x] Freeze pre-build spec/contract in `.claude/tasks/contract-assets-11.15.md` (every model field, choice, form field/exclusion, URL name, exact view context var, badge mapping, and `AssetTelemetryReading` metric/threshold alignment rule)
 
 ## Phase 3 — Build (Serial: Entity by Entity -> Integrate -> Smoke)
 
 ### Entity 1: `AssetIntegrationConnector` (`AICN-`)
-- [ ] `apps/assets/models/IntegrationApiHub/AssetIntegrationConnectors.py`
-- [ ] `apps/assets/forms/IntegrationApiHub/AssetIntegrationConnectors.py`
-- [ ] `apps/assets/views/IntegrationApiHub/AssetIntegrationConnectors.py` (list, create, detail, edit, delete + `test_connection` + `rotate_secret` with `_aicn_secret_reveal`)
-- [ ] `apps/assets/urls/IntegrationApiHub/AssetIntegrationConnectors.py`
-- [ ] `templates/assets/integrationapihub/asset_integration_connector/list.html`
-- [ ] `templates/assets/integrationapihub/asset_integration_connector/detail.html` (pop-once `plaintext_once` secret box + `<dl class="detail-grid">`)
-- [ ] `templates/assets/integrationapihub/asset_integration_connector/form.html`
+- [x] `apps/assets/models/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [x] `apps/assets/forms/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [x] `apps/assets/views/IntegrationApiHub/AssetIntegrationConnectors.py` (list, create, detail, edit, delete + `test_connection` + `rotate_secret` with `_aicn_secret_reveal`)
+- [x] `apps/assets/urls/IntegrationApiHub/AssetIntegrationConnectors.py`
+- [x] `templates/assets/integrationapihub/asset_integration_connector/list.html`
+- [x] `templates/assets/integrationapihub/asset_integration_connector/detail.html` (pop-once `plaintext_once` secret box + `<dl class="detail-grid">`)
+- [x] `templates/assets/integrationapihub/asset_integration_connector/form.html`
 
 ### Entity 2: `AssetTelemetryStream` (`ATMS-`)
-- [ ] `apps/assets/models/IntegrationApiHub/AssetTelemetryStreams.py`
-- [ ] `apps/assets/forms/IntegrationApiHub/AssetTelemetryStreams.py`
-- [ ] `apps/assets/views/IntegrationApiHub/AssetTelemetryStreams.py` (list, create, detail, edit, delete + `ingest_sample_reading` persisting `AssetTelemetryReading` & conditional `AssetMaintenanceRequest`)
-- [ ] `apps/assets/urls/IntegrationApiHub/AssetTelemetryStreams.py`
-- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/list.html`
-- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/detail.html`
-- [ ] `templates/assets/integrationapihub/asset_telemetry_stream/form.html`
+- [x] `apps/assets/models/IntegrationApiHub/AssetTelemetryStreams.py`
+- [x] `apps/assets/forms/IntegrationApiHub/AssetTelemetryStreams.py`
+- [x] `apps/assets/views/IntegrationApiHub/AssetTelemetryStreams.py` (list, create, detail, edit, delete + `ingest_sample_reading` persisting `AssetTelemetryReading` & conditional `AssetMaintenanceRequest`)
+- [x] `apps/assets/urls/IntegrationApiHub/AssetTelemetryStreams.py`
+- [x] `templates/assets/integrationapihub/asset_telemetry_stream/list.html`
+- [x] `templates/assets/integrationapihub/asset_telemetry_stream/detail.html`
+- [x] `templates/assets/integrationapihub/asset_telemetry_stream/form.html`
 
 ### Entity 3: `AssetGlSyncBatch` (`AGLS-`)
-- [ ] `apps/assets/models/IntegrationApiHub/AssetGlSyncBatches.py`
-- [ ] `apps/assets/forms/IntegrationApiHub/AssetGlSyncBatches.py`
-- [ ] `apps/assets/views/IntegrationApiHub/AssetGlSyncBatches.py` (list, create, detail, edit, delete + `execute_reconcile_batch` posting balanced `accounting.JournalEntry`/`JournalLine` in `transaction.atomic()`)
-- [ ] `apps/assets/urls/IntegrationApiHub/AssetGlSyncBatches.py`
-- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/list.html`
-- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/detail.html`
-- [ ] `templates/assets/integrationapihub/asset_gl_sync_batch/form.html`
+- [x] `apps/assets/models/IntegrationApiHub/AssetGlSyncBatches.py`
+- [x] `apps/assets/forms/IntegrationApiHub/AssetGlSyncBatches.py`
+- [x] `apps/assets/views/IntegrationApiHub/AssetGlSyncBatches.py` (list, create, detail, edit, delete + `execute_reconcile_batch` posting balanced `accounting.JournalEntry`/`JournalLine` in `transaction.atomic()`)
+- [x] `apps/assets/urls/IntegrationApiHub/AssetGlSyncBatches.py`
+- [x] `templates/assets/integrationapihub/asset_gl_sync_batch/list.html`
+- [x] `templates/assets/integrationapihub/asset_gl_sync_batch/detail.html`
+- [x] `templates/assets/integrationapihub/asset_gl_sync_batch/form.html`
 
 ### Entity 4: `AssetGisMapping` (`AGIS-`)
-- [ ] `apps/assets/models/IntegrationApiHub/AssetGisMappings.py`
-- [ ] `apps/assets/forms/IntegrationApiHub/AssetGisMappings.py`
-- [ ] `apps/assets/views/IntegrationApiHub/AssetGisMappings.py` (list, create, detail, edit, delete + `verify_spatial_sync`)
-- [ ] `apps/assets/urls/IntegrationApiHub/AssetGisMappings.py`
-- [ ] `templates/assets/integrationapihub/asset_gis_mapping/list.html`
-- [ ] `templates/assets/integrationapihub/asset_gis_mapping/detail.html`
-- [ ] `templates/assets/integrationapihub/asset_gis_mapping/form.html`
+- [x] `apps/assets/models/IntegrationApiHub/AssetGisMappings.py`
+- [x] `apps/assets/forms/IntegrationApiHub/AssetGisMappings.py`
+- [x] `apps/assets/views/IntegrationApiHub/AssetGisMappings.py` (list, create, detail, edit, delete + `verify_spatial_sync`)
+- [x] `apps/assets/urls/IntegrationApiHub/AssetGisMappings.py`
+- [x] `templates/assets/integrationapihub/asset_gis_mapping/list.html`
+- [x] `templates/assets/integrationapihub/asset_gis_mapping/detail.html`
+- [x] `templates/assets/integrationapihub/asset_gis_mapping/form.html`
 
 ### Integrate & Wire-up (Single-writer, after all 4 entity modules exist)
-- [ ] Surgical re-exports in `apps/assets/models/IntegrationApiHub/__init__.py` & `apps/assets/models/__init__.py`
-- [ ] Surgical re-exports in `apps/assets/forms/IntegrationApiHub/__init__.py` & `apps/assets/forms/__init__.py`
-- [ ] Surgical re-exports in `apps/assets/views/IntegrationApiHub/__init__.py` & `apps/assets/views/__init__.py`
-- [ ] Surgical include in `apps/assets/urls/IntegrationApiHub/__init__.py` & `apps/assets/urls/__init__.py`
-- [ ] Register all 4 models in `apps/assets/admin.py`
-- [ ] Extend `apps/assets/management/commands/seed_assets.py` idempotently (demo Acme + Beta data for all 4 entities, re-running `seed_assets` x2 without duplicates)
-- [ ] Add `LIVE_LINKS["11.15"]` in `apps/core/navigation.py` (pointing to `assets:asset_integration_connector_list` and hub routes)
-- [ ] Run `makemigrations assets` -> verify **`0018_...`** -> `migrate` -> `seed_assets` **twice** -> `manage.py check`
+- [x] Surgical re-exports in `apps/assets/models/IntegrationApiHub/__init__.py` & `apps/assets/models/__init__.py`
+- [x] Surgical re-exports in `apps/assets/forms/IntegrationApiHub/__init__.py` & `apps/assets/forms/__init__.py`
+- [x] Surgical re-exports in `apps/assets/views/IntegrationApiHub/__init__.py` & `apps/assets/views/__init__.py`
+- [x] Surgical include in `apps/assets/urls/IntegrationApiHub/__init__.py` & `apps/assets/urls/__init__.py`
+- [x] Register all 4 models in `apps/assets/admin.py`
+- [x] Extend `apps/assets/management/commands/seed_assets.py` idempotently (demo Acme + Beta data for all 4 entities, re-running `seed_assets` x2 without duplicates)
+- [x] Add `LIVE_LINKS["11.15"]` in `apps/core/navigation.py` (pointing to `assets:asset_integration_connector_list` and hub routes)
+- [x] Run `makemigrations assets` -> verify **`0018_...`** -> `migrate` -> `seed_assets` **twice** -> `manage.py check`
 
 ### Smoke Gate (`qa-smoke-tester`)
-- [ ] Smoke test every 11.15 list/create/detail/edit URL + POST actions (`test_connection`, `rotate_secret` pop-once reveal, `ingest_sample_reading` CBM trigger, `execute_reconcile_batch` GL JournalEntry posting, `verify_spatial_sync`) as `admin_acme` (`password`), asserting non-blank rendered data, valid filter rows (L44), page 2 / junk-param tolerance, and cross-tenant Beta IDOR -> 404. Fix any drift against `contract-assets-11.15.md`.
+- [x] Smoke test every 11.15 list/create/detail/edit URL + POST actions (`test_connection`, `rotate_secret` pop-once reveal, `ingest_sample_reading` CBM trigger, `execute_reconcile_batch` GL JournalEntry posting, `verify_spatial_sync`) as `admin_acme` (`password`), asserting non-blank rendered data, valid filter rows (L44), page 2 / junk-param tolerance, and cross-tenant Beta IDOR -> 404. Fix any drift against `contract-assets-11.15.md`.
 
 ## Phase 4 & Phase 5 — Serial Review & Code Fixer
-- [ ] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) against `BASE...HEAD` and consolidate into `.claude/tasks/review-assets-11.15.md`
-- [ ] Run `code-fixer` agent against `.claude/tasks/review-assets-11.15.md` until zero `[ ] open` findings remain and `manage.py check` is clean
+- [x] Run 6 serial reviewers (`code-reviewer` -> `explorer` -> `frontend-reviewer` -> `performance-reviewer` -> `qa-smoke-tester` -> `security-reviewer`) against `BASE...HEAD` and consolidate into `.claude/tasks/review-assets-11.15.md`
+- [x] Run `code-fixer` agent against `.claude/tasks/review-assets-11.15.md` until zero `[ ] open` findings remain and `manage.py check` is clean
 
 ## Phase 6 — Tests (Serial)
-- [ ] Pin test contract and extend `apps/assets/tests/conftest.py` cleanly for 11.15 fixtures (`_integration_api_hub_*` / `integration_api_hub_*`)
-- [ ] `apps/assets/tests/test_integration_api_hub_models.py` (numbering `AICN-`/`ATMS-`/`AGLS-`/`AGIS-`, choice max_lengths, constraints, secret hashing, GL posting / telemetry helpers)
-- [ ] `apps/assets/tests/test_integration_api_hub_forms.py` (`reject_foreign`, global `Currency` allowed, excluded `editable=False` fields, endpoint URI scheme validation, threshold/LRS/GeoJSON `clean()`)
-- [ ] `apps/assets/tests/test_integration_api_hub_views.py` (CRUD, search/FK/enum filters, pagination, `rotate_secret` pop-once session reveal, `ingest_sample_reading` + `AssetMaintenanceRequest`, `execute_reconcile_batch` + `JournalEntry`, `verify_spatial_sync`)
-- [ ] `apps/assets/tests/test_integration_api_hub_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on list/detail/edit/delete/actions, non-admin blocked on `rotate_secret`/`execute_reconcile_batch`, `@require_POST` enforcement)
-- [ ] Run full unfiltered `pytest apps/assets/tests/` and fix green
+- [x] Pin test contract and extend `apps/assets/tests/conftest.py` cleanly for 11.15 fixtures (`_integration_api_hub_*` / `integration_api_hub_*`)
+- [x] `apps/assets/tests/test_integration_api_hub_models.py` (numbering `AICN-`/`ATMS-`/`AGLS-`/`AGIS-`, choice max_lengths, constraints, secret hashing, GL posting / telemetry helpers)
+- [x] `apps/assets/tests/test_integration_api_hub_forms.py` (`reject_foreign`, global `Currency` allowed, excluded `editable=False` fields, endpoint URI scheme validation, threshold/LRS/GeoJSON `clean()`)
+- [x] `apps/assets/tests/test_integration_api_hub_views.py` (CRUD, search/FK/enum filters, pagination, `rotate_secret` pop-once session reveal, `ingest_sample_reading` + `AssetMaintenanceRequest`, `execute_reconcile_batch` + `JournalEntry`, `verify_spatial_sync`)
+- [x] `apps/assets/tests/test_integration_api_hub_security.py` (unauthenticated redirect, Beta tenant IDOR 404 on list/detail/edit/delete/actions, non-admin blocked on `rotate_secret`/`execute_reconcile_batch`, `@require_POST` enforcement)
+- [x] Run full unfiltered `pytest apps/assets/tests/` and fix green
 
 ## Phase 7 — Close-out
-- [ ] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.15 models, URLs, templates, and seeder coverage
-- [ ] Mark Sub-module 11.15 complete in `README.md`
-- [ ] Record any deferred/blocked items in `.agents/tasks/gaps-assets-11.15.md` (or explicitly declare `**Gaps**: None`) and add close-out `### Review notes` below
+- [x] Update `.claude/skills/assets/SKILL.md` with Sub-module 11.15 models, URLs, templates, and seeder coverage
+- [x] Mark Sub-module 11.15 complete in `README.md`
+- [x] Record any deferred/blocked items in `.agents/tasks/gaps-assets-11.15.md` (or explicitly declare `**Gaps**: None`) and add close-out `### Review notes` below
 
 ## Later passes / deferred
 1. **Live outbound HTTP/MQTT/OPC-UA/ArcGIS runtime daemon**: Celery worker loops, live TLS socket clients, OPC-UA subscriptions, and live ArcGIS FeatureServer polling are deferred until an enterprise async broker / KMS vault exists in `core` (all 11.15 test/sync actions remain deterministic ORM/simulated).
@@ -315,7 +315,12 @@
 4. **Sibling integration consolidation (`3.12`, `4.16`, `5.16`, `6.19`, `7.14`, `8.16`, `9.16`, `10.16`, `11.12`)**: Coexists strictly without cross-FKs or schema edits to any of the 9 sibling integration tables (`L55`).
 
 ## Review notes
-_(To be populated after Phase 4–6 close-out; link `.agents/tasks/gaps-assets-11.15.md` or state `**Gaps**: None`.)_
+### Sub-module 11.15: Integration & API Hub (close-out 2026-11-11)
+- **Research & Contract:** [research-assets-11.15.md](file:///c:/xampp/htdocs/NavERP/.claude/tasks/research-assets-11.15.md) (`fd485e4f`), [contract-assets-11.15.md](file:///c:/xampp/htdocs/NavERP/.claude/tasks/contract-assets-11.15.md) (`3e2583e7`, synchronized in Phase 5 `1821e91f`, `f0ba3378`).
+- **Implementation & Migrations:** 4 models (`AssetIntegrationConnector` `AICN-`, `AssetTelemetryStream` `ATMS-`, `AssetGlSyncBatch` `AGLS-`, `AssetGisMapping` `AGIS-`), 4 ModelForms, 25 FBV views + `_common.py`, `_validators.py`, 12 dark-mode-safe templates under `templates/assets/integrationapihub/`, `apps/assets/admin.py`, `_seed_tenant_11_15` (`seed_assets` idempotent x2), `LIVE_LINKS["11.15"]` (`6` distinct targets), `assets:overview` 11.15 KPIs & quick links, and migrations `0018_assetintegrationconnector_assetglsyncbatch_and_more` (`a04b3e66`) + `0019_alter_assetgismapping_drift_status_and_more` (`e593d35f`).
+- **6-Pass Review & Code Fixer:** [review-assets-11.15.md](file:///c:/xampp/htdocs/NavERP/.claude/tasks/review-assets-11.15.md) (`476a8dce` -> `d14e6dc6`): 65 raw findings deduplicated into 31 actionable items (`C1`–`C8`, `I1`–`I13`, `M1`–`M10`); **31 / 31 closed** (`30` fixed across single-file commits, `1` skipped `M9` with `.form-grid` CSS exception documented).
+- **Tests:** `375` dedicated 11.15 tests (`133` models `c2a282e5`, `168` forms `1a44e558`, `35` views `0117f90e`, `39` security/100-user scale `bee86936`) + full unfiltered `apps/assets/tests/` suite (**2,283 tests**, exit code `0`).
+- **Gaps & Cross-Module Follow-ups:** See [.agents/tasks/gaps-assets-11.15.md](file:///c:/xampp/htdocs/NavERP/.agents/tasks/gaps-assets-11.15.md) (`f1b09aa7`) tracking `GAP-assets-11.15-01`..`04` (deferred runtime transport, KMS, GIS map viewer, `.form-grid` CSS) and `GAP-assets-11.15-05`..`07` (cross-module `core` audit redaction `X1`, `11.4` `AssetDepreciationSchedule` `X2` & legacy `conftest.py` fixture cleanup, `11.7` telemetry indexes `X3`).
 
 ---
 # Sub-module 11.14: Asset Analytics & Business Intelligence (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.14.md` (2026-11-11)
