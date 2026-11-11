@@ -58,6 +58,10 @@ from apps.assets.models import (
     AssetScanLog,
     FieldWorkOrder,
     MobileAssetInspection,
+    AssetBusinessContinuityPlan,
+    AssetCyberSecurityProfile,
+    AssetRiskMitigationAction,
+    AssetRiskRegister,
 )
 from apps.core.models import OrgUnit, Party, Tenant
 from apps.scm.models import Asset, Location, PurchaseOrder
@@ -78,6 +82,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if options["flush"]:
             self.stdout.write("Flushing assets module data...")
+            AssetRiskMitigationAction.objects.all().delete()
+            AssetCyberSecurityProfile.objects.all().delete()
+            AssetBusinessContinuityPlan.objects.all().delete()
+            AssetRiskRegister.objects.all().delete()
             AssetComplianceIncident.objects.all().delete()
             AssetPermitLicense.objects.all().delete()
             AssetComplianceAudit.objects.all().delete()
@@ -133,6 +141,7 @@ class Command(BaseCommand):
             self._seed_tenant_11_9(tenant)
             self._seed_tenant_11_10(tenant)
             self._seed_tenant_11_11(tenant)
+            self._seed_tenant_11_12(tenant)
 
         self.stdout.write(self.style.SUCCESS("Module 11 assets seeding complete."))
         self.stdout.write(self.style.SUCCESS("Tenant admin login credentials: admin_acme / password"))
@@ -2997,4 +3006,313 @@ class Command(BaseCommand):
                 )
 
             self.stdout.write(f"[{tenant.name}] 11.13 Seeding complete (3 inspections, 3 work orders, 4 scans, 3 geofence events).")
+
+    def _seed_tenant_11_12(self, tenant):
+        # =====================================================================
+        # 11.12 Asset Risk Management
+        # =====================================================================
+        if AssetRiskRegister.objects.filter(tenant=tenant).exists():
+            self.stdout.write(f"[{tenant.name}] 11.12 Asset Risk Management already seeded; skipping.")
+            return
+
+        today = timezone.now().date()
+        user = User.objects.filter(tenant=tenant).first()
+        scm_asset1 = Asset.objects.filter(tenant=tenant).first()
+        scm_asset2 = Asset.objects.filter(tenant=tenant).order_by("pk")[1] if Asset.objects.filter(tenant=tenant).count() > 1 else scm_asset1
+        scm_asset3 = Asset.objects.filter(tenant=tenant).order_by("pk")[2] if Asset.objects.filter(tenant=tenant).count() > 2 else scm_asset1
+        cat = AssetCategory.objects.filter(tenant=tenant).first()
+        vendor = Party.objects.filter(tenant=tenant, roles__role="vendor").first() or Party.objects.filter(tenant=tenant).first()
+
+        if not scm_asset1:
+            self.stdout.write(f"[{tenant.name}] Warning: No SCM assets found; skipping 11.12 risk seeding.")
+            return
+
+        with transaction.atomic():
+            # 1. Asset Risk Registers
+            ark1 = AssetRiskRegister.objects.create(
+                tenant=tenant,
+                title="Catastrophic Spindle Bearing Seizure on 5-Axis CNC Mill",
+                asset=scm_asset1,
+                category=cat,
+                risk_category="operational",
+                threat_source="equipment_wear",
+                failure_mode="Bearing cage fatigue leading to thermal seizure and spindle stall",
+                description="High spindle thermal runout during continuous titanium milling operations poses catastrophic crash risk.",
+                inherent_likelihood=4,
+                inherent_impact=4,
+                residual_likelihood=2,
+                residual_impact=3,
+                risk_owner=user,
+                treatment_strategy="mitigate",
+                financial_exposure_amount=Decimal("85000.00"),
+                status="treating",
+                review_frequency="monthly",
+                next_review_date=today + timezone.timedelta(days=30),
+            )
+            ark1.calculate_scores()
+            ark1.save()
+
+            ark2 = AssetRiskRegister.objects.create(
+                tenant=tenant,
+                title="OT Network Ransomware Infection via Remote Maintenance Gateway",
+                asset=scm_asset2,
+                category=cat,
+                risk_category="cybersecurity",
+                threat_source="cyber_attack",
+                failure_mode="Ransomware deployment on supervisory SCADA compromising PLC automation",
+                description="Vendor remote diagnostics VPN vulnerable to credential stuffing and OT lateral traversal.",
+                inherent_likelihood=3,
+                inherent_impact=5,
+                residual_likelihood=1,
+                residual_impact=4,
+                risk_owner=user,
+                treatment_strategy="mitigate",
+                financial_exposure_amount=Decimal("250000.00"),
+                status="assessed",
+                review_frequency="quarterly",
+                next_review_date=today + timezone.timedelta(days=60),
+            )
+            ark2.calculate_scores()
+            ark2.save()
+
+            ark3 = AssetRiskRegister.objects.create(
+                tenant=tenant,
+                title="Sole-Source Heavy Forgings Supply Chain Bottleneck",
+                asset=scm_asset3,
+                category=cat,
+                risk_category="geopolitical_supply_chain",
+                threat_source="supply_chain_disruption",
+                failure_mode="Single tier-1 supplier shutdown halting assembly line for 8 weeks",
+                description="Turbine shaft casting supplier experiencing backlog and lead times exceeding 26 weeks.",
+                inherent_likelihood=4,
+                inherent_impact=3,
+                residual_likelihood=2,
+                residual_impact=2,
+                risk_owner=user,
+                treatment_strategy="transfer",
+                financial_exposure_amount=Decimal("120000.00"),
+                status="identified",
+                review_frequency="quarterly",
+                next_review_date=today + timezone.timedelta(days=45),
+            )
+            ark3.calculate_scores()
+            ark3.save()
+
+            ark4 = AssetRiskRegister.objects.create(
+                tenant=tenant,
+                title="High-Pressure Hydraulic Fluid Line Rupture & Environmental Release",
+                asset=scm_asset1,
+                category=cat,
+                risk_category="environmental",
+                threat_source="equipment_wear",
+                failure_mode="Flexible hose fatigue burst spilling 400L ISO 46 oil into storm drain sump",
+                description="Hydraulic power unit operating at 3000 PSI adjacent to exterior storm runoff perimeter.",
+                inherent_likelihood=3,
+                inherent_impact=3,
+                residual_likelihood=1,
+                residual_impact=2,
+                risk_owner=user,
+                treatment_strategy="mitigate",
+                financial_exposure_amount=Decimal("45000.00"),
+                status="monitored",
+                review_frequency="semi_annually",
+                next_review_date=today + timezone.timedelta(days=90),
+            )
+            ark4.calculate_scores()
+            ark4.save()
+
+            # 2. Asset Business Continuity Plans
+            abc1 = AssetBusinessContinuityPlan.objects.create(
+                tenant=tenant,
+                title="Emergency Power Substation Diesel Generator Hot Standby BCP",
+                primary_asset=scm_asset1,
+                backup_redundant_asset=scm_asset2,
+                redundancy_type="hot_standby",
+                recovery_time_objective_hours=Decimal("0.50"),
+                recovery_point_objective_hours=Decimal("0.10"),
+                maximum_tolerable_downtime_hours=Decimal("4.00"),
+                disaster_scenario="power_grid_outage",
+                failover_procedure="1. Automatic transfer switch (ATS) detects utility undervoltage (<90%).\n2. Dual diesel gensets auto-crank within 10 seconds.\n3. Essential bus synchronized and energized within 30 seconds.",
+                failback_procedure="1. Utility voltage stable for 15 minutes continuous.\n2. In-phase transfer closed.\n3. Gensets run 5-minute cool-down cycle.",
+                alternate_facility_site="Building B Auxiliary Substation Yard",
+                critical_spares_required="Fuel filter elements (P/N FF-582), 24V starter battery bank, auto-synchronizer PLC module.",
+                emergency_lead=user,
+                drill_frequency="quarterly",
+                last_drill_date=today - timezone.timedelta(days=45),
+                next_drill_date=today + timezone.timedelta(days=45),
+                drill_result="passed",
+                status="active",
+            )
+
+            abc2 = AssetBusinessContinuityPlan.objects.create(
+                tenant=tenant,
+                title="CNC Milling Cell Warm Standby Failover & Production Reroute",
+                primary_asset=scm_asset2,
+                backup_redundant_asset=scm_asset1,
+                redundancy_type="warm_standby",
+                recovery_time_objective_hours=Decimal("2.00"),
+                recovery_point_objective_hours=Decimal("0.50"),
+                maximum_tolerable_downtime_hours=Decimal("12.00"),
+                disaster_scenario="critical_hardware_loss",
+                failover_procedure="1. Tooling packages loaded onto secondary 5-axis mill.\n2. CAM post-processor config switched to Machine B kinematics.\n3. First-article CMM inspection performed.",
+                failback_procedure="1. Mechanical overhaul completed and 4-hour test cut validated.\n2. Work orders released back to primary spindle.",
+                alternate_facility_site="Machine Shop Bay 2",
+                critical_spares_required="HSK-A63 spindle cartridges, Renishaw probe stylus, Siemens 840D drive module.",
+                emergency_lead=user,
+                drill_frequency="semi_annually",
+                last_drill_date=today - timezone.timedelta(days=120),
+                next_drill_date=today + timezone.timedelta(days=60),
+                drill_result="passed_with_deficiencies",
+                status="active",
+            )
+
+            abc3 = AssetBusinessContinuityPlan.objects.create(
+                tenant=tenant,
+                title="Industrial Steam Boiler Disaster Recovery Plan (Single Point of Failure)",
+                primary_asset=scm_asset3,
+                backup_redundant_asset=None,
+                redundancy_type="none_single_point_of_failure",
+                recovery_time_objective_hours=Decimal("72.00"),
+                recovery_point_objective_hours=Decimal("4.00"),
+                maximum_tolerable_downtime_hours=Decimal("96.00"),
+                disaster_scenario="fire_explosion",
+                failover_procedure="1. Emergency manual trip and fuel isolation.\n2. Call Nationwide Boiler emergency mobile steam dispatch (SLA contract #NB-942).\n3. Hook up temporary steam header and potable feedwater line.",
+                failback_procedure="1. ASME boiler inspector clearance certificate.\n2. Hydrostatic pressure re-certification.\n3. Transition valve manifold back to plant boiler.",
+                alternate_facility_site="Exterior Boiler Pad Mobile Hookup",
+                critical_spares_required="Flexible 4-inch steam hoses, pressure relief safety valves, feedwater pumps.",
+                emergency_lead=user,
+                drill_frequency="annually",
+                drill_result="not_tested",
+                status="draft",
+            )
+
+            # 3. Asset Cyber Security Profiles
+            acs1 = AssetCyberSecurityProfile.objects.create(
+                tenant=tenant,
+                asset=scm_asset1,
+                device_type="plc_controller",
+                ip_address="192.168.10.45",
+                mac_address="00:1B:1B:3A:42:01",
+                network_zone="control_plc",
+                firmware_version="V4.2.1",
+                latest_available_firmware="V4.3.0",
+                firmware_update_status="update_available",
+                protocol_used="modbus_tcp",
+                exposure_level="isolated_vlan",
+                known_vulnerabilities_cve="CVE-2024-21887: Modbus stack buffer overflow under crafted TCP packet payload",
+                cve_risk_score=Decimal("6.8"),
+                compensating_controls="Strict firewall rule blocking external ingress; OT DPI filter drop on non-whitelisted function codes.",
+                last_vulnerability_scan_date=today - timezone.timedelta(days=15),
+                security_posture_status="attention_required",
+                patch_freeze_until=today + timezone.timedelta(days=30),
+            )
+
+            acs2 = AssetCyberSecurityProfile.objects.create(
+                tenant=tenant,
+                asset=scm_asset2,
+                device_type="scada_server",
+                ip_address="10.20.1.15",
+                mac_address="00:50:56:A2:3F:89",
+                network_zone="supervisory_scada",
+                firmware_version="2024.1.2",
+                latest_available_firmware="2024.1.2",
+                firmware_update_status="up_to_date",
+                protocol_used="opc_ua",
+                exposure_level="monitored_dmz",
+                known_vulnerabilities_cve="None. Baseline patched to latest certified release.",
+                cve_risk_score=Decimal("0.0"),
+                compensating_controls="EDR sensor active, MFA for all RDP sessions, SIEM syslog forwarder.",
+                last_vulnerability_scan_date=today - timezone.timedelta(days=5),
+                security_posture_status="secure",
+            )
+
+            acs3 = AssetCyberSecurityProfile.objects.create(
+                tenant=tenant,
+                asset=scm_asset3,
+                device_type="iot_sensor",
+                ip_address="192.168.30.102",
+                mac_address="B8:27:EB:14:8A:23",
+                network_zone="process_io",
+                firmware_version="1.0.4",
+                latest_available_firmware="1.2.0",
+                firmware_update_status="critical_patch_pending",
+                protocol_used="mqtt",
+                exposure_level="isolated_vlan",
+                known_vulnerabilities_cve="CVE-2023-4863: Heap buffer overflow in WebP and embedded MQTT parser.",
+                cve_risk_score=Decimal("8.8"),
+                compensating_controls="Isolated micro-segment with zero internet egress; TLS mutual authentication enforced.",
+                last_vulnerability_scan_date=today - timezone.timedelta(days=20),
+                security_posture_status="vulnerable",
+            )
+
+            # 4. Asset Risk Mitigation Actions
+            arma1 = AssetRiskMitigationAction.objects.create(
+                tenant=tenant,
+                title="Install Wireless Vibration & Temperature Telemetry Sensors on Spindle",
+                risk=ark1,
+                action_type="preventive_inspection",
+                priority="critical",
+                description="Mount tri-axial high-frequency piezoelectric accelerometers on spindle front and rear bearings with automated threshold alerting.",
+                assigned_to=user,
+                alternative_supplier=None,
+                target_completion_date=today + timezone.timedelta(days=14),
+                estimated_cost=Decimal("6500.00"),
+                actual_cost=Decimal("6200.00"),
+                status="verified_effective",
+                actual_completion_date=today - timezone.timedelta(days=2),
+                effectiveness_rating="highly_effective",
+                verification_notes="Sensors transmitting 10-minute FFT spectra to asset health dashboard. Bearing baseline established.",
+            )
+
+            arma2 = AssetRiskMitigationAction.objects.create(
+                tenant=tenant,
+                title="Implement Zero-Trust OT Gateway with Hardware Key MFA for Vendor Access",
+                risk=ark2,
+                action_type="firmware_security_patch",
+                priority="high",
+                description="Replace legacy PPTP/IPsec vendor tunnel with Claroty SRA zero-trust proxy requiring hardware FIDO2 tokens.",
+                assigned_to=user,
+                alternative_supplier=None,
+                target_completion_date=today + timezone.timedelta(days=30),
+                estimated_cost=Decimal("14500.00"),
+                actual_cost=Decimal("0.00"),
+                status="in_progress",
+                effectiveness_rating="pending_evaluation",
+            )
+
+            arma3 = AssetRiskMitigationAction.objects.create(
+                tenant=tenant,
+                title="Qualify Secondary Tier-1 Forgings Supplier with Approved First-Article",
+                risk=ark3,
+                action_type="supplier_diversification",
+                priority="high",
+                description="Audit and certify secondary forging vendor for turbine shaft casting. Negotiate 30-day emergency stocking reserve.",
+                assigned_to=user,
+                alternative_supplier=vendor,
+                target_completion_date=today + timezone.timedelta(days=60),
+                estimated_cost=Decimal("22000.00"),
+                actual_cost=Decimal("0.00"),
+                status="planned",
+                effectiveness_rating="pending_evaluation",
+            )
+
+            arma4 = AssetRiskMitigationAction.objects.create(
+                tenant=tenant,
+                title="Install Heavy-Duty Double-Braided Hydraulic Hoses with Containment Shrouds",
+                risk=ark4,
+                action_type="engineering_control",
+                priority="medium",
+                description="Retrofit all high-pressure flexible lines with MSHA-certified bursting sleeves and auto-shutoff check valves.",
+                assigned_to=user,
+                alternative_supplier=None,
+                target_completion_date=today + timezone.timedelta(days=21),
+                estimated_cost=Decimal("4800.00"),
+                actual_cost=Decimal("4650.00"),
+                status="completed",
+                actual_completion_date=today - timezone.timedelta(days=1),
+                effectiveness_rating="partially_effective",
+                verification_notes="Burst sleeve containment installed; awaiting secondary sump float switch installation next week.",
+            )
+
+        self.stdout.write(f"[{tenant.name}] 11.12 Seeding complete (4 risk registers, 3 continuity plans, 3 cyber profiles, 4 mitigation actions).")
 
