@@ -98,9 +98,10 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Remove redundant manual calculation calls.
   - **Status:** [x] fixed — fix(assets): remove redundant calculate_scores and save calls in seed_assets
 
-- [ ] **`M6`**: `apps/assets/management/commands/seed_assets.py:3024-3026` — Sliced Queryset Consolidation for Asset Lookup
+- [x] **`M6`**: `apps/assets/management/commands/seed_assets.py:3024-3026` — Sliced Queryset Consolidation for Asset Lookup
   - **Issue:** Multiple database roundtrips during tenant asset initialization.
   - **Fix:** Fetch assets via single sliced query `list(Asset.objects.filter(tenant=tenant).order_by("pk")[:3])`.
+  - **Status:** [x] fixed — perf(assets): consolidate asset lookups via sliced query in seed_assets 11.12
 
 - [ ] **`M7`**: `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py:20-25` — Defer Large TextField in Continuity Plan List View
   - **Issue:** `critical_spares_required` is an unbounded `TextField` pulled unnecessarily in list queries.
