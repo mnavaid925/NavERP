@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}Asset Geofence Events — Mobile Asset Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Mobile Asset Management</span>
+            <span>/</span>
+            <span>Geofence Alerts</span>
+        </div>
+        <h1 class="page-title">GPS Perimeter & Geofence Alerts</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_geofence_event_create' %}" class="btn btn-primary">
+            <i data-lucide="shield-alert" class="w-4 h-4 me-1"></i> Log Geofence Event
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="map-pin"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Total Events</div>
+            <div class="stat-value">{{ total_events }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Open Alerts</div>
+            <div class="stat-value">{{ open_alerts_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="alert-octagon"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Breaches</div>
+            <div class="stat-value">{{ critical_breaches_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="check-circle-2"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Resolved / Cleared</div>
+            <div class="stat-value">{{ resolved_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <label class="form-label text-xs">Search</label>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Fence, asset, notes..." class="form-input">
+            </div>
+            <div>
+                <label class="form-label text-xs">Event Type</label>
+                <select name="event_type" class="form-select">
+                    <option value="">All Events</option>
+                    {% for val, label in event_type_choices %}
+                    <option value="{{ val }}" {% if request.GET.event_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Severity</label>
+                <select name="severity" class="form-select">
+                    <option value="">All Severities</option>
+                    {% for val, label in severity_choices %}
+                    <option value="{{ val }}" {% if request.GET.severity == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="form-label text-xs">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
+                </button>
+                <a href="{% url 'assets:asset_geofence_event_list' %}" class="btn btn-outline" title="Reset">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Events Table Card -->
+<div class="card">
+    <div class="card-header flex justify-between items-center">
+        <h2 class="card-title text-base font-semibold">Perimeter Monitoring Events ({{ paginator.count }})</h2>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Number</th>
+                    <th>Perimeter & Asset</th>
+                    <th>Event Type</th>
+                    <th>Severity</th>
+                    <th>Distance & Radius</th>
+                    <th>Detected At</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in events %}
+                <tr>
+                    <td class="font-medium">
+                        <a href="{% url 'assets:asset_geofence_event_detail' item.pk %}" class="text-blue-600 hover:underline">
+                            {{ item.number }}
+                        </a>
+                    </td>
+                    <td>
+                        <div class="font-medium text-slate-900">{{ item.fence_name }}</div>
+                        <div class="text-xs text-slate-500">
+                            {% if item.asset %}
+                            <i data-lucide="cpu" class="w-3 h-3 inline me-1"></i>{{ item.asset.name }} ({{ item.asset.code }})
+                            {% else %}
+                            <span class="text-slate-400">—</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.event_type_badge_class }}">
+                            {{ item.get_event_type_display }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge {{ item.severity_badge_class }}">
+                            {{ item.get_severity_display }}
+                        </span>
+                    </td>
+                    <td class="text-xs text-slate-700 font-mono">
+                        {{ item.distance_from_center_m|floatformat:1 }}m / {{ item.radius_meters }}m
+                    </td>
+                    <td class="text-xs text-slate-600">
+                        {{ item.detected_at|date:"M d, Y H:i" }}
+                    </td>
+                    <td>
+                        <span class="badge {{ item.status_badge_class }}">
+                            {{ item.get_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-end">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_geofence_event_detail' item.pk %}" class="btn btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_geofence_event_edit' item.pk %}" class="btn btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_geofence_event_delete' item.pk %}" class="inline" onsubmit="return confirm('Delete geofence alert {{ item.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-icon text-red-600 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-8">
+                        <div class="empty-state">
+                            <i data-lucide="map-pin" class="w-12 h-12 mx-auto text-slate-300 mb-2"></i>
+                            <div class="text-slate-600 font-medium">No geofence monitoring events found</div>
+                            <div class="text-xs text-slate-400 mb-3">Monitor GPS perimeter violations, unauthorized movement alerts, and yard security.</div>
+                            <a href="{% url 'assets:asset_geofence_event_create' %}" class="btn btn-primary btn-sm">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> Log First Geofence Event
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+        <div class="text-xs text-slate-500">
+            Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
+        </div>
+        <div class="flex gap-1">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.event_type %}&event_type={{ request.GET.event_type }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">Previous</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Previous</span>
+            {% endif %}
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status }}{% endif %}{% if request.GET.event_type %}&event_type={{ request.GET.event_type }}{% endif %}{% if request.GET.severity %}&severity={{ request.GET.severity }}{% endif %}" class="btn btn-outline btn-sm">Next</a>
+            {% else %}
+            <span class="btn btn-outline btn-sm disabled opacity-50 cursor-not-allowed">Next</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
