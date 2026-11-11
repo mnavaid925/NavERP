@@ -2554,7 +2554,7 @@ def asset_geofence_event_b(db, tenant_b, operational_asset_b):
 # =====================================================================
 
 @pytest.fixture
-def asset_risk_register_a(db, tenant_a, operational_asset_a, category_a, user_a):
+def asset_risk_register_a(db, tenant_a, operational_asset_a, category_a, admin_user):
     return AssetRiskRegister.objects.create(
         tenant=tenant_a,
         title="CNC Spindle Bearing Seizure Risk",
@@ -2568,7 +2568,7 @@ def asset_risk_register_a(db, tenant_a, operational_asset_a, category_a, user_a)
         inherent_impact=4,
         residual_likelihood=2,
         residual_impact=2,
-        risk_owner=user_a,
+        risk_owner=admin_user,
         treatment_strategy="mitigate",
         financial_exposure_amount=Decimal("50000.00"),
         status="identified",
@@ -2577,7 +2577,7 @@ def asset_risk_register_a(db, tenant_a, operational_asset_a, category_a, user_a)
 
 
 @pytest.fixture
-def asset_risk_register_b(db, tenant_b, operational_asset_b, category_b, user_b):
+def asset_risk_register_b(db, tenant_b, operational_asset_b, category_b, admin_b):
     return AssetRiskRegister.objects.create(
         tenant=tenant_b,
         title="Compressor Motor Insulation Breakdown Risk",
@@ -2591,7 +2591,7 @@ def asset_risk_register_b(db, tenant_b, operational_asset_b, category_b, user_b)
         inherent_impact=3,
         residual_likelihood=1,
         residual_impact=2,
-        risk_owner=user_b,
+        risk_owner=admin_b,
         treatment_strategy="transfer",
         financial_exposure_amount=Decimal("30000.00"),
         status="identified",
@@ -2600,7 +2600,7 @@ def asset_risk_register_b(db, tenant_b, operational_asset_b, category_b, user_b)
 
 
 @pytest.fixture
-def asset_continuity_plan_a(db, tenant_a, operational_asset_a, user_a):
+def asset_continuity_plan_a(db, tenant_a, operational_asset_a, admin_user):
     return AssetBusinessContinuityPlan.objects.create(
         tenant=tenant_a,
         title="Primary CNC Cell Disaster Recovery Plan",
@@ -2614,7 +2614,7 @@ def asset_continuity_plan_a(db, tenant_a, operational_asset_a, user_a):
         failback_procedure="Recalibrate axes and verify first-article cut.",
         alternate_facility_site="Bay 3 South",
         critical_spares_required="Spare spindle cartridge P/N 884-A",
-        emergency_lead=user_a,
+        emergency_lead=admin_user,
         drill_frequency="semi_annually",
         drill_result="not_tested",
         status="draft",
@@ -2622,7 +2622,7 @@ def asset_continuity_plan_a(db, tenant_a, operational_asset_a, user_a):
 
 
 @pytest.fixture
-def asset_continuity_plan_b(db, tenant_b, operational_asset_b, user_b):
+def asset_continuity_plan_b(db, tenant_b, operational_asset_b, admin_b):
     return AssetBusinessContinuityPlan.objects.create(
         tenant=tenant_b,
         title="Globex Power Generator Continuity Plan",
@@ -2636,7 +2636,7 @@ def asset_continuity_plan_b(db, tenant_b, operational_asset_b, user_b):
         failback_procedure="Switch back to utility grid after 30 min stable voltage.",
         alternate_facility_site="Power Yard 2",
         critical_spares_required="Diesel fuel filter, 24V starter battery",
-        emergency_lead=user_b,
+        emergency_lead=admin_b,
         drill_frequency="quarterly",
         drill_result="passed",
         status="active",
@@ -2686,14 +2686,14 @@ def asset_cyber_profile_b(db, tenant_b, operational_asset_b):
 
 
 @pytest.fixture
-def asset_mitigation_action_a(db, tenant_a, asset_risk_register_a, user_a):
+def asset_mitigation_action_a(db, tenant_a, asset_risk_register_a, admin_user):
     return AssetRiskMitigationAction.objects.create(
         tenant=tenant_a,
         title="Install Spindle Vibration Sensor",
         risk=asset_risk_register_a,
         action_type="preventive_inspection",
         description="Install high-frequency vibration sensor to monitor early bearing wear.",
-        assigned_to=user_a,
+        assigned_to=admin_user,
         target_completion_date=timezone.now().date() + timezone.timedelta(days=14),
         estimated_cost=Decimal("2500.00"),
         priority="high",
@@ -2703,14 +2703,14 @@ def asset_mitigation_action_a(db, tenant_a, asset_risk_register_a, user_a):
 
 
 @pytest.fixture
-def asset_mitigation_action_b(db, tenant_b, asset_risk_register_b, user_b):
+def asset_mitigation_action_b(db, tenant_b, asset_risk_register_b, admin_b):
     return AssetRiskMitigationAction.objects.create(
         tenant=tenant_b,
         title="Install Motor Surge Protector",
         risk=asset_risk_register_b,
         action_type="engineering_control",
         description="Install industrial grade transient voltage surge suppressor.",
-        assigned_to=user_b,
+        assigned_to=admin_b,
         target_completion_date=timezone.now().date() + timezone.timedelta(days=30),
         estimated_cost=Decimal("1500.00"),
         priority="medium",
