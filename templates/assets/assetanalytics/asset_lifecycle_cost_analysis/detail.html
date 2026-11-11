@@ -181,7 +181,7 @@
                             <td><span class="badge badge-info">CapEx</span></td>
                             <td class="text-right font-mono">${{ analysis.installation_commissioning_cost|floatformat:"2g" }}</td>
                         </tr>
-                        <tr class="bg-slate-50 font-semibold">
+                        <tr class="bg-slate-50 dark:bg-slate-800/60 font-semibold">
                             <td colspan="2">Total Initial CapEx</td>
                             <td class="text-right font-mono">${{ total_capex|floatformat:"2g" }}</td>
                         </tr>
@@ -215,7 +215,7 @@
                             <td><span class="badge badge-slate">Operating OpEx</span></td>
                             <td class="text-right font-mono">${{ analysis.insurance_compliance_cost|floatformat:"2g" }}</td>
                         </tr>
-                        <tr class="bg-slate-50 font-semibold">
+                        <tr class="bg-slate-50 dark:bg-slate-800/60 font-semibold">
                             <td colspan="2">Total Lifecycle OpEx (incl. ${{ total_maint|floatformat:"2g" }} Maintenance)</td>
                             <td class="text-right font-mono">${{ total_opex|floatformat:"2g" }}</td>
                         </tr>
@@ -229,9 +229,9 @@
                             <td><span class="badge badge-green">Credit / Recovery</span></td>
                             <td class="text-right font-mono text-emerald-700">-${{ analysis.warranty_insurance_recoveries|floatformat:"2g" }}</td>
                         </tr>
-                        <tr class="bg-blue-50 font-bold">
+                        <tr class="bg-blue-50 dark:bg-blue-950/50 font-bold">
                             <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - ${{ total_recoveries|floatformat:"2g" }} Recoveries)</td>
-                            <td class="text-right font-mono text-blue-900">${{ analysis.total_lifecycle_cost|floatformat:"2g" }}</td>
+                            <td class="text-right font-mono text-blue-900 dark:text-blue-200">${{ analysis.total_lifecycle_cost|floatformat:"2g" }}</td>
                         </tr>
                         <tr>
                             <td>Current Replacement Value (RAV Benchmark)</td>
