@@ -168,17 +168,17 @@
                     </td>
                     <td class="text-right">
                         <div class="table-actions">
-                            <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="btn-icon" title="View Details">
+                            <a href="{% url 'assets:asset_portfolio_scenario_detail' s.pk %}" class="btn btn-icon" title="View Details">
                                 <i data-lucide="eye"></i>
                             </a>
                             {% if not s.is_locked %}
                             {% if request.user.is_superuser or request.user.is_tenant_admin %}
-                            <a href="{% url 'assets:asset_portfolio_scenario_edit' s.pk %}" class="btn-icon" title="Edit">
+                            <a href="{% url 'assets:asset_portfolio_scenario_edit' s.pk %}" class="btn btn-icon" title="Edit">
                                 <i data-lucide="pencil"></i>
                             </a>
                             <form method="post" action="{% url 'assets:asset_portfolio_scenario_delete' s.pk %}" class="inline" onsubmit="return confirm('Delete scenario {{ s.number|escapejs }}?');">
                                 {% csrf_token %}
-                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                <button type="submit" class="btn btn-icon danger" title="Delete">
                                     <i data-lucide="trash-2"></i>
                                 </button>
                             </form>
@@ -209,28 +209,22 @@
 
     {% if is_paginated %}
     <div class="pagination">
-        <div class="pagination-info">
-            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} scenarios
-        </div>
-        <div class="pagination-links">
-            {% if page_obj.has_previous %}
-            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
-                Previous
-            </a>
-            {% else %}
-            <button class="btn btn-outline btn-sm" disabled>Previous</button>
-            {% endif %}
+        <span class="muted">Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ paginator.count }} scenarios</span>
 
-            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+        {% if page_obj.has_previous %}
+        <a aria-label="Previous page" href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}">Prev</a>
+        {% else %}
+        <span class="page disabled">Prev</span>
+        {% endif %}
 
-            {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}" class="btn btn-outline btn-sm">
-                Next
-            </a>
-            {% else %}
-            <button class="btn btn-outline btn-sm" disabled>Next</button>
-            {% endif %}
-        </div>
+        <span class="page active" aria-current="page">{{ page_obj.number }}</span>
+        <span class="page disabled">of {{ paginator.num_pages }}</span>
+
+        {% if page_obj.has_next %}
+        <a aria-label="Next page" href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q|urlencode }}{% endif %}{% if request.GET.status %}&status={{ request.GET.status|urlencode }}{% endif %}{% if request.GET.scenario_type %}&scenario_type={{ request.GET.scenario_type|urlencode }}{% endif %}{% if request.GET.base_fiscal_year %}&base_fiscal_year={{ request.GET.base_fiscal_year|urlencode }}{% endif %}{% if request.GET.scope_org_unit %}&scope_org_unit={{ request.GET.scope_org_unit|urlencode }}{% endif %}{% if request.GET.scope_category %}&scope_category={{ request.GET.scope_category|urlencode }}{% endif %}">Next</a>
+        {% else %}
+        <span class="page disabled">Next</span>
+        {% endif %}
     </div>
     {% endif %}
 </div>
