@@ -228,6 +228,14 @@ class AssetGlSyncBatch(TenantNumbered):
                 fields=["tenant", "reconciliation_status"],
                 name="idx_agls_ten_rec",
             ),
+            models.Index(
+                fields=["tenant", "batch_date", "number"],
+                name="idx_agls_ten_date_num",
+            ),
+            models.Index(
+                fields=["tenant", "connector"],
+                name="idx_agls_ten_conn",
+            ),
         ]
 
     def __str__(self):
