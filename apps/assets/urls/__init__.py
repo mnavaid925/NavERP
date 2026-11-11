@@ -42,6 +42,9 @@ from apps.assets.urls.MobileAssetManagement import (
 from apps.assets.urls.IntegrationApiHub import (
     urlpatterns as integration_api_hub_urlpatterns,
 )
+from apps.assets.urls.AssetAnalytics import (
+    urlpatterns as asset_analytics_urlpatterns,
+)
 from apps.assets.views.overview import overview
 
 app_name = "assets"
@@ -64,4 +67,5 @@ urlpatterns = (
     + asset_risk_urlpatterns
     + mobile_asset_management_urlpatterns
     + integration_api_hub_urlpatterns
+    + asset_analytics_urlpatterns
 )
