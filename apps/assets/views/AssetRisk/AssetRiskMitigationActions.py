@@ -210,6 +210,7 @@ def asset_risk_mitigation_action_complete(request, pk):
 
 
 @login_required
+@tenant_admin_required
 @require_POST
 def asset_risk_mitigation_action_verify(request, pk):
     action = assets_object(request, AssetRiskMitigationAction, pk)
