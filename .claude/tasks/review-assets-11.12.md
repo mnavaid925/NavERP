@@ -21,6 +21,20 @@
   - Action endpoint authorization disparity (`@tenant_admin_required`).
   - Redundant manual calculation calls in `seed_assets.py`.
 
+### Pass 3: Frontend Reviewer (`frontend-reviewer`)
+- **Critical:** None (zero comment leak traps, zero pagination 500s, zero missing CSRF).
+- **Important:**
+  - `templates/assets/assetrisk/` (8 occurrences across 4 templates): Broken field reference `asset.asset_code` on `scm.Asset` (which only defines `code`), rendering asset code blank. Fix: replace with `asset.code` in:
+    - `asset_risk_register/list.html:137`
+    - `asset_risk_register/detail.html:73`
+    - `asset_business_continuity/list.html:124,137`
+    - `asset_business_continuity/detail.html:67,78`
+    - `asset_cybersecurity/list.html:127`
+    - `asset_cybersecurity/detail.html:52`
+- **Minor:**
+  - `templates/assets/assetrisk/*/detail.html:21`: Missing explicit "Back to List" action button in `.page-actions` header.
+  - `templates/assets/assetrisk/*/list.html:94`: Icon-only filter submit button missing `title` / `aria-label="Apply Filters"` for accessibility.
+
 ---
 
 ## Review Pass Log
@@ -53,6 +67,20 @@
   - Missing "Back to List" button in `.page-actions` across the 4 detail templates.
   - Action endpoint authorization disparity (`@tenant_admin_required`).
   - Redundant manual calculation calls in `seed_assets.py`.
+
+### Pass 3: Frontend Reviewer (`frontend-reviewer`)
+- **Critical:** None (zero comment leak traps, zero pagination 500s, zero missing CSRF).
+- **Important:**
+  - `templates/assets/assetrisk/` (8 occurrences across 4 templates): Broken field reference `asset.asset_code` on `scm.Asset` (which only defines `code`), rendering asset code blank. Fix: replace with `asset.code` in:
+    - `asset_risk_register/list.html:137`
+    - `asset_risk_register/detail.html:73`
+    - `asset_business_continuity/list.html:124,137`
+    - `asset_business_continuity/detail.html:67,78`
+    - `asset_cybersecurity/list.html:127`
+    - `asset_cybersecurity/detail.html:52`
+- **Minor:**
+  - `templates/assets/assetrisk/*/detail.html:21`: Missing explicit "Back to List" action button in `.page-actions` header.
+  - `templates/assets/assetrisk/*/list.html:94`: Icon-only filter submit button missing `title` / `aria-label="Apply Filters"` for accessibility.
 
 ---
 
