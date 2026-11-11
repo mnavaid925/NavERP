@@ -53,6 +53,17 @@ class AssetPortfolioScenario(TenantNumbered):
         "archived": "badge-muted",
     }
 
+    LOCKED_STATUSES = {"adopted", "archived"}
+
+    ALLOWED_TRANSITIONS = {
+        "draft": {"simulated", "under_review", "archived"},
+        "simulated": {"under_review", "recommended", "archived"},
+        "under_review": {"recommended", "archived"},
+        "recommended": {"adopted", "archived"},
+        "adopted": {"archived"},
+        "archived": set(),
+    }
+
     SCENARIO_TYPE_CSS = {
         "baseline_bau": "badge-slate",
         "fleet_expansion": "badge-info",
@@ -191,6 +202,10 @@ class AssetPortfolioScenario(TenantNumbered):
         return f"{self.number} — {self.name}"
 
     @property
+    def is_locked(self):
+        return self.status in self.LOCKED_STATUSES
+
+    @property
     def status_badge_class(self):
         return self.STATUS_CSS.get(self.status, "badge-slate")
 
@@ -203,6 +218,10 @@ class AssetPortfolioScenario(TenantNumbered):
         Deterministically project CapEx, maintenance OpEx, deferred backlog, FCI %, health score,
         risk exposure, NPV, payback period, and BCR against scoped tenant portfolio baselines.
         """
+        if self.is_locked:
+            raise ValidationError(
+                "Adopted or archived portfolio scenarios are locked and cannot be re-simulated."
+            )
         from apps.assets.models.AssetAnalytics.AssetLifecycleCostAnalyses import (
             AssetLifecycleCostAnalysis,
         )
