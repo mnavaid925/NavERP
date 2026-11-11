@@ -53,6 +53,10 @@ from apps.assets.models import (
     AssetScanLog,
     FieldWorkOrder,
     MobileAssetInspection,
+    AssetGisMapping,
+    AssetGlSyncBatch,
+    AssetIntegrationConnector,
+    AssetTelemetryStream,
 )
 
 
@@ -470,6 +474,38 @@ class AssetRiskMitigationActionAdmin(admin.ModelAdmin):
     list_select_related = ("tenant", "risk", "assigned_to", "alternative_supplier")
     list_filter = ("status", "priority", "action_type", "effectiveness_rating")
     search_fields = ("number", "title", "risk__number")
+
+
+@admin.register(AssetIntegrationConnector)
+class AssetIntegrationConnectorAdmin(admin.ModelAdmin):
+    list_display = ("number", "name", "connector_category", "provider", "protocol", "environment", "status", "health_status", "tenant")
+    list_select_related = ("tenant", "vendor_partner", "default_org_unit", "default_currency", "owner")
+    list_filter = ("status", "health_status", "connector_category", "provider", "environment")
+    search_fields = ("number", "name", "endpoint_url", "api_key_prefix")
+
+
+@admin.register(AssetTelemetryStream)
+class AssetTelemetryStreamAdmin(admin.ModelAdmin):
+    list_display = ("number", "stream_name", "connector", "operational_asset", "metric_type", "stream_protocol", "stream_status", "readings_ingested_count", "tenant")
+    list_select_related = ("tenant", "connector", "operational_asset", "fixed_asset", "steward")
+    list_filter = ("stream_status", "stream_protocol", "metric_type", "auto_trigger_maintenance")
+    search_fields = ("number", "stream_name", "tag_address", "connector__number")
+
+
+@admin.register(AssetGlSyncBatch)
+class AssetGlSyncBatchAdmin(admin.ModelAdmin):
+    list_display = ("number", "sync_domain", "connector", "batch_date", "source_amount", "target_gl_amount", "variance_amount", "reconciliation_status", "status", "tenant")
+    list_select_related = ("tenant", "connector", "fiscal_period", "gl_account", "offset_gl_account", "journal_entry")
+    list_filter = ("status", "reconciliation_status", "sync_domain", "sync_direction")
+    search_fields = ("number", "external_batch_ref", "connector__number")
+
+
+@admin.register(AssetGisMapping)
+class AssetGisMappingAdmin(admin.ModelAdmin):
+    list_display = ("number", "layer_name", "external_feature_id", "operational_asset", "geometry_type", "coordinate_system_srid", "drift_status", "status", "tenant")
+    list_select_related = ("tenant", "connector", "operational_asset", "location", "gis_custodian")
+    list_filter = ("status", "drift_status", "geometry_type", "is_linear_asset")
+    search_fields = ("number", "layer_name", "external_feature_id", "lrs_route_id")
 
 
 
