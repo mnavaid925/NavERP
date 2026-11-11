@@ -193,6 +193,12 @@ def batch_detail(request, pk):
 def batch_edit(request, pk):
     """Edit an existing Asset GL Sync Batch."""
     batch = assets_object(request, AssetGlSyncBatch, pk)
+    if batch.journal_entry_id is not None or batch.status == "posted":
+        messages.error(
+            request,
+            f"Cannot edit {batch.number}: it is already posted to the General Ledger.",
+        )
+        return redirect("assets:asset_gl_sync_batch_detail", pk=batch.pk)
     if request.method == "POST":
         form = AssetGlSyncBatchForm(
             request.POST, instance=batch, tenant=batch.tenant
