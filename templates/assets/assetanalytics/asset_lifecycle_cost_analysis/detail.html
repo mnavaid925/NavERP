@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ analysis.number }} — {{ analysis.title }} — Lifecycle Cost Analysis — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}">Lifecycle Cost Analyses</a>
+            <span>/</span>
+            <span>{{ analysis.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ analysis.number }} — {{ analysis.title }}</h1>
+            <span class="badge {{ analysis.status_badge_class }}">{{ analysis.get_status_display }}</span>
+            <span class="badge {{ analysis.recommendation_badge_class }}">{{ analysis.get_recommendation_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print
+        </button>
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_populate' analysis.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Sync Upstream Spend
+            </button>
+        </form>
+        {% if analysis.status in "draft,calculated" %}
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="reviewed" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check" class="w-4 h-4 me-1"></i> Mark Reviewed
+            </button>
+        </form>
+        {% endif %}
+        {% if analysis.status in "calculated,reviewed" %}
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_transition' analysis.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="approved" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve Study
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_lifecycle_cost_analysis_edit' analysis.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_lifecycle_cost_analysis_delete' analysis.pk %}" class="inline" onsubmit="return confirm('Delete LCC analysis {{ analysis.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_lifecycle_cost_analysis_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Executive Summary KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="calculator"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Net Lifecycle Cost (TCO)</div>
+            <div class="stat-value">${{ analysis.total_lifecycle_cost|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Equivalent Annual Cost (EAC)</div>
+            <div class="stat-value">${{ analysis.equivalent_annual_cost|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="wrench"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Maintenance / RAV %</div>
+            <div class="stat-value">{{ analysis.maintenance_to_rav_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon purple"><i data-lucide="scale"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">OpEx / CapEx Ratio</div>
+            <div class="stat-value">{{ analysis.opex_to_capex_ratio|floatformat:2 }}x</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Scope & Governance -->
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Asset Scope &amp; Model Parameters</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Study Number</dt>
+                    <dd class="font-mono">{{ analysis.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Lifecycle Stage</dt>
+                    <dd><span class="badge {{ analysis.lifecycle_stage_badge_class }}">{{ analysis.get_lifecycle_stage_display }}</span></dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Operational Asset</dt>
+                    <dd>{% if analysis.operational_asset %}{{ analysis.operational_asset.name }} ({{ analysis.operational_asset.code }}){% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fixed Asset</dt>
+                    <dd>{% if analysis.fixed_asset %}{{ analysis.fixed_asset.name }} ({{ analysis.fixed_asset.number }}){% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Asset Category</dt>
+                    <dd>{{ analysis.asset_category.name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Asset Model</dt>
+                    <dd>{{ analysis.asset_model.name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Org Unit</dt>
+                    <dd>{{ analysis.org_unit.name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Currency</dt>
+                    <dd>{{ analysis.currency.code|default:"Default" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Analysis Date</dt>
+                    <dd>{{ analysis.analysis_date }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Horizon &amp; Discount Rate</dt>
+                    <dd>{{ analysis.analysis_horizon_years }} yrs @ {{ analysis.discount_rate_pct }}%</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Economic EOL Year</dt>
+                    <dd class="font-semibold">{{ analysis.economic_eol_year|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Analyst</dt>
+                    <dd>{{ analysis.analyzed_by.get_full_name|default:analysis.analyzed_by|default:"—" }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Cradle-to-Grave Cost Breakdown -->
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Cradle-to-Grave Cost &amp; Recovery Breakdown</h2>
+        </div>
+        <div class="card-body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Lifecycle Cost Bucket</th>
+                            <th>Category</th>
+                            <th class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Acquisition Capital Cost</td>
+                            <td><span class="badge badge-info">CapEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.acquisition_capital_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Installation &amp; Commissioning</td>
+                            <td><span class="badge badge-info">CapEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.installation_commissioning_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="bg-slate-50 font-semibold">
+                            <td colspan="2">Total Initial CapEx</td>
+                            <td class="text-right font-mono">${{ total_capex|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Preventive &amp; Calibration Maintenance</td>
+                            <td><span class="badge badge-green">Maint OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.preventive_maintenance_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Corrective &amp; Breakdown Repairs</td>
+                            <td><span class="badge badge-red">Maint OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.corrective_maintenance_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>OEM Service &amp; SLA Contracts</td>
+                            <td><span class="badge badge-slate">Maint OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.service_contract_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Energy &amp; Utility Consumption</td>
+                            <td><span class="badge badge-amber">Operating OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.energy_utility_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Downtime Opportunity Loss</td>
+                            <td><span class="badge badge-red">Operating OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.downtime_opportunity_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Insurance &amp; Compliance Costs</td>
+                            <td><span class="badge badge-slate">Operating OpEx</span></td>
+                            <td class="text-right font-mono">${{ analysis.insurance_compliance_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="bg-slate-50 font-semibold">
+                            <td colspan="2">Total Lifecycle OpEx (incl. ${{ total_maint|floatformat:2|intcomma }} Maintenance)</td>
+                            <td class="text-right font-mono">${{ total_opex|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Expected Salvage / Residual Value</td>
+                            <td><span class="badge badge-green">Credit / Recovery</span></td>
+                            <td class="text-right font-mono text-emerald-700">-${{ analysis.expected_salvage_value|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Warranty, Insurance &amp; Disposal Recoveries</td>
+                            <td><span class="badge badge-green">Credit / Recovery</span></td>
+                            <td class="text-right font-mono text-emerald-700">-${{ analysis.warranty_insurance_recoveries|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr class="bg-blue-50 font-bold">
+                            <td colspan="2">Net Total Lifecycle Cost (CapEx + OpEx - ${{ total_recoveries|floatformat:2|intcomma }} Recoveries)</td>
+                            <td class="text-right font-mono text-blue-900">${{ analysis.total_lifecycle_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Current Replacement Value (RAV Benchmark)</td>
+                            <td><span class="badge badge-muted">Reference</span></td>
+                            <td class="text-right font-mono">${{ analysis.current_replacement_value|floatformat:2|intcomma }}</td>
+                        </tr>
+                        <tr>
+                            <td>Posted Accumulated Depreciation (Ref.)</td>
+                            <td><span class="badge badge-muted">Reference</span></td>
+                            <td class="text-right font-mono">${{ analysis.accumulated_depreciation_cost|floatformat:2|intcomma }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if analysis.notes %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Analyst Notes &amp; Recommendations</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-slate-700 whitespace-pre-line">{{ analysis.notes }}</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
