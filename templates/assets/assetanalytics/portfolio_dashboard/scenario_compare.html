@@ -36,11 +36,11 @@
         <form method="get">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
                 {% for s in all_scenarios %}
-                <label class="flex items-start gap-2 p-3 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+                <label class="flex items-start gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/60 cursor-pointer">
                     <input type="checkbox" name="scenarios" value="{{ s.pk }}" {% if s.pk in selected_ids %}checked{% endif %} class="mt-1" />
                     <div>
-                        <div class="font-medium text-sm text-slate-900">{{ s.number }} — {{ s.name|truncatechars:35 }}</div>
-                        <div class="text-xs text-slate-500">{{ s.get_scenario_type_display }} · FY{{ s.base_fiscal_year }}</div>
+                        <div class="font-medium text-sm text-slate-900 dark:text-slate-100">{{ s.number }} — {{ s.name|truncatechars:35 }}</div>
+                        <div class="text-xs text-slate-500 dark:text-slate-400">{{ s.get_scenario_type_display }} · FY{{ s.base_fiscal_year }}</div>
                     </div>
                 </label>
                 {% endfor %}
@@ -147,10 +147,10 @@
                     <td class="text-right font-mono">${{ s.simulated_risk_exposure|floatformat:"2g" }}</td>
                     {% endfor %}
                 </tr>
-                <tr class="bg-blue-50 font-semibold">
+                <tr class="bg-blue-50 dark:bg-blue-950/50 font-semibold">
                     <td>Net Present Value (NPV)</td>
                     {% for s in compared_scenarios %}
-                    <td class="text-right font-mono text-blue-900">${{ s.net_present_value|floatformat:"2g" }}</td>
+                    <td class="text-right font-mono text-blue-900 dark:text-blue-200">${{ s.net_present_value|floatformat:"2g" }}</td>
                     {% endfor %}
                 </tr>
                 <tr>
