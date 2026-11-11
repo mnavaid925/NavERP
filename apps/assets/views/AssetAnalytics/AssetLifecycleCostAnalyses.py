@@ -17,6 +17,7 @@ from apps.assets.models.AssetAnalytics.AssetLifecycleCostAnalyses import (
 from apps.assets.models.AssetClassification.AssetCategories import AssetCategory
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.AssetAnalytics._helpers import (
+    PAGE_SIZE,
     ZERO,
     apply_choice_filter,
     apply_fk_filter,
@@ -88,7 +89,7 @@ def asset_lifecycle_cost_analysis_list(request):
         ),
     )
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     categories = AssetCategory.objects.filter(tenant=request.tenant).order_by("name")
@@ -318,6 +319,6 @@ def asset_lifecycle_cost_analysis_export_csv(request):
             a.economic_eol_year or "",
             a.get_recommendation_display(),
         ]
-        for a in qs
+        for a in qs[:10000].iterator(chunk_size=500)
     )
     return csv_export_response(filename="alcc-analyses.csv", headers=headers, rows=rows)
