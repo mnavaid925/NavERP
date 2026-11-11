@@ -27,31 +27,23 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue"><i data-lucide="layers"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Total Sync Batches</div>
-            <div class="stat-value">{{ total_count }}</div>
-        </div>
+        <div class="stat-label">Total Sync Batches</div>
+        <div class="stat-value">{{ total_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="book-check"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Posted to GL</div>
-            <div class="stat-value">{{ posted_count }}</div>
-        </div>
+        <div class="stat-label">Posted to GL</div>
+        <div class="stat-value">{{ posted_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange"><i data-lucide="scale"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Variances Flagged</div>
-            <div class="stat-value">{{ variance_count }}</div>
-        </div>
+        <div class="stat-label">Variances Flagged</div>
+        <div class="stat-value">{{ variance_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="file-clock"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Draft Queue</div>
-            <div class="stat-value">{{ draft_count }}</div>
-        </div>
+        <div class="stat-label">Draft Queue</div>
+        <div class="stat-value">{{ draft_count }}</div>
     </div>
 </div>
 
@@ -167,9 +159,9 @@
                     </td>
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
-                            <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="btn btn-outline btn-xs">View</a>
+                            <a href="{% url 'assets:asset_gl_sync_batch_detail' batch.pk %}" class="btn btn-outline btn-sm">View</a>
                             {% if not batch.journal_entry and batch.status != "posted" %}
-                            <a href="{% url 'assets:asset_gl_sync_batch_edit' batch.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            <a href="{% url 'assets:asset_gl_sync_batch_edit' batch.pk %}" class="btn btn-outline btn-sm">Edit</a>
                             {% endif %}
                         </div>
                     </td>
@@ -193,7 +185,7 @@
     </div>
 
     {% if is_paginated %}
-    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
         <div class="text-xs text-slate-500">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
