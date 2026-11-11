@@ -24,6 +24,7 @@
         <a href="{% url 'assets:scenario_compare' %}?scenarios={{ scenario.pk }}" class="btn btn-outline">
             <i data-lucide="git-compare" class="w-4 h-4 me-1"></i> Compare
         </a>
+        {% if request.user.is_superuser or request.user.is_tenant_admin %}
         {% if not scenario.is_locked %}
         <form method="post" action="{% url 'assets:asset_portfolio_scenario_simulate' scenario.pk %}" class="inline">
             {% csrf_token %}
@@ -78,6 +79,7 @@
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         {% endif %}
         <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
