@@ -1,6 +1,6 @@
 ---
 name: assets
-description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, and asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12), or invokes /assets.
+description: Work on the Asset Management System (AMS / EAM) module (Module 11 — asset procurement & acquisition, physical inventory audits & cycle counts, location & spatial movement tracking, tool crib & equipment custody lending, asset loss/theft incident reporting and loss write-offs, hierarchical taxonomy classification, OEM equipment model specs, multi-criteria risk/criticality assessments, technical specification templates, multi-method depreciation calculation schedules, asset revaluations & impairment testing, physical/cost-center asset transfers, capitalization threshold policies, breakdown work requests & repair tickets, preventive maintenance recurrence schedules & meter triggers, vendor AMC/SLA service contracts, maintenance work history logs with GL posting, operational downtime logging with hourly loss calculation, Overall Equipment Effectiveness OEE tracking with TPM Six Big Losses, smart sub-meter energy & carbon readings with GHG Scope 1/2/3 footprints, multi-dimensional performance scorecards with MTBF/MTTR benchmarking, asset condition assessments with NDT inspections, continuous IoT telemetry readings with threshold anomaly detection, FMEA failure mode analysis with RPN risk matrix, metrology calibration records with tolerance verification, manufacturer/extended warranty management, warranty claim tracking with OEM defect resolution, industrial property & machinery casualty insurance policies, insurance claims with adjuster tracking, proof of loss, and indemnity settlements, asset disposal & retirement requests, appraisals, competitive resale listings, trade-in allowances, certified scrap/salvage with hazardous waste abatement and Certificate of Destruction COD tracking, lease & rental contract management, ASC 842 / IFRS 16 Right-of-Use asset and lease liability amortization, contract modifications, early terminations, and discounted cash flow Lease vs. Buy decision modeling, asset risk management — ISO 31000 5x5 risk register, ISO 22301 business continuity & disaster failover plans, IEC 62443 OT/IoT cybersecurity profiles with CVE/CVSS scoring, and risk mitigation/geopolitical contingency actions, and mobile asset management — digital mobile inspections, field technician work orders with dispatch/sign-off tracking, barcode/QR/RFID scan logs, and GPS perimeter geofence monitoring). Use when the user asks to add/change/debug anything under apps/assets or templates/assets, extend the assets seeder, touch assets sidebar wiring (LIVE_LINKS 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8, 11.9, 11.10, 11.11, 11.12, 11.13), or invokes /assets.
 ---
 
 # Asset Management System (AMS / EAM) Module (Module 11)
@@ -28,6 +28,7 @@ Comprehensive enterprise physical asset lifecycle and Enterprise Asset Managemen
 - **11.10 Lease & Rental Management**: Master Lease Agreement (MLA) administration, ASC 842 / IFRS 16 statutory operating vs finance lease classification, actuarial amortization payment schedules with ROU asset depreciation and liability reduction, contract modifications/remeasurements, early buyouts and terminations, and discounted cash flow Lease vs. Buy total cost of ownership (TCO) and Net Advantage to Leasing (NAL) modeling.
 - **11.11 Compliance & Regulatory Management**: Asset compliance frameworks, regulatory audits, operating permits & environmental licenses, and safety/compliance incident tracking.
 - **11.12 Asset Risk Management**: Enterprise asset risk register with 5x5 inherent/residual scoring (`[ARK-]`), business continuity and redundancy failover plans with drill tracking (`[ABC-]`), OT/IoT/SCADA cybersecurity profiles with Purdue network zoning and CVE/CVSS scoring (`[ACS-]`), and risk mitigation / geopolitical dual-sourcing contingency actions with verification (`[ARMA-]`).
+- **11.13 Mobile Asset Management**: Digital mobile inspection checklists & offline sync capture (`[MINS-]`), field technician work orders with dispatch/arrival/sign-off tracking (`[MFWO-]`), barcode/QR/RFID mobile scan capture logs (`[ASCN-]`), and GPS perimeter/geofence security alerts (`[AGEO-]`).
 
 ---
 
@@ -94,6 +95,11 @@ apps/assets/
       AssetBusinessContinuityPlans.py         <- AssetBusinessContinuityPlan [ABC-]
       AssetCyberSecurityProfiles.py           <- AssetCyberSecurityProfile [ACS-]
       AssetRiskMitigationActions.py           <- AssetRiskMitigationAction [ARMA-]
+    MobileAssetManagement/                    <- Sub-module 11.13 models
+      MobileAssetInspections.py               <- MobileAssetInspection [MINS-]
+      FieldWorkOrders.py                      <- FieldWorkOrder [MFWO-]
+      AssetScanLogs.py                        <- AssetScanLog [ASCN-]
+      AssetGeofenceEvents.py                  <- AssetGeofenceEvent [AGEO-]
     __init__.py                               <- Re-exports all models
   forms/
     _common.py                                <- Base forms, TenantUniqueMixin, reject_foreign
@@ -152,6 +158,11 @@ apps/assets/
       AssetBusinessContinuityPlans.py         <- AssetBusinessContinuityPlanForm
       AssetCyberSecurityProfiles.py           <- AssetCyberSecurityProfileForm
       AssetRiskMitigationActions.py           <- AssetRiskMitigationActionForm
+    MobileAssetManagement/                    <- Sub-module 11.13 forms
+      MobileAssetInspections.py               <- MobileAssetInspectionForm
+      FieldWorkOrders.py                      <- FieldWorkOrderForm
+      AssetScanLogs.py                        <- AssetScanLogForm
+      AssetGeofenceEvents.py                  <- AssetGeofenceEventForm
     __init__.py                               <- Re-exports all forms
   views/
     _common.py                                <- Shared helpers (assets_scope, assets_object, assets_paginate)
@@ -211,6 +222,11 @@ apps/assets/
       AssetBusinessContinuityPlans.py         <- BCP CRUD + activate, drill
       AssetCyberSecurityProfiles.py           <- Cyber Profile CRUD + scan
       AssetRiskMitigationActions.py           <- Mitigation Action CRUD (?risk= prefill) + complete, verify
+    MobileAssetManagement/                    <- Sub-module 11.13 views
+      MobileAssetInspections.py               <- Inspection CRUD (list, detail, create, edit, delete with offline synced_at)
+      FieldWorkOrders.py                      <- Field Work Order CRUD (arrival/completed/signed timestamps + defer)
+      AssetScanLogs.py                        <- Barcode/QR/RFID Scan Log CRUD
+      AssetGeofenceEvents.py                  <- GPS Perimeter Breach & Geofence Event CRUD (auto acknowledged_by/at)
     __init__.py                               <- Re-exports all views
   urls/
     AssetProcurement/                         <- Sub-module 11.1 URL route definitions
@@ -268,11 +284,16 @@ apps/assets/
       AssetBusinessContinuityPlans.py
       AssetCyberSecurityProfiles.py
       AssetRiskMitigationActions.py
+    MobileAssetManagement/                    <- Sub-module 11.13 URL route definitions
+      MobileAssetInspections.py
+      FieldWorkOrders.py
+      AssetScanLogs.py
+      AssetGeofenceEvents.py
     __init__.py                               <- Root URL router concatenating all packages
   management/commands/
-    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.12)
+    seed_assets.py                            <- Idempotent demonstration data seeder (11.1–11.13)
   tests/
-    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal)
+    conftest.py                               <- Shared fixtures (tenants, GL accounts, POs, locations, assets, maintenance, performance, reliability, warranties, policies, disposal, mobile)
     test_assetprocurement_models.py           <- 11.1 Model invariants, methods, auto-numbering, constraints
     test_assetprocurement_forms.py            <- 11.1 Form validation, clean rules, mass-assignment exclusion
     test_assetprocurement_views.py            <- 11.1 View responses, filtering, guards, actions, execution
@@ -317,6 +338,10 @@ apps/assets/
     test_asset_risk_forms.py                  <- 11.12 Form validation, disabled drill fields, reject_foreign, system exclusions
     test_asset_risk_views.py                  <- 11.12 View contracts, asset__code search, filters, state guards, actions
     test_asset_risk_security.py               <- 11.12 IDOR (404), RBAC gates (403), method safety (405), injection, mass assignment
+    test_mobile_asset_models.py               <- 11.13 Model invariants, MINS/MFWO/ASCN/AGEO sequences, badges, constraints
+    test_mobile_asset_forms.py                <- 11.13 Form tenant scoping, reject_foreign (incl. user FKs), system exclusions
+    test_mobile_asset_views.py                <- 11.13 View contracts, filters, timestamps, pagination, audit logs
+    test_mobile_asset_security.py             <- 11.13 IDOR (404), CSRF (403), XSS escaping, method safety (405), mass assignment
 ```
 
 ---
@@ -828,6 +853,34 @@ Templates under `templates/assets/assetrisk/{asset_risk_register,asset_business_
   - `assets:asset_risk_mitigation_action_complete`: `/assets/risk/mitigations/<pk>/complete/` [POST, planned/in_progress only]
   - `assets:asset_risk_mitigation_action_verify`: `/assets/risk/mitigations/<pk>/verify/` [POST, Admin, completed only]
 
+### 11.13 Mobile Asset Management
+Templates under `templates/assets/mobileassetmanagement/{mobile_asset_inspection,field_work_order,asset_scan_log,asset_geofence_event}/{list,detail,form}.html`. Seeder method `_seed_tenant_11_13(tenant)` in `seed_assets.py` creates demo Mobile Inspections (`MINS-`), Field Work Orders (`MFWO-`), Asset Scan Logs (`ASCN-`), and Geofence Events (`AGEO-`).
+
+- **Mobile Asset Inspections (`MobileAssetInspection` [MINS-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `User`; supports offline sync timestamp stamping (`synced_at`) and condition checklist JSON capture.
+  - `assets:mobile_asset_inspection_list`: `/assets/mobile/inspections/`
+  - `assets:mobile_asset_inspection_create`: `/assets/mobile/inspections/create/`
+  - `assets:mobile_asset_inspection_detail`: `/assets/mobile/inspections/<pk>/`
+  - `assets:mobile_asset_inspection_edit`: `/assets/mobile/inspections/<pk>/edit/`
+  - `assets:mobile_asset_inspection_delete`: `/assets/mobile/inspections/<pk>/delete/` [POST]
+- **Field Work Orders (`FieldWorkOrder` [MFWO-]):** Reuses `scm.Asset`, `accounting.FixedAsset`, `AssetMaintenanceRequest`, `User`; auto-stamps `actual_arrival`, `completed_at`, and `signed_at` lifecycle timestamps.
+  - `assets:field_work_order_list`: `/assets/mobile/work-orders/`
+  - `assets:field_work_order_create`: `/assets/mobile/work-orders/create/`
+  - `assets:field_work_order_detail`: `/assets/mobile/work-orders/<pk>/`
+  - `assets:field_work_order_edit`: `/assets/mobile/work-orders/<pk>/edit/`
+  - `assets:field_work_order_delete`: `/assets/mobile/work-orders/<pk>/delete/` [POST]
+- **Asset Scan Logs (`AssetScanLog` [ASCN-]):** Reuses `scm.Asset`, `User`; tracks barcode/QR/RFID/NFC scan captures, raw payloads, GPS coordinates, and match reconciliation status.
+  - `assets:asset_scan_log_list`: `/assets/mobile/scans/`
+  - `assets:asset_scan_log_create`: `/assets/mobile/scans/create/`
+  - `assets:asset_scan_log_detail`: `/assets/mobile/scans/<pk>/`
+  - `assets:asset_scan_log_edit`: `/assets/mobile/scans/<pk>/edit/`
+  - `assets:asset_scan_log_delete`: `/assets/mobile/scans/<pk>/delete/` [POST]
+- **Asset Geofence Events (`AssetGeofenceEvent` [AGEO-]):** Reuses `scm.Asset`, `User`; auto-stamps `acknowledged_by` and `acknowledged_at` upon alert resolution.
+  - `assets:asset_geofence_event_list`: `/assets/mobile/geofence/`
+  - `assets:asset_geofence_event_create`: `/assets/mobile/geofence/create/`
+  - `assets:asset_geofence_event_detail`: `/assets/mobile/geofence/<pk>/`
+  - `assets:asset_geofence_event_edit`: `/assets/mobile/geofence/<pk>/edit/`
+  - `assets:asset_geofence_event_delete`: `/assets/mobile/geofence/<pk>/delete/` [POST]
+
 ---
 
 ## Conventions & Gotchas
@@ -862,7 +915,7 @@ Idempotent across all tenants. Demo login: `admin_acme` / `password`.
 ```powershell
 venv\Scripts\python.exe -m pytest apps/assets/tests/
 ```
-Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12).
+Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `apps/assets/tests/` suite across implemented sub-modules, including 77 tests for 11.12 and 145 tests for 11.13).
 
 ---
 
@@ -879,4 +932,5 @@ Unfiltered run on SQLite in-memory test database (1,908 passing tests in full `a
 - `11.10`: Lease & Rental Management (`assets:asset_lease_contract_list`)
 - `11.11`: Compliance & Regulatory Management (`assets:asset_compliance_framework_list`)
 - `11.12`: Risk Identification & Assessment (`assets:asset_risk_register_list`), Business Continuity Planning (`assets:asset_business_continuity_plan_list`), Cybersecurity for Connected Assets (`assets:asset_cybersecurity_profile_list`), Geopolitical & Supply Chain Risk / Risk Mitigation & Contingency (`assets:asset_risk_mitigation_action_list`)
+- `11.13`: Mobile Inspection & Data Capture (`assets:mobile_asset_inspection_list`), Field Technician Work Orders (`assets:field_work_order_list`), Barcode/RFID Scanning (`assets:asset_scan_log_list`), GPS & Geofencing (`assets:asset_geofence_event_list`), Offline Synchronization (`assets:mobile_asset_inspection_list`)
 
