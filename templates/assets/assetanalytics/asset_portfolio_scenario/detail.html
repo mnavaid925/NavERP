@@ -24,13 +24,15 @@
         <a href="{% url 'assets:scenario_compare' %}?scenarios={{ scenario.pk }}" class="btn btn-outline">
             <i data-lucide="git-compare" class="w-4 h-4 me-1"></i> Compare
         </a>
+        {% if not scenario.is_locked %}
         <form method="post" action="{% url 'assets:asset_portfolio_scenario_simulate' scenario.pk %}" class="inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-primary">
                 <i data-lucide="play" class="w-4 h-4 me-1"></i> Run Simulation
             </button>
         </form>
-        {% if scenario.status in "draft,simulated" %}
+        {% endif %}
+        {% if scenario.status == "draft" or scenario.status == "simulated" %}
         <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="under_review" />
@@ -39,7 +41,7 @@
             </button>
         </form>
         {% endif %}
-        {% if scenario.status in "simulated,under_review" %}
+        {% if scenario.status == "simulated" or scenario.status == "under_review" %}
         <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="recommended" />
@@ -49,7 +51,7 @@
         </form>
         {% endif %}
         {% if scenario.status == "recommended" %}
-        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline">
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline" onsubmit="return confirm('Adopt scenario {{ scenario.number|escapejs }}? Adopted scenarios are locked against edits.');">
             {% csrf_token %}
             <input type="hidden" name="target_status" value="adopted" />
             <button type="submit" class="btn btn-outline">
@@ -57,15 +59,26 @@
             </button>
         </form>
         {% endif %}
+        {% if scenario.status != "archived" %}
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_transition' scenario.pk %}" class="inline" onsubmit="return confirm('Archive scenario {{ scenario.number|escapejs }}? Archived scenarios are permanently locked.');">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="archived" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="archive" class="w-4 h-4 me-1"></i> Archive
+            </button>
+        </form>
+        {% endif %}
+        {% if not scenario.is_locked %}
         <a href="{% url 'assets:asset_portfolio_scenario_edit' scenario.pk %}" class="btn btn-outline">
             <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
         </a>
-        <form method="post" action="{% url 'assets:asset_portfolio_scenario_delete' scenario.pk %}" class="inline" onsubmit="return confirm('Delete scenario {{ scenario.number }}?');">
+        <form method="post" action="{% url 'assets:asset_portfolio_scenario_delete' scenario.pk %}" class="inline" onsubmit="return confirm('Delete scenario {{ scenario.number|escapejs }}?');">
             {% csrf_token %}
             <button type="submit" class="btn btn-danger">
                 <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
             </button>
         </form>
+        {% endif %}
         <a href="{% url 'assets:asset_portfolio_scenario_list' %}" class="btn btn-outline">
             <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
         </a>
