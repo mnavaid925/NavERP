@@ -104,7 +104,7 @@ class AssetReplacementPlanForm(TenantUniqueMixin, TenantModelForm):
             "linked_requisition": forms.Select(attrs={"class": "form-select"}),
             "planner": forms.Select(attrs={"class": "form-select"}),
             "predicted_eol_date": forms.DateInput(attrs={"class": "form-input", "type": "date"}),
-            "remaining_useful_life_months": forms.NumberInput(attrs={"class": "form-input", "min": "0"}),
+            "remaining_useful_life_months": forms.NumberInput(attrs={"class": "form-input", "min": "0", "max": "1200"}),
             "planned_replacement_year": forms.NumberInput(attrs={"class": "form-input", "min": "2000", "max": "2100"}),
             "planned_quarter": forms.Select(attrs={"class": "form-select"}),
             "replacement_strategy": forms.Select(attrs={"class": "form-select"}),
@@ -137,6 +137,9 @@ class AssetReplacementPlanForm(TenantUniqueMixin, TenantModelForm):
         crit = cleaned.get("criticality_weight")
         if crit is not None and not (1 <= crit <= 10):
             self.add_error("criticality_weight", "Criticality weight must be between 1 and 10.")
+        rul = cleaned.get("remaining_useful_life_months")
+        if rul is not None and not (0 <= rul <= 1200):
+            self.add_error("remaining_useful_life_months", "Remaining useful life must be between 0 and 1200 months.")
         cond = cleaned.get("condition_score")
         if cond is not None and (cond < ZERO or cond > Decimal("100.00")):
             self.add_error("condition_score", "Condition score must be between 0 and 100.")
