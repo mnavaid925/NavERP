@@ -7,6 +7,156 @@
 > `LIVE_LINKS` in `apps/core/navigation.py` and run `venv\Scripts\python.exe temp\audit_integrity.py`.
 > Do not mass-tick the backlog.
 ---
+# Sub-module 11.12: Asset Risk Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.12.md` (2026-11-11)
+
+> **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.11.
+> **NO scaffold step. NO `config/settings.py` edit. NO `config/urls.py` edit.**
+> Migration is **incremental**: previous committed leaf is `0014_assetcomplianceaudit_idx_aca_ten_fw_and_more.py` (from 11.11), so **11.12 claims `0015_...`** (see L43).
+> Plan written from `.claude/tasks/research-assets-11.12.md` (Phase 1).
+> Package folder name: `apps/assets/{models,forms,views,urls}/AssetRisk/<Entity>.py`
+> Template folder name: `templates/assets/assetrisk/{asset_risk_register,asset_business_continuity,asset_cybersecurity,asset_risk_mitigation}/{list,detail,form}.html`
+
+## The Pinned Architectural Rulings (L28, L29, L36, L37, L65, L66)
+- **Asset Risk Management Multi-Tenant Base & Isolation (L28/L29)**:
+  - All 4 models inherit from `TenantNumbered` (`apps/assets/models/_base.py`) with strict `tenant` (`core.Tenant`, CASCADE) isolation. All queries, views, forms, and actions filter strictly on `tenant=request.tenant`.
+  - Authoritative Operational Asset Spine (`scm.Asset` [AST-]): Links subject plant machinery, production equipment, and facilities infrastructure in `apps/scm` via string FK (`"scm.Asset"`).
+  - Asset Taxonomy Integration: Reuses `"assets.AssetCategory"` [ACAT-] for category-level risk profiling and reporting.
+  - Core Spine Bindings:
+    - Reuses `"core.Party"` for alternative backup suppliers, critical component manufacturers, and security audit partners.
+    - Reuses `"core.Document"` for attached disaster recovery playbooks, FMEA worksheets, and CVE security advisories.
+    - Reuses `settings.AUTH_USER_MODEL` for risk owners, emergency leads, and mitigation action assignees.
+  - Collision-free 3-letter / 4-character uppercase prefixes starting with `A` (verified 100% collision-free repository-wide):
+    - `AssetRiskRegister` -> `NUMBER_PREFIX = "ARK"` (format: `ARK-YYYYMM-XXXX`)
+    - `AssetBusinessContinuityPlan` -> `NUMBER_PREFIX = "ABC"` (format: `ABC-YYYYMM-XXXX`)
+    - `AssetCyberSecurityProfile` -> `NUMBER_PREFIX = "ACS"` (format: `ACS-YYYYMM-XXXX`)
+    - `AssetRiskMitigationAction` -> `NUMBER_PREFIX = "ARMA"` (format: `ARMA-YYYYMM-XXXX`)
+
+- **Operational Scope & Feature Mapping**:
+  - `AssetRiskRegister` [ARK-]:
+    - Domain Purpose: Multi-category risk registers, 5x5 Likelihood x Impact matrix scoring, FMEA threat analysis, inherent vs residual risk calculation, and treatment strategy (NavERP.md Bullet 1: Risk Identification & Assessment).
+    - Status / Badge CSS: `identified -> badge-slate`, `assessed -> badge-info`, `treating -> badge-amber`, `monitored -> badge-purple`, `closed -> badge-green`.
+    - Risk Level / Badge CSS: `low -> badge-green`, `medium -> badge-info`, `high -> badge-amber`, `critical -> badge-red`.
+    - Form exclusions: `tenant`, `number`, `inherent_risk_score`, `inherent_risk_level`, `residual_risk_score`, `residual_risk_level`, `last_reviewed_at`, `created_at`, `updated_at`.
+    - View context keys:
+      - List: `risks`, `page_obj`, `paginator`, `is_paginated`, `category_choices`, `level_choices`, `status_choices`, `strategy_choices`, `total_risks`, `critical_risks_count`, `high_risks_count`, `active_treatment_count`, `total_financial_exposure`.
+      - Detail: `risk`, `mitigation_actions`.
+  - `AssetBusinessContinuityPlan` [ABC-]:
+    - Domain Purpose: Business continuity planning (BCP), redundancy architecture (hot/warm/cold standby, N+1 cluster), RTO/RPO/MTD targets, disaster scenario playbooks, and disaster simulation drills (NavERP.md Bullet 2: Business Continuity Planning & Bullet 5: Contingency Plans).
+    - Status / Badge CSS: `draft -> badge-slate`, `active -> badge-green`, `under_review -> badge-amber`, `deprecated -> badge-muted`.
+    - Redundancy / Badge CSS: `hot_standby -> badge-green`, `warm_standby -> badge-info`, `cold_standby -> badge-slate`, `n_plus_one_cluster -> badge-purple`, `reciprocal_agreement -> badge-info`, `mobile_replacement -> badge-slate`, `none_single_point_of_failure -> badge-red`.
+    - Drill Result / Badge CSS: `not_tested -> badge-slate`, `passed -> badge-green`, `passed_with_deficiencies -> badge-amber`, `failed -> badge-red`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+    - View context keys:
+      - List: `plans`, `page_obj`, `paginator`, `is_paginated`, `redundancy_choices`, `scenario_choices`, `status_choices`, `total_plans`, `active_plans_count`, `spof_count`, `avg_rto_hours`.
+      - Detail: `plan`.
+  - `AssetCyberSecurityProfile` [ACS-]:
+    - Domain Purpose: IoT / OT / ICS connected device registry, Purdue model network zoning, firmware baseline tracking, industrial protocols, CVE vulnerability risk scoring, and maintenance patch-freeze windows (NavERP.md Bullet 3: Cybersecurity for Connected Assets).
+    - Posture Status / Badge CSS: `secure -> badge-green`, `attention_required -> badge-amber`, `vulnerable -> badge-red`, `compromised -> badge-red`.
+    - Firmware Status / Badge CSS: `up_to_date -> badge-green`, `update_available -> badge-info`, `critical_patch_pending -> badge-amber`, `end_of_life_unsupported -> badge-red`.
+    - Network Zone / Badge CSS: `enterprise_it -> badge-slate`, `dmz -> badge-amber`, `supervisory_scada -> badge-info`, `control_plc -> badge-purple`, `process_io -> badge-slate`, `isolated_airgap -> badge-green`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+    - View context keys:
+      - List: `profiles`, `page_obj`, `paginator`, `is_paginated`, `device_choices`, `zone_choices`, `posture_choices`, `firmware_choices`, `total_profiles`, `secure_count`, `vulnerable_count`, `critical_patches_count`.
+      - Detail: `profile`.
+  - `AssetRiskMitigationAction` [ARMA-]:
+    - Domain Purpose: Risk treatment execution, contingency response, alternative supplier planning for geopolitical / supply chain resilience, spare parts buffering, and post-implementation effectiveness evaluation (NavERP.md Bullet 4: Geopolitical & Supply Chain Risk & Bullet 5: Risk Mitigation & Contingency).
+    - Status / Badge CSS: `planned -> badge-slate`, `in_progress -> badge-amber`, `completed -> badge-info`, `verified_effective -> badge-green`, `deferred -> badge-muted`, `cancelled -> badge-red`.
+    - Priority / Badge CSS: `critical -> badge-red`, `high -> badge-amber`, `medium -> badge-info`, `low -> badge-slate`.
+    - Action Type / Badge CSS: `engineering_control -> badge-info`, `redundancy_addition -> badge-purple`, `firmware_security_patch -> badge-amber`, `insurance_transfer -> badge-slate`, `supplier_diversification -> badge-green`, `spare_parts_buffer -> badge-info`, `procedure_training -> badge-slate`, `preventive_inspection -> badge-info`.
+    - Effectiveness / Badge CSS: `pending_evaluation -> badge-slate`, `highly_effective -> badge-green`, `partially_effective -> badge-amber`, `ineffective -> badge-red`.
+    - Form exclusions: `tenant`, `number`, `created_at`, `updated_at`.
+    - View context keys:
+      - List: `actions`, `page_obj`, `paginator`, `is_paginated`, `type_choices`, `priority_choices`, `status_choices`, `effectiveness_choices`, `total_actions`, `in_progress_count`, `verified_count`, `total_estimated_cost`, `total_actual_cost`.
+      - Detail: `action`.
+
+## Sub-module 11.12 Implementation Checklist
+
+- [ ] **Phase 1: Research**
+  - [x] Competitive market research of 8 leading EAM/IRM/OT-Cybersecurity suites (`.claude/tasks/research-assets-11.12.md`)
+  - [x] Commit research catalog
+
+- [ ] **Phase 2: Planning & Specification**
+  - [x] Checkable implementation plan in `.claude/tasks/todo.md`
+  - [ ] Commit `todo.md`
+  - [ ] Freeze pre-build contract in `.claude/tasks/contract-assets-11.12.md`
+  - [ ] Commit contract file
+
+- [ ] **Phase 3: Serial Build (Entity by Entity)**
+  - [ ] **Entity 1: `AssetRiskRegister`**
+    - [ ] `apps/assets/models/AssetRisk/AssetRiskRegisters.py`
+    - [ ] `apps/assets/forms/AssetRisk/AssetRiskRegisters.py`
+    - [ ] `apps/assets/views/AssetRisk/AssetRiskRegisters.py`
+    - [ ] `apps/assets/urls/AssetRisk/AssetRiskRegisters.py`
+    - [ ] `templates/assets/assetrisk/asset_risk_register/list.html`
+    - [ ] `templates/assets/assetrisk/asset_risk_register/detail.html`
+    - [ ] `templates/assets/assetrisk/asset_risk_register/form.html`
+  - [ ] **Entity 2: `AssetBusinessContinuityPlan`**
+    - [ ] `apps/assets/models/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [ ] `apps/assets/forms/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [ ] `apps/assets/views/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [ ] `apps/assets/urls/AssetRisk/AssetBusinessContinuityPlans.py`
+    - [ ] `templates/assets/assetrisk/asset_business_continuity/list.html`
+    - [ ] `templates/assets/assetrisk/asset_business_continuity/detail.html`
+    - [ ] `templates/assets/assetrisk/asset_business_continuity/form.html`
+  - [ ] **Entity 3: `AssetCyberSecurityProfile`**
+    - [ ] `apps/assets/models/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [ ] `apps/assets/forms/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [ ] `apps/assets/views/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [ ] `apps/assets/urls/AssetRisk/AssetCyberSecurityProfiles.py`
+    - [ ] `templates/assets/assetrisk/asset_cybersecurity/list.html`
+    - [ ] `templates/assets/assetrisk/asset_cybersecurity/detail.html`
+    - [ ] `templates/assets/assetrisk/asset_cybersecurity/form.html`
+  - [ ] **Entity 4: `AssetRiskMitigationAction`**
+    - [ ] `apps/assets/models/AssetRisk/AssetRiskMitigationActions.py`
+    - [ ] `apps/assets/forms/AssetRisk/AssetRiskMitigationActions.py`
+    - [ ] `apps/assets/views/AssetRisk/AssetRiskMitigationActions.py`
+    - [ ] `apps/assets/urls/AssetRisk/AssetRiskMitigationActions.py`
+    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/list.html`
+    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/detail.html`
+    - [ ] `templates/assets/assetrisk/asset_risk_mitigation/form.html`
+  - [ ] **Integrate**
+    - [ ] Re-export models in `apps/assets/models/__init__.py`
+    - [ ] Re-export forms in `apps/assets/forms/__init__.py`
+    - [ ] Re-export views in `apps/assets/views/__init__.py`
+    - [ ] Wire URL routes in `apps/assets/urls/__init__.py`
+    - [ ] Register all 4 models in `apps/assets/admin.py`
+    - [ ] Extend `apps/assets/management/commands/seed_assets.py` with idempotent 11.12 seed data
+    - [ ] Wire `LIVE_LINKS["11.12"]` in `apps/core/navigation.py`
+    - [ ] Run `makemigrations assets` (claims `0015_...`)
+    - [ ] Run `migrate`
+    - [ ] Run `seed_assets` twice (idempotency check)
+    - [ ] Run `manage.py check`
+  - [ ] **Smoke Test**
+    - [ ] Build & run `temp/smoke_assets_11_12.py` asserting status 200/302, content assertions, and IDOR 404
+
+- [ ] **Phase 4: Review Pass (6 Serial Reviewers)**
+  - [ ] `code-reviewer` agent
+  - [ ] `explorer` agent
+  - [ ] `frontend-reviewer` agent
+  - [ ] `performance-reviewer` agent
+  - [ ] `qa-smoke-tester` agent
+  - [ ] `security-reviewer` agent
+  - [ ] Consolidate, dedupe, sort findings into `.claude/tasks/review-assets-11.12.md` and commit
+
+- [ ] **Phase 5: Code Fixer**
+  - [ ] Run `code-fixer` agent to resolve all findings in ID order (Critical -> Important -> Minor)
+  - [ ] Mark each finding `[x] fixed` or `[~] skipped`
+
+- [ ] **Phase 6: Automated Test Suite**
+  - [ ] Update shared `tests/conftest.py` if needed
+  - [ ] Author `tests/test_asset_risk_models.py`
+  - [ ] Author `tests/test_asset_risk_forms.py`
+  - [ ] Author `tests/test_asset_risk_views.py`
+  - [ ] Author `tests/test_asset_risk_security.py`
+  - [ ] Run full unfiltered test suite (`pytest apps/assets/tests/`) and confirm 100% green
+
+- [ ] **Phase 7: Close-Out & Skill Updates**
+  - [ ] Update `.claude/skills/assets/SKILL.md` with 11.12 entities, routes, and context
+  - [ ] Update `README.md` marking 11.12 complete
+  - [ ] Document gap register in `.agents/tasks/gaps-assets-11.12.md`
+  - [ ] Update close-out in `todo.md`
+
+---
 # Sub-module 11.10: Lease & Rental Management (Module 11: Asset Management System, `assets`) — plan from `research-assets-11.10.md` (2026-11-10)
 
 > **This plan EXTENDS an existing app.** `apps/assets/` is live with Sub-modules 11.1 through 11.9.
