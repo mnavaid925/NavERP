@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ plan.number }} — {{ plan.title }} — Replacement Plan — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:portfolio_dashboard' %}">Asset Analytics &amp; BI</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_replacement_plan_list' %}">Replacement Plans</a>
+            <span>/</span>
+            <span>{{ plan.number }}</span>
+        </div>
+        <div class="flex items-center gap-3 mt-1">
+            <h1 class="page-title">{{ plan.number }} — {{ plan.title }}</h1>
+            <span class="badge {{ plan.status_badge_class }}">{{ plan.get_status_display }}</span>
+            <span class="badge {{ plan.priority_band_badge_class }}">{{ plan.get_priority_band_display }}</span>
+            <span class="badge {{ plan.funding_status_badge_class }}">{{ plan.get_funding_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <button type="button" onclick="window.print()" class="btn btn-outline">
+            <i data-lucide="printer" class="w-4 h-4 me-1"></i> Print CIP Sheet
+        </button>
+        <form method="post" action="{% url 'assets:asset_replacement_plan_recalculate' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="refresh-cw" class="w-4 h-4 me-1"></i> Recalculate Scoring
+            </button>
+        </form>
+        {% if plan.status == "forecasted" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="proposed" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="send" class="w-4 h-4 me-1"></i> Propose for CIP
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status in "forecasted,proposed" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="approved" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="check-circle" class="w-4 h-4 me-1"></i> Approve Plan
+            </button>
+        </form>
+        {% endif %}
+        {% if plan.status == "approved" %}
+        <form method="post" action="{% url 'assets:asset_replacement_plan_transition' plan.pk %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="target_status" value="scheduled" />
+            <button type="submit" class="btn btn-outline">
+                <i data-lucide="calendar" class="w-4 h-4 me-1"></i> Schedule Execution
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'assets:asset_replacement_plan_edit' plan.pk %}" class="btn btn-outline">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_replacement_plan_delete' plan.pk %}" class="inline" onsubmit="return confirm('Delete replacement plan {{ plan.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_replacement_plan_list' %}" class="btn btn-outline">
+            <i data-lucide="arrow-left" class="w-4 h-4 me-1"></i> Back
+        </a>
+    </div>
+</div>
+
+<!-- Priority & Financial KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="gauge"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Priority Score (0–100)</div>
+            <div class="stat-value">{{ plan.priority_score|floatformat:1 }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="activity"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Facility Condition Index (FCI)</div>
+            <div class="stat-value">{{ plan.fci_ratio_pct|floatformat:2 }}%</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="dollar-sign"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Inflation-Adjusted CapEx</div>
+            <div class="stat-value">${{ plan.inflation_adjusted_cost|floatformat:2|intcomma }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="clock"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Target Window &amp; RUL</div>
+            <div class="stat-value">{{ plan.planned_replacement_year }} {{ plan.get_planned_quarter_display|slice:":2" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Asset &amp; Governance Linkages</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid">
+                <div class="detail-item">
+                    <dt>Plan Number</dt>
+                    <dd class="font-mono">{{ plan.number }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Replacement Strategy</dt>
+                    <dd>{{ plan.get_replacement_strategy_display }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Operational Asset</dt>
+                    <dd>{% if plan.operational_asset %}{{ plan.operational_asset.name }} ({{ plan.operational_asset.code }}){% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Fixed Asset</dt>
+                    <dd>{% if plan.fixed_asset %}{{ plan.fixed_asset.name }} ({{ plan.fixed_asset.number }}){% else %}—{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Asset Category</dt>
+                    <dd>{{ plan.asset_category.name|default:"—" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Org Unit &amp; Location</dt>
+                    <dd>{{ plan.org_unit.name|default:"—" }}{% if plan.location %} / {{ plan.location.name }}{% endif %}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Predicted EOL Date</dt>
+                    <dd>{{ plan.predicted_eol_date|default:"—" }} ({{ plan.remaining_useful_life_months }} mos RUL)</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Capital Budget</dt>
+                    <dd>{{ plan.capital_budget.name|default:"Unallocated" }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Linked Requisition</dt>
+                    <dd>
+                        {% if plan.linked_requisition %}
+                        <a href="{% url 'assets:asset_requisition_detail' plan.linked_requisition.pk %}" class="text-blue-600 hover:underline font-mono">
+                            {{ plan.linked_requisition.number }}
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Lifecycle Study</dt>
+                    <dd>
+                        {% if plan.lifecycle_analysis %}
+                        <a href="{% url 'assets:asset_lifecycle_cost_analysis_detail' plan.lifecycle_analysis.pk %}" class="text-blue-600 hover:underline font-mono">
+                            {{ plan.lifecycle_analysis.number }}
+                        </a>
+                        {% else %}—{% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card lg:col-span-2">
+        <div class="card-header">
+            <h2 class="text-base font-semibold text-slate-800">Scoring Breakdown &amp; Capital Economics</h2>
+        </div>
+        <div class="card-body">
+            <dl class="detail-grid mb-4">
+                <div class="detail-item">
+                    <dt>Condition Score (0–100)</dt>
+                    <dd class="font-mono">{{ plan.condition_score|floatformat:2 }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Criticality Weight (1–10)</dt>
+                    <dd class="font-mono">{{ plan.criticality_weight }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Failure Risk Score (0–100)</dt>
+                    <dd class="font-mono">{{ plan.failure_risk_score|floatformat:2 }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Current Replacement Value (RAV)</dt>
+                    <dd class="font-mono">${{ plan.current_replacement_value|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Deferred Maintenance Backlog</dt>
+                    <dd class="font-mono">${{ plan.deferred_maintenance_cost|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Base Estimated Replacement Cost</dt>
+                    <dd class="font-mono">${{ plan.estimated_replacement_cost|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Escalation / Inflation Rate</dt>
+                    <dd class="font-mono">{{ plan.inflation_rate_pct|floatformat:2 }}% p.a.</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Estimated Salvage Recovery</dt>
+                    <dd class="font-mono text-emerald-700">${{ plan.estimated_salvage_recovery|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>Net Capital Requirement</dt>
+                    <dd class="font-mono font-bold text-blue-900">${{ plan.net_capital_requirement|floatformat:2|intcomma }}</dd>
+                </div>
+                <div class="detail-item">
+                    <dt>1-Year Deferral Penalty Cost</dt>
+                    <dd class="font-mono text-red-700">${{ plan.deferral_penalty_cost|floatformat:2|intcomma }}</dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+
+{% if plan.notes %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="text-base font-semibold text-slate-800">Planning Justification &amp; Notes</h2>
+    </div>
+    <div class="card-body">
+        <p class="text-sm text-slate-700 whitespace-pre-line">{{ plan.notes }}</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
