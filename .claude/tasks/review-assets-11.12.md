@@ -93,9 +93,10 @@ All six reviewers have run in strictly serial order:
   - **Fix:** Add `title="Apply Filters" aria-label="Apply Filters"` to the filter submit `<button>`.
   - **Status:** [x] fixed — fix(assets): add accessibility title and aria-label across assetrisk list filter buttons
 
-- [ ] **`M5`**: `apps/assets/management/commands/seed_assets.py:3056,3079,3102,3125` — Redundant Calculation & Save Calls
+- [x] **`M5`**: `apps/assets/management/commands/seed_assets.py:3056,3079,3102,3125` — Redundant Calculation & Save Calls
   - **Issue:** `ark.calculate_scores()` and `ark.save()` are called after `create()`, triggering redundant SQL UPDATEs.
   - **Fix:** Remove redundant manual calculation calls.
+  - **Status:** [x] fixed — fix(assets): remove redundant calculate_scores and save calls in seed_assets
 
 - [ ] **`M6`**: `apps/assets/management/commands/seed_assets.py:3024-3026` — Sliced Queryset Consolidation for Asset Lookup
   - **Issue:** Multiple database roundtrips during tenant asset initialization.
