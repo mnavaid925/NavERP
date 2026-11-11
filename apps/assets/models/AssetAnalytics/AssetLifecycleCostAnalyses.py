@@ -345,21 +345,27 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
         recoveries = self.total_recoveries_amount
 
         net_tco = max(ZERO, capex + opex - recoveries)
-        self.total_lifecycle_cost = q2(net_tco)
+        self.total_lifecycle_cost = cap_decimal(net_tco, max_abs=Decimal("99999999999999.99"))
 
-        horizon = max(1, int(self.analysis_horizon_years or 1))
-        rate_pct = self.discount_rate_pct or ZERO
+        horizon = min(50, max(1, int(self.analysis_horizon_years or 1)))
+        rate_pct = max(ZERO, min(Decimal("100.00"), self.discount_rate_pct or ZERO))
         if rate_pct > ZERO and net_tco > ZERO:
             rate = rate_pct / Decimal("100.00")
             compound = (Decimal("1.00") + rate) ** horizon
             denom = compound - Decimal("1.00")
             if denom > ZERO:
                 crf = (rate * compound) / denom
-                self.equivalent_annual_cost = q2(net_tco * crf)
+                self.equivalent_annual_cost = cap_decimal(
+                    net_tco * crf, max_abs=Decimal("999999999999.99")
+                )
             else:
-                self.equivalent_annual_cost = q2(net_tco / Decimal(horizon))
+                self.equivalent_annual_cost = cap_decimal(
+                    net_tco / Decimal(horizon), max_abs=Decimal("999999999999.99")
+                )
         else:
-            self.equivalent_annual_cost = q2(net_tco / Decimal(horizon))
+            self.equivalent_annual_cost = cap_decimal(
+                net_tco / Decimal(horizon), max_abs=Decimal("999999999999.99")
+            )
 
         rav = self.current_replacement_value or ZERO
         if rav > ZERO:
@@ -566,8 +572,8 @@ class AssetLifecycleCostAnalysis(TenantNumbered):
                 "analyzed_by",
             ],
         )
-        if (self.analysis_horizon_years or 0) < 1:
-            add_field_error(errors, "analysis_horizon_years", "Horizon must be at least 1 year.")
+        if self.analysis_horizon_years is None or not (1 <= int(self.analysis_horizon_years) <= 50):
+            add_field_error(errors, "analysis_horizon_years", "Analysis horizon must be between 1 and 50 years.")
         if self.discount_rate_pct is not None and (
             self.discount_rate_pct < ZERO or self.discount_rate_pct > Decimal("100.00")
         ):
