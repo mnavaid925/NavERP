@@ -27,31 +27,23 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="stat-card">
         <div class="stat-icon blue"><i data-lucide="radio"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Total Streams</div>
-            <div class="stat-value">{{ total_count }}</div>
-        </div>
+        <div class="stat-label">Total Streams</div>
+        <div class="stat-value">{{ total_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon green"><i data-lucide="activity"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Active Feeds</div>
-            <div class="stat-value">{{ active_count }}</div>
-        </div>
+        <div class="stat-label">Active Feeds</div>
+        <div class="stat-value">{{ active_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange"><i data-lucide="alert-octagon"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Faulted Streams</div>
-            <div class="stat-value">{{ faulted_count }}</div>
-        </div>
+        <div class="stat-label">Faulted Streams</div>
+        <div class="stat-value">{{ faulted_count }}</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon purple"><i data-lucide="wrench"></i></div>
-        <div class="stat-body">
-            <div class="stat-label">Auto-Trigger CBM</div>
-            <div class="stat-value">{{ auto_cbm_count }}</div>
-        </div>
+        <div class="stat-label">Auto-Trigger CBM</div>
+        <div class="stat-value">{{ auto_cbm_count }}</div>
     </div>
 </div>
 
@@ -177,8 +169,8 @@
                     <td><span class="badge {{ stream.status_badge_class }}">{{ stream.get_stream_status_display }}</span></td>
                     <td class="text-right">
                         <div class="flex justify-end gap-1">
-                            <a href="{% url 'assets:asset_telemetry_stream_detail' stream.pk %}" class="btn btn-outline btn-xs">View</a>
-                            <a href="{% url 'assets:asset_telemetry_stream_edit' stream.pk %}" class="btn btn-outline btn-xs">Edit</a>
+                            <a href="{% url 'assets:asset_telemetry_stream_detail' stream.pk %}" class="btn btn-outline btn-sm">View</a>
+                            <a href="{% url 'assets:asset_telemetry_stream_edit' stream.pk %}" class="btn btn-outline btn-sm">Edit</a>
                         </div>
                     </td>
                 </tr>
@@ -201,7 +193,7 @@
     </div>
 
     {% if is_paginated %}
-    <div class="card-footer pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
+    <div class="pagination flex justify-between items-center py-3 px-4 border-t border-slate-100">
         <div class="text-xs text-slate-500">
             Page {{ page_obj.number }} of {{ paginator.num_pages }} ({{ paginator.count }} items)
         </div>
