@@ -1,14 +1,15 @@
-import json
 from decimal import Decimal
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 from apps.assets.forms._common import (
     TenantModelForm,
     TenantUniqueMixin,
     reject_foreign,
 )
+from apps.assets.models.IntegrationApiHub._validators import validate_json_object
 from apps.assets.models.IntegrationApiHub.AssetGisMappings import (
     AssetGisMapping,
 )
@@ -190,19 +191,12 @@ class AssetGisMappingForm(TenantUniqueMixin, TenantModelForm):
                 "LRS end measure must be greater than or equal to start measure.",
             )
 
-        raw_geojson = (cleaned_data.get("geojson_payload") or "").strip()
-        if raw_geojson:
-            try:
-                parsed = json.loads(raw_geojson)
-            except ValueError:
-                self.add_error(
-                    "geojson_payload", "GeoJSON payload must be valid JSON syntax."
-                )
-            else:
-                if not isinstance(parsed, dict):
-                    self.add_error(
-                        "geojson_payload",
-                        "GeoJSON payload must be a JSON object ({...}).",
-                    )
+        try:
+            validate_json_object(
+                cleaned_data.get("geojson_payload"),
+                field_label="GeoJSON payload",
+            )
+        except ValidationError as exc:
+            self.add_error("geojson_payload", exc)
 
         return cleaned_data
