@@ -165,6 +165,12 @@ def asset_portfolio_scenario_create(request):
 @tenant_admin_required
 def asset_portfolio_scenario_edit(request, pk):
     scenario = assets_object(request, AssetPortfolioScenario, pk)
+    if scenario.is_locked:
+        messages.error(
+            request,
+            f"Scenario '{scenario.number}' is locked ({scenario.get_status_display()}) and cannot be edited.",
+        )
+        return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     if request.method == "POST":
         form = AssetPortfolioScenarioForm(request.POST, instance=scenario, tenant=request.tenant)
         if form.is_valid():
@@ -188,6 +194,12 @@ def asset_portfolio_scenario_edit(request, pk):
 @require_POST
 def asset_portfolio_scenario_delete(request, pk):
     scenario = assets_object(request, AssetPortfolioScenario, pk)
+    if scenario.is_locked:
+        messages.error(
+            request,
+            f"Scenario '{scenario.number}' is locked ({scenario.get_status_display()}) and cannot be deleted.",
+        )
+        return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     try:
         with transaction.atomic():
             write_audit_log(request.user, scenario, "delete", tenant=request.tenant)
@@ -203,6 +215,12 @@ def asset_portfolio_scenario_delete(request, pk):
 @require_POST
 def asset_portfolio_scenario_simulate(request, pk):
     scenario = assets_object(request, AssetPortfolioScenario, pk)
+    if scenario.is_locked:
+        messages.error(
+            request,
+            f"Scenario '{scenario.number}' is locked ({scenario.get_status_display()}) and cannot be re-simulated.",
+        )
+        return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     with transaction.atomic():
         scenario.run_simulation(save=True)
         write_audit_log(request.user, scenario, "simulate", tenant=request.tenant)
@@ -219,12 +237,19 @@ def asset_portfolio_scenario_simulate(request, pk):
 def asset_portfolio_scenario_transition(request, pk):
     scenario = assets_object(request, AssetPortfolioScenario, pk)
     target_status = request.POST.get("target_status", "").strip()
-    allowed_targets = {"under_review", "recommended", "adopted", "archived"}
-    if target_status not in allowed_targets:
+    status_labels = dict(AssetPortfolioScenario.STATUS_CHOICES)
+    if target_status not in status_labels:
         messages.error(request, "Invalid target scenario status.")
         return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     if scenario.status == target_status:
         messages.info(request, f"Scenario '{scenario.number}' is already '{scenario.get_status_display()}'.")
+        return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
+    allowed_next = AssetPortfolioScenario.ALLOWED_TRANSITIONS.get(scenario.status, set())
+    if target_status not in allowed_next:
+        messages.error(
+            request,
+            f"Cannot transition scenario '{scenario.number}' from '{scenario.get_status_display()}' to '{status_labels[target_status]}'.",
+        )
         return redirect("assets:asset_portfolio_scenario_detail", pk=scenario.pk)
     with transaction.atomic():
         scenario.status = target_status
