@@ -14,6 +14,7 @@ from apps.assets.models.AssetAnalytics.AssetReplacementPlans import AssetReplace
 from apps.assets.models.AssetClassification.AssetCategories import AssetCategory
 from apps.assets.views._common import assets_object, assets_scope
 from apps.assets.views.AssetAnalytics._helpers import (
+    PAGE_SIZE,
     ZERO,
     apply_choice_filter,
     apply_fk_filter,
@@ -102,7 +103,7 @@ def asset_replacement_plan_list(request):
         total_forecast=Sum("inflation_adjusted_cost"),
     )
 
-    paginator = Paginator(qs, 25)
+    paginator = Paginator(qs, PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
 
     cur_year = timezone.localdate().year
@@ -326,6 +327,6 @@ def asset_replacement_plan_export_csv(request):
             p.get_funding_status_display(),
             p.get_status_display(),
         ]
-        for p in qs
+        for p in qs[:10000].iterator(chunk_size=500)
     )
     return csv_export_response(filename="arpl-replacement-plans.csv", headers=headers, rows=rows)
