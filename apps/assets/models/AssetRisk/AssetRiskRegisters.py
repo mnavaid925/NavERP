@@ -240,6 +240,26 @@ class AssetRiskRegister(TenantNumbered):
     def __str__(self):
         return f"{self.number} — {self.title} ({self.get_inherent_risk_level_display()})"
 
+    @property
+    def status_badge_class(self):
+        return self.STATUS_CSS.get(self.status, "badge-slate")
+
+    @property
+    def inherent_risk_level_badge_class(self):
+        return self.RISK_LEVEL_CSS.get(self.inherent_risk_level, "badge-slate")
+
+    @property
+    def residual_risk_level_badge_class(self):
+        return self.RISK_LEVEL_CSS.get(self.residual_risk_level, "badge-slate")
+
+    @property
+    def risk_category_badge_class(self):
+        return self.RISK_CATEGORY_CSS.get(self.risk_category, "badge-slate")
+
+    @property
+    def treatment_strategy_badge_class(self):
+        return self.TREATMENT_STRATEGY_CSS.get(self.treatment_strategy, "badge-slate")
+
     @staticmethod
     def _score_to_level(score: int) -> str:
         if score <= 4:
