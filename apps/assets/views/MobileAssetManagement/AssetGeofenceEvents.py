@@ -88,8 +88,7 @@ def asset_geofence_event_create(request):
             messages.success(request, f"Geofence alert {event.number} logged successfully.")
             return redirect("assets:asset_geofence_event_detail", pk=event.pk)
     else:
-        initial = {"detected_at": timezone.now()}
-        form = AssetGeofenceEventForm(tenant=request.tenant, initial=initial)
+        form = AssetGeofenceEventForm(tenant=request.tenant)
 
     return render(
         request,
