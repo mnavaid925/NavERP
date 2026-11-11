@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+
+{% block title %}Cybersecurity Profiles — Asset Risk Management — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <span>Risk Management</span>
+            <span>/</span>
+            <span>OT/IoT Cybersecurity</span>
+        </div>
+        <h1 class="page-title">Connected Asset Cybersecurity Profiles</h1>
+    </div>
+    <div class="page-actions">
+        <a href="{% url 'assets:asset_cybersecurity_profile_create' %}" class="btn btn-primary">
+            <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Device Profile
+        </a>
+    </div>
+</div>
+
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card">
+        <div class="stat-icon blue"><i data-lucide="cpu"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Connected Devices</div>
+            <div class="stat-value">{{ total_profiles }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i data-lucide="shield-check"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Secure Posture</div>
+            <div class="stat-value">{{ secure_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red"><i data-lucide="shield-alert"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Vulnerable / Exposed</div>
+            <div class="stat-value">{{ vulnerable_count }}</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange"><i data-lucide="alert-triangle"></i></div>
+        <div class="stat-body">
+            <div class="stat-label">Critical Patches Due</div>
+            <div class="stat-value">{{ critical_patches_count }}</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters Card -->
+<div class="card mb-6">
+    <div class="card-body">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div>
+                <input type="text" name="q" value="{{ request.GET.q }}" placeholder="Search device, IP, asset..." class="form-input" />
+            </div>
+            <div>
+                <select name="device_type" class="form-select">
+                    <option value="">All Device Types</option>
+                    {% for val, label in device_choices %}
+                    <option value="{{ val }}" {% if request.GET.device_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="network_zone" class="form-select">
+                    <option value="">All Purdue Zones</option>
+                    {% for val, label in zone_choices %}
+                    <option value="{{ val }}" {% if request.GET.network_zone == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="security_posture_status" class="form-select">
+                    <option value="">All Security Postures</option>
+                    {% for val, label in posture_choices %}
+                    <option value="{{ val }}" {% if request.GET.security_posture_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <select name="firmware_update_status" class="form-select">
+                    <option value="">All Firmware Statuses</option>
+                    {% for val, label in firmware_choices %}
+                    <option value="{{ val }}" {% if request.GET.firmware_update_status == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline"><i data-lucide="filter" class="w-4 h-4"></i></button>
+                {% if request.GET.q or request.GET.device_type or request.GET.network_zone or request.GET.security_posture_status or request.GET.firmware_update_status %}
+                <a href="{% url 'assets:asset_cybersecurity_profile_list' %}" class="btn btn-outline" title="Clear Filters"><i data-lucide="x" class="w-4 h-4"></i></a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card">
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Profile # & Asset</th>
+                    <th>Device Type</th>
+                    <th>Network Zone (Purdue)</th>
+                    <th>IP / MAC Address</th>
+                    <th>Firmware & Status</th>
+                    <th>CVSS Score</th>
+                    <th>Security Posture</th>
+                    <th class="text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prof in profiles %}
+                <tr>
+                    <td>
+                        <a href="{% url 'assets:asset_cybersecurity_profile_detail' prof.pk %}" class="font-medium text-blue-600 hover:underline">
+                            {{ prof.number }}
+                        </a>
+                        <div class="text-xs text-slate-700 font-medium">{{ prof.asset.name }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ prof.asset.asset_code }}</div>
+                    </td>
+                    <td>
+                        <div class="text-sm font-medium">{{ prof.get_device_type_display }}</div>
+                        <div class="text-xs text-slate-500 font-mono">{{ prof.get_protocol_used_display }}</div>
+                    </td>
+                    <td>
+                        <span class="badge {{ prof.network_zone_badge_class }}">
+                            {{ prof.get_network_zone_display }}
+                        </span>
+                        <div class="text-xs text-slate-500">{{ prof.get_exposure_level_display }}</div>
+                    </td>
+                    <td class="font-mono text-xs">
+                        <div>{{ prof.ip_address|default:"No IP Assigned" }}</div>
+                        <div class="text-slate-400">{{ prof.mac_address|default:"" }}</div>
+                    </td>
+                    <td>
+                        <div class="text-xs font-mono font-semibold">{{ prof.firmware_version }}</div>
+                        <span class="badge {{ prof.firmware_status_badge_class }}">
+                            {{ prof.get_firmware_update_status_display }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if prof.cve_risk_score > 0 %}
+                        <span class="font-mono font-bold {% if prof.cve_risk_score >= 8 %}text-red-600{% elif prof.cve_risk_score >= 5 %}text-amber-600{% else %}text-slate-600{% endif %}">
+                            {{ prof.cve_risk_score }}
+                        </span>
+                        {% else %}
+                        <span class="text-slate-400 font-mono text-xs">0.0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge {{ prof.posture_status_badge_class }}">
+                            {{ prof.get_security_posture_status_display }}
+                        </span>
+                    </td>
+                    <td class="text-right">
+                        <div class="table-actions">
+                            <a href="{% url 'assets:asset_cybersecurity_profile_detail' prof.pk %}" class="btn-icon" title="View Details">
+                                <i data-lucide="eye"></i>
+                            </a>
+                            <a href="{% url 'assets:asset_cybersecurity_profile_edit' prof.pk %}" class="btn-icon" title="Edit">
+                                <i data-lucide="pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'assets:asset_cybersecurity_profile_delete' prof.pk %}" class="inline" onsubmit="return confirm('Are you sure you want to delete profile {{ prof.number }}?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon text-red-500 hover:text-red-700" title="Delete">
+                                    <i data-lucide="trash-2"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8">
+                        <div class="empty-state">
+                            <i data-lucide="shield-check" class="w-12 h-12 text-slate-400 mb-3"></i>
+                            <h3 class="text-base font-semibold text-slate-800">No Cybersecurity Profiles Found</h3>
+                            <p class="text-sm text-slate-500 mb-4">Protect OT and IoT devices with network segmentation and firmware management.</p>
+                            <a href="{% url 'assets:asset_cybersecurity_profile_create' %}" class="btn btn-primary">
+                                <i data-lucide="plus" class="w-4 h-4 me-1"></i> New Device Profile
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if is_paginated %}
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ page_obj.start_index }} to {{ page_obj.end_index }} of {{ paginator.count }} profiles
+        </div>
+        <div class="pagination-links">
+            {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.device_type %}&device_type={{ request.GET.device_type }}{% endif %}{% if request.GET.network_zone %}&network_zone={{ request.GET.network_zone }}{% endif %}{% if request.GET.security_posture_status %}&security_posture_status={{ request.GET.security_posture_status }}{% endif %}{% if request.GET.firmware_update_status %}&firmware_update_status={{ request.GET.firmware_update_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Previous
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Previous</button>
+            {% endif %}
+
+            <span class="px-2 text-sm text-slate-600">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}{% if request.GET.device_type %}&device_type={{ request.GET.device_type }}{% endif %}{% if request.GET.network_zone %}&network_zone={{ request.GET.network_zone }}{% endif %}{% if request.GET.security_posture_status %}&security_posture_status={{ request.GET.security_posture_status }}{% endif %}{% if request.GET.firmware_update_status %}&firmware_update_status={{ request.GET.firmware_update_status }}{% endif %}" class="btn btn-outline btn-sm">
+                Next
+            </a>
+            {% else %}
+            <button class="btn btn-outline btn-sm" disabled>Next</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
