@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}{{ mapping.number }} — GIS Spatial Mapping — NavERP{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <div class="breadcrumb">
+            <a href="{% url 'assets:overview' %}">Assets</a>
+            <span>/</span>
+            <a href="{% url 'assets:asset_gis_mapping_list' %}">GIS Mappings</a>
+            <span>/</span>
+            <span>{{ mapping.number }}</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
+            <h1 class="page-title">{{ mapping.layer_name }} / {{ mapping.external_feature_id }}</h1>
+            <span class="badge badge-slate">{{ mapping.number }}</span>
+            <span class="badge {{ mapping.drift_badge_class }}">{{ mapping.get_drift_status_display }}</span>
+            <span class="badge {{ mapping.status_badge_class }}">{{ mapping.get_status_display }}</span>
+        </div>
+    </div>
+    <div class="page-actions flex flex-wrap items-center gap-2">
+        <form method="post" action="{% url 'assets:asset_gis_mapping_verify_sync' mapping.pk %}" class="inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i data-lucide="compass" class="w-4 h-4 me-1"></i> Verify Spatial Sync
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_gis_mapping_edit' mapping.pk %}" class="btn btn-outline btn-sm">
+            <i data-lucide="pencil" class="w-4 h-4 me-1"></i> Edit
+        </a>
+        <form method="post" action="{% url 'assets:asset_gis_mapping_delete' mapping.pk %}" class="inline" onsubmit="return confirm('Delete GIS mapping {{ mapping.number }}?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger btn-sm">
+                <i data-lucide="trash-2" class="w-4 h-4 me-1"></i> Delete
+            </button>
+        </form>
+        <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline btn-sm">Back to List</a>
+    </div>
+</div>
+
+<div class="card mb-6">
+    <div class="card-header">
+        <h2 class="card-title">Spatial Reference, Coordinates &amp; LRS Corridor</h2>
+    </div>
+    <div class="card-body">
+        <dl class="detail-grid">
+            <div class="detail-item">
+                <dt>Mapping Number</dt>
+                <dd class="font-mono font-semibold">{{ mapping.number }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>GIS Connector</dt>
+                <dd>
+                    <a href="{% url 'assets:asset_integration_connector_detail' mapping.connector.pk %}" class="text-brand hover:underline">
+                        {{ mapping.connector.number }} &middot; {{ mapping.connector.name }}
+                    </a>
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>Layer Name</dt>
+                <dd class="font-mono">{{ mapping.layer_name }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>External Feature ID</dt>
+                <dd class="font-mono">{{ mapping.external_feature_id }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Operational Asset</dt>
+                <dd>
+                    {% if mapping.operational_asset %}
+                    <a href="{% url 'scm:asset_detail' mapping.operational_asset.pk %}" class="text-brand hover:underline">{{ mapping.operational_asset }}</a>
+                    {% else %}<span class="text-muted">—</span>{% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>SCM Location</dt>
+                <dd>{{ mapping.location|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Org Unit</dt>
+                <dd>{{ mapping.org_unit|default:"—" }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Geometry &amp; SRID</dt>
+                <dd>{{ mapping.get_geometry_type_display }} (EPSG:{{ mapping.coordinate_system_srid }})</dd>
+            </div>
+            <div class="detail-item">
+                <dt>WGS-84 Coordinates</dt>
+                <dd class="font-mono">{% if mapping.latitude is not None and mapping.longitude is not None %}{{ mapping.latitude }}, {{ mapping.longitude }}{% else %}<span class="text-muted">Not specified</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Elevation (m)</dt>
+                <dd class="font-mono">{% if mapping.elevation_meters is not None %}{{ mapping.elevation_meters }} m{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Linear Referencing (LRS)</dt>
+                <dd>
+                    {% if mapping.is_linear_asset %}
+                    Route {{ mapping.lrs_route_id|default:"—" }} ({{ mapping.lrs_from_measure|default:"0" }} &rarr; {{ mapping.lrs_to_measure|default:"0" }} {{ mapping.get_lrs_measure_unit_display }})
+                    {% else %}
+                    <span class="text-muted">Point / Polygon feature</span>
+                    {% endif %}
+                </dd>
+            </div>
+            <div class="detail-item">
+                <dt>System of Record &amp; Sync</dt>
+                <dd>{{ mapping.get_system_of_record_display }} &middot; {{ mapping.get_sync_direction_display }}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>Last Spatial Sync Verified</dt>
+                <dd>{% if mapping.last_spatial_sync_at %}{{ mapping.last_spatial_sync_at|date:"Y-m-d H:i" }}{% else %}<span class="text-muted">Never verified</span>{% endif %}</dd>
+            </div>
+            <div class="detail-item">
+                <dt>GIS Custodian</dt>
+                <dd>{{ mapping.gis_custodian|default:"—" }}</dd>
+            </div>
+        </dl>
+
+        {% if mapping.geojson_payload %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">GeoJSON Envelope</div>
+            <pre class="font-mono text-xs bg-slate-50 p-3 rounded border border-slate-200 overflow-x-auto">{{ mapping.geojson_payload }}</pre>
+        </div>
+        {% endif %}
+
+        {% if mapping.notes %}
+        <div class="mt-4 pt-4 border-t border-slate-100">
+            <div class="text-xs uppercase tracking-wider text-slate-500 mb-1">Spatial Notes</div>
+            <p class="text-sm text-slate-700 whitespace-pre-line">{{ mapping.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
