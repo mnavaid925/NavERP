@@ -51,12 +51,12 @@
     <div class="card-body">
         <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
-                <label class="form-label text-xs">Search</label>
-                <input type="text" name="q" value="{{ search_query }}" placeholder="Number, feature ID, layer, route..." class="form-input">
+                <label class="form-label text-xs" for="id_filter_q">Search</label>
+                <input id="id_filter_q" type="text" name="q" value="{{ search_query }}" placeholder="Number, feature ID, layer, route..." class="form-input">
             </div>
             <div>
-                <label class="form-label text-xs">Connector</label>
-                <select name="connector" class="form-select">
+                <label class="form-label text-xs" for="id_filter_connector">Connector</label>
+                <select id="id_filter_connector" name="connector" class="form-select">
                     <option value="">All Connectors</option>
                     {% for c in connectors %}
                     <option value="{{ c.pk }}" {% if request.GET.connector == c.pk|stringformat:"d" %}selected{% endif %}>{{ c.number }} &middot; {{ c.name }}</option>
@@ -64,8 +64,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Operational Asset</label>
-                <select name="operational_asset" class="form-select">
+                <label class="form-label text-xs" for="id_filter_asset">Operational Asset</label>
+                <select id="id_filter_asset" name="operational_asset" class="form-select">
                     <option value="">All Assets</option>
                     {% for a in assets_list %}
                     <option value="{{ a.pk }}" {% if request.GET.operational_asset == a.pk|stringformat:"d" %}selected{% endif %}>{{ a.code }} &middot; {{ a.name }}</option>
@@ -73,8 +73,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Geometry Type</label>
-                <select name="geometry_type" class="form-select">
+                <label class="form-label text-xs" for="id_filter_geometry">Geometry Type</label>
+                <select id="id_filter_geometry" name="geometry_type" class="form-select">
                     <option value="">All Geometries</option>
                     {% for val, label in geometry_choices %}
                     <option value="{{ val }}" {% if request.GET.geometry_type == val %}selected{% endif %}>{{ label }}</option>
@@ -82,8 +82,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Drift Status</label>
-                <select name="drift_status" class="form-select">
+                <label class="form-label text-xs" for="id_filter_drift">Drift Status</label>
+                <select id="id_filter_drift" name="drift_status" class="form-select">
                     <option value="">All Drift States</option>
                     {% for val, label in drift_choices %}
                     <option value="{{ val }}" {% if request.GET.drift_status == val %}selected{% endif %}>{{ label }}</option>
@@ -91,8 +91,8 @@
                 </select>
             </div>
             <div>
-                <label class="form-label text-xs">Status</label>
-                <select name="status" class="form-select">
+                <label class="form-label text-xs" for="id_filter_status">Status</label>
+                <select id="id_filter_status" name="status" class="form-select">
                     <option value="">All Statuses</option>
                     {% for val, label in status_choices %}
                     <option value="{{ val }}" {% if request.GET.status == val %}selected{% endif %}>{{ label }}</option>
@@ -103,7 +103,7 @@
                 <button type="submit" class="btn btn-primary flex-1">
                     <i data-lucide="filter" class="w-4 h-4 me-1"></i> Filter
                 </button>
-                <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline" title="Reset filters">
+                <a href="{% url 'assets:asset_gis_mapping_list' %}" class="btn btn-outline" title="Reset filters" aria-label="Reset filters">
                     <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </a>
             </div>
